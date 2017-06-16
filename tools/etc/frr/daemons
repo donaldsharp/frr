@@ -43,11 +43,11 @@ vrrpd=no
 # Check /etc/pam.d/frr if you intend to use "vtysh"!
 #
 vtysh_enable=yes
-zebra_options="  -A 127.0.0.1 -s 90000000"
+zebra_options="  -M cumulus_mlag -M snmp -A 127.0.0.1 -s 90000000"
 mgmtd_options="  -A 127.0.0.1"
-bgpd_options="   -A 127.0.0.1"
-ospfd_options="  -A 127.0.0.1"
-ospf6d_options=" -A ::1"
+bgpd_options="   -M snmp -A 127.0.0.1"
+ospfd_options="  -M snmp -A 127.0.0.1"
+ospf6d_options=" -M snmp -A ::1"
 ripd_options="   -A 127.0.0.1"
 ripngd_options=" -A ::1"
 isisd_options="  -A 127.0.0.1"
