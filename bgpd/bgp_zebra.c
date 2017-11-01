@@ -1303,7 +1303,8 @@ void bgp_zebra_announce_table(struct bgp *bgp, afi_t afi, safi_t safi)
 						   safi);
 }
 
-void bgp_zebra_withdraw(struct prefix *p, struct bgp_info *info, safi_t safi)
+void bgp_zebra_withdraw(struct prefix *p, struct bgp_info *info,
+			struct bgp *bgp, safi_t safi)
 {
 	struct zapi_route api;
 	struct peer *peer;
