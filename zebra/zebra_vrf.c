@@ -287,6 +287,37 @@ static int zebra_vrf_delete(struct vrf *vrf)
 	return 0;
 }
 
+/* Return if this VRF has any FRR configuration or not.
+ * IMPORTANT: This function needs to be updated when additional configuration
+ * is added for a VRF.
+ */
+int zebra_vrf_has_config(struct zebra_vrf *zvrf)
+{
+	afi_t afi;
+	safi_t safi;
+	struct route_table *stable;
+
+	/* NOTE: This is a don't care for the default VRF, but we go through
+	 * the motions to keep things consistent.
+	 */
+	/* Any static routes? */
+	for (afi = AFI_IP; afi < AFI_MAX; afi++) {
+		for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++) {
+			stable = zvrf->stable[afi][safi];
+			if (!stable)
+				continue;
+			if (route_table_count(stable))
+				return 1;
+		}
+	}
+
+	/* EVPN L3-VNI? */
+	if (zvrf->l3vni)
+		return 1;
+
+	return 0;
+}
+
 /* Lookup the routing table in a VRF based on both VRF-Id and table-id.
  * NOTE: Table-id is relevant only in the Default VRF.
  */
