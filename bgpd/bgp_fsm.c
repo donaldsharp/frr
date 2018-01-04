@@ -993,6 +993,7 @@ int bgp_stop(struct peer *peer)
 	char orf_name[BUFSIZ];
 	int ret = 0;
 
+	zlog_debug("bgp_stop: 1");
 	if (peer_dynamic_neighbor(peer)
 	    && !(CHECK_FLAG(peer->flags, PEER_FLAG_DELETE))) {
 		if (bgp_debug_neighbor_events(peer))
@@ -1001,12 +1002,14 @@ int bgp_stop(struct peer *peer)
 		return -1;
 	}
 
+	zlog_debug("bgp_stop: 2");
 	/* Can't do this in Clearing; events are used for state transitions */
 	if (peer->status != Clearing) {
 		/* Delete all existing events of the peer */
 		BGP_EVENT_FLUSH(peer);
 	}
 
+	zlog_debug("bgp_stop: 3");
 	/* Increment Dropped count. */
 	if (peer->status == Established) {
 		peer->dropped++;
@@ -1024,6 +1027,7 @@ int bgp_stop(struct peer *peer)
 				peer_down_str[(int)peer->last_reset]);
 		}
 
+		zlog_debug("bgp_stop: 4");
 		/* graceful restart */
 		if (peer->t_gr_stale) {
 			BGP_TIMER_OFF(peer->t_gr_stale);
@@ -1032,6 +1036,7 @@ int bgp_stop(struct peer *peer)
 					"%s graceful restart stalepath timer stopped",
 					peer->host);
 		}
+		zlog_debug("bgp_stop: 5");
 		if (CHECK_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT)) {
 			if (bgp_debug_neighbor_events(peer)) {
 				zlog_debug(
@@ -1056,64 +1061,84 @@ int bgp_stop(struct peer *peer)
 					peer->nsf[afi][safi] = 0;
 		}
 
+		zlog_debug("bgp_stop: 5");
 		/* set last reset time */
 		peer->resettime = peer->uptime = bgp_clock();
 
+		zlog_debug("bgp_stop: 6");
 		if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
 			zlog_debug("%s remove from all update group",
 				   peer->host);
 		update_group_remove_peer_afs(peer);
 
+		zlog_debug("bgp_stop: 6");
 		hook_call(peer_backward_transition, peer);
 
 		/* Reset peer synctime */
 		peer->synctime = 0;
 
+		zlog_debug("bgp_stop: 7");
 		bgp_bfd_deregister_peer(peer);
 	}
 
+	zlog_debug("bgp_stop: 8");
 	/* stop keepalives */
 	bgp_keepalives_off(peer);
 
+	zlog_debug("bgp_stop: 9");
 	/* Stop read and write threads. */
 	bgp_writes_off(peer);
+	zlog_debug("bgp_stop: 10");
 	bgp_reads_off(peer);
 
+	zlog_debug("bgp_stop: 10");
 	THREAD_OFF(peer->t_connect_check_r);
+	zlog_debug("bgp_stop: 11");
 	THREAD_OFF(peer->t_connect_check_w);
 
 	/* Stop all timers. */
+	zlog_debug("bgp_stop: 12");
 	BGP_TIMER_OFF(peer->t_start);
+	zlog_debug("bgp_stop: 13");
 	BGP_TIMER_OFF(peer->t_connect);
+	zlog_debug("bgp_stop: 14");
 	BGP_TIMER_OFF(peer->t_holdtime);
+	zlog_debug("bgp_stop: 15");
 	BGP_TIMER_OFF(peer->t_routeadv);
 
+	zlog_debug("bgp_stop: 16");
 	/* Clear input and output buffer.  */
 	pthread_mutex_lock(&peer->io_mtx);
 	{
+		zlog_debug("bgp_stop: 17");
 		if (peer->ibuf)
 			stream_fifo_clean(peer->ibuf);
+		zlog_debug("bgp_stop: 18");
 		if (peer->obuf)
 			stream_fifo_clean(peer->obuf);
-
+		zlog_debug("bgp_stop: 19");
 		if (peer->ibuf_work)
 			stream_reset(peer->ibuf_work);
+		zlog_debug("bgp_stop: 20");
 		if (peer->obuf_work)
 			stream_reset(peer->obuf_work);
-
+		zlog_debug("bgp_stop: 21");
 		if (peer->curr) {
 			stream_free(peer->curr);
 			peer->curr = NULL;
 		}
+		zlog_debug("bgp_stop: 22");
 	}
 	pthread_mutex_unlock(&peer->io_mtx);
 
+	zlog_debug("bgp_stop: 23");
 	/* Close of file descriptor. */
 	if (peer->fd >= 0) {
 		close(peer->fd);
 		peer->fd = -1;
 	}
 
+	zlog_debug("bgp_stop: 24");
 	FOREACH_AFI_SAFI (afi, safi) {
 		/* Reset all negotiated variables */
 		peer->afc_nego[afi][safi] = 0;
@@ -1137,6 +1162,7 @@ int bgp_stop(struct peer *peer)
 		}
 	}
 
+	zlog_debug("bgp_stop: 25");
 	/* Reset keepalive and holdtime */
 	if (PEER_OR_GROUP_TIMER_SET(peer)) {
 		peer->v_keepalive = peer->keepalive;
@@ -1169,6 +1195,7 @@ int bgp_stop(struct peer *peer)
 		bgp_peer_conf_if_to_su_update(peer);
 	}
 
+	zlog_debug("bgp_stop: 26");
 	return ret;
 }
 
