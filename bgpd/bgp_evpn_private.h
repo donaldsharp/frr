@@ -96,10 +96,6 @@ struct irt_node {
 	struct list *vnis;
 };
 
-#define RT_TYPE_IMPORT 1
-#define RT_TYPE_EXPORT 2
-#define RT_TYPE_BOTH   3
-
 static inline int is_vni_configured(struct bgpevpn *vpn)
 {
 	return (CHECK_FLAG(vpn->flags, VNI_FLAG_CFGD));
