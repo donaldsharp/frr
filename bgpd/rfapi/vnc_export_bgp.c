@@ -313,7 +313,7 @@ void vnc_direct_bgp_add_route_ce(struct bgp *bgp, struct route_node *rn,
 		return;
 	}
 
-	bgp_update(peer, prefix, 0, /* addpath_id */
+	bgp_update(bgp, peer, prefix, 0, /* addpath_id */
 		   iattr,	   /* bgp_update copies this attr */
 		   afi, SAFI_UNICAST, ZEBRA_ROUTE_VNC_DIRECT,
 		   BGP_ROUTE_REDISTRIBUTE, NULL, /* RD not used for unicast */
@@ -1036,7 +1036,7 @@ void vnc_direct_bgp_add_nve(struct bgp *bgp, struct rfapi_descriptor *rfd)
 					iattr = bgp_attr_intern(&hattr);
 					bgp_attr_flush(&hattr);
 
-					bgp_update(irfd->peer,
+					bgp_update(bgp, irfd->peer,
 						   &rn->p, /* prefix */
 						   0,      /* addpath_id */
 						   iattr,  /* bgp_update copies
@@ -1252,7 +1252,7 @@ static void vnc_direct_add_rn_group_rd(struct bgp *bgp,
 	iattr = bgp_attr_intern(&hattr);
 	bgp_attr_flush(&hattr);
 
-	bgp_update(irfd->peer, &rn->p, /* prefix */
+	bgp_update(bgp, irfd->peer, &rn->p, /* prefix */
 		   0,		       /* addpath_id */
 		   iattr, /* bgp_update copies it */
 		   afi, SAFI_UNICAST,
@@ -1713,7 +1713,7 @@ void vnc_direct_bgp_rh_add_route(struct bgp *bgp, afi_t afi,
 		eti->timer = NULL;
 	}
 
-	bgp_update(peer, prefix, /* prefix */
+	bgp_update(bgp, peer, prefix, /* prefix */
 		   0,		 /* addpath_id */
 		   iattr,	/* bgp_update copies this attr */
 		   afi, SAFI_UNICAST, ZEBRA_ROUTE_VNC_DIRECT_RH,
@@ -1952,7 +1952,7 @@ void vnc_direct_bgp_rh_vpn_enable(struct bgp *bgp, afi_t afi)
 						"%s: calling bgp_update",
 						__func__);
 
-					bgp_update(ri->peer,
+					bgp_update(bgp, ri->peer,
 						   &rn->p, /* prefix */
 						   0,      /* addpath_id */
 						   iattr,  /* bgp_update copies

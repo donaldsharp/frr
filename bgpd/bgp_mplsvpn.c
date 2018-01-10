@@ -212,7 +212,8 @@ int bgp_nlri_parse_vpn(struct peer *peer, struct attr *attr,
 		       psize - VPN_PREFIXLEN_MIN_BYTES);
 
 		if (attr) {
-			bgp_update(peer, &p, addpath_id, attr, packet->afi,
+			bgp_update(peer->bgp, peer, &p, addpath_id,
+				   attr, packet->afi,
 				   SAFI_MPLS_VPN, ZEBRA_ROUTE_BGP,
 				   BGP_ROUTE_NORMAL, &prd, &label, 0, NULL);
 		} else {

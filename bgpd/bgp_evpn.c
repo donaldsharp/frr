@@ -1868,8 +1868,9 @@ static int process_type2_route(struct peer *peer, afi_t afi, safi_t safi,
 
 	/* Process the route. */
 	if (attr)
-		ret = bgp_update(peer, (struct prefix *)&p, addpath_id, attr,
-				 afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
+		ret = bgp_update(peer->bgp, peer, (struct prefix *)&p,
+				 addpath_id, attr, afi, safi,
+				 ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
 				 &prd, label_pnt, 0, NULL);
 	else
 		ret = bgp_withdraw(peer, (struct prefix *)&p, addpath_id, attr,
@@ -1928,8 +1929,9 @@ static int process_type3_route(struct peer *peer, afi_t afi, safi_t safi,
 
 	/* Process the route. */
 	if (attr)
-		ret = bgp_update(peer, (struct prefix *)&p, addpath_id, attr,
-				 afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
+		ret = bgp_update(peer->bgp, peer, (struct prefix *)&p,
+				 addpath_id, attr, afi, safi,
+				 ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
 				 &prd, NULL, 0, NULL);
 	else
 		ret = bgp_withdraw(peer, (struct prefix *)&p, addpath_id, attr,
@@ -2021,8 +2023,9 @@ static int process_type5_route(struct peer *peer, afi_t afi, safi_t safi,
 
 	/* Process the route. */
 	if (!withdraw)
-		ret = bgp_update(peer, (struct prefix *)&p, addpath_id, attr,
-				 afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
+		ret = bgp_update(peer->bgp, peer, (struct prefix *)&p,
+				 addpath_id, attr, afi, safi,
+				 ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
 				 &prd, label_pnt, 0, &evpn);
 	else
 		ret = bgp_withdraw(peer, (struct prefix *)&p, addpath_id, attr,
