@@ -360,10 +360,11 @@ extern int bgp_update(struct bgp *bgp, struct peer *peer, struct prefix *p,
 		      afi_t afi, safi_t safi, int type, int sub_type,
 		      struct prefix_rd *prd, mpls_label_t *label,
 		      int soft_reconfig, struct bgp_route_evpn *evpn);
-extern int bgp_withdraw(struct peer *, struct prefix *, u_int32_t,
-			struct attr *, afi_t, safi_t, int, int,
-			struct prefix_rd *, mpls_label_t *,
-			struct bgp_route_evpn *);
+extern int bgp_withdraw(struct bgp *bgp, struct peer *peer, struct prefix *p,
+			u_int32_t addpath_id, struct attr *attr,
+			afi_t afi, safi_t safi, int type, int sub_type,
+			struct prefix_rd *prd, mpls_label_t *label,
+			struct bgp_route_evpn *evpn);
 
 /* for bgp_nexthop and bgp_damp */
 extern void bgp_process(struct bgp *, struct bgp_node *, afi_t, safi_t);
