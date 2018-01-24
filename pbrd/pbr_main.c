@@ -44,6 +44,7 @@
 #include "routemap.h"
 
 #include "pbr_zebra.h"
+#include "pbr_vty.h"
 
 zebra_capabilities_t _caps_p[] = {
 	ZCAP_NET_RAW, ZCAP_BIND, ZCAP_NET_ADMIN,
@@ -143,6 +144,7 @@ int main(int argc, char **argv, char **envp)
 	vrf_init(NULL, NULL, NULL, NULL);
 
 	pbr_zebra_init();
+	pbr_vty_init();
 
 	frr_config_fork();
 	frr_run(master);
