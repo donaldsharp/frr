@@ -103,19 +103,6 @@ struct nexthop {
 	struct mpls_label_stack *nh_label;
 };
 
-/* The following for loop allows to iterate over the nexthop
- * structure of routes.
- *
- * head:      The pointer to the first nexthop in the chain.
- *
- * nexthop:   The pointer to the current nexthop, either in the
- *            top-level chain or in a resolved chain.
- */
-#define ALL_NEXTHOPS(head, nexthop)                                            \
-	(nexthop) = (head);                                                    \
-	(nexthop);                                                             \
-	(nexthop) = nexthop_next(nexthop)
-
 struct nexthop *nexthop_new(void);
 void nexthop_add(struct nexthop **target, struct nexthop *nexthop);
 

@@ -430,7 +430,7 @@ static void zebra_rnh_eval_import_check_entry(vrf_id_t vrfid, int family,
 	struct nexthop *nexthop;
 
 	if (re && (rnh->state == NULL)) {
-		for (ALL_NEXTHOPS(re->ng.nexthop, nexthop))
+		for (ALL_NEXTHOPS(re->ng, nexthop))
 			if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_FIB)) {
 				state_changed = 1;
 				break;
