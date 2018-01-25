@@ -609,7 +609,7 @@ int zsend_redistribute_route(int cmd, struct zserv *client, struct prefix *p,
 		SET_FLAG(api.message, ZAPI_MESSAGE_NEXTHOP);
 		api.nexthop_num = re->nexthop_active_num;
 	}
-	for (nexthop = re->nexthop; nexthop; nexthop = nexthop->next) {
+	for (nexthop = re->ng.nexthop; nexthop; nexthop = nexthop->next) {
 		if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE))
 			continue;
 
@@ -962,7 +962,7 @@ static int zsend_ipv4_nexthop_lookup_mrib(struct zserv *client,
 		 * we
 		 * are looking up. Therefore, we will just iterate over the top
 		 * chain of nexthops. */
-		for (nexthop = re->nexthop; nexthop; nexthop = nexthop->next)
+		for (nexthop = re->ng.nexthop; nexthop; nexthop = nexthop->next)
 			if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE))
 				num += zsend_write_nexthop(s, nexthop);
 
@@ -1208,7 +1208,7 @@ static int zread_route_add(struct zserv *client, u_short length,
 			if (!nexthop) {
 				zlog_warn("%s: Nexthops Specified: %d but we failed to properly create one",
 					  __PRETTY_FUNCTION__, api.nexthop_num);
-				nexthops_free(re->nexthop);
+				nexthops_free(re->ng.nexthop);
 				XFREE(MTYPE_RE, re);
 				return -1;
 			}
@@ -1240,7 +1240,7 @@ static int zread_route_add(struct zserv *client, u_short length,
 	if (afi != AFI_IP6 && CHECK_FLAG(api.message, ZAPI_MESSAGE_SRCPFX)) {
 		zlog_warn("%s: Received SRC Prefix but afi is not v6",
 			  __PRETTY_FUNCTION__);
-		nexthops_free(re->nexthop);
+		nexthops_free(re->ng.nexthop);
 		XFREE(MTYPE_RE, re);
 		return -1;
 	}
@@ -1406,7 +1406,7 @@ static int zread_ipv4_add(struct zserv *client, u_short length,
 			case NEXTHOP_TYPE_IPV6:
 				zlog_warn("%s: Please use ZEBRA_ROUTE_ADD if you want to pass v6 nexthops",
 					  __PRETTY_FUNCTION__);
-				nexthops_free(re->nexthop);
+				nexthops_free(re->ng.nexthop);
 				XFREE(MTYPE_RE, re);
 				return -1;
 				break;
@@ -1416,7 +1416,7 @@ static int zread_ipv4_add(struct zserv *client, u_short length,
 			default:
 				zlog_warn("%s: Specified nexthop type: %d does not exist",
 					  __PRETTY_FUNCTION__, nexthop_type);
-				nexthops_free(re->nexthop);
+				nexthops_free(re->ng.nexthop);
 				XFREE(MTYPE_RE, re);
 				return -1;
 			}
@@ -1456,7 +1456,7 @@ static int zread_ipv4_add(struct zserv *client, u_short length,
 	return 0;
 
 stream_failure:
-	nexthops_free(re->nexthop);
+	nexthops_free(re->ng.nexthop);
 	XFREE(MTYPE_RE, re);
 	return -1;
 }
@@ -1621,7 +1621,7 @@ static int zread_ipv4_route_ipv6_nexthop_add(struct zserv *client,
 			default:
 				zlog_warn("%s: Please use ZEBRA_ROUTE_ADD if you want to pass non v6 nexthops",
 					  __PRETTY_FUNCTION__);
-				nexthops_free(re->nexthop);
+				nexthops_free(re->ng.nexthop);
 				XFREE(MTYPE_RE, re);
 				return -1;
 			}
@@ -1683,7 +1683,7 @@ static int zread_ipv4_route_ipv6_nexthop_add(struct zserv *client,
 	return 0;
 
 stream_failure:
-	nexthops_free(re->nexthop);
+	nexthops_free(re->ng.nexthop);
 	XFREE(MTYPE_RE, re);
 	return -1;
 }
@@ -1810,7 +1810,7 @@ static int zread_ipv6_add(struct zserv *client, u_short length,
 			default:
 				zlog_warn("%s: Please use ZEBRA_ROUTE_ADD if you want to pass non v6 nexthops",
 					  __PRETTY_FUNCTION__);
-				nexthops_free(re->nexthop);
+				nexthops_free(re->ng.nexthop);
 				XFREE(MTYPE_RE, re);
 				return -1;
 			}
@@ -1874,7 +1874,7 @@ static int zread_ipv6_add(struct zserv *client, u_short length,
 	return 0;
 
 stream_failure:
-	nexthops_free(re->nexthop);
+	nexthops_free(re->ng.nexthop);
 	XFREE(MTYPE_RE, re);
 
 	return -1;
