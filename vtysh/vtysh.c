@@ -1511,6 +1511,7 @@ static int vtysh_exit(struct vty *vty)
 	case PW_NODE:
 	case NS_NODE:
 	case VRF_NODE:
+	case NH_GROUP_NODE:
 	case ZEBRA_NODE:
 	case BGP_NODE:
 	case RIP_NODE:
