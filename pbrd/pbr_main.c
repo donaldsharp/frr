@@ -42,6 +42,8 @@
 #include "distribute.h"
 #include "libfrr.h"
 #include "routemap.h"
+#include "nexthop.h"
+#include "nexthop_group.h"
 
 #include "pbr_zebra.h"
 #include "pbr_map.h"
@@ -143,6 +145,7 @@ int main(int argc, char **argv, char **envp)
 	master = frr_init();
 
 	vrf_init(NULL, NULL, NULL, NULL);
+	nexthop_group_init();
 
 	pbr_map_init();
 	pbr_zebra_init();
