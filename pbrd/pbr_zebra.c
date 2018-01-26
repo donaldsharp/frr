@@ -161,6 +161,7 @@ void route_add(struct prefix *p, struct nexthop *nh)
 	api_nh = &api.nexthops[0];
 	api_nh->vrf_id = VRF_DEFAULT;
 	api_nh->gate.ipv4 = nh->gate.ipv4;
+	api_nh->vrf_id = VRF_DEFAULT;
 	api_nh->type = nh->type;
 	api_nh->ifindex = nh->ifindex;
 	api.nexthop_num = 1;
