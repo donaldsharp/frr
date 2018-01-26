@@ -26,3 +26,20 @@
 #include "table.h"
 
 #include "pbr_map.h"
+
+static __inline int pbr_map_compare(const struct pbr_map *pbrmap1,
+				    const struct pbr_map *pbrmap2);
+
+RB_GENERATE(pbr_map_entry_head, pbr_map, pbr_map_entry, pbr_map_compare)
+
+struct pbr_map_entry_head pbr_maps = RB_INITIALIZER(&pbr_maps);
+
+static __inline int pbr_map_compare(const struct pbr_map *pbrmap1,
+				    const struct pbr_map *pbrmap2)
+{
+	return (pbrmap2->seqno - pbrmap1->seqno);
+}
+
+extern void pbr_map_init(void)
+{
+}
