@@ -140,6 +140,10 @@ if SNMP
 vtysh_scan += $(top_srcdir)/lib/agentx.c
 endif
 
+if PBRD
+vtysh_scan += $(top_srcdir)/pbrd/pbr_vty.c
+endif
+
 vtysh_cmd_FILES = $(vtysh_scan) \
 		  $(top_srcdir)/lib/keychain.c $(top_srcdir)/lib/routemap.c \
 		  $(top_srcdir)/lib/filter.c $(top_srcdir)/lib/plist.c \
