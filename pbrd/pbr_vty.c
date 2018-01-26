@@ -33,7 +33,40 @@
 #include "pbrd/pbr_vty_clippy.c"
 #endif
 
+DEFPY (pbr_map,
+       pbr_map_cmd,
+       "pbr-policy (1-100000)$seqno {src <A.B.C.D/M|X:X::X:X/M>$src|dest <A.B.C.D/M|X:X::X:X/M>$dst} nexthop-group NAME$nhgroup",
+       "Policy to use\n"
+       "Sequence Number\n"
+       "The Source\n"
+       "IP Address\n"
+       "IPv6 Address\n"
+       "dest\n"
+       "IP Address\n"
+       "IPv6 Address\n"
+       "Nexthop group\n"
+       "Name of the Nexthop Group\n")
+{
+	return CMD_SUCCESS;
+}
+
+static struct cmd_node interface_node = {
+	INTERFACE_NODE, "%s(config-if)# ", 1 /* vtysh ? yes */
+};
+
+static int pbr_interface_config_write(struct vty *vty)
+{
+	vty_out(vty, "!\n");
+
+	return 1;
+}
+
 void pbr_vty_init(void)
 {
+	install_node(&interface_node,
+		     pbr_interface_config_write);
+	if_cmd_init();
+
+	install_element(INTERFACE_NODE, &pbr_map_cmd);
 	return;
 }
