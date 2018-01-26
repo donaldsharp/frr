@@ -42,6 +42,7 @@ lib_libfrr_la_SOURCES = \
 	lib/module.c \
 	lib/network.c \
 	lib/nexthop.c \
+	lib/nexthop_group.c \
 	lib/ns.c \
 	lib/openbsd-tree.c \
 	lib/pid_output.c \
@@ -120,6 +121,7 @@ pkginclude_HEADERS += \
 	lib/mpls.h \
 	lib/network.h \
 	lib/nexthop.h \
+	lib/nexthop_group.h \
 	lib/ns.h \
 	lib/openbsd-queue.h \
 	lib/openbsd-tree.h \

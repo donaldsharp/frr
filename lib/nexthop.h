@@ -104,10 +104,7 @@ struct nexthop {
 };
 
 struct nexthop *nexthop_new(void);
-void nexthop_add(struct nexthop **target, struct nexthop *nexthop);
 
-void copy_nexthops(struct nexthop **tnh, struct nexthop *nh,
-		   struct nexthop *rparent);
 void nexthop_free(struct nexthop *nexthop);
 void nexthops_free(struct nexthop *nexthop);
 
