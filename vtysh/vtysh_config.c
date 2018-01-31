@@ -205,6 +205,9 @@ void vtysh_config_parse_line(void *arg, const char *line)
 			config = config_get(NS_NODE, line);
 		else if (strncmp(line, "vrf", strlen("vrf")) == 0)
 			config = config_get(VRF_NODE, line);
+		else if (strncmp(line, "nexthop-group", strlen("nexthop-group"))
+			 == 0)
+			config = config_get(NH_GROUP_NODE, line);
 		else if (strncmp(line, "router-id", strlen("router-id")) == 0)
 			config = config_get(ZEBRA_NODE, line);
 		else if (strncmp(line, "router rip", strlen("router rip")) == 0)
