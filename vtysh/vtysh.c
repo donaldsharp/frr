@@ -984,6 +984,11 @@ static struct cmd_node vrf_node = {
 	VRF_NODE, "%s(config-vrf)# ",
 };
 
+static struct cmd_node nh_group_node = {
+	NH_GROUP_NODE,
+	"%s(config-nh-group)# ",
+};
+
 static struct cmd_node rmap_node = {RMAP_NODE, "%s(config-route-map)# "};
 
 static struct cmd_node zebra_node = {ZEBRA_NODE, "%s(config-router)# "};
@@ -1794,6 +1799,20 @@ DEFUNSH(VTYSH_NS, vtysh_ns, vtysh_ns_cmd, "logical-router (1-65535) ns NAME",
 	return CMD_SUCCESS;
 }
 
+DEFUNSH(VTYSH_PBRD, vtysh_nexthop_group, vtysh_nexthop_group_cmd,
+	"nexthop-group NAME",
+	"Nexthop Group configuration\n"
+	"Name of the Nexthop Group\n")
+{
+	vty->node = NH_GROUP_NODE;
+	return CMD_SUCCESS;
+}
+
+DEFSH(VTYSH_PBRD, vtysh_no_nexthop_group_cmd, "no nexthop-group NAME",
+      NO_STR
+      "Nexthop Group Configuration\n"
+      "Name of the Nexthop Group\n")
+
 DEFUNSH(VTYSH_VRF, vtysh_vrf, vtysh_vrf_cmd, "vrf NAME",
 	"Select a VRF to configure\n"
 	"VRF's name\n")
@@ -1828,6 +1847,18 @@ DEFUNSH(VTYSH_VRF, vtysh_quit_vrf, vtysh_quit_vrf_cmd, "quit",
 	"Exit current mode and down to previous mode\n")
 {
 	return vtysh_exit_vrf(self, vty, argc, argv);
+}
+
+DEFUNSH(VTYSH_PBRD, vtysh_exit_nexthop_group, vtysh_exit_nexthop_group_cmd,
+	"exit", "Exit current mode and down to previous mode\n")
+{
+	return vtysh_exit(vty);
+}
+
+DEFUNSH(VTYSH_VRF, vtysh_quit_nexthop_group, vtysh_quit_nexthop_group_cmd,
+	"qui", "Exit current mode and down to previous mode\n")
+{
+	return vtysh_exit_nexthop_group(self, vty, argc, argv);
 }
 
 /* TODO Implement interface description commands in ripngd, ospf6d
@@ -3046,6 +3077,7 @@ void vtysh_init_vty(void)
 	install_node(&link_params_node, NULL);
 	install_node(&ns_node, NULL);
 	install_node(&vrf_node, NULL);
+	install_node(&nh_group_node, NULL);
 	install_node(&rmap_node, NULL);
 	install_node(&zebra_node, NULL);
 	install_node(&bgp_vpnv4_node, NULL);
@@ -3228,6 +3260,11 @@ void vtysh_init_vty(void)
 	install_element(NS_NODE, &vtysh_exit_ns_cmd);
 	install_element(NS_NODE, &vtysh_quit_ns_cmd);
 
+	install_element(CONFIG_NODE, &vtysh_nexthop_group_cmd);
+	install_element(NH_GROUP_NODE, &vtysh_end_all_cmd);
+	install_element(NH_GROUP_NODE, &vtysh_exit_nexthop_group_cmd);
+	install_element(NH_GROUP_NODE, &vtysh_quit_nexthop_group_cmd);
+
 	install_element(VRF_NODE, &vtysh_end_all_cmd);
 	install_element(VRF_NODE, &vtysh_exit_vrf_cmd);
 	install_element(VRF_NODE, &vtysh_quit_vrf_cmd);
@@ -3311,6 +3348,7 @@ void vtysh_init_vty(void)
 
 	install_element(CONFIG_NODE, &vtysh_vrf_cmd);
 	install_element(CONFIG_NODE, &vtysh_no_vrf_cmd);
+	install_element(CONFIG_NODE, &vtysh_no_nexthop_group_cmd);
 
 	/* "write terminal" command. */
 	install_element(ENABLE_NODE, &vtysh_write_terminal_cmd);

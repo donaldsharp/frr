@@ -52,4 +52,20 @@ void copy_nexthops(struct nexthop **tnh, struct nexthop *nh,
 	(nhop) = (head.nexthop);					\
 	(nhop);								\
 	(nhop) = nexthop_next(nhop)
+
+struct nexthop_group_cmd {
+
+	RB_ENTRY(nexthop_group_cmd) nhgc_entry;
+
+	char name[80];
+
+	struct nexthop_group nhg;
+
+	QOBJ_FIELDS;
+};
+RB_HEAD(nhgc_entry_head, nexthp_group_cmd);
+RB_PROTOTYPE(nhgc_entry_head, nexthop_group_cmd, nhgc_entry,
+	     nexthop_group_cmd_compare)
+DECLARE_QOBJ_TYPE(nexthop_group_cmd);
+
 #endif
