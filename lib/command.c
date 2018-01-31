@@ -1380,6 +1380,7 @@ DEFUN (config_end,
 	case PW_NODE:
 	case NS_NODE:
 	case VRF_NODE:
+	case NH_GROUP_NODE:
 	case ZEBRA_NODE:
 	case RIP_NODE:
 	case RIPNG_NODE:
