@@ -88,6 +88,7 @@ enum node_type {
 	NS_NODE,		/* Logical-Router node. */
 	VRF_NODE,		/* VRF mode node. */
 	INTERFACE_NODE,		/* Interface mode node. */
+	NH_GROUP_NODE,          /* Nexthop-Group mode node. */
 	ZEBRA_NODE,		/* zebra connection node. */
 	TABLE_NODE,		/* rtm_table selection node. */
 	RIP_NODE,		/* RIP protocol mode node. */
@@ -190,7 +191,7 @@ struct cmd_node {
 #define CMD_NOT_MY_INSTANCE	14
 
 /* Argc max counts. */
-#define CMD_ARGC_MAX   25
+#define CMD_ARGC_MAX   256
 
 /* Turn off these macros when uisng cpp with extract.pl */
 #ifndef VTYSH_EXTRACT_PL

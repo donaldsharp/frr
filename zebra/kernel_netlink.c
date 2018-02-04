@@ -40,10 +40,12 @@
 #include "zebra/zserv.h"
 #include "zebra/zebra_ns.h"
 #include "zebra/zebra_vrf.h"
+#include "zebra/rt.h"
 #include "zebra/debug.h"
 #include "zebra/kernel_netlink.h"
 #include "zebra/rt_netlink.h"
 #include "zebra/if_netlink.h"
+#include "zebra/rule_netlink.h"
 
 #ifndef SO_RCVBUFFORCE
 #define SO_RCVBUFFORCE  (33)
@@ -84,6 +86,9 @@ static const struct message nlmsg_str[] = {{RTM_NEWROUTE, "RTM_NEWROUTE"},
 					   {RTM_NEWNEIGH, "RTM_NEWNEIGH"},
 					   {RTM_DELNEIGH, "RTM_DELNEIGH"},
 					   {RTM_GETNEIGH, "RTM_GETNEIGH"},
+					   {RTM_NEWRULE, "RTM_NEWRULE"},
+					   {RTM_DELRULE, "RTM_DELRULE"},
+					   {RTM_GETRULE, "RTM_GETRULE"},
 					   {0}};
 
 static const struct message rtproto_str[] = {
@@ -260,6 +265,12 @@ static int netlink_information_fetch(struct sockaddr_nl *snl,
 		break;
 	case RTM_DELNEIGH:
 		return netlink_neigh_change(snl, h, ns_id);
+		break;
+	case RTM_NEWRULE:
+		return netlink_rule_change(snl, h, ns_id, startup);
+		break;
+	case RTM_DELRULE:
+		return netlink_rule_change(snl, h, ns_id, startup);
 		break;
 	default:
 		if (IS_ZEBRA_DEBUG_KERNEL)
@@ -787,7 +798,8 @@ void kernel_init(struct zebra_ns *zns)
 	/* Initialize netlink sockets */
 	groups = RTMGRP_LINK | RTMGRP_IPV4_ROUTE | RTMGRP_IPV4_IFADDR
 		 | RTMGRP_IPV6_ROUTE | RTMGRP_IPV6_IFADDR | RTMGRP_IPV4_MROUTE
-		 | RTMGRP_NEIGH;
+		 | RTMGRP_NEIGH
+		 | RTNLGRP_IPV4_RULE | RTNLGRP_IPV6_RULE;
 
 	snprintf(zns->netlink.name, sizeof(zns->netlink.name),
 		 "netlink-listen (NS %u)", zns->ns_id);

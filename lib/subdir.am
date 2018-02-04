@@ -42,6 +42,7 @@ lib_libfrr_la_SOURCES = \
 	lib/module.c \
 	lib/network.c \
 	lib/nexthop.c \
+	lib/nexthop_group.c \
 	lib/ns.c \
 	lib/openbsd-tree.c \
 	lib/pid_output.c \
@@ -51,6 +52,7 @@ lib_libfrr_la_SOURCES = \
 	lib/privs.c \
 	lib/ptm_lib.c \
 	lib/qobj.c \
+	lib/ringbuf.c \
 	lib/routemap.c \
 	lib/sbuf.c \
 	lib/sha256.c \
@@ -77,6 +79,8 @@ lib_libfrr_la_SOURCES = \
 
 lib/plist_clippy.c: $(CLIPPY_DEPS)
 lib/plist.lo: lib/plist_clippy.c
+lib/nexthop_group_clippy.c: $(CLIPPY_DEPS)
+lib/nexthop_group.lo: lib/nexthop_group_clippy.c
 
 pkginclude_HEADERS += \
 	lib/bfd.h \
@@ -119,6 +123,7 @@ pkginclude_HEADERS += \
 	lib/mpls.h \
 	lib/network.h \
 	lib/nexthop.h \
+	lib/nexthop_group.h \
 	lib/ns.h \
 	lib/openbsd-queue.h \
 	lib/openbsd-tree.h \
@@ -130,6 +135,7 @@ pkginclude_HEADERS += \
 	lib/pw.h \
 	lib/qobj.h \
 	lib/queue.h \
+	lib/ringbuf.h \
 	lib/routemap.h \
 	lib/sbuf.h \
 	lib/sha256.h \
