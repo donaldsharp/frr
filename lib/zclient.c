@@ -291,7 +291,7 @@ void zclient_create_header(struct stream *s, uint16_t command, vrf_id_t vrf_id)
 	stream_putw(s, ZEBRA_HEADER_SIZE);
 	stream_putc(s, ZEBRA_HEADER_MARKER);
 	stream_putc(s, ZSERV_VERSION);
-	stream_putw(s, vrf_id);
+	stream_putl(s, vrf_id);
 	stream_putw(s, command);
 }
 
@@ -306,7 +306,7 @@ int zclient_read_header(struct stream *s, int sock, u_int16_t *size,
 	*size -= ZEBRA_HEADER_SIZE;
 	STREAM_GETC(s, *marker);
 	STREAM_GETC(s, *version);
-	STREAM_GETW(s, *vrf_id);
+	STREAM_GETL(s, *vrf_id);
 	STREAM_GETW(s, *cmd);
 
 	if (*version != ZSERV_VERSION || *marker != ZEBRA_HEADER_MARKER) {
@@ -912,6 +912,8 @@ int zapi_route_encode(u_char cmd, struct stream *s, struct zapi_route *api)
 	stream_putl(s, api->flags);
 	stream_putc(s, api->message);
 	stream_putc(s, api->safi);
+	if (CHECK_FLAG(api->flags, ZEBRA_FLAG_EVPN_ROUTE))
+		stream_put(s, &(api->rmac), sizeof(struct ethaddr));
 
 	/* Put prefix information. */
 	stream_putc(s, api->prefix.family);
@@ -940,6 +942,8 @@ int zapi_route_encode(u_char cmd, struct stream *s, struct zapi_route *api)
 		}
 
 		stream_putw(s, api->nexthop_num);
+		if (api->nexthop_num)
+			stream_putw(s, api->nh_vrf_id);
 
 		for (i = 0; i < api->nexthop_num; i++) {
 			api_nh = &api->nexthops[i];
@@ -1032,6 +1036,8 @@ int zapi_route_decode(struct stream *s, struct zapi_route *api)
 	STREAM_GETL(s, api->flags);
 	STREAM_GETC(s, api->message);
 	STREAM_GETC(s, api->safi);
+	if (CHECK_FLAG(api->flags, ZEBRA_FLAG_EVPN_ROUTE))
+		stream_get(&(api->rmac), s, sizeof(struct ethaddr));
 
 	/* Prefix. */
 	STREAM_GETC(s, api->prefix.family);
@@ -1086,6 +1092,9 @@ int zapi_route_decode(struct stream *s, struct zapi_route *api)
 				  __func__, api->nexthop_num);
 			return -1;
 		}
+
+		if (api->nexthop_num)
+			STREAM_GETW(s, api->nh_vrf_id);
 
 		for (i = 0; i < api->nexthop_num; i++) {
 			api_nh = &api->nexthops[i];
@@ -1673,7 +1682,7 @@ struct interface *zebra_interface_vrf_update_read(struct stream *s,
 {
 	unsigned int ifindex;
 	struct interface *ifp;
-	vrf_id_t new_id = VRF_DEFAULT;
+	vrf_id_t new_id;
 
 	/* Get interface index. */
 	ifindex = stream_getl(s);
@@ -2039,7 +2048,7 @@ static int zclient_read(struct thread *thread)
 	length = stream_getw(zclient->ibuf);
 	marker = stream_getc(zclient->ibuf);
 	version = stream_getc(zclient->ibuf);
-	vrf_id = stream_getw(zclient->ibuf);
+	vrf_id = stream_getl(zclient->ibuf);
 	command = stream_getw(zclient->ibuf);
 
 	if (marker != ZEBRA_HEADER_MARKER || version != ZSERV_VERSION) {
@@ -2205,6 +2214,16 @@ static int zclient_read(struct thread *thread)
 			(*zclient->local_vni_del)(command, zclient, length,
 						  vrf_id);
 		break;
+	case ZEBRA_L3VNI_ADD:
+		if (zclient->local_l3vni_add)
+			(*zclient->local_l3vni_add)(command, zclient, length,
+						    vrf_id);
+		break;
+	case ZEBRA_L3VNI_DEL:
+		if (zclient->local_l3vni_del)
+			(*zclient->local_l3vni_del)(command, zclient, length,
+						    vrf_id);
+		break;
 	case ZEBRA_MACIP_ADD:
 		if (zclient->local_macip_add)
 			(*zclient->local_macip_add)(command, zclient, length,
@@ -2332,9 +2351,9 @@ void zclient_interface_set_master(struct zclient *client,
 
 	zclient_create_header(s, ZEBRA_INTERFACE_SET_MASTER, master->vrf_id);
 
-	stream_putw(s, master->vrf_id);
+	stream_putl(s, master->vrf_id);
 	stream_putl(s, master->ifindex);
-	stream_putw(s, slave->vrf_id);
+	stream_putl(s, slave->vrf_id);
 	stream_putl(s, slave->ifindex);
 
 	stream_putw_at(s, 0, stream_get_endp(s));

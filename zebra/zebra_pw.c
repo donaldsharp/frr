@@ -73,7 +73,7 @@ struct zebra_pw *zebra_pw_add(struct zebra_vrf *zvrf, const char *ifname,
 	pw->protocol = protocol;
 	pw->vrf_id = zvrf_id(zvrf);
 	pw->client = client;
-	pw->status = PW_STATUS_UP;
+	pw->status = PW_STATUS_DOWN;
 	pw->local_label = MPLS_NO_LABEL;
 	pw->remote_label = MPLS_NO_LABEL;
 	pw->flags = F_PSEUDOWIRE_CWORD;
@@ -256,7 +256,7 @@ static int zebra_pw_check_reachability(struct zebra_pw *pw)
 	 * Need to ensure that there's a label binding for all nexthops.
 	 * Otherwise, ECMP for this route could render the pseudowire unusable.
 	 */
-	for (ALL_NEXTHOPS(re->nexthop, nexthop)) {
+	for (ALL_NEXTHOPS(re->ng, nexthop)) {
 		if (!nexthop->nh_label) {
 			if (IS_ZEBRA_DEBUG_PW)
 				zlog_warn("%s: unlabeled route for %s",

@@ -124,7 +124,7 @@ const char *nexthop_type_to_str(enum nexthop_types_t nh_type)
  */
 int nexthop_labels_match(struct nexthop *nh1, struct nexthop *nh2)
 {
-	struct nexthop_label *nhl1, *nhl2;
+	struct mpls_label_stack *nhl1, *nhl2;
 
 	nhl1 = nh1->nh_label;
 	nhl2 = nh2->nh_label;
@@ -143,47 +143,6 @@ int nexthop_labels_match(struct nexthop *nh1, struct nexthop *nh2)
 struct nexthop *nexthop_new(void)
 {
 	return XCALLOC(MTYPE_NEXTHOP, sizeof(struct nexthop));
-}
-
-/* Add nexthop to the end of a nexthop list.  */
-void nexthop_add(struct nexthop **target, struct nexthop *nexthop)
-{
-	struct nexthop *last;
-
-	for (last = *target; last && last->next; last = last->next)
-		;
-	if (last)
-		last->next = nexthop;
-	else
-		*target = nexthop;
-	nexthop->prev = last;
-}
-
-void copy_nexthops(struct nexthop **tnh, struct nexthop *nh,
-		   struct nexthop *rparent)
-{
-	struct nexthop *nexthop;
-	struct nexthop *nh1;
-
-	for (nh1 = nh; nh1; nh1 = nh1->next) {
-		nexthop = nexthop_new();
-		nexthop->ifindex = nh1->ifindex;
-		nexthop->type = nh1->type;
-		nexthop->flags = nh1->flags;
-		memcpy(&nexthop->gate, &nh1->gate, sizeof(nh1->gate));
-		memcpy(&nexthop->src, &nh1->src, sizeof(nh1->src));
-		memcpy(&nexthop->rmap_src, &nh1->rmap_src, sizeof(nh1->rmap_src));
-		nexthop->rparent = rparent;
-		if (nh1->nh_label)
-			nexthop_add_labels(nexthop, nh1->nh_label_type,
-					   nh1->nh_label->num_labels,
-					   &nh1->nh_label->label[0]);
-		nexthop_add(tnh, nexthop);
-
-		if (CHECK_FLAG(nh1->flags, NEXTHOP_FLAG_RECURSIVE))
-			copy_nexthops(&nexthop->resolved, nh1->resolved,
-				      nexthop);
-	}
 }
 
 /* Free nexthop. */
@@ -210,12 +169,12 @@ void nexthops_free(struct nexthop *nexthop)
 void nexthop_add_labels(struct nexthop *nexthop, enum lsp_types_t type,
 			u_int8_t num_labels, mpls_label_t *label)
 {
-	struct nexthop_label *nh_label;
+	struct mpls_label_stack *nh_label;
 	int i;
 
 	nexthop->nh_label_type = type;
 	nh_label = XCALLOC(MTYPE_NH_LABEL,
-			   sizeof(struct nexthop_label)
+			   sizeof(struct mpls_label_stack)
 				   + num_labels * sizeof(mpls_label_t));
 	nh_label->num_labels = num_labels;
 	for (i = 0; i < num_labels; i++)

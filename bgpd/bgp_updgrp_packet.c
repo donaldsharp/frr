@@ -633,7 +633,6 @@ struct stream *bpacket_reformat_for_peer(struct bpacket *pkt,
 		}
 	}
 
-	bgp_packet_add(peer, s);
 	return s;
 }
 
@@ -963,7 +962,7 @@ struct bpacket *subgroup_withdraw_packet(struct update_subgroup *subgrp)
 		addpath_tx_id = adj->addpath_tx_id;
 
 		space_remaining =
-			STREAM_REMAIN(s) - BGP_MAX_PACKET_SIZE_OVERFLOW;
+			STREAM_WRITEABLE(s) - BGP_MAX_PACKET_SIZE_OVERFLOW;
 		space_needed =
 			BGP_NLRI_LENGTH + addpath_overhead + BGP_TOTAL_ATTR_LEN
 			+ bgp_packet_mpattr_prefix_size(afi, safi, &rn->p);

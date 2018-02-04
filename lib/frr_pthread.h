@@ -21,7 +21,10 @@
 #define _FRR_PTHREAD_H
 
 #include <pthread.h>
+#include "memory.h"
 #include "thread.h"
+
+DECLARE_MTYPE(PTHREAD_PRIM);
 
 struct frr_pthread {
 
@@ -129,6 +132,9 @@ int frr_pthread_stop(unsigned int id, void **result);
 
 /* Stops all frr_pthread's. */
 void frr_pthread_stop_all(void);
+
+/* Yields the current thread of execution */
+void frr_pthread_yield(void);
 
 /* Returns a unique identifier for use with frr_pthread_new().
  *

@@ -23,6 +23,7 @@
 #define __ZEBRA_NS_H__
 
 #include <lib/ns.h>
+#include <lib/vrf.h>
 
 #ifdef HAVE_NETLINK
 /* Socket interface to kernel */
@@ -49,13 +50,13 @@ struct zebra_ns {
 
 	struct route_table *if_table;
 
+	/* L3-VNI hash table (for EVPN). Only in default instance */
+	struct hash *l3vni_table;
+
 #if defined(HAVE_RTADV)
 	struct rtadv rtadv;
 #endif /* HAVE_RTADV */
 };
-
-#define NS_DEFAULT 0
-#define NS_UNKNOWN UINT16_MAX
 
 struct zebra_ns *zebra_ns_lookup(ns_id_t ns_id);
 

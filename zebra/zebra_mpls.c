@@ -104,7 +104,7 @@ static zebra_nhlfe_t *nhlfe_add(zebra_lsp_t *lsp, enum lsp_types_t lsp_type,
 				ifindex_t ifindex, mpls_label_t out_label);
 static int nhlfe_del(zebra_nhlfe_t *snhlfe);
 static void nhlfe_out_label_update(zebra_nhlfe_t *nhlfe,
-				   struct nexthop_label *nh_label);
+				   struct mpls_label_stack *nh_label);
 static int mpls_lsp_uninstall_all(struct hash *lsp_table, zebra_lsp_t *lsp,
 				  enum lsp_types_t type);
 static int mpls_static_lsp_uninstall_all(struct zebra_vrf *zvrf,
@@ -182,7 +182,7 @@ static int lsp_install(struct zebra_vrf *zvrf, mpls_label_t label,
 	 * the label advertised by the recursive nexthop (plus we don't have the
 	 * logic yet to push multiple labels).
 	 */
-	for (nexthop = re->nexthop; nexthop; nexthop = nexthop->next) {
+	for (nexthop = re->ng.nexthop; nexthop; nexthop = nexthop->next) {
 		/* Skip inactive and recursive entries. */
 		if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE))
 			continue;
@@ -457,7 +457,7 @@ static int fec_send(zebra_fec_t *fec, struct zserv *client)
 	s = client->obuf;
 	stream_reset(s);
 
-	zserv_create_header(s, ZEBRA_FEC_UPDATE, VRF_DEFAULT);
+	zclient_create_header(s, ZEBRA_FEC_UPDATE, VRF_DEFAULT);
 
 	stream_putw(s, rn->p.family);
 	stream_put_prefix(s, &rn->p);
@@ -636,7 +636,7 @@ static int nhlfe_nexthop_active_ipv4(zebra_nhlfe_t *nhlfe,
 		    || !CHECK_FLAG(match->flags, ZEBRA_FLAG_SELECTED))
 			continue;
 
-		for (match_nh = match->nexthop; match_nh;
+		for (match_nh = match->ng.nexthop; match_nh;
 		     match_nh = match_nh->next) {
 			if (match->type == ZEBRA_ROUTE_CONNECT
 			    || nexthop->ifindex == match_nh->ifindex) {
@@ -687,10 +687,10 @@ static int nhlfe_nexthop_active_ipv6(zebra_nhlfe_t *nhlfe,
 			break;
 	}
 
-	if (!match || !match->nexthop)
+	if (!match || !match->ng.nexthop)
 		return 0;
 
-	nexthop->ifindex = match->nexthop->ifindex;
+	nexthop->ifindex = match->ng.nexthop->ifindex;
 	return 1;
 }
 
@@ -839,18 +839,11 @@ static void lsp_select_best_nhlfe(zebra_lsp_t *lsp)
  */
 static void lsp_uninstall_from_kernel(struct hash_backet *backet, void *ctxt)
 {
-	int ret;
 	zebra_lsp_t *lsp;
 
 	lsp = (zebra_lsp_t *)backet->data;
-	if (CHECK_FLAG(lsp->flags, LSP_FLAG_INSTALLED)) {
-		ret = kernel_del_lsp(lsp);
-
-		if (!ret) {
-			UNSET_FLAG(lsp->flags, LSP_FLAG_INSTALLED);
-			clear_nhlfe_installed(lsp);
-		}
-	}
+	if (CHECK_FLAG(lsp->flags, LSP_FLAG_INSTALLED))
+		kernel_del_lsp(lsp);
 }
 
 /*
@@ -871,7 +864,6 @@ static void lsp_schedule(struct hash_backet *backet, void *ctxt)
  */
 static wq_item_status lsp_process(struct work_queue *wq, void *data)
 {
-	int ret = 1;
 	zebra_lsp_t *lsp;
 	zebra_nhlfe_t *oldbest, *newbest;
 	char buf[BUFSIZ], buf2[BUFSIZ];
@@ -905,12 +897,7 @@ static wq_item_status lsp_process(struct work_queue *wq, void *data)
 		if (newbest) {
 
 			UNSET_FLAG(lsp->flags, LSP_FLAG_CHANGED);
-			ret = kernel_add_lsp(lsp);
-
-			if (!ret)
-				SET_FLAG(lsp->flags, LSP_FLAG_INSTALLED);
-			else
-				clear_nhlfe_installed(lsp);
+			kernel_add_lsp(lsp);
 
 			zvrf->lsp_installs++;
 		}
@@ -918,25 +905,38 @@ static wq_item_status lsp_process(struct work_queue *wq, void *data)
 		/* Installed, may need an update and/or delete. */
 		if (!newbest) {
 
-			ret = kernel_del_lsp(lsp);
-
-			if (!ret) {
-				UNSET_FLAG(lsp->flags, LSP_FLAG_INSTALLED);
-				clear_nhlfe_installed(lsp);
-			}
+			kernel_del_lsp(lsp);
 
 			zvrf->lsp_removals++;
 		} else if (CHECK_FLAG(lsp->flags, LSP_FLAG_CHANGED)) {
+			zebra_nhlfe_t *nhlfe;
+			struct nexthop *nexthop;
 
 			UNSET_FLAG(lsp->flags, LSP_FLAG_CHANGED);
 			UNSET_FLAG(lsp->flags, LSP_FLAG_INSTALLED);
 
-			ret = kernel_upd_lsp(lsp);
+			/*
+			 * Any NHLFE that was installed but is not
+			 * selected now needs to have its flags updated.
+			 */
+			for (nhlfe = lsp->nhlfe_list;
+			     nhlfe; nhlfe = nhlfe->next) {
+				nexthop = nhlfe->nexthop;
+				if (!nexthop)
+					continue;
 
-			if (!ret)
-				SET_FLAG(lsp->flags, LSP_FLAG_INSTALLED);
-			else
-				clear_nhlfe_installed(lsp);
+				if (CHECK_FLAG(nhlfe->flags,
+					       NHLFE_FLAG_INSTALLED) &&
+				    !CHECK_FLAG(nhlfe->flags,
+						NHLFE_FLAG_SELECTED)) {
+					UNSET_FLAG(nhlfe->flags,
+						   NHLFE_FLAG_INSTALLED);
+					UNSET_FLAG(nexthop->flags,
+						   NEXTHOP_FLAG_FIB);
+				}
+			}
+
+			kernel_upd_lsp(lsp);
 
 			zvrf->lsp_installs++;
 		}
@@ -1217,7 +1217,7 @@ static int nhlfe_del(zebra_nhlfe_t *nhlfe)
  * Update label for NHLFE entry.
  */
 static void nhlfe_out_label_update(zebra_nhlfe_t *nhlfe,
-				   struct nexthop_label *nh_label)
+				   struct mpls_label_stack *nh_label)
 {
 	nhlfe->nexthop->nh_label->label[0] = nh_label->label[0];
 }
@@ -1658,6 +1658,42 @@ static int mpls_processq_init(struct zebra_t *zebra)
 
 
 /* Public functions */
+
+void kernel_lsp_pass_fail(zebra_lsp_t *lsp,
+			  enum southbound_results res)
+{
+	struct nexthop *nexthop;
+	zebra_nhlfe_t *nhlfe;
+
+	if (!lsp)
+		return;
+
+	switch (res) {
+	case SOUTHBOUND_INSTALL_FAILURE:
+		UNSET_FLAG(lsp->flags, LSP_FLAG_INSTALLED);
+		clear_nhlfe_installed(lsp);
+		zlog_warn("LSP Install Failure: %u", lsp->ile.in_label);
+		break;
+	case SOUTHBOUND_INSTALL_SUCCESS:
+		SET_FLAG(lsp->flags, LSP_FLAG_INSTALLED);
+		for (nhlfe = lsp->nhlfe_list; nhlfe; nhlfe = nhlfe->next) {
+			nexthop = nhlfe->nexthop;
+			if (!nexthop)
+				continue;
+
+			SET_FLAG(nhlfe->flags, NHLFE_FLAG_INSTALLED);
+			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_FIB);
+		}
+		break;
+	case SOUTHBOUND_DELETE_SUCCESS:
+		UNSET_FLAG(lsp->flags, LSP_FLAG_INSTALLED);
+		clear_nhlfe_installed(lsp);
+		break;
+	case SOUTHBOUND_DELETE_FAILURE:
+		zlog_warn("LSP Deletion Failure: %u", lsp->ile.in_label);
+		break;
+	}
+}
 
 /*
  * String to label conversion, labels separated by '/'.
@@ -2222,7 +2258,7 @@ int mpls_ftn_update(int add, struct zebra_vrf *zvrf, enum lsp_types_t type,
 	if (re == NULL)
 		return -1;
 
-	for (nexthop = re->nexthop; nexthop; nexthop = nexthop->next) {
+	for (nexthop = re->ng.nexthop; nexthop; nexthop = nexthop->next) {
 		switch (nexthop->type) {
 		case NEXTHOP_TYPE_IPV4:
 		case NEXTHOP_TYPE_IPV4_IFINDEX:
@@ -2440,7 +2476,7 @@ void mpls_ldp_ftn_uninstall_all(struct zebra_vrf *zvrf, int afi)
 	for (rn = route_top(table); rn; rn = route_next(rn)) {
 		update = 0;
 		RNODE_FOREACH_RE (rn, re) {
-			for (nexthop = re->nexthop; nexthop;
+			for (nexthop = re->ng.nexthop; nexthop;
 			     nexthop = nexthop->next) {
 				if (nexthop->nh_label_type != ZEBRA_LSP_LDP)
 					continue;
