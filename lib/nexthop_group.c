@@ -20,10 +20,15 @@
  */
 #include <zebra.h>
 
+#include <vrf.h>
 #include <nexthop.h>
 #include <nexthop_group.h>
 #include <vty.h>
 #include <command.h>
+
+#ifndef VTYSH_EXTRACT_PL
+#include "lib/nexthop_group_clippy.c"
+#endif
 
 static __inline int
 nexthop_group_cmd_compare(const struct nexthop_group_cmd *nhgc1,
@@ -38,6 +43,19 @@ nexthop_group_cmd_compare(const struct nexthop_group_cmd *nhgc1,
 			  const struct nexthop_group_cmd *nhgc2)
 {
 	return strcmp(nhgc1->name, nhgc2->name);
+}
+
+static bool nexthop_exists(struct nexthop_group *nhg,
+			   struct nexthop *nh)
+{
+	struct nexthop *nexthop;
+
+	for (nexthop = nhg->nexthop; nexthop; nexthop = nexthop->next) {
+		if (nexthop_same(nh, nexthop))
+			return true;
+	}
+
+	return false;
 }
 
 /* Add nexthop to the end of a nexthop list.  */
@@ -107,6 +125,7 @@ static struct nexthop_group_cmd *nhgc_get(const char *name)
 		nhgc = XCALLOC(MTYPE_TMP, sizeof(*nhgc));
 		strcpy(nhgc->name, name);
 
+		QOBJ_REG(nhgc, nexthop_group_cmd);
 		RB_INSERT(nhgc_entry_head, &nhgc_entries, nhgc);
 	}
 
@@ -149,6 +168,71 @@ DEFUN_NOSH(no_nexthop_group, no_nexthop_group_cmd, "no nexthop-group NAME",
 	return CMD_SUCCESS;
 }
 
+DEFPY(ecmp_nexthops,
+      ecmp_nexthops_cmd,
+      "nexthop <A.B.C.D|X:X::X:X>$addr [INTERFACE]$intf [nexthop-vrf NAME$name]",
+      "Specify one of the nexthops in this ECMP group\n"
+      "v4 Address\n"
+      "v6 Address\n"
+      "Interface to use\n"
+      "If the nexthop is in a different vrf tell us\n"
+      "The nexthop-vrf Name\n")
+{
+	struct nexthop_group_cmd *nhgc = VTY_GET_CONTEXT(nexthop_group_cmd);
+	struct vrf *vrf;
+	struct nexthop nhop;
+
+	if (name)
+		vrf = vrf_lookup_by_name(name);
+	else
+		vrf = vrf_lookup_by_id(VRF_DEFAULT);
+
+	if (!vrf) {
+		vty_out(vty, "Specified: %s is non-existent\n", name);
+		return CMD_WARNING;
+	}
+
+	memset(&nhop, 0, sizeof(nhop));
+	nhop.vrf_id = vrf->vrf_id;
+
+	if (addr->sa.sa_family == AF_INET) {
+		nhop.gate.ipv4.s_addr = addr->sin.sin_addr.s_addr;
+		if (intf) {
+			nhop.type = NEXTHOP_TYPE_IPV4_IFINDEX;
+			nhop.ifindex = ifname2ifindex(intf, vrf->vrf_id);
+			if (nhop.ifindex == IFINDEX_INTERNAL) {
+				vty_out(vty,
+					"Specified Intf %s does not exist in vrf: %s\n",
+					intf, vrf->name);
+				return CMD_WARNING;
+			}
+		} else
+			nhop.type = NEXTHOP_TYPE_IPV4;
+	} else {
+		memcpy(&nhop.gate.ipv6, &addr->sin6.sin6_addr, 16);
+		if (intf) {
+			nhop.type = NEXTHOP_TYPE_IPV6_IFINDEX;
+			nhop.ifindex = ifname2ifindex(intf, vrf->vrf_id);
+			if (nhop.ifindex == IFINDEX_INTERNAL) {
+				vty_out(vty,
+					"Specified Intf %s does not exist in vrf: %s\n",
+					intf, vrf->name);
+				return CMD_WARNING;
+			}
+		} else
+			nhop.type = NEXTHOP_TYPE_IPV6;
+	}
+
+	if (!nexthop_exists(&nhgc->nhg, &nhop)) {
+		struct nexthop *nh = nexthop_new();
+
+		memcpy(nh, &nhop, sizeof(nhop));
+		nexthop_add(&nhgc->nhg.nexthop, nh);
+	}
+
+	return CMD_SUCCESS;
+}
+
 struct cmd_node nexthop_group_node = {
 	NH_GROUP_NODE,
 	"%s(config-nh-group)# ",
@@ -158,9 +242,46 @@ struct cmd_node nexthop_group_node = {
 static int nexthop_group_write(struct vty *vty)
 {
 	struct nexthop_group_cmd *nhgc;
+	struct nexthop *nh;
 
 	RB_FOREACH (nhgc, nhgc_entry_head, &nhgc_entries) {
+		char buf[100];
+
 		vty_out(vty, "nexthop-group %s\n", nhgc->name);
+
+		for (nh = nhgc->nhg.nexthop ; nh ; nh = nh->next) {
+			vty_out(vty, "  nexthop ");
+			switch (nh->type) {
+			case NEXTHOP_TYPE_IFINDEX:
+				vty_out(vty, "%s\n",
+					ifindex2ifname(nh->ifindex,
+						       nh->vrf_id));
+				break;
+			case NEXTHOP_TYPE_IPV4:
+				vty_out(vty, "%s\n", inet_ntoa(nh->gate.ipv4));
+				break;
+			case NEXTHOP_TYPE_IPV4_IFINDEX:
+				vty_out(vty, "%s %s\n",
+					inet_ntoa(nh->gate.ipv4),
+					ifindex2ifname(nh->ifindex,
+						       nh->vrf_id));
+				break;
+			case NEXTHOP_TYPE_IPV6:
+				vty_out(vty, "%s\n",
+					inet_ntop(AF_INET6, &nh->gate.ipv6,
+						  buf, sizeof buf));
+				break;
+			case NEXTHOP_TYPE_IPV6_IFINDEX:
+				vty_out(vty, "%s %s\n",
+					inet_ntop(AF_INET6, &nh->gate.ipv6,
+						  buf, sizeof buf),
+					ifindex2ifname(nh->ifindex,
+						       nh->vrf_id));
+				break;
+			case NEXTHOP_TYPE_BLACKHOLE:
+				break;
+			}
+		}
 		vty_out(vty, "!\n");
 	}
 
@@ -173,4 +294,6 @@ void nexthop_group_init(void)
 	install_node(&nexthop_group_node, nexthop_group_write);
 	install_element(CONFIG_NODE, &nexthop_group_cmd);
 	install_element(CONFIG_NODE, &no_nexthop_group_cmd);
+
+	install_element(NH_GROUP_NODE, &ecmp_nexthops_cmd);
 }

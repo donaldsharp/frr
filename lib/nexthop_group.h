@@ -61,11 +61,11 @@ struct nexthop_group_cmd {
 
 	struct nexthop_group nhg;
 
-	QOBJ_FIELDS;
+	QOBJ_FIELDS
 };
 RB_HEAD(nhgc_entry_head, nexthp_group_cmd);
 RB_PROTOTYPE(nhgc_entry_head, nexthop_group_cmd, nhgc_entry,
 	     nexthop_group_cmd_compare)
-DECLARE_QOBJ_TYPE(nexthop_group_cmd);
+DECLARE_QOBJ_TYPE(nexthop_group_cmd)
 
 #endif
