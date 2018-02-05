@@ -13,6 +13,7 @@ pbrd_libpbr_a_SOURCES = \
 	pbrd/pbr_vty.c \
 	pbrd/pbr_map.c \
 	pbrd/pbr_nht.c \
+	pbrd/pbr_event.c \
 	# end
 
 pbrd/pbr_vty_clippy.c: $(CLIPPY_DEPS)

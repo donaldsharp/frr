@@ -48,6 +48,7 @@
 #include "pbr_zebra.h"
 #include "pbr_map.h"
 #include "pbr_nht.h"
+#include "pbr_event.h"
 #include "pbr_vty.h"
 
 zebra_capabilities_t _caps_p[] = {
@@ -82,6 +83,7 @@ static void sigint(void)
 {
 	zlog_notice("Terminating on signal");
 
+	pbr_event_stop();
 	exit(0);
 }
 
@@ -150,6 +152,7 @@ int main(int argc, char **argv, char **envp)
 			   pbr_nhgroup_modify_cb,
 			   pbr_nhgroup_delete_cb);
 
+	pbr_event_init();
 	pbr_map_init();
 	pbr_zebra_init();
 	pbr_vty_init();
