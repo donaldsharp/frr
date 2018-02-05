@@ -68,4 +68,6 @@ RB_PROTOTYPE(nhgc_entry_head, nexthop_group_cmd, nhgc_entry,
 	     nexthop_group_cmd_compare)
 DECLARE_QOBJ_TYPE(nexthop_group_cmd)
 
+extern struct nexthop_group_cmd *nhgc_find(const char *name);
+
 #endif
