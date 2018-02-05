@@ -52,6 +52,42 @@ DEFUN_NOSH (pbr_map,
 	return CMD_SUCCESS;
 }
 
+DEFPY (pbr_map_match_src,
+       pbr_map_match_src_cmd,
+       "match src-ip <A.B.C.D/M|X:X::X:X/M>$prefix",
+       "Match the rest of the command\n"
+       "Choose the src ip or ipv6 prefix to use\n"
+       "v4 Prefix\n"
+       "v6 Prefix\n")
+{
+	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
+
+	if (!pbrms->src)
+		pbrms->src = prefix_new();
+
+	prefix_copy(pbrms->src, prefix);
+
+	return CMD_SUCCESS;
+}
+
+DEFPY (pbr_map_match_dst,
+       pbr_map_match_dst_cmd,
+       "match dst-ip <A.B.C.D/M|X:X::X:X/M>$prefix",
+       "Match the rest of the command\n"
+       "Choose the src ip or ipv6 prefix to use\n"
+       "v4 Prefix\n"
+       "v6 Prefix\n")
+{
+	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
+
+	if (!pbrms->dst)
+		pbrms->dst = prefix_new();
+
+	prefix_copy(pbrms->dst, prefix);
+
+	return CMD_SUCCESS;
+}
+
 DEFPY (pbr_policy,
        pbr_policy_cmd,
        "pbr-policy (1-100000)$seqno {src <A.B.C.D/M|X:X::X:X/M>$src|dest <A.B.C.D/M|X:X::X:X/M>$dst} nexthop-group NAME$nhgroup",
@@ -86,8 +122,19 @@ static int pbr_vty_map_config_write_sequence(struct vty *vty,
 					     struct pbr_map *pbrm,
 					     struct pbr_map_sequence *pbrms)
 {
+	char buff[PREFIX_STRLEN];
+
 	vty_out (vty, "pbr-map %s seq %u\n",
 		 pbrm->name, pbrms->seqno);
+
+	if (pbrms->src)
+		vty_out(vty, "  match src-ip %s\n",
+			prefix2str(pbrms->src, buff, sizeof buff));
+
+	if (pbrms->dst)
+		vty_out(vty, "  match dst-ip %s\n",
+			prefix2str(pbrms->dst, buff, sizeof buff));
+
 	vty_out (vty, "!\n");
 	return 1;
 }
@@ -121,5 +168,8 @@ void pbr_vty_init(void)
 
 	install_element(CONFIG_NODE, &pbr_map_cmd);
 	install_element(INTERFACE_NODE, &pbr_policy_cmd);
+
+	install_element(PBRMAP_NODE, &pbr_map_match_src_cmd);
+	install_element(PBRMAP_NODE, &pbr_map_match_dst_cmd);
 	return;
 }
