@@ -28,13 +28,32 @@
 #include "log.h"
 
 #include "pbrd/pbr_zebra.h"
+#include "pbrd/pbr_map.h"
 #include "pbrd/pbr_vty.h"
 #ifndef VTYSH_EXTRACT_PL
 #include "pbrd/pbr_vty_clippy.c"
 #endif
 
-DEFPY (pbr_map,
-       pbr_map_cmd,
+DEFUN_NOSH (pbr_map,
+	    pbr_map_cmd,
+	    "pbr-map WORD seq (1-65535)",
+	    "Create pbr-map or enter pbr-map command mode\n"
+	    "The name of the PBR MAP\n"
+	    "Sequence to insert to/delete from existing pbr-map entry\n"
+	    "Sequence number\n")
+{
+	const char *pbrm_name = argv[1]->arg;
+	uint32_t seqno = atoi(argv[3]->arg);
+	struct pbr_map *pbrm;
+
+	pbrm = pbrm_get(pbrm_name, seqno);
+	VTY_PUSH_CONTEXT(PBRMAP_NODE, pbrm);
+
+	return CMD_SUCCESS;
+}
+
+DEFPY (pbr_policy,
+       pbr_policy_cmd,
        "pbr-policy (1-100000)$seqno {src <A.B.C.D/M|X:X::X:X/M>$src|dest <A.B.C.D/M|X:X::X:X/M>$dst} nexthop-group NAME$nhgroup",
        "Policy to use\n"
        "Sequence Number\n"
@@ -49,7 +68,6 @@ DEFPY (pbr_map,
 {
 	return CMD_SUCCESS;
 }
-
 static struct cmd_node interface_node = {
 	INTERFACE_NODE, "%s(config-if)# ", 1 /* vtysh ? yes */
 };
@@ -61,12 +79,34 @@ static int pbr_interface_config_write(struct vty *vty)
 	return 1;
 }
 
+/* PBR map node structure. */
+static struct cmd_node pbr_map_node = {PBRMAP_NODE, "%s(config-pbr-map)# ", 1};
+
+static int pbr_map_config_write(struct vty *vty)
+{
+	struct pbr_map *pbrm;
+
+	RB_FOREACH(pbrm, pbr_map_entry_head, &pbr_maps) {
+		vty_out(vty, "pbr-map %s seq %u\n",
+			pbrm->name, pbrm->seqno);
+		vty_out(vty, "!\n");
+	}
+
+	return 1;
+}
+
 void pbr_vty_init(void)
 {
 	install_node(&interface_node,
 		     pbr_interface_config_write);
 	if_cmd_init();
 
-	install_element(INTERFACE_NODE, &pbr_map_cmd);
+	install_node(&pbr_map_node,
+		     pbr_map_config_write);
+
+	install_default(PBRMAP_NODE);
+
+	install_element(CONFIG_NODE, &pbr_map_cmd);
+	install_element(INTERFACE_NODE, &pbr_policy_cmd);
 	return;
 }

@@ -991,6 +991,8 @@ static struct cmd_node nh_group_node = {
 
 static struct cmd_node rmap_node = {RMAP_NODE, "%s(config-route-map)# "};
 
+static struct cmd_node pbr_map_node = {PBRMAP_NODE, "%s(config-pbr-map)# "};
+
 static struct cmd_node zebra_node = {ZEBRA_NODE, "%s(config-router)# "};
 
 static struct cmd_node bgp_vpnv4_node = {BGP_VPNV4_NODE,
@@ -1470,6 +1472,24 @@ DEFUNSH(VTYSH_RMAP, vtysh_route_map, vtysh_route_map_cmd,
 	return CMD_SUCCESS;
 }
 
+DEFUNSH(VTYSH_PBRD, vtysh_pbr_map, vtysh_pbr_map_cmd,
+	"pbr-map NAME seq (1-65535)",
+	"Create pbr-map or enter pbr-map command mode\n"
+	"The name of the PBR MAP\n"
+	"Sequence to insert to/delete from existing pbr-map entry\n"
+	"Sequence number\n")
+{
+	vty->node = PBRMAP_NODE;
+	return CMD_SUCCESS;
+}
+
+DEFSH(VTYSH_PBRD, vtysh_no_pbr_map_cmd, "no pbr-map WORD seq (1-65535)",
+      NO_STR
+      "Create pbr-map or enter pbr-map command mode\n"
+      "The name of  the PBR MAP\n"
+      "Sequence to insert to/delete from existing pbr-map entry\n"
+      "Sequence number\n")
+
 DEFUNSH(VTYSH_ALL, vtysh_line_vty, vtysh_line_vty_cmd, "line vty",
 	"Configure a terminal line\n"
 	"Virtual terminal\n")
@@ -1530,6 +1550,7 @@ static int vtysh_exit(struct vty *vty)
 	case ISIS_NODE:
 	case MASC_NODE:
 	case RMAP_NODE:
+	case PBRMAP_NODE:
 	case VTY_NODE:
 	case KEYCHAIN_NODE:
 		vtysh_execute("end");
@@ -1659,6 +1680,18 @@ DEFUNSH(VTYSH_RMAP, vtysh_exit_rmap, vtysh_exit_rmap_cmd, "exit",
 }
 
 DEFUNSH(VTYSH_RMAP, vtysh_quit_rmap, vtysh_quit_rmap_cmd, "quit",
+	"Exit current mode and down to previous mode\n")
+{
+	return vtysh_exit_rmap(self, vty, argc, argv);
+}
+
+DEFUNSH(VTYSH_PBRD, vtysh_exit_pbr_map, vtysh_exit_pbr_map_cmd, "exit",
+	"Exit current mode and down to previous mode\n")
+{
+	return vtysh_exit(vty);
+}
+
+DEFUNSH(VTYSH_PBRD, vtysh_quit_pbr_map, vtysh_quit_pbr_map_cmd, "quit",
 	"Exit current mode and down to previous mode\n")
 {
 	return vtysh_exit_rmap(self, vty, argc, argv);
@@ -3079,6 +3112,7 @@ void vtysh_init_vty(void)
 	install_node(&vrf_node, NULL);
 	install_node(&nh_group_node, NULL);
 	install_node(&rmap_node, NULL);
+	install_node(&pbr_map_node, NULL);
 	install_node(&zebra_node, NULL);
 	install_node(&bgp_vpnv4_node, NULL);
 	install_node(&bgp_vpnv6_node, NULL);
@@ -3201,6 +3235,8 @@ void vtysh_init_vty(void)
 	install_element(KEYCHAIN_KEY_NODE, &vtysh_quit_ripd_cmd);
 	install_element(RMAP_NODE, &vtysh_exit_rmap_cmd);
 	install_element(RMAP_NODE, &vtysh_quit_rmap_cmd);
+	install_element(PBRMAP_NODE, &vtysh_exit_pbr_map_cmd);
+	install_element(PBRMAP_NODE, &vtysh_quit_pbr_map_cmd);
 	install_element(VTY_NODE, &vtysh_exit_line_vty_cmd);
 	install_element(VTY_NODE, &vtysh_quit_line_vty_cmd);
 
@@ -3239,6 +3275,7 @@ void vtysh_init_vty(void)
 	install_element(KEYCHAIN_NODE, &vtysh_end_all_cmd);
 	install_element(KEYCHAIN_KEY_NODE, &vtysh_end_all_cmd);
 	install_element(RMAP_NODE, &vtysh_end_all_cmd);
+	install_element(PBRMAP_NODE, &vtysh_end_all_cmd);
 	install_element(VTY_NODE, &vtysh_end_all_cmd);
 
 	install_element(INTERFACE_NODE, &vtysh_interface_desc_cmd);
@@ -3334,6 +3371,8 @@ void vtysh_init_vty(void)
 
 	install_element(CONFIG_NODE, &key_chain_cmd);
 	install_element(CONFIG_NODE, &vtysh_route_map_cmd);
+	install_element(CONFIG_NODE, &vtysh_pbr_map_cmd);
+	install_element(CONFIG_NODE, &vtysh_no_pbr_map_cmd);
 	install_element(CONFIG_NODE, &vtysh_line_vty_cmd);
 	install_element(KEYCHAIN_NODE, &key_cmd);
 	install_element(KEYCHAIN_NODE, &key_chain_cmd);
