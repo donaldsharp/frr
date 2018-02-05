@@ -136,6 +136,9 @@ static struct nexthop_group_cmd *nhgc_get(const char *name)
 
 		QOBJ_REG(nhgc, nexthop_group_cmd);
 		RB_INSERT(nhgc_entry_head, &nhgc_entries, nhgc);
+
+		if (nhg_hooks.add)
+			nhg_hooks.add(name);
 	}
 
 	return nhgc;
@@ -171,8 +174,11 @@ DEFUN_NOSH(no_nexthop_group, no_nexthop_group_cmd, "no nexthop-group NAME",
 	struct nexthop_group_cmd *nhgc = NULL;
 
 	nhgc = nhgc_find(nhg_name);
-	if (nhgc)
+	if (nhgc) {
 		nhgc_delete(nhgc);
+		if (nhg_hooks.delete)
+			nhg_hooks.delete(nhg_name);
+	}
 
 	return CMD_SUCCESS;
 }
@@ -238,6 +244,9 @@ DEFPY(ecmp_nexthops,
 		memcpy(nh, &nhop, sizeof(nhop));
 		nexthop_add(&nhgc->nhg.nexthop, nh);
 	}
+
+	if (nhg_hooks.modify)
+		nhg_hooks.modify(nhgc->name);
 
 	return CMD_SUCCESS;
 }
