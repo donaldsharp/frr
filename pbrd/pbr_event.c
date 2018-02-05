@@ -51,6 +51,5 @@ void pbr_event_init(void)
 
 void pbr_event_stop(void)
 {
-	work_queue_free(pbr_event_wq);
-	pbr_event_wq = NULL;
+	work_queue_free_and_null(&pbr_event_wq);
 }
