@@ -183,6 +183,16 @@ void route_delete(struct prefix *p)
 	return;
 }
 
+static int pbr_zebra_nexthop_update(int command, struct zclient *zclient,
+			     zebra_size_t length, vrf_id_t vrf_id)
+{
+	struct zapi_route nhr;
+
+	zapi_nexthop_update_decode(zclient->ibuf, &nhr);
+
+	return 1;
+}
+
 extern struct zebra_privs_t pbr_privs;
 
 void pbr_zebra_init(void)
@@ -200,4 +210,5 @@ void pbr_zebra_init(void)
 	zclient->interface_address_add = interface_address_add;
 	zclient->interface_address_delete = interface_address_delete;
 	zclient->notify_owner = notify_owner;
+	zclient->nexthop_update = pbr_zebra_nexthop_update;
 }
