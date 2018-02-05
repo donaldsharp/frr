@@ -82,14 +82,27 @@ static int pbr_interface_config_write(struct vty *vty)
 /* PBR map node structure. */
 static struct cmd_node pbr_map_node = {PBRMAP_NODE, "%s(config-pbr-map)# ", 1};
 
-static int pbr_map_config_write(struct vty *vty)
+static int pbr_vty_map_config_write_sequence(struct vty *vty,
+					     struct pbr_map *pbrm,
+					     struct pbr_map_sequence *pbrms)
+{
+	vty_out (vty, "pbr-map %s seq %u\n",
+		 pbrm->name, pbrms->seqno);
+	vty_out (vty, "!\n");
+	return 1;
+}
+
+static int pbr_vty_map_config_write(struct vty *vty)
 {
 	struct pbr_map *pbrm;
 
 	RB_FOREACH(pbrm, pbr_map_entry_head, &pbr_maps) {
-		vty_out(vty, "pbr-map %s seq %u\n",
-			pbrm->name, pbrm->seqno);
-		vty_out(vty, "!\n");
+		struct pbr_map_sequence *pbrms;
+		struct listnode *node;
+
+		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
+			pbr_vty_map_config_write_sequence(vty, pbrm, pbrms);
+		}
 	}
 
 	return 1;
@@ -102,7 +115,7 @@ void pbr_vty_init(void)
 	if_cmd_init();
 
 	install_node(&pbr_map_node,
-		     pbr_map_config_write);
+		     pbr_vty_map_config_write);
 
 	install_default(PBRMAP_NODE);
 
