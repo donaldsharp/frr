@@ -57,7 +57,7 @@ struct pbr_map_sequence {
 	 * The name of the nexthop group
 	 */
 	struct nexthop *nhop;
-	char *nhop_group;
+	char *nhgrp_name;;
 
 	QOBJ_FIELDS
 };
