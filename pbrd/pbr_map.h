@@ -22,13 +22,7 @@
 #ifndef __PBR_MAP_H__
 #define __PBR_MAP_H__
 
-struct pbr_map {
-	/*
-	 * RB Tree of the pbr_maps
-	 */
-	RB_ENTRY(pbr_map) pbr_map_entry;
-
-	char name[100];
+struct pbr_map_sequence {
 	/*
 	 * The sequence of where we are for display
 	 */
@@ -41,14 +35,24 @@ struct pbr_map {
 	struct prefix *dst;
 
 	/*
-	 * The interface to apply this to
-	 */
-	struct interface *ifp;
-
-	/*
 	 * The name of the nexthop group
 	 */
+	struct nexthop *nhop;
 	char *nhop_group;
+};
+
+struct pbr_map {
+	/*
+	 * RB Tree of the pbr_maps
+	 */
+	RB_ENTRY(pbr_map) pbr_map_entry;
+
+	/*
+	 * The name of the PBR_MAP
+	 */
+	char name[100];
+
+	struct list *seqnumbers;
 
 	QOBJ_FIELDS
 };
