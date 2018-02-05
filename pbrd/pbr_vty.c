@@ -44,10 +44,10 @@ DEFUN_NOSH (pbr_map,
 {
 	const char *pbrm_name = argv[1]->arg;
 	uint32_t seqno = atoi(argv[3]->arg);
-	struct pbr_map *pbrm;
+	struct pbr_map_sequence *pbrms;
 
-	pbrm = pbrm_get(pbrm_name, seqno);
-	VTY_PUSH_CONTEXT(PBRMAP_NODE, pbrm);
+	pbrms = pbrm_get(pbrm_name, seqno);
+	VTY_PUSH_CONTEXT(PBRMAP_NODE, pbrms);
 
 	return CMD_SUCCESS;
 }
