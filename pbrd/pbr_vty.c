@@ -25,6 +25,7 @@
 #include "command.h"
 #include "prefix.h"
 #include "nexthop.h"
+#include "nexthop_group.h"
 #include "log.h"
 
 #include "pbrd/pbr_zebra.h"
@@ -88,6 +89,31 @@ DEFPY (pbr_map_match_dst,
 	return CMD_SUCCESS;
 }
 
+DEFPY (pbr_map_nexthop_group,
+       pbr_map_nexthop_group_cmd,
+       "set nexthop-group NAME$name",
+       "Set for the PBR-MAP\n"
+       "nexthop-group to use\n"
+       "The name of the nexthop-group\n")
+{
+	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
+	struct nexthop_group_cmd *nhgc;
+
+	nhgc = nhgc_find(name);
+	if (!nhgc) {
+		vty_out(vty, "Specified nexthop-group %s does not exist\n",
+			name);
+		vty_out(vty, "PBR-MAP will not be applied until it is created\n");
+	}
+
+	if (pbrms->nhgrp_name)
+		XFREE(MTYPE_TMP, pbrms->nhgrp_name);
+
+	pbrms->nhgrp_name = XSTRDUP(MTYPE_TMP, name);
+
+	return CMD_SUCCESS;
+}
+
 DEFPY (pbr_policy,
        pbr_policy_cmd,
        "pbr-policy (1-100000)$seqno {src <A.B.C.D/M|X:X::X:X/M>$src|dest <A.B.C.D/M|X:X::X:X/M>$dst} nexthop-group NAME$nhgroup",
@@ -135,6 +161,9 @@ static int pbr_vty_map_config_write_sequence(struct vty *vty,
 		vty_out(vty, "  match dst-ip %s\n",
 			prefix2str(pbrms->dst, buff, sizeof buff));
 
+	if (pbrms->nhgrp_name)
+		vty_out(vty, "  set nexthop-group %s\n", pbrms->nhgrp_name);
+
 	vty_out (vty, "!\n");
 	return 1;
 }
@@ -171,5 +200,7 @@ void pbr_vty_init(void)
 
 	install_element(PBRMAP_NODE, &pbr_map_match_src_cmd);
 	install_element(PBRMAP_NODE, &pbr_map_match_dst_cmd);
+	install_element(PBRMAP_NODE, &pbr_map_nexthop_group_cmd);
+
 	return;
 }
