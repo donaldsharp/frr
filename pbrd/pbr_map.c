@@ -36,7 +36,7 @@ RB_GENERATE(pbr_map_entry_head, pbr_map, pbr_map_entry, pbr_map_compare)
 
 struct pbr_map_entry_head pbr_maps = RB_INITIALIZER(&pbr_maps);
 
-DEFINE_QOBJ_TYPE(pbr_map)
+DEFINE_QOBJ_TYPE(pbr_map_sequence)
 
 static __inline int pbr_map_compare(const struct pbr_map *pbrmap1,
 				    const struct pbr_map *pbrmap2)
@@ -70,7 +70,7 @@ static struct pbr_map *pbrm_find(const char *name)
 	return RB_FIND(pbr_map_entry_head, &pbr_maps, &pbrm);
 }
 
-extern struct pbr_map *pbrm_get(const char *name, uint32_t seqno)
+extern struct pbr_map_sequence *pbrm_get(const char *name, uint32_t seqno)
 {
 	struct pbr_map *pbrm;
 	struct pbr_map_sequence *pbrms;
@@ -87,9 +87,6 @@ extern struct pbr_map *pbrm_get(const char *name, uint32_t seqno)
 		pbrm->seqnumbers->del =
 			 (void (*)(void *))pbr_map_sequence_delete;
 
-		//pbrm->seqno = seqno;
-
-		QOBJ_REG(pbrm, pbr_map);
 		RB_INSERT(pbr_map_entry_head, &pbr_maps, pbrm);
 	}
 
@@ -102,11 +99,13 @@ extern struct pbr_map *pbrm_get(const char *name, uint32_t seqno)
 	if (!pbrms) {
 		pbrms = XCALLOC(MTYPE_TMP, sizeof(*pbrms));
 		pbrms->seqno = seqno;
+		pbrms->parent = pbrm;
 
+		QOBJ_REG(pbrms, pbr_map_sequence);
 		listnode_add_sort(pbrm->seqnumbers, pbrms);
 	}
 
-	return pbrm;
+	return pbrms;
 }
 
 extern void pbr_map_init(void)
