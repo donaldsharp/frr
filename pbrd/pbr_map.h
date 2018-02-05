@@ -28,6 +28,7 @@ struct pbr_map {
 	 */
 	RB_ENTRY(pbr_map) pbr_map_entry;
 
+	char name[100];
 	/*
 	 * The sequence of where we are for display
 	 */
@@ -48,11 +49,16 @@ struct pbr_map {
 	 * The name of the nexthop group
 	 */
 	char *nhop_group;
+
+	QOBJ_FIELDS
 };
 RB_HEAD(pbr_map_entry_head, pbr_map);
 RB_PROTOTYPE(pbr_map_entry_head, pbr_map, pbr_map_entry, pbr_map_compare)
+DECLARE_QOBJ_TYPE(pbr_map)
 
 extern struct pbr_map_entry_head pbr_maps;
+
+extern struct pbr_map *pbrm_get(const char *name, uint32_t seqno);
 
 extern void pbr_map_init(void);
 
