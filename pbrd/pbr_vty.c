@@ -114,19 +114,37 @@ DEFPY (pbr_map_nexthop_group,
 	return CMD_SUCCESS;
 }
 
+DEFPY (pbr_table_range,
+       pbr_table_range_cmd,
+       "[no] pbr table range (10-15)$start (16-20)$end",
+       NO_STR
+       "Policy based routing\n"
+       "Policy based routing table\n"
+       "Table range\n"
+       "Initial value of range\n"
+       "Final value of range\n")
+{
+	return CMD_SUCCESS;
+}
+
+DEFPY (pbr_rule_range,
+       pbr_rule_range_cmd,
+       "[no] pbr rule range (10-15)$start (16-20)$end",
+       NO_STR
+       "Policy based routing\n"
+       "Policy based routing rule\n"
+       "Rule range\n"
+       "Initial value of range\n"
+       "Final value of range\n")
+{
+	return CMD_SUCCESS;
+}
+
 DEFPY (pbr_policy,
        pbr_policy_cmd,
-       "pbr-policy (1-100000)$seqno {src <A.B.C.D/M|X:X::X:X/M>$src|dest <A.B.C.D/M|X:X::X:X/M>$dst} nexthop-group NAME$nhgroup",
+       "pbr-policy NAME$mapname",
        "Policy to use\n"
-       "Sequence Number\n"
-       "The Source\n"
-       "IP Address\n"
-       "IPv6 Address\n"
-       "dest\n"
-       "IP Address\n"
-       "IPv6 Address\n"
-       "Nexthop group\n"
-       "Name of the Nexthop Group\n")
+       "Name of the pbr-map to apply\n")
 {
 	return CMD_SUCCESS;
 }
@@ -197,7 +215,8 @@ void pbr_vty_init(void)
 
 	install_element(CONFIG_NODE, &pbr_map_cmd);
 	install_element(INTERFACE_NODE, &pbr_policy_cmd);
-
+	install_element(CONFIG_NODE, &pbr_table_range_cmd);
+	install_element(CONFIG_NODE, &pbr_rule_range_cmd);
 	install_element(PBRMAP_NODE, &pbr_map_match_src_cmd);
 	install_element(PBRMAP_NODE, &pbr_map_match_dst_cmd);
 	install_element(PBRMAP_NODE, &pbr_map_nexthop_group_cmd);
