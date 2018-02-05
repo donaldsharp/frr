@@ -108,7 +108,7 @@ static void nhgc_delete_nexthops(struct nexthop_group_cmd *nhgc)
 	return;
 }
 
-static struct nexthop_group_cmd *nhgc_find(const char *name)
+struct nexthop_group_cmd *nhgc_find(const char *name)
 {
 	struct nexthop_group_cmd find;
 
