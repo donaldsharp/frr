@@ -34,7 +34,15 @@ struct nexthop_group {
 	struct nexthop *nexthop;
 };
 
-void nexthop_group_init(void);
+/*
+ * Initialize nexthop_groups.  If you are interested in when
+ * a nexthop_group is added/deleted/modified, then set the
+ * appropriate callback functions to handle it in your
+ * code
+ */
+void nexthop_group_init(void (*add)(const char *name),
+			void (*delete)(const char *name),
+			void (*modify)(const char *name));
 
 void nexthop_add(struct nexthop **target, struct nexthop *nexthop);
 void copy_nexthops(struct nexthop **tnh, struct nexthop *nh,

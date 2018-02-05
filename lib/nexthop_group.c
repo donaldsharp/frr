@@ -30,6 +30,14 @@
 #include "lib/nexthop_group_clippy.c"
 #endif
 
+struct nexthop_group_hooks {
+	void (*add)(const char *name);
+	void (*modify)(const char *name);
+	void (*delete)(const char *name);
+};
+
+static struct nexthop_group_hooks nhg_hooks;
+
 static __inline int
 nexthop_group_cmd_compare(const struct nexthop_group_cmd *nhgc1,
 			  const struct nexthop_group_cmd *nhgc2);
@@ -289,12 +297,25 @@ static int nexthop_group_write(struct vty *vty)
 	return 1;
 }
 
-void nexthop_group_init(void)
+
+void nexthop_group_init(void (*add)(const char *name),
+			void (*modify)(const char *name),
+			void (*delete)(const char *name))
 {
 	RB_INIT(nhgc_entry_head, &nhgc_entries);
+
 	install_node(&nexthop_group_node, nexthop_group_write);
 	install_element(CONFIG_NODE, &nexthop_group_cmd);
 	install_element(CONFIG_NODE, &no_nexthop_group_cmd);
 
 	install_element(NH_GROUP_NODE, &ecmp_nexthops_cmd);
+
+	memset(&nhg_hooks, 0, sizeof(nhg_hooks));
+
+	if (add)
+		nhg_hooks.add = add;
+	if (modify)
+		nhg_hooks.modify = modify;
+	if (delete)
+		nhg_hooks.delete = delete;
 }

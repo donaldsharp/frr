@@ -47,6 +47,7 @@
 
 #include "pbr_zebra.h"
 #include "pbr_map.h"
+#include "pbr_nht.h"
 #include "pbr_vty.h"
 
 zebra_capabilities_t _caps_p[] = {
@@ -145,7 +146,9 @@ int main(int argc, char **argv, char **envp)
 	master = frr_init();
 
 	vrf_init(NULL, NULL, NULL, NULL);
-	nexthop_group_init();
+	nexthop_group_init(pbr_nhgroup_add_cb,
+			   pbr_nhgroup_modify_cb,
+			   pbr_nhgroup_delete_cb);
 
 	pbr_map_init();
 	pbr_zebra_init();
