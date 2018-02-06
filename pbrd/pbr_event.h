@@ -39,6 +39,17 @@ struct pbr_event {
 	union g_addr addr;
 };
 
+/*
+ * Return a event structure that can be filled in and enqueued.
+ * Assume this memory is owned by the event subsystem.
+ */
+extern struct pbr_event *pbr_event_new(void);
+
+/*
+ * Enqueue an event for later processing
+ */
+void pbr_event_enqueue(struct pbr_event *pbre);
+
 extern void pbr_event_init(void);
 extern void pbr_event_stop(void);
 #endif

@@ -22,20 +22,46 @@
 #include <zebra.h>
 
 #include <log.h>
+#include <nexthop.h>
 
 #include "pbrd/pbr_nht.h"
+#include "pbrd/pbr_event.h"
 
 void pbr_nhgroup_add_cb(const char *name)
 {
+	struct pbr_event *pbre;
+
+	pbre = pbr_event_new();
+
+	pbre->event = PBR_NHG_ADD;
+	strlcpy(pbre->name, name, sizeof(pbre->name));
+
+	pbr_event_enqueue(pbre);
 	zlog_debug("Received ADD cb for %s", name);
 }
 
 void pbr_nhgroup_modify_cb(const char *name)
 {
+	struct pbr_event *pbre;
+
+	pbre = pbr_event_new();
+
+	pbre->event = PBR_NHG_MODIFY;
+	strlcpy(pbre->name, name, sizeof(pbre->name));
+
+	pbr_event_enqueue(pbre);
 	zlog_debug("Received MODIFY cb for %s", name);
 }
 
 void pbr_nhgroup_delete_cb(const char *name)
 {
+	struct pbr_event *pbre;
+
+	pbre = pbr_event_new();
+
+	pbre->event = PBR_NHG_DELETE;
+	strlcpy(pbre->name, name, sizeof(pbre->name));
+
+	pbr_event_enqueue(pbre);
 	zlog_debug("Recieved DELETE cb for %s", name);
 }
