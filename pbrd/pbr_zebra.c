@@ -36,6 +36,7 @@
 #include "nexthop.h"
 
 #include "pbr_zebra.h"
+#include "pbr_nht.h"
 
 /* Zebra structure to hold current status. */
 struct zclient *zclient = NULL;
@@ -90,7 +91,6 @@ static int interface_delete(int command, struct zclient *zclient,
 static int interface_address_add(int command, struct zclient *zclient,
 				 zebra_size_t length, vrf_id_t vrf_id)
 {
-
 	zebra_interface_address_read(command, zclient->ibuf, vrf_id);
 
 	return 0;
@@ -184,7 +184,7 @@ void route_delete(struct prefix *p)
 }
 
 static int pbr_zebra_nexthop_update(int command, struct zclient *zclient,
-			     zebra_size_t length, vrf_id_t vrf_id)
+				    zebra_size_t length, vrf_id_t vrf_id)
 {
 	struct zapi_route nhr;
 
@@ -211,4 +211,38 @@ void pbr_zebra_init(void)
 	zclient->interface_address_delete = interface_address_delete;
 	zclient->notify_owner = notify_owner;
 	zclient->nexthop_update = pbr_zebra_nexthop_update;
+}
+
+void pbr_send_rnh(struct nexthop *nhop, bool reg)
+{
+	uint32_t command;
+	struct prefix p;
+
+	command = (reg) ?
+		ZEBRA_NEXTHOP_REGISTER : ZEBRA_NEXTHOP_UNREGISTER;
+
+	memset(&p, 0, sizeof(p));
+	switch(nhop->type) {
+	case NEXTHOP_TYPE_IFINDEX:
+	case NEXTHOP_TYPE_BLACKHOLE:
+		return;
+	case NEXTHOP_TYPE_IPV4:
+	case NEXTHOP_TYPE_IPV4_IFINDEX:
+		p.family = AF_INET;
+		p.u.prefix4.s_addr = nhop->gate.ipv4.s_addr;
+		p.prefixlen = 32;
+		break;
+	case NEXTHOP_TYPE_IPV6:
+	case NEXTHOP_TYPE_IPV6_IFINDEX:
+		p.family = AF_INET6;
+		memcpy(&p.u.prefix6, &nhop->gate.ipv6, 16);
+		p.prefixlen = 128;
+		break;
+	}
+
+	if (zclient_send_rnh(zclient, command, &p,
+			     false, nhop->vrf_id) < 0) {
+		zlog_warn("%s: Failure to send nexthop to zebra",
+			  __PRETTY_FUNCTION__);
+	}
 }
