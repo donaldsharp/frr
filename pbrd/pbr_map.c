@@ -25,9 +25,11 @@
 #include "linklist.h"
 #include "prefix.h"
 #include "table.h"
+#include "nexthop.h"
 #include "memory.h"
 
 #include "pbr_map.h"
+#include "pbr_event.h"
 
 static __inline int pbr_map_compare(const struct pbr_map *pbrmap1,
 				    const struct pbr_map *pbrmap2);
@@ -75,6 +77,7 @@ extern struct pbr_map_sequence *pbrm_get(const char *name, uint32_t seqno)
 	struct pbr_map *pbrm;
 	struct pbr_map_sequence *pbrms;
 	struct listnode *node, *nnode;
+	struct pbr_event *pbre;
 
 	pbrm = pbrm_find(name);
 	if (!pbrm) {
@@ -88,6 +91,10 @@ extern struct pbr_map_sequence *pbrm_get(const char *name, uint32_t seqno)
 			 (void (*)(void *))pbr_map_sequence_delete;
 
 		RB_INSERT(pbr_map_entry_head, &pbr_maps, pbrm);
+
+		pbre = pbr_event_new();
+		pbre->event = PBR_MAP_ADD;
+		strlcpy(pbre->name, name, sizeof(pbre->name));
 	}
 
 	for (ALL_LIST_ELEMENTS(pbrm->seqnumbers, node, nnode, pbrms)) {
@@ -104,6 +111,9 @@ extern struct pbr_map_sequence *pbrm_get(const char *name, uint32_t seqno)
 		QOBJ_REG(pbrms, pbr_map_sequence);
 		listnode_add_sort(pbrm->seqnumbers, pbrms);
 	}
+
+	if (pbre)
+		pbr_event_enqueue(pbre);
 
 	return pbrms;
 }

@@ -31,6 +31,7 @@
 #include "pbrd/pbr_zebra.h"
 #include "pbrd/pbr_map.h"
 #include "pbrd/pbr_vty.h"
+#include "pbrd/pbr_event.h"
 #ifndef VTYSH_EXTRACT_PL
 #include "pbrd/pbr_vty_clippy.c"
 #endif
@@ -62,11 +63,17 @@ DEFPY (pbr_map_match_src,
        "v6 Prefix\n")
 {
 	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
+	struct pbr_event *pbre;
 
 	if (!pbrms->src)
 		pbrms->src = prefix_new();
 
 	prefix_copy(pbrms->src, prefix);
+
+	pbre = pbr_event_new();
+	pbre->event = PBR_MAP_MODIFY;
+	strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
+	pbr_event_enqueue(pbre);
 
 	return CMD_SUCCESS;
 }
@@ -80,11 +87,17 @@ DEFPY (pbr_map_match_dst,
        "v6 Prefix\n")
 {
 	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
+	struct pbr_event *pbre;
 
 	if (!pbrms->dst)
 		pbrms->dst = prefix_new();
 
 	prefix_copy(pbrms->dst, prefix);
+
+	pbre = pbr_event_new();
+	pbre->event = PBR_MAP_MODIFY;
+	strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
+	pbr_event_enqueue(pbre);
 
 	return CMD_SUCCESS;
 }
@@ -98,6 +111,7 @@ DEFPY (pbr_map_nexthop_group,
 {
 	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
 	struct nexthop_group_cmd *nhgc;
+	struct pbr_event *pbre;
 
 	nhgc = nhgc_find(name);
 	if (!nhgc) {
@@ -110,6 +124,11 @@ DEFPY (pbr_map_nexthop_group,
 		XFREE(MTYPE_TMP, pbrms->nhgrp_name);
 
 	pbrms->nhgrp_name = XSTRDUP(MTYPE_TMP, name);
+
+	pbre = pbr_event_new();
+	pbre->event = PBR_MAP_MODIFY;
+	strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
+	pbr_event_enqueue(pbre);
 
 	return CMD_SUCCESS;
 }
