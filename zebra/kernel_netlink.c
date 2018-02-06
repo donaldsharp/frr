@@ -657,6 +657,71 @@ int netlink_parse_info(int (*filter)(struct sockaddr_nl *, struct nlmsghdr *,
 	return ret;
 }
 
+#define BTK_DEPTH 100
+struct buffer_to_kernel {
+	struct nlsock *nl[BTK_DEPTH];
+	struct thread *waiting;
+	uint32_t current;
+	uint32_t size[BTK_DEPTH];
+	struct sockaddr_nl snl[BTK_DEPTH];
+	struct iovec iov[BTK_DEPTH];
+	struct mmsghdr msg[BTK_DEPTH];
+	unsigned char data[BTK_DEPTH][10000];
+	int (*filter[BTK_DEPTH])(struct sockaddr_nl *, struct nlmsghdr *,
+				 ns_id_t, int startup);
+};
+
+struct buffer_to_kernel btk;
+
+static int send_to_kernel(struct thread *thread)
+{
+	int status;
+	int save_errno;
+
+#if 0
+	/* Request an acknowledgement by setting NLM_F_ACK */
+	n->nlmsg_flags |= NLM_F_ACK;
+#endif
+
+#if 0
+	if (IS_ZEBRA_DEBUG_KERNEL)
+		zlog_debug(
+			"netlink_talk: %s type %s(%u), len=%d seq=%u flags 0x%x",
+			nl->name, nl_msg_type_to_str(n->nlmsg_type),
+			n->nlmsg_type, n->nlmsg_len, n->nlmsg_seq,
+			n->nlmsg_flags);
+#endif
+
+	/* Send message to netlink interface. */
+	if (zserv_privs.change(ZPRIVS_RAISE))
+		zlog_err("Can't raise privileges");
+	status = sendmmsg(btk.nl[btk.current -1]->sock, &btk.msg[0], btk.current -1,0);
+	save_errno = errno;
+	if (zserv_privs.change(ZPRIVS_LOWER))
+		zlog_err("Can't lower privileges");
+
+	btk.current = 0;
+#if 0
+	if (IS_ZEBRA_DEBUG_KERNEL_MSGDUMP_SEND) {
+		zlog_debug("%s: >> netlink message dump [sent]", __func__);
+		zlog_hexdump(n, n->nlmsg_len);
+	}
+#endif
+	if (status < 0) {
+		zlog_err("netlink_talk sendmsg() error: %s",
+			 safe_strerror(save_errno));
+		return -1;
+	}
+#if 0
+	/*
+	 * Get reply from netlink socket.
+	 * The reply should either be an acknowlegement or an error.
+	 */
+	return netlink_parse_info(filter, nl, zns, 0, startup);
+#endif
+	return 0;
+}
+
 /*
  * netlink_talk
  *
@@ -675,63 +740,41 @@ int netlink_talk(int (*filter)(struct sockaddr_nl *, struct nlmsghdr *, ns_id_t,
 		 struct nlmsghdr *n, struct nlsock *nl, struct zebra_ns *zns,
 		 int startup)
 {
-	int status;
-	struct sockaddr_nl snl;
-	struct iovec iov;
-	struct msghdr msg;
-	int save_errno;
+	if (btk.current != 0 && btk.nl[btk.current-1] != nl) {
+		THREAD_OFF(btk.waiting);
+		send_to_kernel(NULL);
+	}
 
-	memset(&snl, 0, sizeof snl);
-	memset(&iov, 0, sizeof iov);
-	memset(&msg, 0, sizeof msg);
-
-	iov.iov_base = n;
-	iov.iov_len = n->nlmsg_len;
-	msg.msg_name = (void *)&snl;
-	msg.msg_namelen = sizeof snl;
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	snl.nl_family = AF_NETLINK;
+	memset(&btk.snl[btk.current], 0, sizeof btk.snl[btk.current]);
+	memset(&btk.iov[btk.current], 0, sizeof btk.iov[btk.current]);
+	memset(&btk.msg[btk.current], 0, sizeof btk.msg[btk.current]);
 
 	n->nlmsg_seq = ++nl->seq;
 	n->nlmsg_pid = nl->snl.nl_pid;
 
-	/* Request an acknowledgement by setting NLM_F_ACK */
-	n->nlmsg_flags |= NLM_F_ACK;
+	memcpy(&btk.data[btk.current][0], n, n->nlmsg_len);
+	btk.iov[btk.current].iov_base = &btk.data[btk.current][0];
+	btk.iov[btk.current].iov_len = n->nlmsg_len;
+	btk.msg[btk.current].msg_hdr.msg_name = (void *)&btk.snl[btk.current];
+	btk.msg[btk.current].msg_hdr.msg_namelen = sizeof btk.snl[btk.current];
+	btk.msg[btk.current].msg_hdr.msg_iov = &btk.iov[btk.current];
+	btk.msg[btk.current].msg_hdr.msg_iovlen = 1;
 
-	if (IS_ZEBRA_DEBUG_KERNEL)
-		zlog_debug(
-			"netlink_talk: %s type %s(%u), len=%d seq=%u flags 0x%x",
-			nl->name, nl_msg_type_to_str(n->nlmsg_type),
-			n->nlmsg_type, n->nlmsg_len, n->nlmsg_seq,
-			n->nlmsg_flags);
+	btk.snl[btk.current].nl_family = AF_NETLINK;
 
-	/* Send message to netlink interface. */
-	if (zserv_privs.change(ZPRIVS_RAISE))
-		zlog_err("Can't raise privileges");
-	status = sendmsg(nl->sock, &msg, 0);
-	save_errno = errno;
-	if (zserv_privs.change(ZPRIVS_LOWER))
-		zlog_err("Can't lower privileges");
+	btk.filter[btk.current] = filter;
+	btk.nl[btk.current] = nl;
+	btk.current++;
 
-	if (IS_ZEBRA_DEBUG_KERNEL_MSGDUMP_SEND) {
-		zlog_debug("%s: >> netlink message dump [sent]", __func__);
-		zlog_hexdump(n, n->nlmsg_len);
+	if (btk.current == BTK_DEPTH) {
+		THREAD_OFF(btk.waiting);
+		send_to_kernel(NULL);
+	} else {
+		if (!btk.waiting)
+			thread_add_timer_msec(zebrad.master, send_to_kernel,
+					      NULL, 20, &btk.waiting);
 	}
-
-	if (status < 0) {
-		zlog_err("netlink_talk sendmsg() error: %s",
-			 safe_strerror(save_errno));
-		return -1;
-	}
-
-
-	/*
-	 * Get reply from netlink socket.
-	 * The reply should either be an acknowlegement or an error.
-	 */
-	return netlink_parse_info(filter, nl, zns, 0, startup);
+	return 0;
 }
 
 /* Issue request message to kernel via netlink socket. GET messages
@@ -784,6 +827,10 @@ int netlink_request(struct nlsock *nl, struct nlmsghdr *n)
 void kernel_init(struct zebra_ns *zns)
 {
 	unsigned long groups;
+
+	btk.current = 0;
+	memset(&btk.size, 0, sizeof(uint32_t) * 10);
+	memset(&btk.data, 0, sizeof(unsigned char) * 10 * 10000);
 
 	/* Initialize netlink sockets */
 	groups = RTMGRP_LINK | RTMGRP_IPV4_ROUTE | RTMGRP_IPV4_IFADDR
