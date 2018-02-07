@@ -25,8 +25,10 @@
 #include <workqueue.h>
 #include <nexthop.h>
 #include <log.h>
+#include <vty.h>
 
 #include "pbrd/pbr_event.h"
+#include "pbrd/pbr_map.h"
 
 struct work_queue *pbr_event_wq;
 
@@ -61,6 +63,10 @@ static const char *pbr_event_wqentry2str(struct pbr_event *pbre,
 	case PBR_NH_CHANGED:
 		snprintf(buffer, buflen, "Nexthop Call back from Zebra");
 		break;
+	case PBR_MAP_INSTALL:
+		snprintf(buffer, buflen, "PBR_MAP %s Installing into zapi",
+			 pbre->name);
+		break;
 	}
 
 	return buffer;
@@ -84,10 +90,13 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 
 	switch (pbre->event) {
 	case PBR_NHG_ADD:
+		pbr_map_check_nh_group_change(pbre->name);
 		break;
 	case PBR_NHG_MODIFY:
+		pbr_map_check_nh_group_change(pbre->name);
 		break;
 	case PBR_NHG_DELETE:
+		pbr_map_check_nh_group_change(pbre->name);
 		break;
 	case PBR_MAP_ADD:
 		break;
@@ -96,6 +105,8 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 	case PBR_MAP_DELETE:
 		break;
 	case PBR_NH_CHANGED:
+		break;
+	case PBR_MAP_INSTALL:
 		break;
 	}
 

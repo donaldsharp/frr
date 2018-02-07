@@ -99,4 +99,6 @@ extern void pbr_map_write_interfaces(struct vty *vty, struct interface *ifp);
 extern void pbr_map_init(void);
 
 extern bool pbr_map_check_valid(const char *name);
+
+extern void pbr_map_check_nh_group_change(const char *nh_group);
 #endif

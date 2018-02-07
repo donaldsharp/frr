@@ -119,7 +119,7 @@ extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno)
 {
 	struct pbr_map *pbrm;
 	struct pbr_map_sequence *pbrms;
-	struct listnode *node, *nnode;
+	struct listnode *node;
 	struct pbr_event *pbre;
 
 	pbrm = pbrm_find(name);
@@ -146,7 +146,7 @@ extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno)
 		strlcpy(pbre->name, name, sizeof(pbre->name));
 	}
 
-	for (ALL_LIST_ELEMENTS(pbrm->seqnumbers, node, nnode, pbrms)) {
+	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
 		if (pbrms->seqno == seqno)
 			break;
 
@@ -204,23 +204,10 @@ static void pbr_map_sequence_check_valid(struct pbr_map_sequence *pbrms)
 	pbr_map_sequence_check_src_dst_valid(pbrms);
 }
 
-/*
- * For a given PBR-MAP check to see if we think it is a
- * valid config or not.  If so note that it is and return
- * that we are valid.
- */
-extern bool pbr_map_check_valid(const char *name)
+static bool pbr_map_check_valid_internal(struct pbr_map *pbrm)
 {
-	struct pbr_map *pbrm;
 	struct pbr_map_sequence *pbrms;
 	struct listnode *node;
-
-	pbrm = pbrm_find(name);
-	if (!pbrm) {
-		zlog_debug("%s: Specified PBR-MAP(%s) does not exist?",
-			   __PRETTY_FUNCTION__, name);
-		return false;
-	}
 
 	pbrm->valid = true;
 	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
@@ -235,6 +222,60 @@ extern bool pbr_map_check_valid(const char *name)
 	}
 
 	return pbrm->valid;
+}
+
+/*
+ * For a given PBR-MAP check to see if we think it is a
+ * valid config or not.  If so note that it is and return
+ * that we are valid.
+ */
+extern bool pbr_map_check_valid(const char *name)
+{
+	struct pbr_map *pbrm;
+
+	pbrm = pbrm_find(name);
+	if (!pbrm) {
+		zlog_debug("%s: Specified PBR-MAP(%s) does not exist?",
+			   __PRETTY_FUNCTION__, name);
+		return false;
+	}
+
+	pbr_map_check_valid_internal(pbrm);
+	return pbrm->valid;
+}
+
+/*
+ * For a nexthop group specified, see if any of the pbr-maps
+ * are using it and if so, check to see that we are still
+ * valid for usage.  If we are valid then schedule the installation/deletion
+ * of the pbr-policy.
+ */
+extern void pbr_map_check_nh_group_change(const char *nh_group)
+{
+	struct pbr_map_sequence *pbrms;
+	struct pbr_map *pbrm;
+	struct listnode *node;
+
+	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
+		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
+			if (pbrms->nhgrp_name &&
+			    (strcmp(nh_group, pbrms->nhgrp_name) == 0)) {
+				bool original = pbrm->valid;
+
+				pbr_map_check_valid_internal(pbrm);
+				if (original != pbrm->valid) {
+					struct pbr_event *pbre;
+
+					pbre = pbr_event_new();
+					pbre->event = PBR_MAP_INSTALL;
+					strcpy(pbre->name, pbrm->name);
+
+					pbr_event_enqueue(pbre);
+				}
+				break;
+			}
+		}
+	}
 }
 
 extern void pbr_map_init(void)
