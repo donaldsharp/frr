@@ -27,9 +27,11 @@
 #include "table.h"
 #include "nexthop.h"
 #include "memory.h"
+#include "log.h"
 
 #include "pbr_map.h"
 #include "pbr_event.h"
+#include "pbr_nht.h"
 
 static __inline int pbr_map_compare(const struct pbr_map *pbrmap1,
 				    const struct pbr_map *pbrmap2);
@@ -116,6 +118,76 @@ extern struct pbr_map_sequence *pbrm_get(const char *name, uint32_t seqno)
 		pbr_event_enqueue(pbre);
 
 	return pbrms;
+}
+
+static void
+pbr_map_sequence_check_nexthops_valid(struct pbr_map_sequence *pbrms)
+{
+	/*
+	 * Check validness of the nexthop or nexthop-group
+	 */
+	if (!pbrms->nhop && !pbrms->nhgrp_name)
+		pbrms->reason |= PBR_MAP_INVALID_NO_NEXTHOPS;
+
+	if (pbrms->nhop && pbrms->nhgrp_name)
+		pbrms->reason |= PBR_MAP_INVALID_BOTH_NHANDGRP;
+
+	if (pbrms->nhop && !pbr_nht_nexthop_valid(pbrms->nhop))
+		pbrms->reason |= PBR_MAP_INVALID_NEXTHOP;
+
+	if (pbrms->nhgrp_name
+	    && !pbr_nht_nexthop_group_valid(pbrms->nhgrp_name))
+		pbrms->reason |= PBR_MAP_INVALID_NEXTHOP_GROUP;
+}
+
+static void pbr_map_sequence_check_src_dst_valid(struct pbr_map_sequence *pbrms)
+{
+	if (!pbrms->src && !pbrms->dst)
+		pbrms->reason |= PBR_MAP_INVALID_SRCDST;
+}
+
+/*
+ * Checks to see if we think that the pbmrs is valid.  If we think
+ * the config is valid return true.
+ */
+static void pbr_map_sequence_check_valid(struct pbr_map_sequence *pbrms)
+{
+	pbr_map_sequence_check_nexthops_valid(pbrms);
+
+	pbr_map_sequence_check_src_dst_valid(pbrms);
+}
+
+/*
+ * For a given PBR-MAP check to see if we think it is a
+ * valid config or not.  If so note that it is and return
+ * that we are valid.
+ */
+extern bool pbr_map_check_valid(const char *name)
+{
+	struct pbr_map *pbrm;
+	struct pbr_map_sequence *pbrms;
+	struct listnode *node;
+
+	pbrm = pbrm_find(name);
+	if (!pbrm) {
+		zlog_debug("%s: Specified PBR-MAP(%s) does not exist?",
+			   __PRETTY_FUNCTION__, name);
+		return false;
+	}
+
+	pbrm->valid = true;
+	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
+		pbrms->reason = 0;
+		pbr_map_sequence_check_valid(pbrms);
+		/*
+		 * A pbr_map_sequence that is invalid causes
+		 * the whole shebang to be invalid
+		 */
+		if (pbrms->reason != 0)
+			pbrm->valid = false;
+	}
+
+	return pbrm->valid;
 }
 
 extern void pbr_map_init(void)

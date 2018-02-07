@@ -65,3 +65,15 @@ void pbr_nhgroup_delete_cb(const char *name)
 	pbr_event_enqueue(pbre);
 	zlog_debug("Recieved DELETE cb for %s", name);
 }
+
+bool pbr_nht_nexthop_valid(struct nexthop *nhop)
+{
+	zlog_debug("%s %p", __PRETTY_FUNCTION__, nhop);
+	return true;
+}
+
+bool pbr_nht_nexthop_group_valid(const char *name)
+{
+	zlog_debug("%s(%s)", __PRETTY_FUNCTION__, name);
+	return true;
+}
