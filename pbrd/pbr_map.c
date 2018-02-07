@@ -28,6 +28,7 @@
 #include "nexthop.h"
 #include "memory.h"
 #include "log.h"
+#include "vty.h"
 
 #include "pbr_map.h"
 #include "pbr_event.h"
@@ -65,7 +66,47 @@ static void pbr_map_sequence_delete(struct pbr_map_sequence *pbrms)
 	XFREE(MTYPE_TMP, pbrms);
 }
 
-static struct pbr_map *pbrm_find(const char *name)
+static int pbr_map_interface_compare(const struct interface *ifp1,
+				     const struct interface *ifp2)
+{
+	return strcmp(ifp1->name, ifp2->name);
+}
+
+static void pbr_map_interface_delete(struct interface *ifp)
+{
+	return;
+}
+
+void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp_add)
+{
+	struct listnode *node;
+	struct interface *ifp;
+
+	for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, ifp)) {
+		if (ifp_add == ifp)
+			return;
+	}
+
+	listnode_add_sort(pbrm->incoming, ifp);
+}
+
+void pbr_map_write_interfaces(struct vty *vty, struct interface *ifp_find)
+{
+	struct pbr_map *pbrm;
+	struct listnode *node;
+	struct interface *ifp;
+
+	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
+		for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, ifp)) {
+			if (ifp == ifp_find) {
+				vty_out(vty, "  pbr-policy %s", pbrm->name);
+				break;
+			}
+		}
+	}
+}
+
+struct pbr_map *pbrm_find(const char *name)
 {
 	struct pbr_map pbrm;
 
@@ -74,7 +115,7 @@ static struct pbr_map *pbrm_find(const char *name)
 	return RB_FIND(pbr_map_entry_head, &pbr_maps, &pbrm);
 }
 
-extern struct pbr_map_sequence *pbrm_get(const char *name, uint32_t seqno)
+extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno)
 {
 	struct pbr_map *pbrm;
 	struct pbr_map_sequence *pbrms;
@@ -91,6 +132,12 @@ extern struct pbr_map_sequence *pbrm_get(const char *name, uint32_t seqno)
 			(int (*)(void *, void *))pbr_map_sequence_compare;
 		pbrm->seqnumbers->del =
 			 (void (*)(void *))pbr_map_sequence_delete;
+
+		pbrm->incoming = list_new();
+		pbrm->incoming->cmp =
+			(int (*)(void *, void *))pbr_map_interface_compare;
+		pbrm->incoming->del =
+			(void (*)(void *))pbr_map_interface_delete;
 
 		RB_INSERT(pbr_map_entry_head, &pbr_maps, pbrm);
 

@@ -36,6 +36,12 @@ struct pbr_map {
 	struct list *seqnumbers;
 
 	/*
+	 * The list of incoming interfaces that
+	 * we will apply this policy map onto
+	 */
+	struct list *incoming;
+
+	/*
 	 * If valid is true we think the pbr_map is valid,
 	 * If false, look in individual pbrms to see
 	 * what we think is the invalid reason
@@ -84,8 +90,12 @@ DECLARE_QOBJ_TYPE(pbr_map_sequence)
 
 extern struct pbr_map_entry_head pbr_maps;
 
-extern struct pbr_map_sequence *pbrm_get(const char *name, uint32_t seqno);
+extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno);
 
+extern struct pbr_map *pbrm_find(const char *name);
+
+extern void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp);
+extern void pbr_map_write_interfaces(struct vty *vty, struct interface *ifp);
 extern void pbr_map_init(void);
 
 extern bool pbr_map_check_valid(const char *name);

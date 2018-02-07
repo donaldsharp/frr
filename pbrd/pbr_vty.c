@@ -24,6 +24,7 @@
 #include "vty.h"
 #include "command.h"
 #include "prefix.h"
+#include "vrf.h"
 #include "nexthop.h"
 #include "nexthop_group.h"
 #include "log.h"
@@ -48,7 +49,7 @@ DEFUN_NOSH (pbr_map,
 	uint32_t seqno = atoi(argv[3]->arg);
 	struct pbr_map_sequence *pbrms;
 
-	pbrms = pbrm_get(pbrm_name, seqno);
+	pbrms = pbrms_get(pbrm_name, seqno);
 	VTY_PUSH_CONTEXT(PBRMAP_NODE, pbrms);
 
 	return CMD_SUCCESS;
@@ -165,6 +166,21 @@ DEFPY (pbr_policy,
        "Policy to use\n"
        "Name of the pbr-map to apply\n")
 {
+	VTY_DECLVAR_CONTEXT(interface, ifp);
+	struct pbr_map *pbrm;
+
+	/*
+	 * In the future we would probably want to
+	 * allow pre-creation of the pbr-map
+	 * here.  But for getting something
+	 * up and running let's not do that yet.
+	 */
+	pbrm = pbrm_find(mapname);
+	if (!pbrm)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	pbr_map_add_interface(pbrm, ifp);
+
 	return CMD_SUCCESS;
 }
 static struct cmd_node interface_node = {
@@ -173,7 +189,22 @@ static struct cmd_node interface_node = {
 
 static int pbr_interface_config_write(struct vty *vty)
 {
-	vty_out(vty, "!\n");
+	struct interface *ifp;
+	struct vrf *vrf;
+
+	RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
+		FOR_ALL_INTERFACES (vrf, ifp) {
+			if (vrf->vrf_id == VRF_DEFAULT)
+				vty_frame(vty, "interface %s\n", ifp->name);
+			else
+				vty_frame(vty, "interface %s vrf %s\n",
+					  ifp->name, vrf->name);
+
+			pbr_map_write_interfaces(vty, ifp);
+
+			vty_endframe(vty, "!\n");
+		}
+	}
 
 	return 1;
 }
