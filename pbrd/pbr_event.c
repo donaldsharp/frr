@@ -82,6 +82,23 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 		   __PRETTY_FUNCTION__,
 		   pbr_event_wqentry2str(pbre, buffer, sizeof(buffer)));
 
+	switch (pbre->event) {
+	case PBR_NHG_ADD:
+		break;
+	case PBR_NHG_MODIFY:
+		break;
+	case PBR_NHG_DELETE:
+		break;
+	case PBR_MAP_ADD:
+		break;
+	case PBR_MAP_MODIFY:
+		break;
+	case PBR_MAP_DELETE:
+		break;
+	case PBR_NH_CHANGED:
+		break;
+	}
+
 	XFREE(MTYPE_TMP, pbre);
 
 	return WQ_SUCCESS;
