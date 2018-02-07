@@ -1969,7 +1969,7 @@ DEFUN (vtysh_show_work_queues,
 
 DEFUN (vtysh_show_work_queues_daemon,
        vtysh_show_work_queues_daemon_cmd,
-       "show work-queues <zebra|ripd|ripngd|ospfd|ospf6d|bgpd|isisd>",
+       "show work-queues <zebra|ripd|ripngd|ospfd|ospf6d|bgpd|isisd|pbrd>",
        SHOW_STR
        "Work Queue information\n"
        "For the zebra daemon\n"
@@ -1978,7 +1978,8 @@ DEFUN (vtysh_show_work_queues_daemon,
        "For the ospf daemon\n"
        "For the ospfv6 daemon\n"
        "For the bgp daemon\n"
-       "For the isis daemon\n")
+       "For the isis daemon\n"
+       "For the pbr daemon\n")
 {
 	int idx_protocol = 2;
 	unsigned int i;
