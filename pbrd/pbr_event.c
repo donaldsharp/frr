@@ -99,8 +99,6 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 		break;
 	}
 
-	XFREE(MTYPE_TMP, pbre);
-
 	return WQ_SUCCESS;
 }
 

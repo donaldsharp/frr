@@ -87,7 +87,7 @@ void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp_add)
 			return;
 	}
 
-	listnode_add_sort(pbrm->incoming, ifp);
+	listnode_add_sort(pbrm->incoming, ifp_add);
 }
 
 void pbr_map_write_interfaces(struct vty *vty, struct interface *ifp_find)
@@ -99,7 +99,7 @@ void pbr_map_write_interfaces(struct vty *vty, struct interface *ifp_find)
 	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
 		for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, ifp)) {
 			if (ifp == ifp_find) {
-				vty_out(vty, "  pbr-policy %s", pbrm->name);
+				vty_out(vty, "  pbr-policy %s\n", pbrm->name);
 				break;
 			}
 		}
