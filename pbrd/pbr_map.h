@@ -47,6 +47,11 @@ struct pbr_map {
 	 * what we think is the invalid reason
 	 */
 	bool valid;
+
+	/*
+	 * Is this actually installed?
+	 */
+	bool installed;
 };
 
 RB_HEAD(pbr_map_entry_head, pbr_map);
@@ -101,4 +106,5 @@ extern void pbr_map_init(void);
 extern bool pbr_map_check_valid(const char *name);
 
 extern void pbr_map_check_nh_group_change(const char *nh_group);
+extern void pbr_map_check_policy_change(const char *name);
 #endif

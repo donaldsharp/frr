@@ -29,8 +29,9 @@ enum pbr_events {
 	PBR_MAP_ADD,
 	PBR_MAP_MODIFY,
 	PBR_MAP_DELETE,
-	PBR_NH_CHANGED,
 	PBR_MAP_INSTALL,
+	PBR_NH_CHANGED,
+	PBR_POLICY_CHANGED,
 };
 
 struct pbr_event {

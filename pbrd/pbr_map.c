@@ -81,6 +81,7 @@ void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp_add)
 {
 	struct listnode *node;
 	struct interface *ifp;
+	struct pbr_event *pbre;
 
 	for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, ifp)) {
 		if (ifp_add == ifp)
@@ -88,6 +89,11 @@ void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp_add)
 	}
 
 	listnode_add_sort(pbrm->incoming, ifp_add);
+
+	pbre = pbr_event_new();
+	pbre->event = PBR_POLICY_CHANGED;
+	strcpy(pbre->name, pbrm->name);
+	pbr_event_enqueue(pbre);
 }
 
 void pbr_map_write_interfaces(struct vty *vty, struct interface *ifp_find)
@@ -275,6 +281,31 @@ extern void pbr_map_check_nh_group_change(const char *nh_group)
 				break;
 			}
 		}
+	}
+}
+
+extern void pbr_map_check_policy_change(const char *name)
+{
+	struct pbr_map *pbrm;
+	bool original;
+
+	pbrm = pbrm_find(name);
+	if (!pbrm) {
+		zlog_debug("%s: Specified PBR-MAP(%s) does not exist?",
+			   __PRETTY_FUNCTION__, name);
+		return;
+	}
+
+	original = pbrm->valid;
+	pbr_map_check_valid(name);
+	if (original != pbrm->valid) {
+		struct pbr_event *pbre;
+
+		pbre = pbr_event_new();
+		pbre->event = PBR_MAP_INSTALL;
+		strcpy(pbre->name, name);
+
+		pbr_event_enqueue(pbre);
 	}
 }
 
