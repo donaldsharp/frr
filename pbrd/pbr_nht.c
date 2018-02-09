@@ -37,7 +37,7 @@ static struct hash *pbr_nhg_hash;
 
 static uint32_t pbr_nhg_low_table;
 static uint32_t pbr_nhg_high_table;
-static uint8_t nhg_tableid[65535];
+static bool nhg_tableid[65535];
 static void *pbr_nh_alloc(void *p);
 
 void pbr_nhgroup_add_cb(const char *name)
@@ -248,6 +248,26 @@ static int pbr_nhg_hash_equal(const void *arg1, const void *arg2)
 		(const struct pbr_nexthop_group_cache *)arg2;
 
 	return !strcmp(nhgc1->name, nhgc2->name);
+}
+
+
+uint32_t pbr_nht_get_next_tableid(void)
+{
+	uint32_t i;
+	bool found = false;
+
+	for (i = pbr_nhg_low_table; i <= pbr_nhg_high_table; i++) {
+		if (nhg_tableid[i] == false) {
+			found = true;
+			break;
+		}
+	}
+
+	if (found) {
+		nhg_tableid[i] = true;
+		return i;
+	} else
+		return 0;
 }
 
 void pbr_nht_set_tableid_range(uint32_t low, uint32_t high)
