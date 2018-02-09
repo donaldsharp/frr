@@ -30,6 +30,7 @@
 #include "log.h"
 
 #include "pbrd/pbr_zebra.h"
+#include "pbrd/pbr_nht.h"
 #include "pbrd/pbr_map.h"
 #include "pbrd/pbr_vty.h"
 #include "pbrd/pbr_event.h"
@@ -136,7 +137,7 @@ DEFPY (pbr_map_nexthop_group,
 
 DEFPY (pbr_table_range,
        pbr_table_range_cmd,
-       "[no] pbr table range (10-15)$start (16-20)$end",
+       "[no]$no pbr table range (5000-65535)$start (6000-65535)$end",
        NO_STR
        "Policy based routing\n"
        "Policy based routing table\n"
@@ -144,6 +145,12 @@ DEFPY (pbr_table_range,
        "Initial value of range\n"
        "Final value of range\n")
 {
+	if (no)
+		pbr_nht_set_tableid_range(PBR_NHT_DEFAULT_LOW_TABLEID,
+					  PBR_NHT_DEFAULT_HIGH_TABLEID);
+	else
+		pbr_nht_set_tableid_range(start, end);
+
 	return CMD_SUCCESS;
 }
 
@@ -239,6 +246,8 @@ static int pbr_vty_map_config_write_sequence(struct vty *vty,
 static int pbr_vty_map_config_write(struct vty *vty)
 {
 	struct pbr_map *pbrm;
+
+	pbr_nht_write_table_range(vty);
 
 	RB_FOREACH(pbrm, pbr_map_entry_head, &pbr_maps) {
 		struct pbr_map_sequence *pbrms;

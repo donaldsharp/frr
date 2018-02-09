@@ -26,14 +26,18 @@
 #include <nexthop_group.h>
 #include <hash.h>
 #include <jhash.h>
+#include <vty.h>
 
 #include "pbrd/pbr_nht.h"
 #include "pbrd/pbr_event.h"
 #include "pbrd/pbr_zebra.h"
 
-struct hash *pbr_nh_hash;
-struct hash *pbr_nhg_hash;
+static struct hash *pbr_nh_hash;
+static struct hash *pbr_nhg_hash;
 
+static uint32_t pbr_nhg_low_table;
+static uint32_t pbr_nhg_high_table;
+static uint8_t nhg_tableid[65535];
 static void *pbr_nh_alloc(void *p);
 
 void pbr_nhgroup_add_cb(const char *name)
@@ -246,6 +250,21 @@ static int pbr_nhg_hash_equal(const void *arg1, const void *arg2)
 	return !strcmp(nhgc1->name, nhgc2->name);
 }
 
+void pbr_nht_set_tableid_range(uint32_t low, uint32_t high)
+{
+	pbr_nhg_low_table = low;
+	pbr_nhg_high_table = high;
+}
+
+void pbr_nht_write_table_range(struct vty *vty)
+{
+	if (pbr_nhg_low_table != PBR_NHT_DEFAULT_LOW_TABLEID
+	    || pbr_nhg_high_table != PBR_NHT_DEFAULT_HIGH_TABLEID) {
+		vty_out(vty, "pbr table range %u %u", pbr_nhg_low_table,
+			pbr_nhg_high_table);
+	}
+}
+
 void pbr_nht_init(void)
 {
 	pbr_nh_hash = hash_create_size(16, pbr_nh_hash_key, pbr_nh_hash_equal,
@@ -253,4 +272,8 @@ void pbr_nht_init(void)
 
 	pbr_nhg_hash = hash_create_size(
 		16, pbr_nhg_hash_key, pbr_nhg_hash_equal, "PBR NHG Cache Hash");
+
+	pbr_nhg_low_table = PBR_NHT_DEFAULT_LOW_TABLEID;
+	pbr_nhg_high_table = PBR_NHT_DEFAULT_HIGH_TABLEID;
+	memset(&nhg_tableid, 0, 65535 * sizeof(uint8_t));
 }
