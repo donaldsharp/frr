@@ -22,6 +22,23 @@
 #ifndef __PBR_NHT_H__
 #define __PBR_NHT_H__
 
+struct pbr_nexthop_cache {
+	struct nexthop nexthop;
+
+	bool valid;
+};
+
+struct pbr_nexthop_group_cache {
+	char name[100];
+
+	struct list *pbrnhcache;
+
+	/*
+	 * If all nexthops are considered valid
+	 */
+	bool valid;
+};
+
 extern void pbr_nhgroup_add_cb(const char *name);
 extern void pbr_nhgroup_modify_cb(const char *name);
 extern void pbr_nhgroup_delete_cb(const char *name);
@@ -29,4 +46,9 @@ extern void pbr_nhgroup_delete_cb(const char *name);
 extern bool pbr_nht_nexthop_valid(struct nexthop *nhop);
 extern bool pbr_nht_nexthop_group_valid(const char *name);
 
+extern void pbr_nht_add_group(const char *name);
+extern void pbr_nht_change_group(const char *name);
+extern void pbr_nht_delete_group(const char *name);
+
+extern void pbr_nht_init(void);
 #endif

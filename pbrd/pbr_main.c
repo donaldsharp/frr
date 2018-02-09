@@ -153,6 +153,7 @@ int main(int argc, char **argv, char **envp)
 			   pbr_nhgroup_delete_cb);
 
 	pbr_event_init();
+	pbr_nht_init();
 	pbr_map_init();
 	pbr_zebra_init();
 	pbr_vty_init();

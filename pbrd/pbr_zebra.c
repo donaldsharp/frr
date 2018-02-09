@@ -137,6 +137,8 @@ static int notify_owner(int command, struct zclient *zclient,
 	if (!zapi_route_notify_decode(zclient->ibuf, &p, &note))
 		return -1;
 
+	zlog_debug("Got callback for a route, write code!\n");
+
 	return 0;
 }
 

@@ -29,6 +29,7 @@
 
 #include "pbrd/pbr_event.h"
 #include "pbrd/pbr_map.h"
+#include "pbrd/pbr_nht.h"
 
 struct work_queue *pbr_event_wq;
 
@@ -94,12 +95,15 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 
 	switch (pbre->event) {
 	case PBR_NHG_ADD:
+		pbr_nht_add_group(pbre->name);
 		pbr_map_check_nh_group_change(pbre->name);
 		break;
 	case PBR_NHG_MODIFY:
+		pbr_nht_change_group(pbre->name);
 		pbr_map_check_nh_group_change(pbre->name);
 		break;
 	case PBR_NHG_DELETE:
+		pbr_nht_delete_group(pbre->name);
 		pbr_map_check_nh_group_change(pbre->name);
 		break;
 	case PBR_MAP_ADD:
