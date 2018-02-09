@@ -122,6 +122,9 @@ static void *pbr_nhgc_alloc(void *p)
 	new = XCALLOC(MTYPE_TMP, sizeof(*new));
 
 	strcpy(new->name, pnhgc->name);
+	new->table_id = pbr_nht_get_next_tableid();
+	zlog_debug("%s: NHT: %s assigned table-id: %u",
+		   __PRETTY_FUNCTION__, new->name, new->table_id);
 
 	return new;
 }
