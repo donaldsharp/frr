@@ -45,7 +45,15 @@ extern void pbr_nht_write_table_range(struct vty *vty);
 #define PBR_NHT_DEFAULT_LOW_TABLEID 5000
 #define PBR_NHT_DEFAULT_HIGH_TABLEID 6000
 extern void pbr_nht_set_tableid_range(uint32_t low, uint32_t high);
+
+/*
+ * Get the next tableid to use for installation
+ */
 extern uint32_t pbr_nht_get_next_tableid(void);
+/*
+ * Get the next rule number to use for installation
+ */
+extern uint32_t pbr_nht_get_next_rule(void);
 
 extern void pbr_nhgroup_add_cb(const char *name);
 extern void pbr_nhgroup_modify_cb(const char *name);
