@@ -53,6 +53,12 @@ extern uint32_t pbr_nht_get_next_tableid(void);
 /*
  * Get the next rule number to use for installation
  */
+extern void pbr_nht_write_rule_range(struct vty *vty);
+
+#define PBR_NHT_DEFAULT_LOW_RULE 5000
+#define PBR_NHT_DEFAULT_HIGH_RULE 6000
+extern void pbr_nht_set_rule_range(uint32_t low, uint32_t high);
+
 extern uint32_t pbr_nht_get_next_rule(void);
 
 extern void pbr_nhgroup_add_cb(const char *name);
