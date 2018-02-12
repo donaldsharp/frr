@@ -110,6 +110,7 @@ void pbr_nht_change_group(const char *name)
 	for (ALL_NEXTHOPS(nhgc->nhg, nexthop)) {
 		zlog_debug("Handling stuff\n");
 		pnhc = hash_get(pbr_nh_hash, nexthop, pbr_nh_alloc);
+		zlog_debug("Found: %p", pnhc);
 	}
 }
 
@@ -152,6 +153,7 @@ void pbr_nht_add_group(const char *name)
 
 		memcpy(&lookup.nexthop, nhop, sizeof(*nhop));
 		pnhc = hash_get(pbr_nh_hash, &lookup, pbr_nh_alloc);
+		zlog_debug("Found: %p", pnhc);
 	}
 }
 

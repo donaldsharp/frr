@@ -150,7 +150,8 @@ extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno)
 		pbre = pbr_event_new();
 		pbre->event = PBR_MAP_ADD;
 		strlcpy(pbre->name, name, sizeof(pbre->name));
-	}
+	} else
+		pbre = NULL;
 
 	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
 		if (pbrms->seqno == seqno)
