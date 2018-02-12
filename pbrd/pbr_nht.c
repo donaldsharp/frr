@@ -37,7 +37,10 @@ static struct hash *pbr_nhg_hash;
 
 static uint32_t pbr_nhg_low_table;
 static uint32_t pbr_nhg_high_table;
+static uint32_t pbr_nhg_low_rule;
+static uint32_t pbr_nhg_high_rule;
 static bool nhg_tableid[65535];
+static bool nhg_rule[65535];
 static void *pbr_nh_alloc(void *p);
 
 void pbr_nhgroup_add_cb(const char *name)
@@ -285,10 +288,44 @@ void pbr_nht_write_table_range(struct vty *vty)
 {
 	if (pbr_nhg_low_table != PBR_NHT_DEFAULT_LOW_TABLEID
 	    || pbr_nhg_high_table != PBR_NHT_DEFAULT_HIGH_TABLEID) {
-		vty_out(vty, "pbr table range %u %u", pbr_nhg_low_table,
+		vty_out(vty, "pbr table range %u %u\n", pbr_nhg_low_table,
 			pbr_nhg_high_table);
 	}
 }
+
+uint32_t pbr_nht_get_next_rule(void)
+{
+	uint32_t i;
+	bool found = false;
+
+	for (i = pbr_nhg_low_rule; i <= pbr_nhg_high_rule; i++) {
+		if (nhg_rule[i] == false) {
+			found = true;
+			break;
+		}
+	}
+
+	if (found) {
+		nhg_rule[i] = true;
+		return i;
+	} else
+		return 0;
+}
+void pbr_nht_set_rule_range(uint32_t low, uint32_t high)
+{
+	pbr_nhg_low_rule = low;
+	pbr_nhg_high_rule = high;
+}
+
+void pbr_nht_write_rule_range(struct vty *vty)
+{
+	if (pbr_nhg_low_rule != PBR_NHT_DEFAULT_LOW_RULE
+	    || pbr_nhg_high_rule != PBR_NHT_DEFAULT_HIGH_RULE) {
+		vty_out(vty, "pbr rule range %u %u\n", pbr_nhg_low_rule,
+			pbr_nhg_high_rule);
+	}
+}
+
 
 void pbr_nht_init(void)
 {
@@ -300,5 +337,7 @@ void pbr_nht_init(void)
 
 	pbr_nhg_low_table = PBR_NHT_DEFAULT_LOW_TABLEID;
 	pbr_nhg_high_table = PBR_NHT_DEFAULT_HIGH_TABLEID;
+	pbr_nhg_low_rule = PBR_NHT_DEFAULT_LOW_RULE;
+	pbr_nhg_high_rule = PBR_NHT_DEFAULT_HIGH_RULE;
 	memset(&nhg_tableid, 0, 65535 * sizeof(uint8_t));
 }

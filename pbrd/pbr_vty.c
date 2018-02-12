@@ -155,15 +155,21 @@ DEFPY (pbr_table_range,
 }
 
 DEFPY (pbr_rule_range,
-       pbr_rule_range_cmd,
-       "[no] pbr rule range (10-15)$start (16-20)$end",
-       NO_STR
-       "Policy based routing\n"
-       "Policy based routing rule\n"
-       "Rule range\n"
-       "Initial value of range\n"
-       "Final value of range\n")
+	pbr_rule_range_cmd,
+	"[no] pbr rule range (5000-65535)$start (6000-65535)$end",
+	NO_STR
+	"Policy based routing\n"
+	"Policy based routing rule\n"
+	"Rule range\n"
+	"Initial value of range\n"
+	"Final value of range\n")
 {
+	if (no)
+		pbr_nht_set_rule_range(PBR_NHT_DEFAULT_LOW_RULE,
+				       PBR_NHT_DEFAULT_HIGH_RULE);
+	else
+		pbr_nht_set_rule_range(start, end);
+
 	return CMD_SUCCESS;
 }
 
@@ -248,6 +254,7 @@ static int pbr_vty_map_config_write(struct vty *vty)
 	struct pbr_map *pbrm;
 
 	pbr_nht_write_table_range(vty);
+	pbr_nht_write_rule_range(vty);
 
 	RB_FOREACH(pbrm, pbr_map_entry_head, &pbr_maps) {
 		struct pbr_map_sequence *pbrms;
