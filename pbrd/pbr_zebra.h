@@ -26,7 +26,7 @@ extern void pbr_zebra_init(void);
 
 extern void route_add(struct pbr_nexthop_group_cache *pnhgc,
 		      struct nexthop_group_cmd *nhgc);
-extern void route_delete(struct prefix *p);
+extern void route_delete(struct pbr_nexthop_group_cache *pnhgc);
 
 extern void pbr_send_rnh(struct nexthop *nhop, bool reg);
 #endif

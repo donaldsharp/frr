@@ -149,6 +149,10 @@ static void zebra_connected(struct zclient *zclient)
 	zclient_send_reg_requests(zclient, VRF_DEFAULT);
 }
 
+/*
+ * This function assumes a default route is being
+ * installed into the appropriate tableid
+ */
 void route_add(struct pbr_nexthop_group_cache *pnhgc,
 	       struct nexthop_group_cmd *nhgc)
 {
@@ -204,7 +208,11 @@ void route_add(struct pbr_nexthop_group_cache *pnhgc,
 	zclient_route_send(ZEBRA_ROUTE_ADD, zclient, &api);
 }
 
-void route_delete(struct prefix *p)
+/*
+ * This function assumes a default route is being
+ * removed from the appropriate tableid
+ */
+void route_delete(struct pbr_nexthop_group_cache *pnhgc)
 {
 	struct zapi_route api;
 
@@ -212,7 +220,10 @@ void route_delete(struct prefix *p)
 	api.vrf_id = VRF_DEFAULT;
 	api.type = ZEBRA_ROUTE_PBR;
 	api.safi = SAFI_UNICAST;
-	memcpy(&api.prefix, p, sizeof(*p));
+	api.prefix.family = AF_INET;
+
+	api.tableid = pnhgc->table_id;
+	SET_FLAG(api.message, ZAPI_MESSAGE_TABLEID);
 	zclient_route_send(ZEBRA_ROUTE_DELETE, zclient, &api);
 
 	return;
