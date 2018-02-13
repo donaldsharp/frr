@@ -320,6 +320,7 @@ void nexthop_group_init(void (*new)(const char *name),
 	install_element(CONFIG_NODE, &nexthop_group_cmd);
 	install_element(CONFIG_NODE, &no_nexthop_group_cmd);
 
+	install_default(NH_GROUP_NODE);
 	install_element(NH_GROUP_NODE, &ecmp_nexthops_cmd);
 
 	memset(&nhg_hooks, 0, sizeof(nhg_hooks));
