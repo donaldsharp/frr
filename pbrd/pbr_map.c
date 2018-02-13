@@ -251,6 +251,28 @@ extern bool pbr_map_check_valid(const char *name)
 	return pbrm->valid;
 }
 
+extern void pbr_map_schedule_policy_from_nhg(const char *nh_group)
+{
+	struct pbr_map_sequence *pbrms;
+	struct pbr_map *pbrm;
+	struct listnode *node;
+
+	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
+		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
+			if (pbrms->nhgrp_name
+			    && (strcmp(nh_group, pbrms->nhgrp_name) == 0)) {
+				struct pbr_event *pbre;
+
+				pbrms->nhs_installed = true;
+
+				pbre = pbr_event_new();
+				pbre->event = PBR_MAP_POLICY_INSTALL;
+				strcpy(pbre->name, pbrm->name);
+			}
+		}
+	}
+}
+
 /*
  * For a nexthop group specified, see if any of the pbr-maps
  * are using it and if so, check to see that we are still

@@ -29,6 +29,7 @@
 #include <vty.h>
 
 #include "pbrd/pbr_nht.h"
+#include "pbrd/pbr_map.h"
 #include "pbrd/pbr_event.h"
 #include "pbrd/pbr_zebra.h"
 
@@ -88,6 +89,21 @@ static struct pbr_nexthop_cache *pbr_nht_lookup_nexthop(struct nexthop *nexthop)
 	return NULL;
 }
 #endif
+
+static void pbr_nht_find_nhg_from_table(struct hash_backet *b, void *data)
+{
+	struct pbr_nexthop_group_cache *pnhgc =
+		(struct pbr_nexthop_group_cache *)b->data;
+	uint32_t *table_id = (uint32_t *)data;
+
+	if (pnhgc->table_id == *table_id)
+		pbr_map_schedule_policy_from_nhg(pnhgc->name);
+}
+
+void pbr_nht_route_installed_for_table(uint32_t table_id)
+{
+	hash_iterate(pbr_nhg_hash, pbr_nht_find_nhg_from_table, &table_id);
+}
 
 void pbr_nht_change_group(const char *name)
 {

@@ -139,7 +139,21 @@ static int notify_owner(int command, struct zclient *zclient,
 	if (!zapi_route_notify_decode(zclient->ibuf, &p, &table, &note))
 		return -1;
 
-	zlog_debug("Got callback for a route, write code!\n");
+	switch (note) {
+	case ZAPI_ROUTE_FAIL_INSTALL:
+		zlog_debug("%s Route install failure for table: %u",
+			   __PRETTY_FUNCTION__, table);
+		break;
+	case ZAPI_ROUTE_BETTER_ADMIN_WON:
+		zlog_debug("%s Route better admin distance won for table: %u",
+			   __PRETTY_FUNCTION__, table);
+		break;
+	case ZAPI_ROUTE_INSTALLED:
+		zlog_debug("%s Route installed succeeded for table: %u",
+			   __PRETTY_FUNCTION__, table);
+		// pbr_nht_route_installed_for_table(table);
+		break;
+	}
 
 	return 0;
 }
