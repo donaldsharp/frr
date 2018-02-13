@@ -40,9 +40,10 @@ struct nexthop_group {
  * appropriate callback functions to handle it in your
  * code
  */
-void nexthop_group_init(void (*add)(const char *name),
-			void (*delete)(const char *name),
-			void (*modify)(const char *name));
+void nexthop_group_init(void (*new)(const char *name),
+			void (*add_nexthop)(const char *name),
+			void (*del_nexthop)(const char *name),
+			void (*delete)(const char *name));
 
 void nexthop_add(struct nexthop **target, struct nexthop *nexthop);
 void copy_nexthops(struct nexthop **tnh, struct nexthop *nh,
