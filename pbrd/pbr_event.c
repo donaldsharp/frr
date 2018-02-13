@@ -37,12 +37,16 @@ static const char *pbr_event_wqentry2str(struct pbr_event *pbre,
 					 char *buffer, size_t buflen)
 {
 	switch(pbre->event) {
-	case PBR_NHG_ADD:
+	case PBR_NHG_NEW:
 		snprintf(buffer, buflen, "Nexthop Group Added %s",
 			 pbre->name);
 		break;
-	case PBR_NHG_MODIFY:
-		snprintf(buffer, buflen, "Nexthop Group Modified %s",
+	case PBR_NHG_ADD_NEXTHOP:
+		snprintf(buffer, buflen, "Nexthop Group Nexthop Added %s",
+			 pbre->name);
+		break;
+	case PBR_NHG_DEL_NEXTHOP:
+		snprintf(buffer, buflen, "Nexthop Group Nexthop Deleted %s",
 			 pbre->name);
 		break;
 	case PBR_NHG_DELETE:
@@ -94,11 +98,15 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 		   pbr_event_wqentry2str(pbre, buffer, sizeof(buffer)));
 
 	switch (pbre->event) {
-	case PBR_NHG_ADD:
+	case PBR_NHG_NEW:
 		pbr_nht_add_group(pbre->name);
 		pbr_map_check_nh_group_change(pbre->name);
 		break;
-	case PBR_NHG_MODIFY:
+	case PBR_NHG_ADD_NEXTHOP:
+		pbr_nht_change_group(pbre->name);
+		pbr_map_check_nh_group_change(pbre->name);
+		break;
+	case PBR_NHG_DEL_NEXTHOP:
 		pbr_nht_change_group(pbre->name);
 		pbr_map_check_nh_group_change(pbre->name);
 		break;

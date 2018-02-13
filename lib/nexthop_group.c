@@ -31,8 +31,9 @@
 #endif
 
 struct nexthop_group_hooks {
-	void (*add)(const char *name);
-	void (*modify)(const char *name);
+	void (*new)(const char *name);
+	void (*add_nexthop)(const char *name);
+	void (*del_nexthop)(const char *name);
 	void (*delete)(const char *name);
 };
 
@@ -137,8 +138,8 @@ static struct nexthop_group_cmd *nhgc_get(const char *name)
 		QOBJ_REG(nhgc, nexthop_group_cmd);
 		RB_INSERT(nhgc_entry_head, &nhgc_entries, nhgc);
 
-		if (nhg_hooks.add)
-			nhg_hooks.add(name);
+		if (nhg_hooks.new)
+			nhg_hooks.new(name);
 	}
 
 	return nhgc;
@@ -185,7 +186,8 @@ DEFUN_NOSH(no_nexthop_group, no_nexthop_group_cmd, "no nexthop-group NAME",
 
 DEFPY(ecmp_nexthops,
       ecmp_nexthops_cmd,
-      "nexthop <A.B.C.D|X:X::X:X>$addr [INTERFACE]$intf [nexthop-vrf NAME$name]",
+      "[no] nexthop <A.B.C.D|X:X::X:X>$addr [INTERFACE]$intf [nexthop-vrf NAME$name]",
+      NO_STR
       "Specify one of the nexthops in this ECMP group\n"
       "v4 Address\n"
       "v6 Address\n"
@@ -245,8 +247,8 @@ DEFPY(ecmp_nexthops,
 		nexthop_add(&nhgc->nhg.nexthop, nh);
 	}
 
-	if (nhg_hooks.modify)
-		nhg_hooks.modify(nhgc->name);
+	if (nhg_hooks.add_nexthop)
+		nhg_hooks.add_nexthop(nhgc->name);
 
 	return CMD_SUCCESS;
 }
@@ -307,8 +309,9 @@ static int nexthop_group_write(struct vty *vty)
 }
 
 
-void nexthop_group_init(void (*add)(const char *name),
-			void (*modify)(const char *name),
+void nexthop_group_init(void (*new)(const char *name),
+			void (*add_nexthop)(const char *name),
+			void (*del_nexthop)(const char *name),
 			void (*delete)(const char *name))
 {
 	RB_INIT(nhgc_entry_head, &nhgc_entries);
@@ -321,10 +324,12 @@ void nexthop_group_init(void (*add)(const char *name),
 
 	memset(&nhg_hooks, 0, sizeof(nhg_hooks));
 
-	if (add)
-		nhg_hooks.add = add;
-	if (modify)
-		nhg_hooks.modify = modify;
+	if (new)
+		nhg_hooks.new = new;
+	if (add_nexthop)
+		nhg_hooks.add_nexthop = add_nexthop;
+	if (del_nexthop)
+		nhg_hooks.del_nexthop = del_nexthop;
 	if (delete)
 		nhg_hooks.delete = delete;
 }
