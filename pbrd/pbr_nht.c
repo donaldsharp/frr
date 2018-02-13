@@ -50,24 +50,37 @@ void pbr_nhgroup_add_cb(const char *name)
 
 	pbre = pbr_event_new();
 
-	pbre->event = PBR_NHG_ADD;
+	pbre->event = PBR_NHG_NEW;
 	strlcpy(pbre->name, name, sizeof(pbre->name));
 
 	pbr_event_enqueue(pbre);
 	zlog_debug("Received ADD cb for %s", name);
 }
 
-void pbr_nhgroup_modify_cb(const char *name)
+void pbr_nhgroup_add_nexthop_cb(const char *name)
 {
 	struct pbr_event *pbre;
 
 	pbre = pbr_event_new();
 
-	pbre->event = PBR_NHG_MODIFY;
+	pbre->event = PBR_NHG_ADD_NEXTHOP;
 	strlcpy(pbre->name, name, sizeof(pbre->name));
 
 	pbr_event_enqueue(pbre);
-	zlog_debug("Received MODIFY cb for %s", name);
+	zlog_debug("Received NEXTHOP_ADD cb for %s", name);
+}
+
+void pbr_nhgroup_del_nexthop_cb(const char *name)
+{
+	struct pbr_event *pbre;
+
+	pbre = pbr_event_new();
+
+	pbre->event = PBR_NHG_DEL_NEXTHOP;
+	strlcpy(pbre->name, name, sizeof(pbre->name));
+
+	pbr_event_enqueue(pbre);
+	zlog_debug("Received NEXTHOP_DEL cb for %s", name);
 }
 
 void pbr_nhgroup_delete_cb(const char *name)

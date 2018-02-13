@@ -26,12 +26,17 @@ enum pbr_events {
 	/*
 	 * A NHG has been added to the system, handle it
 	 */
-	PBR_NHG_ADD,
+	PBR_NHG_NEW,
 
 	/*
 	 * A NHG has been modified( added a new nexthop )
 	 */
-	PBR_NHG_MODIFY,
+	PBR_NHG_ADD_NEXTHOP,
+
+	/*
+	 * A NHG has been modified( deleted a nexthop )
+	 */
+	PBR_NHG_DEL_NEXTHOP,
 
 	/*
 	 * A NHG has been deleted from the system

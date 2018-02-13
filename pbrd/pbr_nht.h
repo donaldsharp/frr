@@ -62,7 +62,8 @@ extern void pbr_nht_set_rule_range(uint32_t low, uint32_t high);
 extern uint32_t pbr_nht_get_next_rule(void);
 
 extern void pbr_nhgroup_add_cb(const char *name);
-extern void pbr_nhgroup_modify_cb(const char *name);
+extern void pbr_nhgroup_add_nexthop_cb(const char *name);
+extern void pbr_nhgroup_del_nexthop_cb(const char *name);
 extern void pbr_nhgroup_delete_cb(const char *name);
 
 extern bool pbr_nht_nexthop_valid(struct nexthop *nhop);
