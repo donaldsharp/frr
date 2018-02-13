@@ -124,6 +124,7 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 		pbr_map_check_policy_change(pbre->name);
 		break;
 	case PBR_MAP_POLICY_INSTALL:
+		pbr_map_policy_install(pbre->name);
 		break;
 	}
 

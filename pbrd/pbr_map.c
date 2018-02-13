@@ -273,6 +273,26 @@ extern void pbr_map_schedule_policy_from_nhg(const char *nh_group)
 	}
 }
 
+static void pbr_map_sequence_install(struct pbr_map_sequence *pbmrs)
+{
+	zlog_debug("%s: Installing Sequence: %s %u", __PRETTY_FUNCTION__,
+		   pbmrs->parent->name, pbmrs->seqno);
+}
+
+extern void pbr_map_policy_install(const char *name)
+{
+	struct pbr_map_sequence *pbrms;
+	struct pbr_map *pbrm;
+	struct listnode *node;
+
+	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
+		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
+			if (pbrm->valid && pbrms->nhs_installed)
+				pbr_map_sequence_install(pbrms);
+		}
+	}
+}
+
 /*
  * For a nexthop group specified, see if any of the pbr-maps
  * are using it and if so, check to see that we are still
