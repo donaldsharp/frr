@@ -168,10 +168,10 @@ void nexthops_free(struct nexthop *nexthop)
 bool nexthop_same(const struct nexthop *nh1,
 		  const struct nexthop *nh2)
 {
-	if (nh1 || !nh2)
+	if (nh1 && !nh2)
 		return false;
 
-	if (!nh1 || nh2)
+	if (!nh1 && nh2)
 		return false;
 
 	if (nh1 == nh2)
@@ -180,7 +180,7 @@ bool nexthop_same(const struct nexthop *nh1,
 	if (nh1->vrf_id != nh2->vrf_id)
 		return false;
 
-	if (nh1->type != nh2->vrf_id)
+	if (nh1->type != nh2->type)
 		return false;
 
 	switch(nh1->type) {

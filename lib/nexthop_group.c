@@ -54,17 +54,17 @@ nexthop_group_cmd_compare(const struct nexthop_group_cmd *nhgc1,
 	return strcmp(nhgc1->name, nhgc2->name);
 }
 
-static bool nexthop_exists(struct nexthop_group *nhg,
-			   struct nexthop *nh)
+static struct nexthop *nexthop_exists(struct nexthop_group *nhg,
+				      struct nexthop *nh)
 {
 	struct nexthop *nexthop;
 
 	for (nexthop = nhg->nexthop; nexthop; nexthop = nexthop->next) {
 		if (nexthop_same(nh, nexthop))
-			return true;
+			return nexthop;
 	}
 
-	return false;
+	return NULL;
 }
 
 /* Add nexthop to the end of a nexthop list.  */
@@ -79,6 +79,26 @@ void nexthop_add(struct nexthop **target, struct nexthop *nexthop)
 	else
 		*target = nexthop;
 	nexthop->prev = last;
+}
+
+/* Delete nexthop from a nexthop list.  */
+void nexthop_del(struct nexthop_group *nhg, struct nexthop *nh)
+{
+	struct nexthop *nexthop;
+
+	for (nexthop = nhg->nexthop; nexthop; nexthop = nexthop->next) {
+		if (nexthop_same(nh, nexthop)) {
+			break;
+		}
+	}
+
+	if (nexthop->prev)
+		nexthop->prev->next = nexthop->next;
+	else
+		nhg->nexthop = nexthop->next;
+
+	if (nexthop->next)
+		nexthop->next->prev = nexthop->prev;
 }
 
 void copy_nexthops(struct nexthop **tnh, struct nexthop *nh,
@@ -198,6 +218,7 @@ DEFPY(ecmp_nexthops,
 	struct nexthop_group_cmd *nhgc = VTY_GET_CONTEXT(nexthop_group_cmd);
 	struct vrf *vrf;
 	struct nexthop nhop;
+	struct nexthop *nh;
 
 	if (name)
 		vrf = vrf_lookup_by_name(name);
@@ -240,15 +261,26 @@ DEFPY(ecmp_nexthops,
 			nhop.type = NEXTHOP_TYPE_IPV6;
 	}
 
-	if (!nexthop_exists(&nhgc->nhg, &nhop)) {
-		struct nexthop *nh = nexthop_new();
+	if (no) {
+		nh = nexthop_exists(&nhgc->nhg, &nhop);
+		if (nh) {
+			nexthop_del(&nhgc->nhg, nh);
+			nexthop_free(nh);
+
+			if (nhg_hooks.del_nexthop)
+				nhg_hooks.del_nexthop(nhgc->name);
+		}
+	}
+	else {
+		/* must be adding new nexthop since !no and !nexthop_exists */
+		nh = nexthop_new();
 
 		memcpy(nh, &nhop, sizeof(nhop));
 		nexthop_add(&nhgc->nhg.nexthop, nh);
-	}
 
-	if (nhg_hooks.add_nexthop)
-		nhg_hooks.add_nexthop(nhgc->name);
+		if (nhg_hooks.add_nexthop)
+			nhg_hooks.add_nexthop(nhgc->name);
+	}
 
 	return CMD_SUCCESS;
 }
