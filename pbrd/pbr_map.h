@@ -76,6 +76,7 @@ struct pbr_map_sequence {
 	 */
 	struct nexthop *nhop;
 	char *nhgrp_name;
+	bool nhs_installed;
 
 	/*
 	 * A reason of 0 means we think the pbr_map_sequence is good to go
@@ -107,4 +108,8 @@ extern bool pbr_map_check_valid(const char *name);
 
 extern void pbr_map_check_nh_group_change(const char *nh_group);
 extern void pbr_map_check_policy_change(const char *name);
+
+extern void pbr_map_schedule_policy_from_nhg(const char *nh_group);
+
+extern void pbr_map_policy_install(const char *name);
 #endif

@@ -23,15 +23,62 @@
 #define __PBR_EVENT_H__
 
 enum pbr_events {
+	/*
+	 * A NHG has been added to the system, handle it
+	 */
 	PBR_NHG_NEW,
+
+	/*
+	 * A NHG has added a new nexthop
+	 */
 	PBR_NHG_ADD_NEXTHOP,
+
+	/*
+	 * A NHG has deleted a nexthop
+	 */
 	PBR_NHG_DEL_NEXTHOP,
+
+	/*
+	 * A NHG has been deleted from the system
+	 */
 	PBR_NHG_DELETE,
+
+	/*
+	 * A new pbr-map has been created
+	 */
 	PBR_MAP_ADD,
+
+	/*
+	 * The pbr-map has been modified in some fashion
+	 */
 	PBR_MAP_MODIFY,
+
+	/*
+	 * The pbr-map has been deleted from the system
+	 */
 	PBR_MAP_DELETE,
+
+	/*
+	 * Start the sequence of events to install/remove the policy
+	 * from being installed
+	 */
 	PBR_MAP_INSTALL,
+
+	/*
+	 * We believe we have gotten enough information to actually
+	 * install the rule portion, since the nexthops are installed
+	 */
+	PBR_MAP_POLICY_INSTALL,
+
+	/*
+	 * Callbacks for a Nexthop in a nexthop group has been
+	 * changed in some fashion
+	 */
 	PBR_NH_CHANGED,
+
+	/*
+	 * Callback for when a policy has been applied to an interface
+	 */
 	PBR_POLICY_CHANGED,
 };
 

@@ -34,9 +34,10 @@
 #include "plist.h"
 #include "log.h"
 #include "nexthop.h"
+#include "nexthop_group.h"
 
-#include "pbr_zebra.h"
 #include "pbr_nht.h"
+#include "pbr_zebra.h"
 
 /* Zebra structure to hold current status. */
 struct zclient *zclient = NULL;
@@ -138,7 +139,21 @@ static int notify_owner(int command, struct zclient *zclient,
 	if (!zapi_route_notify_decode(zclient->ibuf, &p, &table, &note))
 		return -1;
 
-	zlog_debug("Got callback for a route, write code!\n");
+	switch (note) {
+	case ZAPI_ROUTE_FAIL_INSTALL:
+		zlog_debug("%s Route install failure for table: %u",
+			   __PRETTY_FUNCTION__, table);
+		break;
+	case ZAPI_ROUTE_BETTER_ADMIN_WON:
+		zlog_debug("%s Route better admin distance won for table: %u",
+			   __PRETTY_FUNCTION__, table);
+		break;
+	case ZAPI_ROUTE_INSTALLED:
+		zlog_debug("%s Route installed succeeded for table: %u",
+			   __PRETTY_FUNCTION__, table);
+		// pbr_nht_route_installed_for_table(table);
+		break;
+	}
 
 	return 0;
 }
@@ -148,30 +163,70 @@ static void zebra_connected(struct zclient *zclient)
 	zclient_send_reg_requests(zclient, VRF_DEFAULT);
 }
 
-void route_add(struct prefix *p, struct nexthop *nh)
+/*
+ * This function assumes a default route is being
+ * installed into the appropriate tableid
+ */
+void route_add(struct pbr_nexthop_group_cache *pnhgc,
+	       struct nexthop_group_cmd *nhgc)
 {
 	struct zapi_route api;
 	struct zapi_nexthop *api_nh;
+	struct nexthop *nhop;
+	uint32_t i;
 
 	memset(&api, 0, sizeof(api));
+
 	api.vrf_id = VRF_DEFAULT;
 	api.type = ZEBRA_ROUTE_PBR;
 	api.safi = SAFI_UNICAST;
-	memcpy(&api.prefix, p, sizeof(*p));
+	/*
+	 * Sending a default route
+	 */
+	api.prefix.family = AF_INET;
+	api.tableid = pnhgc->table_id;
+	SET_FLAG(api.message, ZAPI_MESSAGE_TABLEID);
 
 	SET_FLAG(api.message, ZAPI_MESSAGE_NEXTHOP);
-
-	api_nh = &api.nexthops[0];
-	api_nh->vrf_id = VRF_DEFAULT;
-	api_nh->gate.ipv4 = nh->gate.ipv4;
-	api_nh->type = nh->type;
-	api_nh->ifindex = nh->ifindex;
-	api.nexthop_num = 1;
+	i = 0;
+	for (ALL_NEXTHOPS(nhgc->nhg, nhop)) {
+		api_nh = &api.nexthops[i];
+		api_nh->vrf_id = nhop->vrf_id;
+		api_nh->type = nhop->type;
+		switch (nhop->type) {
+		case NEXTHOP_TYPE_IPV4:
+			api_nh->gate.ipv4 = nhop->gate.ipv4;
+			break;
+		case NEXTHOP_TYPE_IPV4_IFINDEX:
+			api_nh->gate.ipv4 = nhop->gate.ipv4;
+			api_nh->ifindex = nhop->ifindex;
+			break;
+		case NEXTHOP_TYPE_IFINDEX:
+			api_nh->ifindex = nhop->ifindex;
+			break;
+		case NEXTHOP_TYPE_IPV6:
+			memcpy(&api_nh->gate.ipv6, &nhop->gate.ipv6, 16);
+			break;
+		case NEXTHOP_TYPE_IPV6_IFINDEX:
+			api_nh->ifindex = nhop->ifindex;
+			memcpy(&api_nh->gate.ipv6, &nhop->gate.ipv6, 16);
+			break;
+		case NEXTHOP_TYPE_BLACKHOLE:
+			api_nh->bh_type = nhop->bh_type;
+			break;
+		}
+		i++;
+	}
+	api.nexthop_num = i;
 
 	zclient_route_send(ZEBRA_ROUTE_ADD, zclient, &api);
 }
 
-void route_delete(struct prefix *p)
+/*
+ * This function assumes a default route is being
+ * removed from the appropriate tableid
+ */
+void route_delete(struct pbr_nexthop_group_cache *pnhgc)
 {
 	struct zapi_route api;
 
@@ -179,7 +234,10 @@ void route_delete(struct prefix *p)
 	api.vrf_id = VRF_DEFAULT;
 	api.type = ZEBRA_ROUTE_PBR;
 	api.safi = SAFI_UNICAST;
-	memcpy(&api.prefix, p, sizeof(*p));
+	api.prefix.family = AF_INET;
+
+	api.tableid = pnhgc->table_id;
+	SET_FLAG(api.message, ZAPI_MESSAGE_TABLEID);
 	zclient_route_send(ZEBRA_ROUTE_DELETE, zclient, &api);
 
 	return;

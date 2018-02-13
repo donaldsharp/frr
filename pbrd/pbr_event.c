@@ -76,6 +76,10 @@ static const char *pbr_event_wqentry2str(struct pbr_event *pbre,
 		snprintf(buffer, buflen,
 			 "PBR-Policy %s applied to an interface", pbre->name);
 		break;
+	case PBR_MAP_POLICY_INSTALL:
+		snprintf(buffer, buflen, "PBR-POLICY installation time for %s",
+			 pbre->name);
+		break;
 	}
 
 	return buffer;
@@ -126,6 +130,9 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 		break;
 	case PBR_POLICY_CHANGED:
 		pbr_map_check_policy_change(pbre->name);
+		break;
+	case PBR_MAP_POLICY_INSTALL:
+		pbr_map_policy_install(pbre->name);
 		break;
 	}
 
