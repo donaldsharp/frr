@@ -144,9 +144,10 @@ void pbr_nht_change_group(const char *name)
 		pnhc = hash_get(pbr_nh_hash, nexthop, pbr_nh_alloc);
 		zlog_debug("Found: %p", pnhc);
 	}
+
+	route_add(pnhgc, nhgc);
 }
 
-#if 0
 static void *pbr_nhgc_alloc(void *p)
 {
 	struct pbr_nexthop_group_cache *new;
@@ -162,13 +163,12 @@ static void *pbr_nhgc_alloc(void *p)
 
 	return new;
 }
-#endif
 
 void pbr_nht_add_group(const char *name)
 {
 	struct nexthop *nhop;
 	struct nexthop_group_cmd *nhgc;
-//	struct pbr_nexthop_group_cache *pnhgc;
+	struct pbr_nexthop_group_cache *pnhgc;
 	struct pbr_nexthop_group_cache lookup;
 
 	nhgc = nhgc_find(name);
@@ -179,7 +179,7 @@ void pbr_nht_add_group(const char *name)
 	}
 
 	strcpy(lookup.name, name);
-//	pnhgc = hash_get(pbr_nhg_hash, &lookup, pbr_nhgc_alloc);
+	pnhgc = hash_get(pbr_nhg_hash, &lookup, pbr_nhgc_alloc);
 
 	for (ALL_NEXTHOPS(nhgc->nhg, nhop)) {
 		struct pbr_nexthop_cache lookup;
