@@ -35,6 +35,18 @@ struct nlsock {
 };
 #endif
 
+struct zebra_ns_tables {
+	RB_ENTRY(zebra_ns_tables) zebra_ns_tables_entry;
+
+	uint32_t tableid;
+	afi_t afi;
+
+	struct route_table *table;
+};
+RB_HEAD(zebra_ns_tables_head, zebra_ns_tables);
+RB_PROTOTYPE(zebra_ns_tables_head, zebra_ns_tables, zebra_ns_tables_entry,
+	     zebra_ns_tables_entry_compare)
+
 struct zebra_ns {
 	/* net-ns name.  */
 	char name[VRF_NAMSIZ];
@@ -56,6 +68,8 @@ struct zebra_ns {
 #if defined(HAVE_RTADV)
 	struct rtadv rtadv;
 #endif /* HAVE_RTADV */
+
+	struct zebra_ns_tables_head ns_tables;
 };
 
 struct zebra_ns *zebra_ns_lookup(ns_id_t ns_id);
@@ -63,4 +77,8 @@ struct zebra_ns *zebra_ns_lookup(ns_id_t ns_id);
 int zebra_ns_init(void);
 int zebra_ns_enable(ns_id_t ns_id, void **info);
 int zebra_ns_disable(ns_id_t ns_id, void **info);
+
+extern struct route_table *zebra_ns_get_table(struct zebra_ns *zns,
+					      struct zebra_vrf *zvrf,
+					      uint32_t tableid, afi_t afi);
 #endif
