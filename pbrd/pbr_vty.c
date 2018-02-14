@@ -28,6 +28,7 @@
 #include "nexthop.h"
 #include "nexthop_group.h"
 #include "log.h"
+#include "json.h"
 
 #include "pbrd/pbr_nht.h"
 #include "pbrd/pbr_zebra.h"
@@ -196,6 +197,64 @@ DEFPY (pbr_policy,
 
 	return CMD_SUCCESS;
 }
+
+DEFPY (show_pbr,
+	show_pbr_cmd,
+	"show pbr [json$json]",
+	SHOW_STR
+	"Policy Based Routing\n"
+	JSON_STR)
+{
+	pbr_nht_write_table_range(vty);
+	pbr_nht_write_rule_range(vty);
+
+	return CMD_SUCCESS;
+}
+
+DEFPY (show_pbr_map,
+	show_pbr_map_cmd,
+	"show pbr map [NAME$name] [detail$detail] [json$json]",
+	SHOW_STR
+	"Policy Based Routing\n"
+	"PBR Map\n"
+	"PBR Map Name\n"
+	"Detailed information\n"
+	JSON_STR)
+{
+        struct pbr_map *pbrm;
+
+        RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps)
+		if (!name || (strcmp(name, pbrm->name) == 0))
+			vty_out(vty, "  pbr-map %s\n", pbrm->name);
+
+	return CMD_SUCCESS;
+}
+
+DEFPY (show_pbr_interface,
+	show_pbr_interface_cmd,
+	"show pbr interface [NAME$name] [json$json]",
+	SHOW_STR
+	"Policy Based Routing\n"
+	"PBR Interface\n"
+	"PBR Interface Name\n"
+	JSON_STR)
+{
+        struct pbr_map *pbrm;
+        struct listnode *node;
+        struct interface *ifp;
+
+        RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
+                for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, ifp)) {
+                        if (!name || (strcmp(ifp->name, name) == 0)) {
+                                vty_out(vty, "  %s with pbr-policy %s\n", ifp->name, pbrm->name);
+                                break;
+                        }
+                }
+        }
+
+	return CMD_SUCCESS;
+}
+
 static struct cmd_node interface_node = {
 	INTERFACE_NODE, "%s(config-if)# ", 1 /* vtysh ? yes */
 };
@@ -286,6 +345,9 @@ void pbr_vty_init(void)
 	install_element(PBRMAP_NODE, &pbr_map_match_src_cmd);
 	install_element(PBRMAP_NODE, &pbr_map_match_dst_cmd);
 	install_element(PBRMAP_NODE, &pbr_map_nexthop_group_cmd);
+	install_element(VIEW_NODE, &show_pbr_cmd);
+	install_element(VIEW_NODE, &show_pbr_map_cmd);
+	install_element(VIEW_NODE, &show_pbr_interface_cmd);
 
 	return;
 }
