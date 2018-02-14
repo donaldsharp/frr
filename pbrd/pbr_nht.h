@@ -39,6 +39,8 @@ struct pbr_nexthop_group_cache {
 	 * If all nexthops are considered valid
 	 */
 	bool valid;
+
+	bool installed;
 };
 
 extern void pbr_nht_write_table_range(struct vty *vty);
