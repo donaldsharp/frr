@@ -175,28 +175,30 @@ DEFPY (pbr_rule_range,
 }
 
 DEFPY (pbr_policy,
-       pbr_policy_cmd,
-       "pbr-policy NAME$mapname",
-       "Policy to use\n"
-       "Name of the pbr-map to apply\n")
+	pbr_policy_cmd,
+	"[no] pbr-policy NAME$mapname",
+	NO_STR
+	"Policy to use\n"
+	"Name of the pbr-map to apply\n")
 {
 	VTY_DECLVAR_CONTEXT(interface, ifp);
 	struct pbr_map *pbrm;
+	struct pbr_interface *pbr_ifp = ifp->info;
 
-	/*
-	 * In the future we would probably want to
-	 * allow pre-creation of the pbr-map
-	 * here.  But for getting something
-	 * up and running let's not do that yet.
-	 */
 	pbrm = pbrm_find(mapname);
-	if (!pbrm) {
-		struct pbr_interface *pbr_ifp = ifp->info;
 
-		strcpy(pbr_ifp->mapname, mapname);
-		vty_out (vty, "storing mapname %s on pbr_ifp\n", pbr_ifp->mapname);
-	} else
-		pbr_map_add_interface(pbrm, ifp);
+	if (no) {
+		if (pbrm)
+			pbr_map_interface_delete(pbrm, ifp);
+		else
+			if (strcmp(pbr_ifp->mapname, mapname) == 0)
+				strcpy(pbr_ifp->mapname, "");
+	} else {
+		if (pbrm)
+			pbr_map_add_interface(pbrm, ifp);
+		else
+			strcpy(pbr_ifp->mapname, mapname);
+	}
 
 	return CMD_SUCCESS;
 }
