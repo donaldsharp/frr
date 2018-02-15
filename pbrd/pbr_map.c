@@ -26,13 +26,15 @@
 #include "prefix.h"
 #include "table.h"
 #include "nexthop.h"
+#include "nexthop_group.h"
 #include "memory.h"
 #include "log.h"
 #include "vty.h"
 
+#include "pbr_nht.h"
 #include "pbr_map.h"
 #include "pbr_event.h"
-#include "pbr_nht.h"
+#include "pbr_zebra.h"
 
 static __inline int pbr_map_compare(const struct pbr_map *pbrmap1,
 				    const struct pbr_map *pbrmap2);
@@ -273,23 +275,23 @@ extern void pbr_map_schedule_policy_from_nhg(const char *nh_group)
 	}
 }
 
-static void pbr_map_sequence_install(struct pbr_map_sequence *pbmrs)
-{
-	zlog_debug("%s: Installing Sequence: %s %u", __PRETTY_FUNCTION__,
-		   pbmrs->parent->name, pbmrs->seqno);
-}
-
 extern void pbr_map_policy_install(const char *name)
 {
 	struct pbr_map_sequence *pbrms;
 	struct pbr_map *pbrm;
 	struct listnode *node;
+	bool install;
 
+	install = true;
 	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
+		install = true;
 		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
-			if (pbrm->valid && pbrms->nhs_installed)
-				pbr_map_sequence_install(pbrms);
+			if (!pbrm->valid || !pbrms->nhs_installed)
+				install = false;
 		}
+
+		if (install)
+			pbr_send_pbr_map(pbrm);
 	}
 }
 
