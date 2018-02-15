@@ -224,12 +224,40 @@ DEFPY (show_pbr_map,
 	"Detailed information\n"
 	JSON_STR)
 {
-        struct pbr_map *pbrm;
+	struct pbr_map_sequence *pbrms;
+	struct pbr_map *pbrm;
+	struct listnode *node;
+	char buf[PREFIX_STRLEN];
 
-        RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps)
-		if (!name || (strcmp(name, pbrm->name) == 0))
-			vty_out(vty, "  pbr-map %s\n", pbrm->name);
+	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
+		if (!name || (strcmp(name, pbrm->name) == 0)) {
+			vty_out(vty, "  pbr-map %s valid: %d installed: %d\n",
+				pbrm->name, pbrm->valid, pbrm->installed);
 
+			for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node,
+						  pbrms)) {
+				vty_out(vty,
+					"\tSeq: %u rule: %u Reason: %" PRIu64
+					"\n",
+					pbrms->seqno, pbrms->ruleno,
+					pbrms->reason);
+				if (pbrms->src)
+					vty_out(vty, "\tSRC Match: %s\n",
+						prefix2str(pbrms->src, buf,
+							   sizeof(buf)));
+				if (pbrms->dst)
+					vty_out(vty, "\tDST Match: %s\n",
+						prefix2str(pbrms->dst, buf,
+							   sizeof(buf)));
+				vty_out(vty,
+					"\tNexthop-Group: %s Installed: %u\n",
+					(pbrms->nhgrp_name)
+						? pbrms->nhgrp_name
+						: "Not Yet Specified",
+					pbrms->nhs_installed);
+			}
+		}
+	}
 	return CMD_SUCCESS;
 }
 
@@ -249,8 +277,9 @@ DEFPY (show_pbr_interface,
         RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
                 for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, ifp)) {
                         if (!name || (strcmp(ifp->name, name) == 0)) {
-                                vty_out(vty, "  %s with pbr-policy %s\n", ifp->name, pbrm->name);
-                                break;
+				vty_out(vty, "  %s(%d) with pbr-policy %s\n",
+					ifp->name, ifp->ifindex, pbrm->name);
+				break;
                         }
                 }
         }
