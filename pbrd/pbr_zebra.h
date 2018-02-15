@@ -22,6 +22,12 @@
 #ifndef __PBR_ZEBRA_H__
 #define __PBR_ZEBRA_H__
 
+DECLARE_MTYPE(PBR_INTERFACE)
+
+struct pbr_interface {
+	char mapname[100];
+};
+
 extern void pbr_zebra_init(void);
 
 extern void route_add(struct pbr_nexthop_group_cache *pnhgc,

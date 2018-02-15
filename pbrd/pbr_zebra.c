@@ -43,6 +43,9 @@
 /* Zebra structure to hold current status. */
 struct zclient *zclient = NULL;
 
+DEFINE_MGROUP(PBRD, "pbrd")
+DEFINE_MTYPE(PBRD, PBR_INTERFACE, "PBR interface")
+
 /* For registering threads. */
 extern struct thread_master *master;
 
@@ -57,6 +60,23 @@ static struct interface *zebra_interface_if_lookup(struct stream *s)
 	return if_lookup_by_name(ifname_tmp, VRF_DEFAULT);
 }
 
+static struct pbr_interface *pbr_if_new(struct interface *ifp)
+{
+	struct pbr_interface *pbr_ifp;
+
+	zassert(ifp);
+	zassert(!ifp->info);
+
+	pbr_ifp = XCALLOC(MTYPE_PBR_INTERFACE, sizeof(*pbr_ifp));
+
+	if (!pbr_ifp) {
+		zlog_err("PBR XCALLOC(%zu) failure", sizeof(*pbr_ifp));
+		return 0;
+	}
+
+	return (pbr_ifp);
+}
+
 /* Inteface addition message from zebra. */
 static int interface_add(int command, struct zclient *zclient,
 			       zebra_size_t length, vrf_id_t vrf_id)
@@ -65,11 +85,20 @@ static int interface_add(int command, struct zclient *zclient,
 
 	ifp = zebra_interface_add_read(zclient->ibuf, vrf_id);
 
-	if (!ifp->info)
+	if (!ifp)
 		return 0;
+
+	if (!ifp->info) {
+		struct pbr_interface *pbr_ifp;
+
+		pbr_ifp = pbr_if_new(ifp);
+		ifp->info = pbr_ifp;
+	}
 
 	return 0;
 }
+
+
 
 static int interface_delete(int command, struct zclient *zclient,
 			    zebra_size_t length, vrf_id_t vrf_id)

@@ -25,6 +25,7 @@
 #include "linklist.h"
 #include "prefix.h"
 #include "table.h"
+#include "vrf.h"
 #include "nexthop.h"
 #include "nexthop_group.h"
 #include "memory.h"
@@ -342,6 +343,32 @@ extern void pbr_map_install(const char *name)
 
 	pbr_send_pbr_map(pbrm);
 }
+
+extern void pbr_map_add_interfaces(const char *name)
+{
+	struct pbr_map *pbrm;
+	struct interface *ifp;
+	struct pbr_interface *pbr_ifp;
+	struct vrf *vrf;
+
+	pbrm = pbrm_find(name);
+	if (!pbrm) {
+		zlog_debug("%s: Specified PBR-MAP(%s) does not exist?",
+			   __PRETTY_FUNCTION__, name);
+		return;
+	}
+
+	RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
+                FOR_ALL_INTERFACES (vrf, ifp) {
+			if (ifp->info) {
+				pbr_ifp = ifp->info;
+				if (strcmp(name, pbr_ifp->mapname) == 0)
+					pbr_map_add_interface(pbrm, ifp);
+			}
+		}
+	}
+}
+
 
 extern void pbr_map_check_policy_change(const char *name)
 {

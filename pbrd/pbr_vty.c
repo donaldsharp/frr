@@ -190,10 +190,13 @@ DEFPY (pbr_policy,
 	 * up and running let's not do that yet.
 	 */
 	pbrm = pbrm_find(mapname);
-	if (!pbrm)
-		return CMD_WARNING_CONFIG_FAILED;
+	if (!pbrm) {
+		struct pbr_interface *pbr_ifp = ifp->info;
 
-	pbr_map_add_interface(pbrm, ifp);
+		strcpy(pbr_ifp->mapname, mapname);
+		vty_out (vty, "storing mapname %s on pbr_ifp\n", pbr_ifp->mapname);
+	} else
+		pbr_map_add_interface(pbrm, ifp);
 
 	return CMD_SUCCESS;
 }
