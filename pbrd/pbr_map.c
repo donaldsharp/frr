@@ -75,9 +75,26 @@ static int pbr_map_interface_compare(const struct interface *ifp1,
 	return strcmp(ifp1->name, ifp2->name);
 }
 
-static void pbr_map_interface_delete(struct interface *ifp)
+void pbr_map_interface_delete(struct pbr_map *pbrm, struct interface *ifp_del)
 {
-	return;
+
+	struct listnode *node;
+	struct interface *ifp;
+	struct pbr_event *pbre;
+
+	for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, ifp)) {
+		if (ifp_del == ifp)
+			break;
+	}
+
+	if (ifp) {
+		listnode_delete(pbrm->incoming, ifp_del);
+
+		pbre = pbr_event_new();
+		pbre->event = PBR_POLICY_CHANGED;
+		strcpy(pbre->name, pbrm->name);
+		pbr_event_enqueue(pbre);
+	}
 }
 
 void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp_add)
