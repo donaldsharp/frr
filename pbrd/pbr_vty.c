@@ -182,22 +182,34 @@ DEFPY (pbr_policy,
 	"Name of the pbr-map to apply\n")
 {
 	VTY_DECLVAR_CONTEXT(interface, ifp);
-	struct pbr_map *pbrm;
+	struct pbr_map *pbrm, *old_pbrm;
 	struct pbr_interface *pbr_ifp = ifp->info;
 
 	pbrm = pbrm_find(mapname);
 
 	if (no) {
-		if (pbrm)
-			pbr_map_interface_delete(pbrm, ifp);
-		else
-			if (strcmp(pbr_ifp->mapname, mapname) == 0)
-				strcpy(pbr_ifp->mapname, "");
+		if (strcmp(pbr_ifp->mapname, mapname) == 0) {
+			strcpy(pbr_ifp->mapname, "");
+
+			if (pbrm)
+				pbr_map_interface_delete(pbrm, ifp);
+		}
 	} else {
-		if (pbrm)
-			pbr_map_add_interface(pbrm, ifp);
-		else
+		if (strcmp(pbr_ifp->mapname, "") == 0) {
 			strcpy(pbr_ifp->mapname, mapname);
+
+			if (pbrm)
+				pbr_map_add_interface(pbrm, ifp);
+		} else {
+			if (!(strcmp(pbr_ifp->mapname, mapname) == 0)) {
+				old_pbrm = pbrm_find(pbr_ifp->mapname);
+				if (old_pbrm)
+					pbr_map_interface_delete(old_pbrm, ifp);
+				strcpy(pbr_ifp->mapname, mapname);
+				if (pbrm)
+					pbr_map_add_interface(pbrm, ifp);
+			}
+		}
 	}
 
 	return CMD_SUCCESS;
