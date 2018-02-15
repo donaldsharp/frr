@@ -329,6 +329,20 @@ extern void pbr_map_check_nh_group_change(const char *nh_group)
 	}
 }
 
+extern void pbr_map_install(const char *name)
+{
+	struct pbr_map *pbrm;
+
+	pbrm = pbrm_find(name);
+	if (!pbrm) {
+		zlog_debug("%s: Specified PBR-MAP(%s) does not exist?",
+			   __PRETTY_FUNCTION__, name);
+		return;
+	}
+
+	pbr_send_pbr_map(pbrm);
+}
+
 extern void pbr_map_check_policy_change(const char *name)
 {
 	struct pbr_map *pbrm;

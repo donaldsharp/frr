@@ -127,6 +127,7 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 	case PBR_NH_CHANGED:
 		break;
 	case PBR_MAP_INSTALL:
+		pbr_map_install(pbre->name);
 		break;
 	case PBR_POLICY_CHANGED:
 		pbr_map_check_policy_change(pbre->name);
