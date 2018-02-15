@@ -237,7 +237,7 @@ DEFPY (show_pbr_map,
 			for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node,
 						  pbrms)) {
 				vty_out(vty,
-					"\tSeq: %u rule: %u Reason: %" PRIu64
+					"    Seq: %u rule: %u Reason: %" PRIu64
 					"\n",
 					pbrms->seqno, pbrms->ruleno,
 					pbrms->reason);
