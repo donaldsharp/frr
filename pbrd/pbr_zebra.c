@@ -340,15 +340,17 @@ void pbr_send_rnh(struct nexthop *nhop, bool reg)
 static void pbr_encode_pbr_map_sequence_prefix(struct stream *s,
 					       struct prefix *p)
 {
-	if (p) {
-		stream_putc(s, p->family);
-		stream_putc(s, p->prefixlen);
-		stream_put(s, &p->u.prefix, prefix_blen(p));
-	} else {
-		stream_putc(s, AFI_IP);
-		stream_putc(s, 0);
-		stream_putl(s, 0);
+	struct prefix any;
+
+	if (!p) {
+		memset(&any, 0, sizeof(any));
+		any.family = AFI_IP;
+		p = &any;
 	}
+
+	stream_putc(s, p->family);
+	stream_putc(s, p->prefixlen);
+	stream_put(s, &p->u.prefix, prefix_blen(p));
 }
 
 static void pbr_encode_pbr_map_sequence(struct stream *s,
