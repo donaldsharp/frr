@@ -83,5 +83,11 @@ extern void pbr_nht_delete_group(const char *name);
  */
 extern void pbr_nht_route_installed_for_table(uint32_t table_id);
 
+/*
+ * Given the nexthop group name, lookup the associated
+ * tableid with it
+ */
+extern uint32_t pbr_nht_get_table(const char *name);
+
 extern void pbr_nht_init(void);
 #endif

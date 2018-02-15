@@ -363,6 +363,23 @@ void pbr_nht_write_rule_range(struct vty *vty)
 	}
 }
 
+uint32_t pbr_nht_get_table(const char *name)
+{
+	struct pbr_nexthop_group_cache find;
+	struct pbr_nexthop_group_cache *pnhgc;
+
+	memset(&find, 0, sizeof(find));
+	strcpy(find.name, name);
+	pnhgc = hash_lookup(pbr_nhg_hash, &find);
+
+	if (!pnhgc) {
+		zlog_debug("%s: Something has gone terribly wrong for %s",
+			   __PRETTY_FUNCTION__, name);
+		return 5000;
+	}
+
+	return pnhgc->table_id;
+}
 
 void pbr_nht_init(void)
 {

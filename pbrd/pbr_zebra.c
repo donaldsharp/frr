@@ -37,6 +37,7 @@
 #include "nexthop_group.h"
 
 #include "pbr_nht.h"
+#include "pbr_map.h"
 #include "pbr_zebra.h"
 
 /* Zebra structure to hold current status. */
@@ -305,4 +306,61 @@ void pbr_send_rnh(struct nexthop *nhop, bool reg)
 		zlog_warn("%s: Failure to send nexthop to zebra",
 			  __PRETTY_FUNCTION__);
 	}
+}
+
+static void pbr_encode_pbr_map_sequence_prefix(struct stream *s,
+					       struct prefix *p)
+{
+	if (p) {
+		stream_putc(s, p->family);
+		stream_putc(s, p->prefixlen);
+		stream_put(s, &p->u.prefix, prefix_blen(p));
+	} else {
+		stream_putc(s, AFI_IP);
+		stream_putc(s, 0);
+		stream_putl(s, 0);
+	}
+}
+
+static void pbr_encode_pbr_map_sequence(struct stream *s,
+					struct pbr_map_sequence *pbrms,
+					struct interface *ifp)
+{
+	stream_putl(s, pbrms->seqno);
+	stream_putl(s, pbrms->ruleno);
+	pbr_encode_pbr_map_sequence_prefix(s, pbrms->src);
+	stream_putw(s, 0);  /* src port */
+	pbr_encode_pbr_map_sequence_prefix(s, pbrms->dst);
+	stream_putw(s, 0);  /* dst port */
+	stream_putl(s, pbr_nht_get_table(pbrms->nhgrp_name));
+	stream_putl(s, ifp->ifindex);
+}
+
+void pbr_send_pbr_map(struct pbr_map *pbrm)
+{
+	struct listnode *inode, *snode;
+	struct pbr_map_sequence *pbrms;
+	struct interface *ifp;
+	struct stream *s;
+	uint32_t total;
+
+	s = zclient->obuf;
+	stream_reset(s);
+
+	zclient_create_header(s, ZEBRA_RULE_ADD, VRF_DEFAULT);
+
+	total = 0;
+	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, snode, pbrms))
+		total++;
+
+	stream_putl(s, total);
+	for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, inode, ifp)) {
+		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, snode, pbrms)) {
+			pbr_encode_pbr_map_sequence(s, pbrms, ifp);
+		}
+	}
+
+	stream_putw_at(s, 0, stream_get_endp(s));
+
+	zclient_send_message(zclient);
 }

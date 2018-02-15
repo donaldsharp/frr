@@ -66,6 +66,11 @@ struct pbr_map_sequence {
 	uint32_t seqno;
 
 	/*
+	 * The rule number to install into
+	 */
+	uint32_t ruleno;
+
+	/*
 	 * Our policy Catchers
 	 */
 	struct prefix *src;

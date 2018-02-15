@@ -31,8 +31,8 @@
 #include "json.h"
 
 #include "pbrd/pbr_nht.h"
-#include "pbrd/pbr_zebra.h"
 #include "pbrd/pbr_map.h"
+#include "pbrd/pbr_zebra.h"
 #include "pbrd/pbr_vty.h"
 #include "pbrd/pbr_event.h"
 #ifndef VTYSH_EXTRACT_PL
