@@ -165,6 +165,7 @@ extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno)
 	if (!pbrms) {
 		pbrms = XCALLOC(MTYPE_TMP, sizeof(*pbrms));
 		pbrms->seqno = seqno;
+		pbrms->ruleno = pbr_nht_get_next_rule();
 		pbrms->parent = pbrm;
 
 		QOBJ_REG(pbrms, pbr_map_sequence);
@@ -328,6 +329,11 @@ extern void pbr_map_check_nh_group_change(const char *nh_group)
 			}
 		}
 	}
+}
+
+extern void pbr_map_check(const char *name)
+{
+	return;
 }
 
 extern void pbr_map_install(const char *name)
