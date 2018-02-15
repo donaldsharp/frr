@@ -16,6 +16,14 @@ pbrd_libpbr_a_SOURCES = \
 	pbrd/pbr_event.c \
 	# end
 
+noinst_HEADERS += \
+	pbrd/pbr_event.h \
+	pbrd/pbr_map.h \
+	pbrd/pbr_nht.h \
+	pbrd/pbr_vty.h \
+	pbrd/pbr_zebra.h \
+	# end
+
 pbrd/pbr_vty_clippy.c: $(CLIPPY_DEPS)
 pbrd/pbr_vty.$(OBJEXT): pbrd/pbr_vty_clippy.c
 
