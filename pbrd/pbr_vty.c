@@ -284,16 +284,28 @@ DEFPY (show_pbr_interface,
 	"PBR Interface Name\n"
 	JSON_STR)
 {
-        struct pbr_map *pbrm;
-        struct listnode *node;
         struct interface *ifp;
+	struct vrf *vrf;
+	struct pbr_interface *pbr_ifp;
 
-        RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
-                for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, ifp)) {
+	RB_FOREACH(vrf, vrf_name_head, &vrfs_by_name) {
+		FOR_ALL_INTERFACES(vrf, ifp) {
                         if (!name || (strcmp(ifp->name, name) == 0)) {
-				vty_out(vty, "  %s(%d) with pbr-policy %s\n",
-					ifp->name, ifp->ifindex, pbrm->name);
-				break;
+				pbr_ifp = ifp->info;
+
+				if (!(strcmp(pbr_ifp->mapname, "") == 0)) {
+					struct pbr_map *pbrm;
+
+					pbrm = pbrm_find(pbr_ifp->mapname);
+					vty_out(vty,
+						"  %s(%d) with pbr-policy %s",
+						ifp->name, ifp->ifindex,
+						pbr_ifp->mapname);
+					if (!pbrm)
+						vty_out(vty,
+							" (map doesn't exist)");
+					vty_out(vty, "\n");
+				}
                         }
                 }
         }
