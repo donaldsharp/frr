@@ -344,7 +344,7 @@ static void pbr_encode_pbr_map_sequence_prefix(struct stream *s,
 
 	if (!p) {
 		memset(&any, 0, sizeof(any));
-		any.family = AFI_IP;
+		any.family = AF_INET;
 		p = &any;
 	}
 
