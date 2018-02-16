@@ -116,20 +116,12 @@ void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp_add)
 	pbr_event_enqueue(pbre);
 }
 
-void pbr_map_write_interfaces(struct vty *vty, struct interface *ifp_find)
+void pbr_map_write_interfaces(struct vty *vty, struct interface *ifp)
 {
-	struct pbr_map *pbrm;
-	struct listnode *node;
-	struct interface *ifp;
+	struct pbr_interface *pbr_ifp = ifp->info;
 
-	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
-		for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, ifp)) {
-			if (ifp == ifp_find) {
-				vty_out(vty, "  pbr-policy %s\n", pbrm->name);
-				break;
-			}
-		}
-	}
+	if (!(strcmp(pbr_ifp->mapname, "") == 0))
+		vty_out(vty, " pbr-policy %s\n", pbr_ifp->mapname);
 }
 
 struct pbr_map *pbrm_find(const char *name)
