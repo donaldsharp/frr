@@ -31,6 +31,7 @@
 #include "zebra_memory.h"
 #include "rt.h"
 #include "zebra_vxlan.h"
+#include "zebra_pbr.h"
 
 DEFINE_MTYPE(ZEBRA, ZEBRA_NS, "Zebra Name Space")
 
@@ -142,11 +143,14 @@ int zebra_ns_disable(ns_id_t ns_id, void **info)
 	struct zebra_ns_tables *znst;
 	struct zebra_ns *zns = (struct zebra_ns *)(*info);
 
+	hash_clean(zns->rules_hash, zebra_pbr_rules_free);
+	hash_free(zns->rules_hash);
 	while ((znst = RB_ROOT(zebra_ns_tables_head, &zns->ns_tables))
 	       != NULL) {
 		RB_REMOVE(zebra_ns_tables_head, &zns->ns_tables, znst);
 		znst = zebra_ns_free_table(znst);
 	}
+
 	route_table_finish(zns->if_table);
 	zebra_vxlan_ns_disable(zns);
 #if defined(HAVE_RTADV)
@@ -175,5 +179,8 @@ int zebra_ns_init(void)
 	/* Default NS is activated */
 	zebra_ns_enable(NS_DEFAULT, (void **)&dzns);
 
+	dzns->rules_hash =
+		hash_create_size(8, zebra_pbr_rules_hash_key,
+				 zebra_pbr_rules_hash_equal, "Rules Hash");
 	return 0;
 }

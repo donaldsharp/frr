@@ -70,6 +70,8 @@ struct zebra_ns {
 #endif /* HAVE_RTADV */
 
 	struct zebra_ns_tables_head ns_tables;
+
+	struct hash *rules_hash;
 };
 
 struct zebra_ns *zebra_ns_lookup(ns_id_t ns_id);

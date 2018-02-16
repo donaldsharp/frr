@@ -2597,7 +2597,7 @@ static inline void zread_rule(uint16_t command,
 		if (zpr.filter.dst_port)
 			zpr.filter.filter_bm |= PBR_FILTER_DST_PORT;
 
-		zebra_pbr_add_rule(&zpr, ifp);
+		zebra_pbr_add_rule(zvrf->zns, &zpr, ifp);
 	}
 
 stream_failure:
