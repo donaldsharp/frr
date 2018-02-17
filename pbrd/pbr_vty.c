@@ -57,21 +57,25 @@ DEFUN_NOSH (pbr_map,
 	return CMD_SUCCESS;
 }
 
-DEFPY (pbr_map_match_src,
-       pbr_map_match_src_cmd,
-       "match src-ip <A.B.C.D/M|X:X::X:X/M>$prefix",
-       "Match the rest of the command\n"
-       "Choose the src ip or ipv6 prefix to use\n"
-       "v4 Prefix\n"
-       "v6 Prefix\n")
+DEFPY(pbr_map_match_src, pbr_map_match_src_cmd,
+	"[no] match src-ip <A.B.C.D/M|X:X::X:X/M>$prefix",
+	NO_STR
+	"Match the rest of the command\n"
+	"Choose the src ip or ipv6 prefix to use\n"
+	"v4 Prefix\n"
+	"v6 Prefix\n")
 {
 	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
 	struct pbr_event *pbre;
 
-	if (!pbrms->src)
-		pbrms->src = prefix_new();
-
-	prefix_copy(pbrms->src, prefix);
+	if (!no) {
+		if (!pbrms->src)
+			pbrms->src = prefix_new();
+		prefix_copy(pbrms->src, prefix);
+	} else {
+		prefix_free(pbrms->src);
+		pbrms->src = 0;
+	}
 
 	pbre = pbr_event_new();
 	pbre->event = PBR_MAP_MODIFY;
@@ -81,21 +85,25 @@ DEFPY (pbr_map_match_src,
 	return CMD_SUCCESS;
 }
 
-DEFPY (pbr_map_match_dst,
-       pbr_map_match_dst_cmd,
-       "match dst-ip <A.B.C.D/M|X:X::X:X/M>$prefix",
-       "Match the rest of the command\n"
-       "Choose the src ip or ipv6 prefix to use\n"
-       "v4 Prefix\n"
-       "v6 Prefix\n")
+DEFPY(pbr_map_match_dst, pbr_map_match_dst_cmd,
+	"[no] match dst-ip <A.B.C.D/M|X:X::X:X/M>$prefix",
+	NO_STR
+	"Match the rest of the command\n"
+	"Choose the src ip or ipv6 prefix to use\n"
+	"v4 Prefix\n"
+	"v6 Prefix\n")
 {
 	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
 	struct pbr_event *pbre;
 
-	if (!pbrms->dst)
-		pbrms->dst = prefix_new();
-
-	prefix_copy(pbrms->dst, prefix);
+	if (!no) {
+		if (!pbrms->dst)
+			pbrms->dst = prefix_new();
+		prefix_copy(pbrms->dst, prefix);
+	} else {
+		prefix_free(pbrms->dst);
+		pbrms->dst = 0;
+	}
 
 	pbre = pbr_event_new();
 	pbre->event = PBR_MAP_MODIFY;
@@ -105,12 +113,12 @@ DEFPY (pbr_map_match_dst,
 	return CMD_SUCCESS;
 }
 
-DEFPY (pbr_map_nexthop_group,
-       pbr_map_nexthop_group_cmd,
-       "set nexthop-group NAME$name",
-       "Set for the PBR-MAP\n"
-       "nexthop-group to use\n"
-       "The name of the nexthop-group\n")
+DEFPY(pbr_map_nexthop_group, pbr_map_nexthop_group_cmd,
+	"[no] set nexthop-group NAME$name",
+	NO_STR
+	"Set for the PBR-MAP\n"
+	"nexthop-group to use\n"
+	"The name of the nexthop-group\n")
 {
 	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
 	struct nexthop_group_cmd *nhgc;
@@ -126,7 +134,8 @@ DEFPY (pbr_map_nexthop_group,
 	if (pbrms->nhgrp_name)
 		XFREE(MTYPE_TMP, pbrms->nhgrp_name);
 
-	pbrms->nhgrp_name = XSTRDUP(MTYPE_TMP, name);
+	if (!no)
+		pbrms->nhgrp_name = XSTRDUP(MTYPE_TMP, name);
 
 	pbre = pbr_event_new();
 	pbre->event = PBR_MAP_MODIFY;
