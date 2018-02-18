@@ -186,6 +186,7 @@ void pbr_nht_add_group(const char *name)
 
 	strcpy(lookup.name, name);
 	pnhgc = hash_get(pbr_nhg_hash, &lookup, pbr_nhgc_alloc);
+	zlog_debug("Retrieved %p", pnhgc);
 
 	for (ALL_NEXTHOPS(nhgc->nhg, nhop)) {
 		struct pbr_nexthop_cache lookup;
