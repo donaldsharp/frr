@@ -41,7 +41,7 @@
 
 DEFUN_NOSH (pbr_map,
 	    pbr_map_cmd,
-	    "pbr-map WORD seq (1-65535)",
+	    "pbr-map WORD seq (1-1000)",
 	    "Create pbr-map or enter pbr-map command mode\n"
 	    "The name of the PBR MAP\n"
 	    "Sequence to insert to/delete from existing pbr-map entry\n"

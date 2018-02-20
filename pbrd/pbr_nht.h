@@ -61,7 +61,7 @@ extern void pbr_nht_write_rule_range(struct vty *vty);
 #define PBR_NHT_DEFAULT_HIGH_RULE 1300
 extern void pbr_nht_set_rule_range(uint32_t low, uint32_t high);
 
-extern uint32_t pbr_nht_get_next_rule(void);
+extern uint32_t pbr_nht_get_next_rule(uint32_t seqno);
 
 extern void pbr_nhgroup_add_cb(const char *name);
 extern void pbr_nhgroup_add_nexthop_cb(const char *name);
