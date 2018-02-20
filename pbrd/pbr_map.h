@@ -87,11 +87,12 @@ struct pbr_map_sequence {
 	 * A reason of 0 means we think the pbr_map_sequence is good to go
 	 * We can accumuluate multiple failure states
 	 */
-#define PBR_MAP_INVALID_NEXTHOP_GROUP (1 << 0)
-#define PBR_MAP_INVALID_NEXTHOP (1 << 1)
-#define PBR_MAP_INVALID_NO_NEXTHOPS (1 << 2)
-#define PBR_MAP_INVALID_BOTH_NHANDGRP (1 << 3)
-#define PBR_MAP_INVALID_SRCDST (1 << 4)
+#define PBR_MAP_VALID_SEQUENCE_NUMBER  0
+#define PBR_MAP_INVALID_NEXTHOP_GROUP  (1 << 0)
+#define PBR_MAP_INVALID_NEXTHOP        (1 << 1)
+#define PBR_MAP_INVALID_NO_NEXTHOPS    (1 << 2)
+#define PBR_MAP_INVALID_BOTH_NHANDGRP  (1 << 3)
+#define PBR_MAP_INVALID_SRCDST         (1 << 4)
 	uint64_t reason;
 
 	QOBJ_FIELDS
@@ -113,7 +114,7 @@ extern void pbr_map_init(void);
 
 extern bool pbr_map_check_valid(const char *name);
 
-extern void pbr_map_check(const char *name);
+extern void pbr_map_check(const char *name, uint32_t seqno);
 extern void pbr_map_check_nh_group_change(const char *nh_group);
 extern void pbr_map_check_policy_change(const char *name);
 

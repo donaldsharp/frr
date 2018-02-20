@@ -79,6 +79,7 @@ DEFPY(pbr_map_match_src, pbr_map_match_src_cmd,
 
 	pbre = pbr_event_new();
 	pbre->event = PBR_MAP_MODIFY;
+	pbre->seqno = pbrms->seqno;
 	strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
 	pbr_event_enqueue(pbre);
 
@@ -107,6 +108,7 @@ DEFPY(pbr_map_match_dst, pbr_map_match_dst_cmd,
 
 	pbre = pbr_event_new();
 	pbre->event = PBR_MAP_MODIFY;
+	pbre->seqno = pbrms->seqno;
 	strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
 	pbr_event_enqueue(pbre);
 
@@ -139,6 +141,7 @@ DEFPY(pbr_map_nexthop_group, pbr_map_nexthop_group_cmd,
 
 	pbre = pbr_event_new();
 	pbre->event = PBR_MAP_MODIFY;
+	pbre->seqno = pbrms->seqno;
 	strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
 	pbr_event_enqueue(pbre);
 
@@ -275,14 +278,15 @@ DEFPY (show_pbr_map,
 
 				if (pbrms->nhgrp_name) {
 					vty_out(vty,
-						"\tNexthop-Group: %s Installed: %u(%d)\n",
+						"\tNexthop-Group: %s(%u) Installed: %u(%d)\n",
 						pbrms->nhgrp_name,
+						pbr_nht_get_table(pbrms->nhgrp_name),
 						pbrms->nhs_installed,
 						pbr_nht_get_installed(
 							pbrms->nhgrp_name));
 				} else {
 					vty_out(vty,
-						"\tNexthop-Group: Unknown\n");
+						"\tNexthop-Group: Unknown Installed: 0(0)\n");
 				}
 			}
 		}

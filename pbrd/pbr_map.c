@@ -176,6 +176,9 @@ extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno)
 		pbrms->seqno = seqno;
 		pbrms->ruleno = pbr_nht_get_next_rule(seqno);
 		pbrms->parent = pbrm;
+		pbrms->reason =
+			PBR_MAP_INVALID_SRCDST |
+			PBR_MAP_INVALID_NO_NEXTHOPS;
 
 		QOBJ_REG(pbrms, pbr_map_sequence);
 		listnode_add_sort(pbrm->seqnumbers, pbrms);
@@ -202,9 +205,12 @@ pbr_map_sequence_check_nexthops_valid(struct pbr_map_sequence *pbrms)
 	if (pbrms->nhop && !pbr_nht_nexthop_valid(pbrms->nhop))
 		pbrms->reason |= PBR_MAP_INVALID_NEXTHOP;
 
-	if (pbrms->nhgrp_name
-	    && !pbr_nht_nexthop_group_valid(pbrms->nhgrp_name))
-		pbrms->reason |= PBR_MAP_INVALID_NEXTHOP_GROUP;
+	if (pbrms->nhgrp_name) {
+		if (!pbr_nht_nexthop_group_valid(pbrms->nhgrp_name))
+			pbrms->reason |= PBR_MAP_INVALID_NEXTHOP_GROUP;
+		else
+			pbrms->nhs_installed = true;
+	}
 }
 
 static void pbr_map_sequence_check_src_dst_valid(struct pbr_map_sequence *pbrms)
@@ -293,16 +299,22 @@ extern void pbr_map_policy_install(const char *name)
 	struct listnode *node;
 	bool install;
 
-	install = true;
-	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
-		install = true;
-		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
-			if (!pbrm->valid || !pbrms->nhs_installed)
-				install = false;
-		}
+	pbrm = pbrm_find(name);
+	if (!pbrm)
+		return;
 
-		if (install)
-			pbr_send_pbr_map(pbrm);
+	install = true;
+	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
+		zlog_debug("%s: Looking at what to install %s(%u) %d %d",
+			   __PRETTY_FUNCTION__, name, pbrms->seqno,
+			   pbrm->valid, pbrms->nhs_installed);
+		if (!pbrm->valid || !pbrms->nhs_installed)
+			install = false;
+	}
+
+	if (install) {
+		zlog_debug("\tInstalling");
+		pbr_send_pbr_map(pbrm);
 	}
 }
 
@@ -340,9 +352,37 @@ extern void pbr_map_check_nh_group_change(const char *nh_group)
 	}
 }
 
-extern void pbr_map_check(const char *name)
+extern void pbr_map_check(const char *name, uint32_t seqno)
 {
-	return;
+	struct pbr_map_sequence *pbrms;
+	struct listnode *node;
+	struct pbr_map *pbrm;
+
+	if (pbr_map_check_valid(name))
+		zlog_debug("We are totally valid %s\n", name);
+
+	pbrm = pbrm_find(name);
+	if (!pbrm)
+		return;
+
+	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
+		if (seqno != pbrms->seqno)
+			continue;
+
+		zlog_debug("%s: Installing %s(%u) reason: %" PRIu64,
+			   __PRETTY_FUNCTION__,
+			   name, seqno, pbrms->reason);
+		if (pbrms->reason == PBR_MAP_VALID_SEQUENCE_NUMBER) {
+			struct pbr_event *pbre;
+
+			zlog_debug("\tSending PBR_MAP_POLICY_INSTALL event");
+			pbre = pbr_event_new();
+			pbre->event = PBR_MAP_POLICY_INSTALL;
+			strcpy(pbre->name, pbrm->name);
+
+			pbr_event_enqueue(pbre);
+		}
+	}
 }
 
 extern void pbr_map_install(const char *name)

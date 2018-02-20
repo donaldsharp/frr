@@ -1473,7 +1473,7 @@ DEFUNSH(VTYSH_RMAP, vtysh_route_map, vtysh_route_map_cmd,
 }
 
 DEFUNSH(VTYSH_PBRD, vtysh_pbr_map, vtysh_pbr_map_cmd,
-	"pbr-map NAME seq (1-65535)",
+	"pbr-map NAME seq (1-1000)",
 	"Create pbr-map or enter pbr-map command mode\n"
 	"The name of the PBR MAP\n"
 	"Sequence to insert to/delete from existing pbr-map entry\n"

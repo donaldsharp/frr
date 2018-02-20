@@ -87,6 +87,7 @@ struct pbr_event {
 
 	char name[100];
 	union g_addr addr;
+	uint32_t seqno;
 };
 
 /*
