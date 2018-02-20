@@ -272,12 +272,18 @@ DEFPY (show_pbr_map,
 					vty_out(vty, "\tDST Match: %s\n",
 						prefix2str(pbrms->dst, buf,
 							   sizeof(buf)));
-				vty_out(vty,
-					"\tNexthop-Group: %s Installed: %u\n",
-					(pbrms->nhgrp_name)
-						? pbrms->nhgrp_name
-						: "Not Yet Specified",
-					pbrms->nhs_installed);
+
+				if (pbrms->nhgrp_name) {
+					vty_out(vty,
+						"\tNexthop-Group: %s Installed: %u(%d)\n",
+						pbrms->nhgrp_name,
+						pbrms->nhs_installed,
+						pbr_nht_get_installed(
+							pbrms->nhgrp_name));
+				} else {
+					vty_out(vty,
+						"\tNexthop-Group: Unknown\n");
+				}
 			}
 		}
 	}

@@ -382,6 +382,23 @@ uint32_t pbr_nht_get_table(const char *name)
 	return pnhgc->table_id;
 }
 
+bool pbr_nht_get_installed(const char *name)
+{
+	struct pbr_nexthop_group_cache find;
+	struct pbr_nexthop_group_cache *pnhgc;
+
+	memset(&find, 0, sizeof(find));
+	strcpy(find.name, name);
+
+	pnhgc = hash_lookup(pbr_nhg_hash, &find);
+
+	if (!pnhgc) {
+		return false;
+	}
+
+	return pnhgc->installed;
+}
+
 void pbr_nht_init(void)
 {
 	pbr_nh_hash = hash_create_size(16, pbr_nh_hash_key, pbr_nh_hash_equal,
