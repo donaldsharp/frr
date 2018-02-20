@@ -147,7 +147,7 @@ DEFPY(pbr_map_nexthop_group, pbr_map_nexthop_group_cmd,
 
 DEFPY (pbr_table_range,
        pbr_table_range_cmd,
-       "[no]$no pbr table range (5000-65535)$start (6000-65535)$end",
+       "[no]$no pbr table range (10000-65535)$start (11000-65535)$end",
        NO_STR
        "Policy based routing\n"
        "Policy based routing table\n"
@@ -166,7 +166,7 @@ DEFPY (pbr_table_range,
 
 DEFPY (pbr_rule_range,
 	pbr_rule_range_cmd,
-	"[no] pbr rule range (5000-65535)$start (6000-65535)$end",
+	"[no] pbr rule range (300-900)$start (400-999)$end",
 	NO_STR
 	"Policy based routing\n"
 	"Policy based routing rule\n"
