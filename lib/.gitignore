@@ -25,3 +25,4 @@ grammar_sandbox
 clippy
 defun_lex.c
 plist_clippy.c
+nexthop_group_clippy.c
