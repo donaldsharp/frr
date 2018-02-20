@@ -166,7 +166,7 @@ DEFPY (pbr_table_range,
 
 DEFPY (pbr_rule_range,
 	pbr_rule_range_cmd,
-	"[no] pbr rule range (300-900)$start (400-999)$end",
+	"[no] pbr rule range (300-1300)$start (400-1400)$end",
 	NO_STR
 	"Policy based routing\n"
 	"Policy based routing rule\n"

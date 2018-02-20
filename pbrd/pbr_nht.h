@@ -58,7 +58,7 @@ extern uint32_t pbr_nht_get_next_tableid(void);
 extern void pbr_nht_write_rule_range(struct vty *vty);
 
 #define PBR_NHT_DEFAULT_LOW_RULE 300
-#define PBR_NHT_DEFAULT_HIGH_RULE 600
+#define PBR_NHT_DEFAULT_HIGH_RULE 1300
 extern void pbr_nht_set_rule_range(uint32_t low, uint32_t high);
 
 extern uint32_t pbr_nht_get_next_rule(void);
