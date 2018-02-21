@@ -261,17 +261,15 @@ DEFPY(ecmp_nexthops,
 			nhop.type = NEXTHOP_TYPE_IPV6;
 	}
 
-	if (no) {
-		nh = nexthop_exists(&nhgc->nhg, &nhop);
-		if (nh) {
-			nexthop_del(&nhgc->nhg, nh);
-			nexthop_free(nh);
+	nh = nexthop_exists(&nhgc->nhg, &nhop);
 
-			if (nhg_hooks.del_nexthop)
-				nhg_hooks.del_nexthop(nhgc->name);
-		}
-	}
-	else {
+	if (no && nh) {
+		nexthop_del(&nhgc->nhg, nh);
+		nexthop_free(nh);
+
+		if (nhg_hooks.del_nexthop)
+			nhg_hooks.del_nexthop(nhgc->name);
+	} else if (!nh) {
 		/* must be adding new nexthop since !no and !nexthop_exists */
 		nh = nexthop_new();
 
