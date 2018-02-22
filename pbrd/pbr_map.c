@@ -298,7 +298,12 @@ extern void pbr_map_schedule_policy_from_nhg(const char *nh_group)
 	struct listnode *node;
 
 	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
+		zlog_debug("%s: Looking at %s", __PRETTY_FUNCTION__,
+			   pbrm->name);
 		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
+			zlog_debug("\tNH Grp name: %s",
+				   pbrms->nhgrp_name ? pbrms->nhgrp_name
+						     : "NULL");
 			if (pbrms->nhgrp_name
 			    && (strcmp(nh_group, pbrms->nhgrp_name) == 0)) {
 				struct pbr_event *pbre;
@@ -306,8 +311,11 @@ extern void pbr_map_schedule_policy_from_nhg(const char *nh_group)
 				pbrms->nhs_installed = true;
 
 				pbre = pbr_event_new();
-				pbre->event = PBR_MAP_POLICY_INSTALL;
+				pbre->event = PBR_MAP_MODIFY;
 				strcpy(pbre->name, pbrm->name);
+				pbre->seqno = pbrms->seqno;
+
+				pbr_event_enqueue(pbre);
 			}
 		}
 	}
@@ -320,6 +328,7 @@ extern void pbr_map_policy_install(const char *name)
 	struct listnode *node;
 	bool install;
 
+	zlog_debug("%s: for %s", __PRETTY_FUNCTION__, name);
 	pbrm = pbrm_find(name);
 	if (!pbrm)
 		return;
@@ -379,6 +388,7 @@ extern void pbr_map_check(const char *name, uint32_t seqno)
 	struct listnode *node;
 	struct pbr_map *pbrm;
 
+	zlog_debug("%s: for %s(%u)", __PRETTY_FUNCTION__, name, seqno);
 	if (pbr_map_check_valid(name))
 		zlog_debug("We are totally valid %s\n", name);
 

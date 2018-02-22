@@ -150,6 +150,7 @@ void pbr_nht_change_group(const char *name)
 	}
 
 	pnhgc->installed = false;
+	pnhgc->valid = true;
 	route_add(pnhgc, nhgc);
 }
 
@@ -209,8 +210,20 @@ bool pbr_nht_nexthop_valid(struct nexthop *nhop)
 
 bool pbr_nht_nexthop_group_valid(const char *name)
 {
+	struct pbr_nexthop_group_cache *pnhgc;
+	struct pbr_nexthop_group_cache lookup;
+
 	zlog_debug("%s(%s)", __PRETTY_FUNCTION__, name);
-	return true;
+
+	strcpy(lookup.name, name);
+	pnhgc = hash_get(pbr_nhg_hash, &lookup, NULL);
+	if (!pnhgc)
+		return false;
+	zlog_debug("\t%d %d", pnhgc->valid, pnhgc->installed);
+	if (pnhgc->valid && pnhgc->installed)
+		return true;
+
+	return false;
 }
 
 static void *pbr_nh_alloc(void *p)
