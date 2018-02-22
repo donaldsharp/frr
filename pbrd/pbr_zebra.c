@@ -378,15 +378,23 @@ void pbr_send_pbr_map(struct pbr_map *pbrm, bool install)
 	s = zclient->obuf;
 	stream_reset(s);
 
-	zclient_create_header(s, ZEBRA_RULE_ADD, VRF_DEFAULT);
+	zclient_create_header(s,
+			      install ? ZEBRA_RULE_ADD : ZEBRA_RULE_DELETE,
+			      VRF_DEFAULT);
 
 	total = 0;
-	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, snode, pbrms))
+	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, snode, pbrms)) {
+		if (!install && !(pbrms->reason & PBR_MAP_DEL_SEQUENCE_NUMBER))
+			continue;
 		total++;
+	}
 
 	stream_putl(s, total);
 	for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, inode, ifp)) {
 		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, snode, pbrms)) {
+			if (!install &&
+			    !(pbrms->reason & PBR_MAP_DEL_SEQUENCE_NUMBER))
+				continue;
 			pbr_encode_pbr_map_sequence(s, pbrms, ifp);
 		}
 	}
