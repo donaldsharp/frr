@@ -39,13 +39,11 @@
 #include "pbrd/pbr_vty_clippy.c"
 #endif
 
-DEFUN_NOSH (pbr_map,
-	    pbr_map_cmd,
-	    "pbr-map WORD seq (1-1000)",
-	    "Create pbr-map or enter pbr-map command mode\n"
-	    "The name of the PBR MAP\n"
-	    "Sequence to insert to/delete from existing pbr-map entry\n"
-	    "Sequence number\n")
+DEFUN_NOSH(pbr_map, pbr_map_cmd, "pbr-map WORD seq (1-1000)",
+	   "Create pbr-map or enter pbr-map command mode\n"
+	   "The name of the PBR MAP\n"
+	   "Sequence to insert in existing pbr-map entry\n"
+	   "Sequence number\n")
 {
 	const char *pbrm_name = argv[1]->arg;
 	uint32_t seqno = atoi(argv[3]->arg);
@@ -53,6 +51,48 @@ DEFUN_NOSH (pbr_map,
 
 	pbrms = pbrms_get(pbrm_name, seqno);
 	VTY_PUSH_CONTEXT(PBRMAP_NODE, pbrms);
+
+	return CMD_SUCCESS;
+}
+
+DEFUN_NOSH(no_pbr_map, no_pbr_map_cmd, "no pbr-map WORD [seq (1-65535)]",
+	   NO_STR
+	   "Delete pbr-map\n"
+	   "The name of the PBR MAP\n"
+	   "Sequence to delete from existing pbr-map entry\n"
+	   "Sequence number\n")
+{
+	const char *pbrm_name = argv[2]->arg;
+	uint32_t seqno = 0;
+	struct pbr_map *pbrm = pbrm_find(pbrm_name);
+	struct pbr_event *pbre;
+	struct pbr_map_sequence *pbrms;
+	struct listnode *node, *next_node;
+
+	if (argc > 3)
+		seqno = atoi(argv[4]->arg);
+
+	if (!pbrm)
+		vty_out(vty, "pbr-map %s not found\n", pbrm_name);
+	else {
+		if (seqno) {
+			pbrms = pbrms_get(pbrm->name, seqno);
+			pbrms->reason |= PBR_MAP_DEL_SEQUENCE_NUMBER;
+		} else {
+			for (ALL_LIST_ELEMENTS(pbrm->seqnumbers, node,
+					       next_node, pbrms)) {
+				if (pbrms)
+					pbrms->reason |=
+						PBR_MAP_DEL_SEQUENCE_NUMBER;
+			}
+		}
+
+		pbre = pbr_event_new();
+		pbre->event = PBR_MAP_DELETE;
+		pbre->seqno = seqno;
+		strlcpy(pbre->name, pbrm_name, sizeof(pbre->name));
+		pbr_event_enqueue(pbre);
+	}
 
 	return CMD_SUCCESS;
 }
@@ -416,6 +456,7 @@ void pbr_vty_init(void)
 	install_default(PBRMAP_NODE);
 
 	install_element(CONFIG_NODE, &pbr_map_cmd);
+	install_element(CONFIG_NODE, &no_pbr_map_cmd);
 	install_element(INTERFACE_NODE, &pbr_policy_cmd);
 	install_element(CONFIG_NODE, &pbr_table_range_cmd);
 	install_element(CONFIG_NODE, &pbr_rule_range_cmd);
