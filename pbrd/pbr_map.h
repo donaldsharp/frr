@@ -93,6 +93,7 @@ struct pbr_map_sequence {
 #define PBR_MAP_INVALID_NO_NEXTHOPS    (1 << 2)
 #define PBR_MAP_INVALID_BOTH_NHANDGRP  (1 << 3)
 #define PBR_MAP_INVALID_SRCDST         (1 << 4)
+#define PBR_MAP_DEL_SEQUENCE_NUMBER    (1 << 5)
 	uint64_t reason;
 
 	QOBJ_FIELDS
