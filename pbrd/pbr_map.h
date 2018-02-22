@@ -106,7 +106,7 @@ extern struct pbr_map_entry_head pbr_maps;
 extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno);
 
 extern struct pbr_map *pbrm_find(const char *name);
-
+extern void pbr_map_delete(const char *name, uint32_t seqno);
 extern void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp);
 extern void pbr_map_interface_delete(struct pbr_map *pbrm,
 				     struct interface *ifp);

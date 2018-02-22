@@ -188,7 +188,7 @@ DEFUN_NOSH(nexthop_group, nexthop_group_cmd, "nexthop-group NAME",
 
 DEFUN_NOSH(no_nexthop_group, no_nexthop_group_cmd, "no nexthop-group NAME",
 	   NO_STR
-	   "Enter into the nexthop-group submode\n"
+	   "Delete the nexthop-group\n"
 	   "Specify the NAME of the nexthop-group\n")
 {
 	const char *nhg_name = argv[2]->arg;

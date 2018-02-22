@@ -125,6 +125,7 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 		pbr_map_check(pbre->name, pbre->seqno);
 		break;
 	case PBR_MAP_DELETE:
+		pbr_map_delete(pbre->name, pbre->seqno);
 		break;
 	case PBR_NH_CHANGED:
 		break;

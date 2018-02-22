@@ -133,6 +133,27 @@ struct pbr_map *pbrm_find(const char *name)
 	return RB_FIND(pbr_map_entry_head, &pbr_maps, &pbrm);
 }
 
+extern void pbr_map_delete(const char *name, uint32_t seqno)
+{
+	struct pbr_map *pbrm;
+	struct pbr_map_sequence *pbrms;
+	struct listnode *node, *next_node;
+
+	pbrm = pbrm_find(name);
+
+	if (pbrm->installed)
+		pbr_send_pbr_map(pbrm, 0);
+
+	for (ALL_LIST_ELEMENTS(pbrm->seqnumbers, node, next_node, pbrms)) {
+		if (pbrms)
+			if (pbrms->reason & PBR_MAP_DEL_SEQUENCE_NUMBER)
+				listnode_delete(pbrm->seqnumbers, pbrms);
+	}
+
+	if (pbrm->seqnumbers->count == 0)
+		RB_REMOVE(pbr_map_entry_head, &pbr_maps, pbrm);
+}
+
 extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno)
 {
 	struct pbr_map *pbrm;
