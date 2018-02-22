@@ -314,7 +314,7 @@ extern void pbr_map_policy_install(const char *name)
 
 	if (install) {
 		zlog_debug("\tInstalling");
-		pbr_send_pbr_map(pbrm);
+		pbr_send_pbr_map(pbrm, true);
 	}
 }
 
@@ -396,7 +396,7 @@ extern void pbr_map_install(const char *name)
 		return;
 	}
 
-	pbr_send_pbr_map(pbrm);
+	pbr_send_pbr_map(pbrm, true);
 }
 
 extern void pbr_map_add_interfaces(const char *name)

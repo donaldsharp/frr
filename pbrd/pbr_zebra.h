@@ -36,5 +36,5 @@ extern void route_delete(struct pbr_nexthop_group_cache *pnhgc);
 
 extern void pbr_send_rnh(struct nexthop *nhop, bool reg);
 
-extern void pbr_send_pbr_map(struct pbr_map *pbrm);
+extern void pbr_send_pbr_map(struct pbr_map *pbrm, bool install);
 #endif

@@ -367,7 +367,7 @@ static void pbr_encode_pbr_map_sequence(struct stream *s,
 	stream_putl(s, ifp->ifindex);
 }
 
-void pbr_send_pbr_map(struct pbr_map *pbrm)
+void pbr_send_pbr_map(struct pbr_map *pbrm, bool install)
 {
 	struct listnode *inode, *snode;
 	struct pbr_map_sequence *pbrms;
