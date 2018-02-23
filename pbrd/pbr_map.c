@@ -75,6 +75,29 @@ static int pbr_map_interface_compare(const struct interface *ifp1,
 	return strcmp(ifp1->name, ifp2->name);
 }
 
+static const char *pbr_map_reason_str[] = {
+	"Invalid NH-group",     "Invalid NH",	 "No Nexthops",
+	"Both NH and NH-Group", "Invalid Src or Dst", "Deleting Sequence",
+};
+
+void pbr_map_reason_string(unsigned int reason, char *buf, int size)
+{
+	unsigned int bit;
+	int len = 0;
+
+	if (!buf)
+		return;
+
+	for (bit = 0; bit < array_size(pbr_map_reason_str); bit++) {
+		if ((reason & (1 << bit)) && (len < size)) {
+			len += snprintf((buf + len), (size - len), "%s%s",
+					(len > 0) ? ", " : "",
+					pbr_map_reason_str[bit]);
+		}
+	}
+}
+
+
 void pbr_map_interface_delete(struct pbr_map *pbrm, struct interface *ifp_del)
 {
 

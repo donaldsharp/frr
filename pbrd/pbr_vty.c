@@ -294,6 +294,7 @@ DEFPY (show_pbr_map,
 	struct pbr_map *pbrm;
 	struct listnode *node;
 	char buf[PREFIX_STRLEN];
+	char rbuf[64];
 
 	RB_FOREACH (pbrm, pbr_map_entry_head, &pbr_maps) {
 		if (!name || (strcmp(name, pbrm->name) == 0)) {
@@ -302,11 +303,15 @@ DEFPY (show_pbr_map,
 
 			for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node,
 						  pbrms)) {
+				if (pbrms->reason)
+					pbr_map_reason_string(pbrms->reason,
+							      rbuf,
+							      sizeof(rbuf));
 				vty_out(vty,
-					"    Seq: %u rule: %u Reason: %" PRIu64
-					"\n",
+					"    Seq: %u rule: %u Reason: %s\n",
 					pbrms->seqno, pbrms->ruleno,
-					pbrms->reason);
+					pbrms->reason ? rbuf : "Valid");
+
 				if (pbrms->src)
 					vty_out(vty, "\tSRC Match: %s\n",
 						prefix2str(pbrms->src, buf,
