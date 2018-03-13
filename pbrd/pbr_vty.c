@@ -88,10 +88,8 @@ DEFUN_NOSH(no_pbr_map, no_pbr_map_cmd, "no pbr-map WORD [seq (1-65535)]",
 		}
 	}
 
-	pbre = pbr_event_new();
-	pbre->event = PBR_MAP_DELETE;
+	pbre = pbr_event_new(PBR_MAP_DELETE, pbrm_name);
 	pbre->seqno = seqno;
-	strlcpy(pbre->name, pbrm_name, sizeof(pbre->name));
 	pbr_event_enqueue(pbre);
 
 	return CMD_SUCCESS;
@@ -117,10 +115,8 @@ DEFPY(pbr_map_match_src, pbr_map_match_src_cmd,
 		pbrms->src = 0;
 	}
 
-	pbre = pbr_event_new();
-	pbre->event = PBR_MAP_MODIFY;
+	pbre = pbr_event_new(PBR_MAP_MODIFY, pbrms->parent->name);
 	pbre->seqno = pbrms->seqno;
-	strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
 	pbr_event_enqueue(pbre);
 
 	return CMD_SUCCESS;
@@ -146,10 +142,8 @@ DEFPY(pbr_map_match_dst, pbr_map_match_dst_cmd,
 		pbrms->dst = 0;
 	}
 
-	pbre = pbr_event_new();
-	pbre->event = PBR_MAP_MODIFY;
+	pbre = pbr_event_new(PBR_MAP_MODIFY, pbrms->parent->name);
 	pbre->seqno = pbrms->seqno;
-	strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
 	pbr_event_enqueue(pbre);
 
 	return CMD_SUCCESS;
@@ -173,16 +167,14 @@ DEFPY(pbr_map_nexthop_group, pbr_map_nexthop_group_cmd,
 		vty_out(vty, "PBR-MAP will not be applied until it is created\n");
 	}
 
-	pbre = pbr_event_new();
-
 	if (no) {
 		if (pbrms->nhgrp_name && strcmp(name, pbrms->nhgrp_name) == 0)
-			pbre->event = PBR_MAP_NHG_DELETE;
+			pbre = pbr_event_new(PBR_MAP_NHG_DELETE,
+					     pbrms->parent->name);
 		else {
 			vty_out(vty,
 				"Nexthop Group specified: %s does not exist to remove",
 				name);
-			pbr_event_free(&pbre);
 			return CMD_WARNING;
 		}
 	} else {
@@ -190,19 +182,16 @@ DEFPY(pbr_map_nexthop_group, pbr_map_nexthop_group_cmd,
 			if (strcmp(name, pbrms->nhgrp_name) != 0) {
 				vty_out(vty,
 					"Please delete current nexthop group before modifying current one");
-				pbr_event_free(&pbre);
 				return CMD_WARNING;
 			}
 
-			pbr_event_free(&pbre);
 			return CMD_SUCCESS;
 		}
 		pbrms->nhgrp_name = XSTRDUP(MTYPE_TMP, name);
-		pbre->event = PBR_MAP_NHG_ADD;
+		pbre = pbr_event_new(PBR_MAP_NHG_ADD, pbrms->parent->name);
 	}
 
 	pbre->seqno = pbrms->seqno;
-	strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
 	pbr_event_enqueue(pbre);
 
 	return CMD_SUCCESS;
@@ -295,11 +284,9 @@ DEFPY(pbr_map_nexthop, pbr_map_nexthop_cmd,
 		if (nh) {
 			// nexthop_del(pbrms->nhg, nh);
 			// nexthop_free(nh);
-			pbre = pbr_event_new();
-			pbre->event = PBR_MAP_NEXTHOP_DELETE;
+			pbre = pbr_event_new(PBR_MAP_NEXTHOP_DELETE,
+					     pbrms->parent->name);
 			pbre->seqno = pbrms->seqno;
-			strlcpy(pbre->name, pbrms->parent->name,
-				sizeof(pbre->name));
 			pbr_event_enqueue(pbre);
 		}
 	} else if (!nh) {
@@ -316,10 +303,8 @@ DEFPY(pbr_map_nexthop, pbr_map_nexthop_cmd,
 		memcpy(nh, &nhop, sizeof(nhop));
 		nexthop_add(&pbrms->nhg->nexthop, nh);
 
-		pbre = pbr_event_new();
-		pbre->event = PBR_MAP_NEXTHOP_ADD;
+		pbre = pbr_event_new(PBR_MAP_NEXTHOP_ADD, pbrms->parent->name);
 		pbre->seqno = pbrms->seqno;
-		strlcpy(pbre->name, pbrms->parent->name, sizeof(pbre->name));
 		pbr_event_enqueue(pbre);
 	}
 

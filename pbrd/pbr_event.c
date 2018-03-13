@@ -194,9 +194,14 @@ void pbr_event_enqueue(struct pbr_event *pbre)
 	work_queue_add(pbr_event_wq, pbre);
 }
 
-struct pbr_event *pbr_event_new(void)
+struct pbr_event *pbr_event_new(enum pbr_events ev, const char *name)
 {
-	return XCALLOC(MTYPE_PBR_EVENT, sizeof(struct pbr_event));
+	struct pbr_event *event;
+	event = XCALLOC(MTYPE_PBR_EVENT, sizeof(struct pbr_event));
+	event->event = ev;
+	if (name)
+		strlcpy(event->name, name, sizeof(event->name));
+	return event;
 }
 
 extern struct thread_master *master;

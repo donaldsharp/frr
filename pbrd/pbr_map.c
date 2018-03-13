@@ -128,9 +128,7 @@ void pbr_map_interface_delete(struct pbr_map *pbrm, struct interface *ifp_del)
 	if (pmi) {
 		pmi->delete = true;
 
-		pbre = pbr_event_new();
-		pbre->event = PBR_POLICY_DELETED;
-		strcpy(pbre->name, pmi->ifp->name);
+		pbre = pbr_event_new(PBR_POLICY_DELETED, pmi->ifp->name);
 		pbr_event_enqueue(pbre);
 	}
 }
@@ -151,9 +149,7 @@ void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp_add)
 	pmi->pbrm = pbrm;
 	listnode_add_sort(pbrm->incoming, pmi);
 
-	pbre = pbr_event_new();
-	pbre->event = PBR_POLICY_CHANGED;
-	strcpy(pbre->name, pbrm->name);
+	pbre = pbr_event_new(PBR_POLICY_CHANGED, pbrm->name);
 	pbr_event_enqueue(pbre);
 }
 
@@ -258,9 +254,7 @@ extern struct pbr_map_sequence *pbrms_get(const char *name, uint32_t seqno)
 
 		RB_INSERT(pbr_map_entry_head, &pbr_maps, pbrm);
 
-		pbre = pbr_event_new();
-		pbre->event = PBR_MAP_ADD;
-		strlcpy(pbre->name, name, sizeof(pbre->name));
+		pbre = pbr_event_new(PBR_MAP_ADD, name);
 	} else
 		pbre = NULL;
 
@@ -392,9 +386,8 @@ extern void pbr_map_schedule_policy_from_nhg(const char *nh_group)
 			    && (strcmp(nh_group, pbrms->nhgrp_name) == 0)) {
 				pbrms->nhs_installed = true;
 
-				pbre = pbr_event_new();
-				pbre->event = PBR_MAP_MODIFY;
-				strcpy(pbre->name, pbrm->name);
+				pbre = pbr_event_new(PBR_MAP_MODIFY,
+						     pbrm->name);
 				pbre->seqno = pbrms->seqno;
 
 				pbr_event_enqueue(pbre);
@@ -405,9 +398,8 @@ extern void pbr_map_schedule_policy_from_nhg(const char *nh_group)
 				== 0)) {
 				pbrms->nhs_installed = true;
 
-				pbre = pbr_event_new();
-				pbre->event = PBR_MAP_MODIFY;
-				strcpy(pbre->name, pbrm->name);
+				pbre = pbr_event_new(PBR_MAP_MODIFY,
+						     pbrm->name);
 				pbre->seqno = pbrms->seqno;
 
 				pbr_event_enqueue(pbre);
@@ -498,10 +490,8 @@ extern void pbr_map_check_nh_group_change(const char *nh_group)
 				if (original != pbrm->valid) {
 					struct pbr_event *pbre;
 
-					pbre = pbr_event_new();
-					pbre->event = PBR_MAP_INSTALL;
-					strcpy(pbre->name, pbrm->name);
-
+					pbre = pbr_event_new(PBR_MAP_INSTALL,
+							     pbrm->name);
 					pbr_event_enqueue(pbre);
 				}
 				break;
@@ -534,7 +524,8 @@ extern void pbr_map_check(const char *name, uint32_t seqno)
 			zlog_debug("%s: Installing %s(%u) reason: %" PRIu64,
 				   __PRETTY_FUNCTION__, name, seqno,
 				   pbrms->reason);
-			pbre = pbr_event_new();
+			pbre = pbr_event_new(PBR_MAP_POLICY_INSTALL,
+					     pbrm->name);
 			pbre->event = PBR_MAP_POLICY_INSTALL;
 			strcpy(pbre->name, pbrm->name);
 
@@ -610,9 +601,7 @@ extern void pbr_map_check_policy_change(const char *name)
 	if (pbrm->valid && !pbrm->installed) {
 		struct pbr_event *pbre;
 
-		pbre = pbr_event_new();
-		pbre->event = PBR_MAP_INSTALL;
-		strcpy(pbre->name, name);
+		pbre = pbr_event_new(PBR_MAP_INSTALL, name);
 
 		pbr_event_enqueue(pbre);
 	}

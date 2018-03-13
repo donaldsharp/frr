@@ -120,7 +120,7 @@ struct pbr_event {
  * Return a event structure that can be filled in and enqueued.
  * Assume this memory is owned by the event subsystem.
  */
-extern struct pbr_event *pbr_event_new(void);
+extern struct pbr_event *pbr_event_new(enum pbr_events ev, const char *name);
 
 /*
  * Free the associated pbr_event item

@@ -121,10 +121,7 @@ void pbr_nhgroup_add_cb(const char *name)
 {
 	struct pbr_event *pbre;
 
-	pbre = pbr_event_new();
-
-	pbre->event = PBR_NHG_NEW;
-	strlcpy(pbre->name, name, sizeof(pbre->name));
+	pbre = pbr_event_new(PBR_NHG_NEW, name);
 
 	pbr_event_enqueue(pbre);
 	zlog_debug("Received ADD cb for %s", name);
@@ -134,10 +131,7 @@ void pbr_nhgroup_add_nexthop_cb(const char *name)
 {
 	struct pbr_event *pbre;
 
-	pbre = pbr_event_new();
-
-	pbre->event = PBR_NHG_ADD_NEXTHOP;
-	strlcpy(pbre->name, name, sizeof(pbre->name));
+	pbre = pbr_event_new(PBR_NHG_ADD_NEXTHOP, name);
 
 	pbr_event_enqueue(pbre);
 	zlog_debug("Received NEXTHOP_ADD cb for %s", name);
@@ -147,10 +141,7 @@ void pbr_nhgroup_del_nexthop_cb(const char *name)
 {
 	struct pbr_event *pbre;
 
-	pbre = pbr_event_new();
-
-	pbre->event = PBR_NHG_DEL_NEXTHOP;
-	strlcpy(pbre->name, name, sizeof(pbre->name));
+	pbre = pbr_event_new(PBR_NHG_DEL_NEXTHOP, name);
 
 	pbr_event_enqueue(pbre);
 	zlog_debug("Received NEXTHOP_DEL cb for %s", name);
@@ -160,10 +151,7 @@ void pbr_nhgroup_delete_cb(const char *name)
 {
 	struct pbr_event *pbre;
 
-	pbre = pbr_event_new();
-
-	pbre->event = PBR_NHG_DELETE;
-	strlcpy(pbre->name, name, sizeof(pbre->name));
+	pbre = pbr_event_new(PBR_NHG_DELETE, name);
 
 	pbr_event_enqueue(pbre);
 	zlog_debug("Received DELETE cb for %s", name);
@@ -471,9 +459,7 @@ static void pbr_nht_individual_nexthop_update_lookup(struct hash_backet *b,
 	if (old_valid != pnhc->valid) {
 		struct pbr_event *pbre;
 
-		pbre = pbr_event_new();
-		pbre->event = PBR_NH_CHANGED;
-		strcpy(pbre->name, pnhc->parent->name);
+		pbre = pbr_event_new(PBR_NH_CHANGED, pnhc->parent->name);
 
 		pbr_event_enqueue(pbre);
 	}
