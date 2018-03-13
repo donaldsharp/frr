@@ -35,6 +35,7 @@
 #include "pbrd/pbr_zebra.h"
 #include "pbrd/pbr_vty.h"
 #include "pbrd/pbr_event.h"
+#include "pbrd/pbr_debug.h"
 #ifndef VTYSH_EXTRACT_PL
 #include "pbrd/pbr_vty_clippy.c"
 #endif
@@ -623,6 +624,8 @@ void pbr_vty_init(void)
 	install_element(VIEW_NODE, &show_pbr_map_cmd);
 	install_element(VIEW_NODE, &show_pbr_interface_cmd);
 	install_element(VIEW_NODE, &show_pbr_nexthop_group_cmd);
+
+	pbr_debug_init_vty();
 
 	return;
 }

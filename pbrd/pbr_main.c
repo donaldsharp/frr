@@ -50,6 +50,7 @@
 #include "pbr_zebra.h"
 #include "pbr_event.h"
 #include "pbr_vty.h"
+#include "pbr_debug.h"
 
 zebra_capabilities_t _caps_p[] = {
 	ZCAP_NET_RAW, ZCAP_BIND, ZCAP_NET_ADMIN,
@@ -146,6 +147,8 @@ int main(int argc, char **argv, char **envp)
 	}
 
 	master = frr_init();
+
+	pbr_debug_init();
 
 	vrf_init(NULL, NULL, NULL, NULL);
 	nexthop_group_init(pbr_nhgroup_add_cb,
