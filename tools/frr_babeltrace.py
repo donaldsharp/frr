@@ -4,11 +4,11 @@
 Usage: frr_babeltrace.py trace_path
 
 FRR pushes data into lttng tracepoints in the least overhead way possible
-i.e. as binary-data/crf_arrays. These traces need to be converted into pretty
+i.e. as binary-data/ctf_arrays. These traces need to be converted into pretty
 strings for easy greping etc. This script is a babeltrace python plugin for
 that pretty printing.
 
-Copyright (C) 2021  NVIDIA Corporation
+Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 Anuradha Karuppiah
 """
 
@@ -17,8 +17,32 @@ import socket
 import sys
 
 import babeltrace
+import datetime
 
 ########################### common parsers - start ############################
+def print_prefix_addr(field_val):
+    """
+    pretty print "struct prefix"
+    """
+    if field_val[0] == socket.AF_INET:
+        addr = [str(fv) for fv in field_val[8:12]]
+        return str(ipaddress.IPv4Address(".".join(addr)))
+
+    if field_val[0] == socket.AF_INET6:
+        tmp = "".join("%02x" % fb for fb in field_val[8:24])
+        addr = []
+        while tmp:
+            addr.append(tmp[:4])
+            tmp = tmp[4:]
+        addr = ":".join(addr)
+        return str(ipaddress.IPv6Address(addr))
+
+    if not field_val[0]:
+        return ""
+
+    return field_val
+
+
 def print_ip_addr(field_val):
     """
     pretty print "struct ipaddr"
@@ -60,6 +84,22 @@ def print_esi(field_val):
     """
     return ":".join("%02x" % fb for fb in field_val)
 
+def print_kernel_cmd(field_val):
+    """
+    pretty print kernel opcode to string
+    """
+    if field_val == 24:
+        cmd_str = "RTM_NEWROUTE"
+    elif field_val == 25:
+        cmd_str = "RTM_DELROUTE"
+    elif field_val == 26:
+        cmd_str = "RTM_GETROUTE"
+    else:
+        cmd_str = str(field_val)
+
+    return cmd_str
+
+
 def get_field_list(event):
     """
     only fetch fields added via the TP, skip metadata etc.
@@ -68,7 +108,7 @@ def get_field_list(event):
 
 def parse_event(event, field_parsers):
     """
-    Wild card event parser; doesn't make things any prettier
+    Wild card event parser; doesn"t make things any prettier
     """
     field_list = get_field_list(event)
     field_info = {}
@@ -78,7 +118,11 @@ def parse_event(event, field_parsers):
             field_info[field] = field_parser(event.get(field))
         else:
             field_info[field] = event.get(field)
-    print(event.name, field_info)
+    dt = datetime.datetime.fromtimestamp(event.timestamp/1000000000)
+    dt_format = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3]
+    print(dt_format, event.name, field_info)
+
+
 ############################ common parsers - end #############################
 
 ############################ evpn parsers - start #############################
@@ -261,6 +305,131 @@ def parse_frr_bgp_evpn_withdraw_type5(event):
     """
     field_parsers = {"ip": print_ip_addr}
 
+def parse_frr_zebra_netlink_route_multipath_msg_encode(event):
+    """
+    bgp evpn local-mac-ip del parser; raw format -
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"pfx": print_prefix_addr,
+                     "cmd": print_kernel_cmd}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_netlink_ipneigh_change(event):
+    """
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"ip": print_ip_addr,
+                     "mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_netlink_macfdb_change(event):
+    """
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_netlink_neigh_update_msg_encode(event):
+    """
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"ip": print_ip_addr,
+                     "mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_process_remote_macip_add(event):
+    """
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, esi, esi, sizeof(esi_t))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"ip": print_ip_addr,
+                     "esi": print_esi,
+                     "mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_process_remote_macip_del(event):
+    """
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, esi, esi, sizeof(esi_t))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"ip": print_ip_addr,
+                     "esi": print_esi,
+                     "mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_zebra_evpn_macip_send_msg_to_client(event):
+    """
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, esi, esi, sizeof(esi_t))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"ip": print_ip_addr,
+                     "esi": print_esi,
+                     "mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_zebra_evpn_process_sync_macip_add(event):
+    """
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, esi, esi, sizeof(esi_t))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"ip": print_ip_addr,
+                     "esi": print_esi,
+                     "mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_zebra_vxlan_remote_macip_add(event):
+    """
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, esi, esi, sizeof(esi_t))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"ip": print_ip_addr,
+                     "esi": print_esi,
+                     "mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_zebra_vxlan_remote_macip_del(event):
+    """
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"ip": print_ip_addr,
+                     "mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_zebra_evpn_proc_remote_nh(event):
+    """
+    ctf_array(unsigned char, ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"ip": print_ip_addr,
+                     "mac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_zebra_evpn_proc_remote_es(event):
+    """
+    ctf_array(unsigned char, esi, esi, sizeof(esi_t))
+    """
+    field_parsers = {"esi": print_esi}
+
     parse_event(event, field_parsers)
 
 ############################ evpn parsers - end *#############################
@@ -303,6 +472,30 @@ def main():
                      parse_frr_bgp_evpn_advertise_type5,
                      "frr_bgp:evpn_withdraw_type5":
                      parse_frr_bgp_evpn_withdraw_type5,
+                     "frr_zebra:netlink_route_multipath_msg_encode":
+                     parse_frr_zebra_netlink_route_multipath_msg_encode,
+                     "frr_zebra:netlink_ipneigh_change":
+                     parse_frr_zebra_netlink_ipneigh_change,
+                     "frr_zebra:netlink_macfdb_change":
+                     parse_frr_zebra_netlink_macfdb_change,
+                     "frr_zebra:netlink_neigh_update_msg_encode":
+                     parse_frr_zebra_netlink_neigh_update_msg_encode,
+                     "frr_zebra:process_remote_macip_add":
+                     parse_frr_zebra_process_remote_macip_add,
+                     "frr_zebra:process_remote_macip_del":
+                     parse_frr_zebra_process_remote_macip_del,
+                     "frr_zebra:zebra_evpn_macip_send_msg_to_client":
+                     parse_frr_zebra_zebra_evpn_macip_send_msg_to_client,
+                     "frr_zebra:zebra_evpn_process_sync_macip_add":
+                     parse_frr_zebra_zebra_evpn_process_sync_macip_add,
+                     "frr_zebra:zebra_vxlan_remote_macip_add":
+                     parse_frr_zebra_zebra_vxlan_remote_macip_add,
+                     "frr_zebra:zebra_vxlan_remote_macip_del":
+                     parse_frr_zebra_zebra_vxlan_remote_macip_del,
+                     "frr_zebra:zebra_evpn_proc_remote_nh":
+                     parse_frr_zebra_zebra_evpn_proc_remote_nh,
+                     "frr_zebra:zebra_evpn_proc_remote_es":
+                     parse_frr_zebra_zebra_evpn_proc_remote_es,
 }
 
     # get the trace path from the first command line argument
