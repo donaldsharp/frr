@@ -43,7 +43,7 @@ struct pbr_nexthop_group_cache {
 struct pbr_nexthop_cache {
 	struct pbr_nexthop_group_cache *parent;
 
-	struct nexthop nexthop;
+	struct nexthop *nexthop;
 
 	bool valid;
 };
