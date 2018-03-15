@@ -55,6 +55,7 @@ include babeld/subdir.am
 include eigrpd/subdir.am
 include sharpd/subdir.am
 include pimd/subdir.am
+include pbrd/subdir.am
 
 SUBDIRS = . @LIBRFP@ @RFPTEST@ \
 	 @BGPD@ \
@@ -114,3 +115,6 @@ EXTRA_DIST += \
 ACLOCAL_AMFLAGS = -I m4
 
 noinst_HEADERS += defaults.h
+
+indent:
+	tools/indent.py `find sharpd bgpd eigrpd include isisd lib nhrpd ospf6d ospfd pimd qpb ripd vtysh zebra -name '*.[ch]' | grep -v include/linux`

@@ -35,6 +35,8 @@
 #include <string.h>
 #include <time.h>
 #include <net/if.h>
+#include <unistd.h>
+#include <getopt.h>
 
 #define MTRACEBIS_VERSION "0.1"
 #define MTRACE_TIMEOUT (5)
@@ -228,7 +230,7 @@ int main(int argc, char *const argv[])
 		static struct option long_options[] = {
 			{"help", no_argument, 0, 'h'},
 			{"version", no_argument, 0, 'v'},
-			{0, 0, 0, 0} };
+			{0, 0, 0, 0}};
 		int option_index = 0;
 
 		c = getopt_long(argc, argv, "vh", long_options, &option_index);

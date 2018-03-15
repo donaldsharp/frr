@@ -56,7 +56,7 @@ static struct interface *zebra_interface_if_lookup(struct stream *s)
 
 /* Inteface addition message from zebra. */
 static int interface_add(int command, struct zclient *zclient,
-			       zebra_size_t length, vrf_id_t vrf_id)
+			 zebra_size_t length, vrf_id_t vrf_id)
 {
 	struct interface *ifp;
 
@@ -130,20 +130,39 @@ static int interface_state_down(int command, struct zclient *zclient,
 
 extern uint32_t total_routes;
 extern uint32_t installed_routes;
+extern uint32_t removed_routes;
 
-static int notify_owner(int command, struct zclient *zclient,
-			zebra_size_t length, vrf_id_t vrf_id)
+static int route_notify_owner(int command, struct zclient *zclient,
+			      zebra_size_t length, vrf_id_t vrf_id)
 {
 	struct prefix p;
 	enum zapi_route_notify_owner note;
+	uint32_t table;
 
-	if (!zapi_route_notify_decode(zclient->ibuf, &p, &note))
+	if (!zapi_route_notify_decode(zclient->ibuf, &p, &table, &note))
 		return -1;
 
-	installed_routes++;
-
-	if (total_routes == installed_routes)
-		zlog_debug("Installed All Items");
+	switch (note) {
+	case ZAPI_ROUTE_INSTALLED:
+		installed_routes++;
+		if (total_routes == installed_routes)
+			zlog_debug("Installed All Items");
+		break;
+	case ZAPI_ROUTE_FAIL_INSTALL:
+		zlog_debug("Failed install of route");
+		break;
+	case ZAPI_ROUTE_BETTER_ADMIN_WON:
+		zlog_debug("Better Admin Distance won over us");
+		break;
+	case ZAPI_ROUTE_REMOVED:
+		removed_routes++;
+		if (total_routes == removed_routes)
+			zlog_debug("Removed all Items");
+		break;
+	case ZAPI_ROUTE_REMOVE_FAIL:
+		zlog_debug("Route removal Failure");
+		break;
+	}
 	return 0;
 }
 
@@ -168,6 +187,7 @@ void route_add(struct prefix *p, struct nexthop *nh)
 	api.safi = SAFI_UNICAST;
 	memcpy(&api.prefix, p, sizeof(*p));
 
+	SET_FLAG(api.flags, ZEBRA_FLAG_ALLOW_RECURSION);
 	SET_FLAG(api.message, ZAPI_MESSAGE_NEXTHOP);
 
 	api_nh = &api.nexthops[0];
@@ -198,7 +218,7 @@ extern struct zebra_privs_t sharp_privs;
 
 void sharp_zebra_init(void)
 {
-	struct zclient_options opt = { .receive_notify = true };
+	struct zclient_options opt = {.receive_notify = true};
 
 	zclient = zclient_new_notify(master, &opt);
 
@@ -210,5 +230,5 @@ void sharp_zebra_init(void)
 	zclient->interface_down = interface_state_down;
 	zclient->interface_address_add = interface_address_add;
 	zclient->interface_address_delete = interface_address_delete;
-	zclient->notify_owner = notify_owner;
+	zclient->route_notify_owner = route_notify_owner;
 }

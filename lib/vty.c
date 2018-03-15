@@ -719,6 +719,7 @@ static void vty_end_config(struct vty *vty)
 	case BGP_EVPN_NODE:
 	case BGP_IPV6L_NODE:
 	case RMAP_NODE:
+	case PBRMAP_NODE:
 	case OSPF_NODE:
 	case OSPF6_NODE:
 	case LDP_NODE:
@@ -1116,6 +1117,7 @@ static void vty_stop_input(struct vty *vty)
 	case EIGRP_NODE:
 	case BGP_NODE:
 	case RMAP_NODE:
+	case PBRMAP_NODE:
 	case OSPF_NODE:
 	case OSPF6_NODE:
 	case LDP_NODE:
@@ -2287,7 +2289,8 @@ static void vty_read_file(FILE *confp)
 			message = "Command returned Incomplete";
 			break;
 		case CMD_ERR_EXEED_ARGC_MAX:
-			message = "Command exceeded maximum number of Arguments";
+			message =
+				"Command exceeded maximum number of Arguments";
 			break;
 		default:
 			message = "Command returned unhandled error message";
@@ -2297,8 +2300,8 @@ static void vty_read_file(FILE *confp)
 		nl = strchr(vty->error_buf, '\n');
 		if (nl)
 			*nl = '\0';
-		zlog_err("ERROR: %s on config line %u: %s",
-			 message, line_num, vty->error_buf);
+		zlog_err("ERROR: %s on config line %u: %s", message, line_num,
+			 vty->error_buf);
 	}
 
 	vty_close(vty);
@@ -2370,7 +2373,8 @@ void vty_read_config(const char *config_file, char *config_default_dir)
 	if (config_file != NULL) {
 		if (!IS_DIRECTORY_SEP(config_file[0])) {
 			if (getcwd(cwd, MAXPATHLEN) == NULL) {
-				zlog_err("Failure to determine Current Working Directory %d!",
+				zlog_err(
+					"Failure to determine Current Working Directory %d!",
 					errno);
 				exit(1);
 			}
@@ -2385,14 +2389,15 @@ void vty_read_config(const char *config_file, char *config_default_dir)
 
 		if (confp == NULL) {
 			zlog_err("%s: failed to open configuration file %s: %s",
-				__func__, fullpath, safe_strerror(errno));
+				 __func__, fullpath, safe_strerror(errno));
 
 			confp = vty_use_backup_config(fullpath);
 			if (confp)
-				zlog_warn("WARNING: using backup configuration file!");
+				zlog_warn(
+					"WARNING: using backup configuration file!");
 			else {
 				zlog_err("can't open configuration file [%s]",
-					config_file);
+					 config_file);
 				exit(1);
 			}
 		}
@@ -2427,16 +2432,17 @@ void vty_read_config(const char *config_file, char *config_default_dir)
 		confp = fopen(config_default_dir, "r");
 		if (confp == NULL) {
 			zlog_err("%s: failed to open configuration file %s: %s",
-				__func__, config_default_dir,
-				safe_strerror(errno));
+				 __func__, config_default_dir,
+				 safe_strerror(errno));
 
 			confp = vty_use_backup_config(config_default_dir);
 			if (confp) {
-				zlog_warn("WARNING: using backup configuration file!");
+				zlog_warn(
+					"WARNING: using backup configuration file!");
 				fullpath = config_default_dir;
 			} else {
 				zlog_err("can't open configuration file [%s]",
-					config_default_dir);
+					 config_default_dir);
 				goto tmp_free_and_out;
 			}
 		} else
@@ -2946,12 +2952,11 @@ static void vty_save_cwd(void)
 		 */
 		if (!chdir(SYSCONFDIR)) {
 			zlog_err("Failure to chdir to %s, errno: %d",
-				SYSCONFDIR, errno);
+				 SYSCONFDIR, errno);
 			exit(-1);
 		}
 		if (getcwd(cwd, MAXPATHLEN) == NULL) {
-			zlog_err("Failure to getcwd, errno: %d",
-				errno);
+			zlog_err("Failure to getcwd, errno: %d", errno);
 			exit(-1);
 		}
 	}

@@ -396,6 +396,8 @@ AC_ARG_ENABLE(rpki,
   AS_HELP_STRING([--enable-rpki], [enable RPKI prefix validation support]))
 AC_ARG_ENABLE([clippy-only],
   AS_HELP_STRING([--enable-clippy-only], [Only build clippy]))
+AC_ARG_ENABLE([numeric_version],
+  AS_HELP_STRING([--enable-numeric-version], [Only numeric digits allowed in version (for Alpine)]))
 
 AS_IF([test "${enable_clippy_only}" != "yes"], [
 AC_CHECK_HEADERS(json-c/json.h)
@@ -646,6 +648,14 @@ esac
 AC_DEFINE_UNQUOTED(MULTIPATH_NUM, $MPATH_NUM, Maximum number of paths for a route)
 
 AC_DEFINE_UNQUOTED(VTYSH_PAGER, "$VTYSH_PAGER", [What pager to use])
+
+dnl ------------------------------------
+dnl Alpine only accepts numeric versions
+dnl ------------------------------------
+if test "x${enable_numeric_version}" != "x" ; then
+  VERSION="`echo ${VERSION} | tr -c -d '[[.0-9]]'`"
+  PACKAGE_VERSION="`echo ${PACKAGE_VERSION} | tr -c -d '[[.0-9]]'`"
+fi
 
 dnl -----------------------------------
 dnl Add extra version string to package
@@ -1336,6 +1346,7 @@ AM_CONDITIONAL(BABELD, test "${enable_babeld}" != "no")
 AM_CONDITIONAL(OSPF6D, test "${enable_ospf6d}" != "no")
 AM_CONDITIONAL(ISISD, test "${enable_isisd}" != "no")
 AM_CONDITIONAL(PIMD, test "${enable_pimd}" != "no")
+AM_CONDITIONAL(PBRD, test "${enable_pbrd}" != "no")
 
 if test "${enable_bgp_announce}" = "no";then
   AC_DEFINE(DISABLE_BGP_ANNOUNCE,1,Disable BGP installation to zebra)
@@ -1872,27 +1883,10 @@ AC_CONFIG_FILES([Makefile
 	  redhat/frr.spec
 	  debianpkg/Makefile
 	  debianpkg/changelog
+	  alpine/APKBUILD
 	  snapcraft/snapcraft.yaml
 	  lib/version.h
 	  tests/lib/cli/test_cli.refout
-	  doc/defines.texi
-	  doc/bgpd.8
-	  doc/isisd.8
-	  doc/ospf6d.8
-	  doc/ospfclient.8
-	  doc/ospfd.8
-	  doc/ldpd.8
-	  doc/ripd.8
-	  doc/eigrpd.8
-	  doc/ripngd.8
-	  doc/pimd.8
-	  doc/mtracebis.8
-	  doc/nhrpd.8
-	  doc/vtysh.1
-	  doc/watchfrr.8
-	  doc/zebra.8
-	  doc/frr.1
-	  doc/frr-args.8
 	  pkgsrc/bgpd.sh pkgsrc/ospf6d.sh pkgsrc/ospfd.sh
 	  pkgsrc/ripd.sh pkgsrc/ripngd.sh pkgsrc/zebra.sh
 	  pkgsrc/eigrpd.sh])

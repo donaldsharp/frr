@@ -99,7 +99,7 @@ static void mtrace_debug(struct pim_interface *pim_ifp,
 			if (PIM_DEBUG_MTRACE)
 				zlog_debug(
 					"Mtrace response block of wrong"
-					 " length");
+					" length");
 
 		responses = responses / sizeof(struct igmp_mtrace_rsp);
 
@@ -492,7 +492,7 @@ int igmp_mtrace_recv_qry_req(struct igmp_sock *igmp, struct ip *ip_hdr,
 		if (PIM_DEBUG_MTRACE)
 			zlog_warn(
 				"Recv mtrace packet from %s on %s: too short,"
-				" len=%d, min=%lu",
+				" len=%d, min=%zu",
 				from_str, ifp->name, igmp_msg_len,
 				sizeof(struct igmp_mtrace));
 		return -1;
