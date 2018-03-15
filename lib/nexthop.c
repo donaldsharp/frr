@@ -31,6 +31,7 @@
 #include "prefix.h"
 #include "nexthop.h"
 #include "mpls.h"
+#include "jhash.h"
 
 DEFINE_MTYPE_STATIC(LIB, NEXTHOP, "Nexthop")
 DEFINE_MTYPE_STATIC(LIB, NH_LABEL, "Nexthop label")
@@ -309,4 +310,16 @@ unsigned int nexthop_level(struct nexthop *nexthop)
 		rv++;
 
 	return rv;
+}
+
+uint32_t nexthop_hash(struct nexthop *nexthop)
+{
+	uint32_t key;
+
+	key = jhash_1word(nexthop->vrf_id, 0x45afe398);
+	key = jhash_1word(nexthop->ifindex, key);
+	key = jhash_1word(nexthop->type, key);
+	key = jhash(&nexthop->gate, sizeof(union g_addr), key);
+
+	return key;
 }
