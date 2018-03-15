@@ -45,7 +45,7 @@
 DEFINE_MTYPE_STATIC(PBRD, PBR_INTERFACE, "PBR Interface")
 
 /* Zebra structure to hold current status. */
-struct zclient *zclient = NULL;
+struct zclient *zclient;
 
 /* For registering threads. */
 extern struct thread_master *master;
@@ -435,7 +435,7 @@ void pbr_send_rnh(struct nexthop *nhop, bool reg)
 		ZEBRA_NEXTHOP_REGISTER : ZEBRA_NEXTHOP_UNREGISTER;
 
 	memset(&p, 0, sizeof(p));
-	switch(nhop->type) {
+	switch (nhop->type) {
 	case NEXTHOP_TYPE_IFINDEX:
 	case NEXTHOP_TYPE_BLACKHOLE:
 		return;
@@ -544,7 +544,7 @@ void pbr_send_pbr_map(struct pbr_map *pbrm, bool install)
 
 		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, snode, pbrms)) {
 
-			DEBUGD(&pbr_dbg_zebra, "%s: \tSeqno: %u %ld valid %u",
+			DEBUGD(&pbr_dbg_zebra, "%s: \tSeqno: %u %" PRIu64 " valid %u",
 			       __PRETTY_FUNCTION__, pbrms->seqno, pbrms->reason,
 			       pbrm->valid);
 
