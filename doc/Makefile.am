@@ -26,6 +26,10 @@ man_MANS += $(MANPAGE_BUILDDIR)/pimd.8
 man_MANS += $(MANPAGE_BUILDDIR)/mtracebis.8
 endif
 
+if PBRD
+man_MANS += $(MANPAGE_BUILDDIR)/pbrd.8
+endif
+
 if BGPD
 man_MANS += $(MANPAGE_BUILDDIR)/bgpd.8
 endif
@@ -139,6 +143,7 @@ EXTRA_DIST = frr-sphinx.mk \
 	manpages/vtysh.rst \
 	manpages/nhrpd.rst \
 	manpages/pimd.rst \
+	manpages/pbrd.rst \
 	manpages/mtracebis.rst \
 	manpages/ripngd.rst \
 	manpages/frr.rst \
@@ -209,6 +214,7 @@ EXTRA_DIST = frr-sphinx.mk \
 	user/babeld.rst \
 	user/snmp.rst \
 	user/pim.rst \
+	user/pbr.rst \
 	user/ripngd.rst \
 	user/snmptrap.rst \
 	user/glossary.rst \
