@@ -377,7 +377,6 @@ bool pbr_map_check_valid(const char *name)
 void pbr_map_schedule_policy_from_nhg(const char *nh_group)
 {
 	struct pbr_map_sequence *pbrms;
-	struct pbr_event *pbre;
 	struct pbr_map *pbrm;
 	struct listnode *node;
 
@@ -392,11 +391,7 @@ void pbr_map_schedule_policy_from_nhg(const char *nh_group)
 			    && (strcmp(nh_group, pbrms->nhgrp_name) == 0)) {
 				pbrms->nhs_installed = true;
 
-				pbre = pbr_event_new(PBR_MAP_MODIFY,
-						     pbrm->name);
-				pbre->seqno = pbrms->seqno;
-
-				pbr_event_enqueue(pbre);
+				pbr_map_check(pbrms);
 			}
 
 			if (pbrms->nhg
@@ -404,11 +399,7 @@ void pbr_map_schedule_policy_from_nhg(const char *nh_group)
 				== 0)) {
 				pbrms->nhs_installed = true;
 
-				pbre = pbr_event_new(PBR_MAP_MODIFY,
-						     pbrm->name);
-				pbre->seqno = pbrms->seqno;
-
-				pbr_event_enqueue(pbre);
+				pbr_map_check(pbrms);
 			}
 		}
 	}
@@ -500,52 +491,60 @@ void pbr_map_check_nh_group_change(const char *nh_group)
 	}
 }
 
-void pbr_map_check(const char *name, uint32_t seqno)
+void pbr_map_check_temp(const char *name, uint32_t seqno)
 {
 	struct pbr_map_sequence *pbrms;
 	struct listnode *node;
 	struct pbr_map *pbrm;
-
-	DEBUGD(&pbr_dbg_map, "%s: for %s(%u)", __PRETTY_FUNCTION__, name,
-	       seqno);
-	if (pbr_map_check_valid(name))
-		DEBUGD(&pbr_dbg_map, "We are totally valid %s\n", name);
 
 	pbrm = pbrm_find(name);
 	if (!pbrm)
 		return;
 
 	for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, node, pbrms)) {
-		if (seqno != pbrms->seqno)
-			continue;
-
-		DEBUGD(&pbr_dbg_map, "%s: Installing %s(%u) reason: %" PRIu64,
-		       __PRETTY_FUNCTION__, name, seqno, pbrms->reason);
-
-		if (pbrms->reason == PBR_MAP_VALID_SEQUENCE_NUMBER) {
-			struct pbr_event *pbre;
-
-			DEBUGD(&pbr_dbg_map,
-			       "%s: Installing %s(%u) reason: %" PRIu64,
-			       __PRETTY_FUNCTION__, name, seqno, pbrms->reason);
-			DEBUGD(&pbr_dbg_map,
-			       "\tSending PBR_MAP_POLICY_INSTALL event");
-
-			pbre = pbr_event_new(PBR_MAP_POLICY_INSTALL,
-					     pbrm->name);
-			pbre->event = PBR_MAP_POLICY_INSTALL;
-			strcpy(pbre->name, pbrm->name);
-
-			pbr_event_enqueue(pbre);
-
-			break;
-		} else {
-			DEBUGD(&pbr_dbg_map,
-			       "%s: Removing %s(%u) reason: %" PRIu64,
-			       __PRETTY_FUNCTION__, name, seqno, pbrms->reason);
-			pbr_send_pbr_map(pbrm, false);
-			break;
+		if (seqno == pbrms->seqno) {
+			pbr_map_check(pbrms);
+			return;
 		}
+	}
+}
+
+void pbr_map_check(struct pbr_map_sequence *pbrms)
+{
+	struct pbr_map *pbrm;
+
+	pbrm = pbrms->parent;
+	DEBUGD(&pbr_dbg_map, "%s: for %s(%u)", __PRETTY_FUNCTION__,
+	       pbrm->name, pbrms->seqno);
+	if (pbr_map_check_valid(pbrm->name))
+		DEBUGD(&pbr_dbg_map, "We are totally valid %s\n",
+		       pbrm->name);
+
+	DEBUGD(&pbr_dbg_map, "%s: Installing %s(%u) reason: %" PRIu64,
+	       __PRETTY_FUNCTION__, pbrm->name, pbrms->seqno, pbrms->reason);
+
+	if (pbrms->reason == PBR_MAP_VALID_SEQUENCE_NUMBER) {
+		struct pbr_event *pbre;
+
+		DEBUGD(&pbr_dbg_map,
+		       "%s: Installing %s(%u) reason: %" PRIu64,
+		       __PRETTY_FUNCTION__, pbrm->name,
+		       pbrms->seqno, pbrms->reason);
+		DEBUGD(&pbr_dbg_map,
+		       "\tSending PBR_MAP_POLICY_INSTALL event");
+
+		pbre = pbr_event_new(PBR_MAP_POLICY_INSTALL,
+				     pbrm->name);
+		pbre->event = PBR_MAP_POLICY_INSTALL;
+		strcpy(pbre->name, pbrm->name);
+
+		pbr_event_enqueue(pbre);
+	} else {
+		DEBUGD(&pbr_dbg_map,
+		       "%s: Removing %s(%u) reason: %" PRIu64,
+		       __PRETTY_FUNCTION__, pbrm->name,
+		       pbrms->seqno, pbrms->reason);
+		pbr_send_pbr_map(pbrm, false);
 	}
 }
 

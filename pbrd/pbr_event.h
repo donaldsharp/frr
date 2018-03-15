@@ -69,11 +69,6 @@ enum pbr_events {
 	PBR_MAP_ADD,
 
 	/*
-	 * The pbr-map has been modified in some fashion
-	 */
-	PBR_MAP_MODIFY,
-
-	/*
 	 * The pbr-map has been deleted from the system
 	 */
 	PBR_MAP_DELETE,

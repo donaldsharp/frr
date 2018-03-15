@@ -77,10 +77,6 @@ static const char *pbr_event_wqentry2str(struct pbr_event *pbre,
 		snprintf(buffer, buflen, "PBR-MAP %s Added",
 			 pbre->name);
 		break;
-	case PBR_MAP_MODIFY:
-		snprintf(buffer, buflen, "PBR_MAP %s Modified",
-			 pbre->name);
-		break;
 	case PBR_MAP_DELETE:
 		snprintf(buffer, buflen, "PBR_MAP %s Deleted",
 			 pbre->name);
@@ -144,23 +140,20 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 		break;
 	case PBR_MAP_NEXTHOP_ADD:
 		pbr_nht_add_individual_nexthop(pbre->name, pbre->seqno);
-		pbr_map_check(pbre->name, pbre->seqno);
+		pbr_map_check_temp(pbre->name, pbre->seqno);
 		break;
 	case PBR_MAP_NEXTHOP_DELETE:
 		pbr_nht_delete_individual_nexthop(pbre->name, pbre->seqno);
-		pbr_map_check(pbre->name, pbre->seqno);
+		pbr_map_check_temp(pbre->name, pbre->seqno);
 		break;
 	case PBR_MAP_NHG_ADD:
-		pbr_map_check(pbre->name, pbre->seqno);
+		pbr_map_check_temp(pbre->name, pbre->seqno);
 		break;
 	case PBR_MAP_NHG_DELETE:
-		pbr_map_check(pbre->name, pbre->seqno);
+		pbr_map_check_temp(pbre->name, pbre->seqno);
 		break;
 	case PBR_MAP_ADD:
 		pbr_map_add_interfaces(pbre->name);
-		break;
-	case PBR_MAP_MODIFY:
-		pbr_map_check(pbre->name, pbre->seqno);
 		break;
 	case PBR_MAP_DELETE:
 		pbr_map_delete(pbre->name, pbre->seqno);

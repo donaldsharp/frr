@@ -106,7 +106,6 @@ DEFPY(pbr_map_match_src, pbr_map_match_src_cmd,
 	"v6 Prefix\n")
 {
 	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
-	struct pbr_event *pbre;
 
 	if (!no) {
 		if (!pbrms->src)
@@ -117,9 +116,7 @@ DEFPY(pbr_map_match_src, pbr_map_match_src_cmd,
 		pbrms->src = 0;
 	}
 
-	pbre = pbr_event_new(PBR_MAP_MODIFY, pbrms->parent->name);
-	pbre->seqno = pbrms->seqno;
-	pbr_event_enqueue(pbre);
+	pbr_map_check(pbrms);
 
 	return CMD_SUCCESS;
 }
@@ -133,7 +130,6 @@ DEFPY(pbr_map_match_dst, pbr_map_match_dst_cmd,
 	"v6 Prefix\n")
 {
 	struct pbr_map_sequence *pbrms = VTY_GET_CONTEXT(pbr_map_sequence);
-	struct pbr_event *pbre;
 
 	if (!no) {
 		if (!pbrms->dst)
@@ -141,12 +137,10 @@ DEFPY(pbr_map_match_dst, pbr_map_match_dst_cmd,
 		prefix_copy(pbrms->dst, prefix);
 	} else {
 		prefix_free(pbrms->dst);
-		pbrms->dst = 0;
+		pbrms->dst = NULL;
 	}
 
-	pbre = pbr_event_new(PBR_MAP_MODIFY, pbrms->parent->name);
-	pbre->seqno = pbrms->seqno;
-	pbr_event_enqueue(pbre);
+	pbr_map_check(pbrms);
 
 	return CMD_SUCCESS;
 }
