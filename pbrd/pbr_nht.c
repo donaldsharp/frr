@@ -553,14 +553,6 @@ static void pbr_nht_individual_nexthop_update_lookup(struct hash_backet *b,
 	       prefix2str(&pnhi->nhr->prefix, buf, sizeof(buf)), old_valid,
 	       pnhc->valid);
 
-	if (old_valid != pnhc->valid) {
-		struct pbr_event *pbre;
-
-		pbre = pbr_event_new(PBR_NH_CHANGED, pnhc->parent->name);
-
-		pbr_event_enqueue(pbre);
-	}
-
 	if (pnhc->valid)
 		pnhi->valid += 1;
 }
@@ -569,6 +561,9 @@ static void pbr_nht_nexthop_update_lookup(struct hash_backet *b, void *data)
 {
 	struct pbr_nexthop_group_cache *pnhgc = b->data;
 	struct pbr_nht_individual pnhi;
+	bool old_valid;
+
+	old_valid = pnhgc->valid;
 
 	pnhi.nhr = (struct zapi_route *)data;
 	pnhi.valid = 0;
@@ -579,6 +574,9 @@ static void pbr_nht_nexthop_update_lookup(struct hash_backet *b, void *data)
 	 * If any of the specified nexthops are valid we are valid
 	 */
 	pnhgc->valid = !!pnhi.valid;
+
+	if (old_valid != pnhgc->valid)
+		pbr_map_check_nh_group_change(pnhgc->name);
 }
 
 void pbr_nht_nexthop_update(struct zapi_route *nhr)

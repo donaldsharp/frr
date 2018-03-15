@@ -81,9 +81,6 @@ static const char *pbr_event_wqentry2str(struct pbr_event *pbre,
 		snprintf(buffer, buflen, "PBR_MAP %s Deleted",
 			 pbre->name);
 		break;
-	case PBR_NH_CHANGED:
-		snprintf(buffer, buflen, "Nexthop Call back from Zebra");
-		break;
 	case PBR_POLICY_CHANGED:
 		snprintf(buffer, buflen,
 			 "PBR-Policy %s applied to an interface", pbre->name);
@@ -157,9 +154,6 @@ static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 		break;
 	case PBR_MAP_DELETE:
 		pbr_map_delete(pbre->name, pbre->seqno);
-		break;
-	case PBR_NH_CHANGED:
-		pbr_map_check_nh_group_change(pbre->name);
 		break;
 	case PBR_POLICY_CHANGED:
 		pbr_map_check_policy_change(pbre->name);

@@ -80,12 +80,6 @@ enum pbr_events {
 	PBR_MAP_POLICY_INSTALL,
 
 	/*
-	 * Callbacks for a Nexthop in a nexthop group has been
-	 * changed in some fashion
-	 */
-	PBR_NH_CHANGED,
-
-	/*
 	 * Callback for when a policy has been applied to an interface
 	 */
 	PBR_POLICY_CHANGED,
