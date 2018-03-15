@@ -542,9 +542,9 @@ void pbr_send_pbr_map(struct pbr_map_sequence *pbrms, bool install)
 		       __PRETTY_FUNCTION__, pbrms->seqno, pbrms->reason,
 		       pbrm->valid);
 
-		if (!install &&
-		    !(pbrms->reason & PBR_MAP_DEL_SEQUENCE_NUMBER))
-			 encode = false;
+		if (!install && (pbrms->delete == false))
+			encode = false;
+
 		if (!install && !pbrms->installed)
 			 encode = false;
 

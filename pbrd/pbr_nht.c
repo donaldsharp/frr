@@ -423,6 +423,7 @@ void pbr_nht_delete_individual_nexthop(const char *name, uint32_t seqno)
 	struct nexthop *nh;
 
 	pbrms = pbrms_get(name, seqno);
+	pbrms->delete = true;
 
 	memset(&find, 0, sizeof(find));
 	strcpy(&find.name[0], pbrms->internal_nhg_name);

@@ -106,6 +106,12 @@ struct pbr_map_sequence {
 	bool nhs_installed;
 
 	bool installed;
+
+	/*
+	 *  Are we deleting the pbmrms
+	 */
+	bool delete;
+
 	/*
 	 * A reason of 0 means we think the pbr_map_sequence is good to go
 	 * We can accumuluate multiple failure states
@@ -116,7 +122,6 @@ struct pbr_map_sequence {
 #define PBR_MAP_INVALID_NO_NEXTHOPS    (1 << 2)
 #define PBR_MAP_INVALID_BOTH_NHANDGRP  (1 << 3)
 #define PBR_MAP_INVALID_SRCDST         (1 << 4)
-#define PBR_MAP_DEL_SEQUENCE_NUMBER    (1 << 5)
 	uint64_t reason;
 
 	QOBJ_FIELDS

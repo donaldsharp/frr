@@ -180,10 +180,10 @@ extern void pbr_map_delete(const char *name, uint32_t seqno)
 	pbrm = pbrm_find(name);
 
 	for (ALL_LIST_ELEMENTS(pbrm->seqnumbers, node, nnode, pbrms)) {
-		if (pbrms->reason & PBR_MAP_DEL_SEQUENCE_NUMBER)
+		if (pbrms->delete)
 			pbr_send_pbr_map(pbrms, 0);
 
-		if (!(pbrms->reason & PBR_MAP_DEL_SEQUENCE_NUMBER))
+		if (pbrms->delete == false)
 			continue;
 
 		if (pbrms->nhg)

@@ -81,12 +81,12 @@ DEFUN_NOSH(no_pbr_map, no_pbr_map_cmd, "no pbr-map WORD [seq (1-65535)]",
 
 	if (seqno) {
 		pbrms = pbrms_get(pbrm->name, seqno);
-		pbrms->reason |= PBR_MAP_DEL_SEQUENCE_NUMBER;
+		pbrms->delete = true;
 	} else {
 		for (ALL_LIST_ELEMENTS(pbrm->seqnumbers, node, next_node,
 				       pbrms)) {
 			if (pbrms)
-				pbrms->reason |= PBR_MAP_DEL_SEQUENCE_NUMBER;
+				pbrms->delete = true;
 		}
 	}
 
