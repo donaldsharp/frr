@@ -492,13 +492,8 @@ void pbr_map_check_nh_group_change(const char *nh_group)
 
 				pbr_map_check_valid_internal(pbrm);
 
-				if (original != pbrm->valid) {
-					struct pbr_event *pbre;
-
-					pbre = pbr_event_new(PBR_MAP_INSTALL,
-							     pbrm->name);
-					pbr_event_enqueue(pbre);
-				}
+				if (original != pbrm->valid)
+					pbr_map_install(pbrm);
 				break;
 			}
 		}
@@ -554,18 +549,8 @@ void pbr_map_check(const char *name, uint32_t seqno)
 	}
 }
 
-void pbr_map_install(const char *name)
+void pbr_map_install(struct pbr_map *pbrm)
 {
-	struct pbr_map *pbrm;
-
-	pbrm = pbrm_find(name);
-	if (!pbrm) {
-		DEBUGD(&pbr_dbg_map,
-		       "%s: Specified PBR-MAP(%s) does not exist?",
-		       __PRETTY_FUNCTION__, name);
-		return;
-	}
-
 	if (!pbrm->incoming->count)
 		return;
 
@@ -612,13 +597,8 @@ void pbr_map_check_policy_change(const char *name)
 	}
 
 	pbr_map_check_valid(name);
-	if (pbrm->valid && !pbrm->installed) {
-		struct pbr_event *pbre;
-
-		pbre = pbr_event_new(PBR_MAP_INSTALL, name);
-
-		pbr_event_enqueue(pbre);
-	}
+	if (pbrm->valid && !pbrm->installed)
+		pbr_map_install(pbrm);
 }
 
 void pbr_map_init(void)

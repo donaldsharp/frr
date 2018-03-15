@@ -79,12 +79,6 @@ enum pbr_events {
 	PBR_MAP_DELETE,
 
 	/*
-	 * Start the sequence of events to install/remove the policy
-	 * from being installed
-	 */
-	PBR_MAP_INSTALL,
-
-	/*
 	 * We believe we have gotten enough information to actually
 	 * install the rule portion, since the nexthops are installed
 	 */
