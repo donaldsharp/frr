@@ -504,13 +504,14 @@ static void pbr_encode_pbr_map_sequence(struct stream *s,
 	stream_putl(s, ifp->ifindex);
 }
 
-void pbr_send_pbr_map(struct pbr_map *pbrm, bool install)
+void pbr_send_pbr_map(struct pbr_map_sequence *pbrms, bool install)
 {
 	struct listnode *inode, *snode;
-	struct pbr_map_sequence *pbrms;
+	struct pbr_map *pbrm = pbrms->parent;
 	struct pbr_map_interface *pmi;
 	struct stream *s;
 	uint32_t total;
+	bool encode = true;
 	ssize_t tspot;
 
 	DEBUGD(&pbr_dbg_zebra, "%s: for %s %d", __PRETTY_FUNCTION__, pbrm->name,
@@ -533,38 +534,29 @@ void pbr_send_pbr_map(struct pbr_map *pbrm, bool install)
 		       pbrm->name, install, pmi->ifp->name, pmi->delete);
 
 		if (!install && pmi->delete) {
-			for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, snode,
-						  pbrms)) {
-				pbr_encode_pbr_map_sequence(s,
-							    pbrms, pmi->ifp);
-				total++;
-			}
-			continue;
-		}
-
-		for (ALL_LIST_ELEMENTS_RO(pbrm->seqnumbers, snode, pbrms)) {
-
-			DEBUGD(&pbr_dbg_zebra, "%s: \tSeqno: %u %" PRIu64 " valid %u",
-			       __PRETTY_FUNCTION__, pbrms->seqno, pbrms->reason,
-			       pbrm->valid);
-
-			if (!install &&
-			    !(pbrms->reason & PBR_MAP_DEL_SEQUENCE_NUMBER))
-				continue;
-
-			if (!install && !pbrms->installed)
-				continue;
-
-			if (install && pbrms->installed)
-				continue;
-
-			DEBUGD(&pbr_dbg_zebra, "%s: \t Seq: %u ifp %s",
-			       __PRETTY_FUNCTION__, pbrms->seqno,
-			       pmi->ifp->name);
-
 			pbr_encode_pbr_map_sequence(s, pbrms, pmi->ifp);
 			total++;
 		}
+
+		DEBUGD(&pbr_dbg_zebra, "%s: \tSeqno: %u %" PRIu64 " valid %u",
+		       __PRETTY_FUNCTION__, pbrms->seqno, pbrms->reason,
+		       pbrm->valid);
+
+		if (!install &&
+		    !(pbrms->reason & PBR_MAP_DEL_SEQUENCE_NUMBER))
+			 encode = false;
+		if (!install && !pbrms->installed)
+			 encode = false;
+
+		if (install && pbrms->installed)
+			 encode = false;
+
+		DEBUGD(&pbr_dbg_zebra, "%s: \t Seq: %u ifp %s",
+		       __PRETTY_FUNCTION__, pbrms->seqno,
+		       pmi->ifp->name);
+
+		pbr_encode_pbr_map_sequence(s, pbrms, pmi->ifp);
+		total++;
 	}
 
 	DEBUGD(&pbr_dbg_zebra, "%s: Putting %u at %zu ", __PRETTY_FUNCTION__,
