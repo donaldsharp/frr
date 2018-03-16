@@ -40,26 +40,7 @@ struct work_queue *pbr_event_wq;
 static const char *pbr_event_wqentry2str(struct pbr_event *pbre,
 					 char *buffer, size_t buflen)
 {
-	switch (pbre->event) {
-	case PBR_NHG_NEW:
-		snprintf(buffer, buflen, "Nexthop Group Added %s",
-			 pbre->name);
-		break;
-	case PBR_NHG_ADD_NEXTHOP:
-		snprintf(buffer, buflen, "Nexthop Group Nexthop Added %s",
-			 pbre->name);
-		break;
-	case PBR_NHG_DEL_NEXTHOP:
-		snprintf(buffer, buflen, "Nexthop Group Nexthop Deleted %s",
-			 pbre->name);
-		break;
-	case PBR_NHG_DELETE:
-		snprintf(buffer, buflen, "Nexthop Group Deleted %s",
-			 pbre->name);
-		break;
-	}
-
-	return buffer;
+	return "Event not found.";
 }
 
 void pbr_event_free(struct pbr_event **pbre)
@@ -76,31 +57,6 @@ static void pbr_event_delete_wq(struct work_queue *wq, void *data)
 
 static wq_item_status pbr_event_process_wq(struct work_queue *wq, void *data)
 {
-	struct pbr_event *pbre = (struct pbr_event *)data;
-	char buffer[256];
-
-	DEBUGD(&pbr_dbg_event, "%s: Handling event %s", __PRETTY_FUNCTION__,
-	       pbr_event_wqentry2str(pbre, buffer, sizeof(buffer)));
-
-	switch (pbre->event) {
-	case PBR_NHG_NEW:
-		pbr_nht_add_group(pbre->name);
-		pbr_map_check_nh_group_change(pbre->name);
-		break;
-	case PBR_NHG_ADD_NEXTHOP:
-		pbr_nht_change_group(pbre->name);
-		pbr_map_check_nh_group_change(pbre->name);
-		break;
-	case PBR_NHG_DEL_NEXTHOP:
-		pbr_nht_change_group(pbre->name);
-		pbr_map_check_nh_group_change(pbre->name);
-		break;
-	case PBR_NHG_DELETE:
-		pbr_nht_delete_group(pbre->name);
-		pbr_map_check_nh_group_change(pbre->name);
-		break;
-	}
-
 	return WQ_SUCCESS;
 }
 

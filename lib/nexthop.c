@@ -241,7 +241,7 @@ void nexthop_del_labels(struct nexthop *nexthop)
 	}
 }
 
-const char *nexthop2str(struct nexthop *nexthop, char *str, int size)
+const char *nexthop2str(const struct nexthop *nexthop, char *str, int size)
 {
 	switch (nexthop->type) {
 	case NEXTHOP_TYPE_IFINDEX:

@@ -80,7 +80,7 @@ extern void pbr_nhgroup_delete_cb(const char *name);
 extern bool pbr_nht_nexthop_valid(struct nexthop_group *nhg);
 extern bool pbr_nht_nexthop_group_valid(const char *name);
 
-extern void pbr_nht_add_group(const char *name);
+extern struct pbr_nexthop_group_cache *pbr_nht_add_group(const char *name);
 extern void pbr_nht_change_group(const char *name);
 extern void pbr_nht_delete_group(const char *name);
 
