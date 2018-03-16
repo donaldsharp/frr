@@ -32,7 +32,6 @@
 
 #include "pbrd/pbr_nht.h"
 #include "pbrd/pbr_map.h"
-#include "pbrd/pbr_event.h"
 #include "pbrd/pbr_zebra.h"
 #include "pbrd/pbr_memory.h"
 #include "pbrd/pbr_debug.h"
