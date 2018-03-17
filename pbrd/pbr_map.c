@@ -198,6 +198,24 @@ extern void pbr_map_delete(struct pbr_map_sequence *pbrms)
 	}
 }
 
+void pbr_map_delete_nexthop_group(struct pbr_map_sequence *pbrms)
+{
+	struct pbr_map *pbrm = pbrms->parent;
+	struct listnode *node;
+	struct pbr_map_interface *pmi;
+
+	if (pbrm->valid && pbrms->nhs_installed && pbrm->incoming->count) {
+		for (ALL_LIST_ELEMENTS_RO(pbrm->incoming, node, pmi))
+			pbr_send_pbr_map(pbrms, pmi, false);
+	}
+
+	pbrm->valid = false;
+	pbrms->nhs_installed = false;
+	pbrms->installed = false;
+	pbrms->reason |= PBR_MAP_INVALID_NO_NEXTHOPS;
+	pbrms->nhgrp_name = NULL;
+}
+
 struct pbr_map_sequence *pbrms_lookup_unique(uint32_t unique,
 					     ifindex_t ifindex)
 {

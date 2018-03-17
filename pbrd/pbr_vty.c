@@ -154,7 +154,7 @@ DEFPY(pbr_map_nexthop_group, pbr_map_nexthop_group_cmd,
 
 	if (no) {
 		if (pbrms->nhgrp_name && strcmp(name, pbrms->nhgrp_name) == 0)
-			pbr_map_check(pbrms);
+			pbr_map_delete_nexthop_group(pbrms);
 		else {
 			vty_out(vty,
 				"Nexthop Group specified: %s does not exist to remove",
@@ -261,12 +261,8 @@ DEFPY(pbr_map_nexthop, pbr_map_nexthop_cmd,
 	}
 
 	if (no) {
-		if (nh) {
-			// nexthop_del(pbrms->nhg, nh);
-			// nexthop_free(nh);
+		if (nh)
 			pbr_nht_delete_individual_nexthop(pbrms);
-			pbr_map_check(pbrms);
-		}
 	} else if (!nh) {
 
 		if (pbrms->nhg->nexthop) {

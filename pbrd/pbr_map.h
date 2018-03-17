@@ -135,6 +135,7 @@ extern struct pbr_map_sequence *pbrms_lookup_unique(uint32_t unique,
 
 extern struct pbr_map *pbrm_find(const char *name);
 extern void pbr_map_delete(struct pbr_map_sequence *pbrms);
+extern void pbr_map_delete_nexthop_group(struct pbr_map_sequence *pbrms);
 extern void pbr_map_add_interface(struct pbr_map *pbrm, struct interface *ifp);
 extern void pbr_map_interface_delete(struct pbr_map *pbrm,
 				     struct interface *ifp);
