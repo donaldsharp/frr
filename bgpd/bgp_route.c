@@ -2095,6 +2095,24 @@ struct bgp_process_queue {
 	unsigned int queued;
 };
 
+/*
+ * old_select = The old best path
+ * new_select = the new best path
+ *
+ * if (!old_select && new_select)
+ *     We are sending new information on.
+ *
+ * if (old_select && new_select) {
+ *         if (new_select != old_select)
+ *                 We have a new best path send a change
+ *         else
+ *                 We've received a update with new attributes that needs
+ *                 to be passed on.
+ * }
+ *
+ * if (old_select && !new_select)
+ *     We are removing the rn from the system
+ */
 static void bgp_process_main_one(struct bgp *bgp, struct bgp_node *rn,
 				 afi_t afi, safi_t safi)
 {
@@ -2295,6 +2313,27 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_node *rn,
 				|| old_select->sub_type == BGP_ROUTE_IMPORTED))
 
 				bgp_zebra_withdraw(p, old_select, safi);
+		}
+	}
+
+	/*
+	 * We need to withdraw/update the route to the vpn leaking
+	 * subsystem or from vrf <-> vrf leaking.
+	 *
+	 * Currently I am only handling the withdrawal case
+	 * as that I am not sure what we need to do for the
+	 * install or change case here( if it is even possible
+	 * in this code path ).
+	 */
+	if (old_select && !new_select) {
+		if (safi == SAFI_UNICAST &&
+		    (bgp->inst_type == BGP_INSTANCE_TYPE_VRF ||
+		     bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)) {
+			struct bgp_info *ri;
+
+			for (ri = rn->info; ri; ri = ri->next)
+				vpn_leak_from_vrf_withdraw(bgp_get_default(),
+							   bgp, ri);
 		}
 	}
 
