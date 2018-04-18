@@ -1,16 +1,14 @@
 /*
- * Static Routing Information code
- * Copyright (C) 2016 Cumulus Networks
+ * static memory code.
+ * Copyright (C) 2018 Cumulus Networks, Inc.
  *               Donald Sharp
  *
- * This file is part of Quagga.
- *
- * Quagga is free software; you can redistribute it and/or modify it
+ * FRR is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; either version 2, or (at your option) any
  * later version.
  *
- * Quagga is distributed in the hope that it will be useful, but
+ * FRR is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
@@ -21,3 +19,10 @@
  */
 #include <zebra.h>
 
+#include <memory.h>
+
+#include "staticd/static_memory.h"
+
+DEFINE_MGROUP(STATIC, "staticd")
+
+DEFINE_MTYPE(STATIC, STATIC_ROUTE, "Static Route");
