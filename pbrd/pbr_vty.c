@@ -494,11 +494,7 @@ static int pbr_interface_config_write(struct vty *vty)
 
 	RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
 		FOR_ALL_INTERFACES (vrf, ifp) {
-			if (vrf->vrf_id == VRF_DEFAULT)
-				vty_frame(vty, "interface %s\n", ifp->name);
-			else
-				vty_frame(vty, "interface %s vrf %s\n",
-					  ifp->name, vrf->name);
+			vty_frame(vty, "interface %s\n", ifp->name);
 
 			pbr_map_write_interfaces(vty, ifp);
 
