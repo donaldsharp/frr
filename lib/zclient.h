@@ -73,6 +73,7 @@ typedef enum {
 	ZEBRA_ROUTE_ADD,
 	ZEBRA_ROUTE_DELETE,
 	ZEBRA_ROUTE_NOTIFY_OWNER,
+	ZEBRA_ROUTE_EOR,
 	ZEBRA_IPV4_ROUTE_ADD,
 	ZEBRA_IPV4_ROUTE_DELETE,
 	ZEBRA_IPV6_ROUTE_ADD,
@@ -658,6 +659,7 @@ extern int zapi_ipv4_route_ipv6_nexthop(uint8_t, struct zclient *,
 					struct zapi_ipv6 *)
 	__attribute__((deprecated));
 extern int zclient_route_send(uint8_t, struct zclient *, struct zapi_route *);
+extern int zclient_route_send_eor(struct zclient *zclient, vrf_id_t vrf_id);
 extern int zclient_send_rnh(struct zclient *zclient, int command,
 			    struct prefix *p, bool exact_match,
 			    vrf_id_t vrf_id);

@@ -953,6 +953,16 @@ int zapi_ipv6_route(uint8_t cmd, struct zclient *zclient, struct prefix_ipv6 *p,
 	return zclient_send_message(zclient);
 }
 
+int zclient_route_send_eor(struct zclient *zclient, vrf_id_t vrf_id)
+{
+	struct stream *s = zclient->obuf;
+
+	stream_reset(s);
+	zclient_create_header(s, ZEBRA_ROUTE_EOR, vrf_id);
+
+	return zclient_send_message(zclient);
+}
+
 int zclient_route_send(uint8_t cmd, struct zclient *zclient,
 		       struct zapi_route *api)
 {

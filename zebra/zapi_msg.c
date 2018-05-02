@@ -1535,6 +1535,15 @@ static void zread_route_del(ZAPI_HANDLER_ARGS)
 	}
 }
 
+/*
+ * An upper-level protocol is signaling to zebra that it is
+ * currently done with sending new updates to zebra.
+ */
+static void zread_route_eor(ZAPI_HANDLER_ARGS)
+{
+	zlog_debug("Received EoR");
+}
+
 /* This function support multiple nexthop. */
 /*
  * Parse the ZEBRA_IPV4_ROUTE_ADD sent from client. Update re and
@@ -2887,6 +2896,7 @@ void (*zserv_handlers[])(ZAPI_HANDLER_ARGS) = {
 	[ZEBRA_INTERFACE_DELETE] = zread_interface_delete,
 	[ZEBRA_ROUTE_ADD] = zread_route_add,
 	[ZEBRA_ROUTE_DELETE] = zread_route_del,
+	[ZEBRA_ROUTE_EOR] = zread_route_eor,
 	[ZEBRA_IPV4_ROUTE_ADD] = zread_ipv4_add,
 	[ZEBRA_IPV4_ROUTE_DELETE] = zread_ipv4_delete,
 	[ZEBRA_IPV4_ROUTE_IPV6_NEXTHOP_ADD] = zread_ipv4_route_ipv6_nexthop_add,
