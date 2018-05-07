@@ -355,7 +355,7 @@ static int pim_update_upstream_nh_helper(struct hash_backet *backet, void *arg)
 			 */
 			pim_jp_agg_switch_interface(&old, &up->rpf, up);
 
-			pim_upstream_join_timer_restart(up, &old);
+			pim_upstream_join_timer_restart(pim, up, &old);
 		} /* up->join_state == PIM_UPSTREAM_JOINED */
 
 		/*
@@ -394,7 +394,7 @@ static int pim_update_upstream_nh(struct pim_instance *pim,
 				struct pim_rpf rpf;
 				rpf.source_nexthop.interface = ifp;
 				rpf.rpf_addr.u.prefix4 = us->address;
-				pim_joinprune_send(&rpf, us->us);
+				pim_joinprune_send(pim, &rpf, us->us);
 				pim_jp_agg_clear_group(us->us);
 			}
 		}

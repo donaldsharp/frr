@@ -30,7 +30,8 @@ struct pim_jp_agg_group {
 	struct list *sources;
 };
 
-void pim_jp_agg_upstream_verification(struct pim_upstream *up, bool ignore);
+void pim_jp_agg_upstream_verification(struct pim_instance *pim,
+				      struct pim_upstream *up, bool ignore);
 int pim_jp_agg_is_in_list(struct list *group, struct pim_upstream *up);
 
 void pim_jp_agg_group_list_free(struct pim_jp_agg_group *jag);
@@ -45,6 +46,7 @@ void pim_jp_agg_add_group(struct list *group, struct pim_upstream *up,
 void pim_jp_agg_switch_interface(struct pim_rpf *orpf, struct pim_rpf *nrpf,
 				 struct pim_upstream *up);
 
-void pim_jp_agg_single_upstream_send(struct pim_rpf *rpf,
+void pim_jp_agg_single_upstream_send(struct pim_instance *pim,
+				     struct pim_rpf *rpf,
 				     struct pim_upstream *up, bool is_join);
 #endif

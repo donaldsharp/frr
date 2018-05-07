@@ -102,8 +102,9 @@ void igmp_v2_send_query(struct igmp_group *group, int fd, const char *ifname,
 	}
 }
 
-int igmp_v2_recv_report(struct igmp_sock *igmp, struct in_addr from,
-			const char *from_str, char *igmp_msg, int igmp_msg_len)
+int igmp_v2_recv_report(struct pim_instance *pim, struct igmp_sock *igmp,
+			struct in_addr from, const char *from_str,
+			char *igmp_msg, int igmp_msg_len)
 {
 	struct interface *ifp = igmp->interface;
 	struct in_addr group_addr;
@@ -143,13 +144,14 @@ int igmp_v2_recv_report(struct igmp_sock *igmp, struct in_addr from,
 	 * Report                        IS_EX( {} )
 	 * Leave                         TO_IN( {} )
 	 */
-	igmpv3_report_isex(igmp, from, group_addr, 0, NULL, 1);
+	igmpv3_report_isex(pim, igmp, from, group_addr, 0, NULL, 1);
 
 	return 0;
 }
 
-int igmp_v2_recv_leave(struct igmp_sock *igmp, struct in_addr from,
-		       const char *from_str, char *igmp_msg, int igmp_msg_len)
+int igmp_v2_recv_leave(struct pim_instance *pim, struct igmp_sock *igmp,
+		       struct in_addr from, const char *from_str,
+		       char *igmp_msg, int igmp_msg_len)
 {
 	struct interface *ifp = igmp->interface;
 	struct in_addr group_addr;
@@ -189,7 +191,7 @@ int igmp_v2_recv_leave(struct igmp_sock *igmp, struct in_addr from,
 	 * Report                        IS_EX( {} )
 	 * Leave                         TO_IN( {} )
 	 */
-	igmpv3_report_toin(igmp, from, group_addr, 0, NULL);
+	igmpv3_report_toin(pim, igmp, from, group_addr, 0, NULL);
 
 	return 0;
 }

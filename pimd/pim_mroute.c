@@ -144,7 +144,8 @@ static int pim_mroute_set(struct pim_instance *pim, int enable)
 static const char *igmpmsgtype2str[IGMPMSG_WRVIFWHOLE + 1] = {
 	"<unknown_upcall?>", "NOCACHE", "WRONGVIF", "WHOLEPKT", "WRVIFWHOLE"};
 
-static int pim_mroute_msg_nocache(int fd, struct interface *ifp,
+static int pim_mroute_msg_nocache(struct pim_instance *pim,
+				  int fd, struct interface *ifp,
 				  const struct igmpmsg *msg)
 {
 	struct pim_interface *pim_ifp = ifp->info;
@@ -152,7 +153,7 @@ static int pim_mroute_msg_nocache(int fd, struct interface *ifp,
 	struct pim_rpf *rpg;
 	struct prefix_sg sg;
 
-	rpg = RP(pim_ifp->pim, msg->im_dst);
+	rpg = RP(pim, msg->im_dst);
 	/*
 	 * If the incoming interface is unknown OR
 	 * the Interface type is SSM we don't need to
@@ -183,7 +184,7 @@ static int pim_mroute_msg_nocache(int fd, struct interface *ifp,
 	sg.src = msg->im_src;
 	sg.grp = msg->im_dst;
 
-	up = pim_upstream_find_or_add(&sg, ifp, PIM_UPSTREAM_FLAG_MASK_FHR,
+	up = pim_upstream_find_or_add(pim, &sg, ifp, PIM_UPSTREAM_FLAG_MASK_FHR,
 				      __PRETTY_FUNCTION__);
 	if (!up) {
 		if (PIM_DEBUG_MROUTE) {
@@ -204,7 +205,7 @@ static int pim_mroute_msg_nocache(int fd, struct interface *ifp,
 	}
 
 	PIM_UPSTREAM_FLAG_SET_SRC_STREAM(up->flags);
-	pim_upstream_keep_alive_timer_start(up, pim_ifp->pim->keep_alive_time);
+	pim_upstream_keep_alive_timer_start(up, pim->keep_alive_time);
 
 	up->channel_oil->cc.pktcnt++;
 	PIM_UPSTREAM_FLAG_SET_FHR(up->flags);
@@ -212,8 +213,7 @@ static int pim_mroute_msg_nocache(int fd, struct interface *ifp,
 	if (up->channel_oil->oil.mfcc_parent >= MAXVIFS) {
 		int vif_index = 0;
 		vif_index = pim_if_find_vifindex_by_ifindex(
-			pim_ifp->pim,
-			up->rpf.source_nexthop.interface->ifindex);
+			pim, up->rpf.source_nexthop.interface->ifindex);
 		up->channel_oil->oil.mfcc_parent = vif_index;
 	}
 	pim_register_join(up);
@@ -221,7 +221,8 @@ static int pim_mroute_msg_nocache(int fd, struct interface *ifp,
 	return 0;
 }
 
-static int pim_mroute_msg_wholepkt(int fd, struct interface *ifp,
+static int pim_mroute_msg_wholepkt(struct pim_instance *pim,
+				   int fd, struct interface *ifp,
 				   const char *buf)
 {
 	struct pim_interface *pim_ifp;
@@ -238,15 +239,15 @@ static int pim_mroute_msg_wholepkt(int fd, struct interface *ifp,
 	sg.src = ip_hdr->ip_src;
 	sg.grp = ip_hdr->ip_dst;
 
-	up = pim_upstream_find(pim_ifp->pim, &sg);
+	up = pim_upstream_find(pim, &sg);
 	if (!up) {
 		struct prefix_sg star = sg;
 		star.src.s_addr = INADDR_ANY;
 
-		up = pim_upstream_find(pim_ifp->pim, &star);
+		up = pim_upstream_find(pim, &star);
 
 		if (up && PIM_UPSTREAM_FLAG_TEST_SRC_IGMP(up->flags)) {
-			up = pim_upstream_add(pim_ifp->pim, &sg, ifp,
+			up = pim_upstream_add(pim, &sg, ifp,
 					      PIM_UPSTREAM_FLAG_MASK_SRC_LHR,
 					      __PRETTY_FUNCTION__, NULL);
 			if (!up) {
@@ -258,9 +259,9 @@ static int pim_mroute_msg_wholepkt(int fd, struct interface *ifp,
 				return 0;
 			}
 			pim_upstream_keep_alive_timer_start(
-				up, pim_ifp->pim->keep_alive_time);
-			pim_upstream_inherited_olist(pim_ifp->pim, up);
-			pim_upstream_switch(pim_ifp->pim, up,
+				up, pim->keep_alive_time);
+			pim_upstream_inherited_olist(pim, up);
+			pim_upstream_switch(pim, up,
 					    PIM_UPSTREAM_JOINED);
 
 			if (PIM_DEBUG_MROUTE)
@@ -278,7 +279,7 @@ static int pim_mroute_msg_wholepkt(int fd, struct interface *ifp,
 
 	pim_ifp = up->rpf.source_nexthop.interface->info;
 
-	rpg = RP(pim_ifp->pim, sg.grp);
+	rpg = RP(pim, sg.grp);
 
 	if ((pim_rpf_addr_is_inaddr_none(rpg)) || (!pim_ifp)
 	    || (!(PIM_I_am_DR(pim_ifp)))) {
@@ -293,7 +294,7 @@ static int pim_mroute_msg_wholepkt(int fd, struct interface *ifp,
 	 * If we've received a register suppress
 	 */
 	if (!up->t_rs_timer) {
-		if (pim_is_grp_ssm(pim_ifp->pim, sg.grp)) {
+		if (pim_is_grp_ssm(pim, sg.grp)) {
 			if (PIM_DEBUG_PIM_REG)
 				zlog_debug(
 					"%s register forward skipped as group is SSM",
@@ -307,7 +308,8 @@ static int pim_mroute_msg_wholepkt(int fd, struct interface *ifp,
 	return 0;
 }
 
-static int pim_mroute_msg_wrongvif(int fd, struct interface *ifp,
+static int pim_mroute_msg_wrongvif(struct pim_instance *pim,
+				   int fd, struct interface *ifp,
 				   const struct igmpmsg *msg)
 {
 	struct pim_ifchannel *ch;
@@ -401,7 +403,7 @@ static int pim_mroute_msg_wrongvif(int fd, struct interface *ifp,
 		return -5;
 	}
 
-	if (assert_action_a1(ch)) {
+	if (assert_action_a1(pim, ch)) {
 		if (PIM_DEBUG_MROUTE) {
 			zlog_debug(
 				"%s: WRONGVIF (S,G)=%s assert_action_a1 failure on interface %s",
@@ -413,7 +415,8 @@ static int pim_mroute_msg_wrongvif(int fd, struct interface *ifp,
 	return 0;
 }
 
-static int pim_mroute_msg_wrvifwhole(int fd, struct interface *ifp,
+static int pim_mroute_msg_wrvifwhole(struct pim_instance *pim,
+				     int fd, struct interface *ifp,
 				     const char *buf)
 {
 	const struct ip *ip_hdr = (const struct ip *)buf;
@@ -452,11 +455,11 @@ static int pim_mroute_msg_wrvifwhole(int fd, struct interface *ifp,
     }
 #endif
 
-	up = pim_upstream_find(pim_ifp->pim, &sg);
+	up = pim_upstream_find(pim, &sg);
 	if (up) {
 		struct pim_upstream *parent;
 		struct pim_nexthop source;
-		struct pim_rpf *rpf = RP(pim_ifp->pim, sg.grp);
+		struct pim_rpf *rpf = RP(pim, sg.grp);
 		if (!rpf || !rpf->source_nexthop.interface)
 			return 0;
 
@@ -466,7 +469,7 @@ static int pim_mroute_msg_wrvifwhole(int fd, struct interface *ifp,
 		 * tree, let's check and if so we can safely drop
 		 * it.
 		 */
-		parent = pim_upstream_find(pim_ifp->pim, &star_g);
+		parent = pim_upstream_find(pim, &star_g);
 		if (parent && parent->rpf.source_nexthop.interface == ifp)
 			return 0;
 
@@ -479,7 +482,7 @@ static int pim_mroute_msg_wrvifwhole(int fd, struct interface *ifp,
 		 */
 		if (!PIM_UPSTREAM_FLAG_TEST_FHR(up->flags)) {
 			// No if channel, but upstream we are at the RP.
-			if (pim_nexthop_lookup(pim_ifp->pim, &source,
+			if (pim_nexthop_lookup(pim, &source,
 					       up->upstream_register, 0)
 			    == 0) {
 				pim_register_stop_send(source.interface, &sg,
@@ -489,15 +492,15 @@ static int pim_mroute_msg_wrvifwhole(int fd, struct interface *ifp,
 			}
 			if (!up->channel_oil)
 				up->channel_oil = pim_channel_oil_add(
-					pim_ifp->pim, &sg,
+					pim, &sg,
 					pim_ifp->mroute_vif_index);
-			pim_upstream_inherited_olist(pim_ifp->pim, up);
+			pim_upstream_inherited_olist(pim, up);
 			if (!up->channel_oil->installed)
 				pim_mroute_add(up->channel_oil,
 					       __PRETTY_FUNCTION__);
 		} else {
-			if (I_am_RP(pim_ifp->pim, up->sg.grp)) {
-				if (pim_nexthop_lookup(pim_ifp->pim, &source,
+			if (I_am_RP(pim, up->sg.grp)) {
+				if (pim_nexthop_lookup(pim, &source,
 						       up->upstream_register, 0)
 				    == 0)
 					pim_register_stop_send(
@@ -507,19 +510,19 @@ static int pim_mroute_msg_wrvifwhole(int fd, struct interface *ifp,
 				up->sptbit = PIM_UPSTREAM_SPTBIT_TRUE;
 			}
 			pim_upstream_keep_alive_timer_start(
-				up, pim_ifp->pim->keep_alive_time);
-			pim_upstream_inherited_olist(pim_ifp->pim, up);
-			pim_mroute_msg_wholepkt(fd, ifp, buf);
+				up, pim->keep_alive_time);
+			pim_upstream_inherited_olist(pim, up);
+			pim_mroute_msg_wholepkt(pim, fd, ifp, buf);
 		}
 		return 0;
 	}
 
 	pim_ifp = ifp->info;
-	oil = pim_channel_oil_add(pim_ifp->pim, &sg, pim_ifp->mroute_vif_index);
+	oil = pim_channel_oil_add(pim, &sg, pim_ifp->mroute_vif_index);
 	if (!oil->installed)
 		pim_mroute_add(oil, __PRETTY_FUNCTION__);
 	if (pim_if_connected_to_source(ifp, sg.src)) {
-		up = pim_upstream_add(pim_ifp->pim, &sg, ifp,
+		up = pim_upstream_add(pim, &sg, ifp,
 				      PIM_UPSTREAM_FLAG_MASK_FHR,
 				      __PRETTY_FUNCTION__, NULL);
 		if (!up) {
@@ -531,14 +534,14 @@ static int pim_mroute_msg_wrvifwhole(int fd, struct interface *ifp,
 		}
 		PIM_UPSTREAM_FLAG_SET_SRC_STREAM(up->flags);
 		pim_upstream_keep_alive_timer_start(
-			up, pim_ifp->pim->keep_alive_time);
+			up, pim->keep_alive_time);
 		up->channel_oil = oil;
 		up->channel_oil->cc.pktcnt++;
 		pim_register_join(up);
-		pim_upstream_inherited_olist(pim_ifp->pim, up);
+		pim_upstream_inherited_olist(pim, up);
 
 		// Send the packet to the RP
-		pim_mroute_msg_wholepkt(fd, ifp, buf);
+		pim_mroute_msg_wholepkt(pim, fd, ifp, buf);
 	}
 
 	return 0;
@@ -590,7 +593,7 @@ static int pim_mroute_msg(struct pim_instance *pim, const char *buf,
 				igmp, ip_src_str, ip_dst_str);
 		}
 		if (igmp)
-			pim_igmp_packet(igmp, (char *)buf, buf_size);
+			pim_igmp_packet(pim, igmp, (char *)buf, buf_size);
 
 	} else if (ip_hdr->ip_p) {
 		if (PIM_DEBUG_MROUTE_DETAIL) {
@@ -627,19 +630,22 @@ static int pim_mroute_msg(struct pim_instance *pim, const char *buf,
 
 		switch (msg->im_msgtype) {
 		case IGMPMSG_WRONGVIF:
-			return pim_mroute_msg_wrongvif(pim->mroute_socket, ifp,
+			return pim_mroute_msg_wrongvif(pim,
+						       pim->mroute_socket, ifp,
 						       msg);
 			break;
 		case IGMPMSG_NOCACHE:
-			return pim_mroute_msg_nocache(pim->mroute_socket, ifp,
+			return pim_mroute_msg_nocache(pim,
+						      pim->mroute_socket, ifp,
 						      msg);
 			break;
 		case IGMPMSG_WHOLEPKT:
-			return pim_mroute_msg_wholepkt(pim->mroute_socket, ifp,
+			return pim_mroute_msg_wholepkt(pim,
+						       pim->mroute_socket, ifp,
 						       (const char *)msg);
 			break;
 		case IGMPMSG_WRVIFWHOLE:
-			return pim_mroute_msg_wrvifwhole(
+			return pim_mroute_msg_wrvifwhole(pim,
 				pim->mroute_socket, ifp, (const char *)msg);
 			break;
 		default:
@@ -778,7 +784,8 @@ int pim_mroute_socket_disable(struct pim_instance *pim)
   would be used for multicast forwarding, a corresponding multicast
   interface must be added to the kernel.
  */
-int pim_mroute_add_vif(struct interface *ifp, struct in_addr ifaddr,
+int pim_mroute_add_vif(struct pim_instance *pim,
+		       struct interface *ifp, struct in_addr ifaddr,
 		       unsigned char flags)
 {
 	struct pim_interface *pim_ifp = ifp->info;
@@ -788,7 +795,7 @@ int pim_mroute_add_vif(struct interface *ifp, struct in_addr ifaddr,
 	if (PIM_DEBUG_MROUTE)
 		zlog_debug("%s: Add Vif %d (%s[%s])", __PRETTY_FUNCTION__,
 			   pim_ifp->mroute_vif_index, ifp->name,
-			   pim_ifp->pim->vrf->name);
+			   pim->vrf->name);
 
 	memset(&vc, 0, sizeof(vc));
 	vc.vifc_vifi = pim_ifp->mroute_vif_index;
@@ -814,7 +821,7 @@ int pim_mroute_add_vif(struct interface *ifp, struct in_addr ifaddr,
 	}
 #endif
 
-	err = setsockopt(pim_ifp->pim->mroute_socket, IPPROTO_IP, MRT_ADD_VIF,
+	err = setsockopt(pim->mroute_socket, IPPROTO_IP, MRT_ADD_VIF,
 			 (void *)&vc, sizeof(vc));
 	if (err) {
 		char ifaddr_str[INET_ADDRSTRLEN];
@@ -824,7 +831,7 @@ int pim_mroute_add_vif(struct interface *ifp, struct in_addr ifaddr,
 
 		zlog_warn(
 			"%s: failure: setsockopt(fd=%d,IPPROTO_IP,MRT_ADD_VIF,vif_index=%d,ifaddr=%s,flag=%d): errno=%d: %s",
-			__PRETTY_FUNCTION__, pim_ifp->pim->mroute_socket,
+			__PRETTY_FUNCTION__, pim->mroute_socket,
 			ifp->ifindex, ifaddr_str, flags, errno,
 			safe_strerror(errno));
 		return -2;
@@ -833,7 +840,7 @@ int pim_mroute_add_vif(struct interface *ifp, struct in_addr ifaddr,
 	return 0;
 }
 
-int pim_mroute_del_vif(struct interface *ifp)
+int pim_mroute_del_vif(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp = ifp->info;
 	struct vifctl vc;
@@ -842,18 +849,18 @@ int pim_mroute_del_vif(struct interface *ifp)
 	if (PIM_DEBUG_MROUTE)
 		zlog_debug("%s: Del Vif %d (%s[%s])", __PRETTY_FUNCTION__,
 			   pim_ifp->mroute_vif_index, ifp->name,
-			   pim_ifp->pim->vrf->name);
+			   pim->vrf->name);
 
 	memset(&vc, 0, sizeof(vc));
 	vc.vifc_vifi = pim_ifp->mroute_vif_index;
 
-	err = setsockopt(pim_ifp->pim->mroute_socket, IPPROTO_IP, MRT_DEL_VIF,
+	err = setsockopt(pim->mroute_socket, IPPROTO_IP, MRT_DEL_VIF,
 			 (void *)&vc, sizeof(vc));
 	if (err) {
 		zlog_warn(
 			"%s %s: failure: setsockopt(fd=%d,IPPROTO_IP,MRT_DEL_VIF,vif_index=%d): errno=%d: %s",
 			__FILE__, __PRETTY_FUNCTION__,
-			pim_ifp->pim->mroute_socket, pim_ifp->mroute_vif_index,
+			pim->mroute_socket, pim_ifp->mroute_vif_index,
 			errno, safe_strerror(errno));
 		return -2;
 	}

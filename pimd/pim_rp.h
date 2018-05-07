@@ -52,7 +52,8 @@ int pim_rp_config_write(struct pim_instance *pim, struct vty *vty,
 void pim_rp_setup(struct pim_instance *pim);
 
 int pim_rp_i_am_rp(struct pim_instance *pim, struct in_addr group);
-void pim_rp_check_on_if_add(struct pim_interface *pim_ifp);
+void pim_rp_check_on_if_add(struct pim_instance *pim,
+			    struct pim_interface *pim_ifp);
 void pim_i_am_rp_re_evaluate(struct pim_instance *pim);
 
 int pim_rp_check_is_my_ip_address(struct pim_instance *pim,

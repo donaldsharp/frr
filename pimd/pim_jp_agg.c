@@ -40,6 +40,7 @@ void pim_jp_agg_group_list_free(struct pim_jp_agg_group *jag)
 static void pim_jp_agg_src_free(struct pim_jp_sources *js)
 {
 	struct pim_upstream *up = js->up;
+	struct pim_instance *pim;
 
 	/*
 	 * When we are being called here, we know
@@ -48,8 +49,11 @@ static void pim_jp_agg_src_free(struct pim_jp_sources *js)
 	 * pick this shit back up when the
 	 * nbr comes back alive
 	 */
-	if (up)
-		join_timer_start(js->up);
+	if (up) {
+		pim = pim_get_pim_instance(
+			up->rpf.source_nexthop.interface->vrf_id);
+		join_timer_start(pim, js->up);
+	}
 	XFREE(MTYPE_PIM_JP_AGG_SOURCE, js);
 }
 
@@ -209,12 +213,12 @@ int pim_jp_agg_is_in_list(struct list *group, struct pim_upstream *up)
  * can be safely compiled out in real
  * builds
  */
-void pim_jp_agg_upstream_verification(struct pim_upstream *up, bool ignore)
+void pim_jp_agg_upstream_verification(struct pim_instance *pim,
+				      struct pim_upstream *up, bool ignore)
 {
 #ifdef PIM_JP_AGG_DEBUG
 	struct interface *ifp;
 	struct pim_interface *pim_ifp = up->rpf.source_nexthop.interface->info;
-	struct pim_instance *pim = pim_ifp->pim;
 
 	FOR_ALL_INTERFACES (pim->vrf, ifp) {
 		pim_ifp = ifp->info;
@@ -311,7 +315,8 @@ void pim_jp_agg_switch_interface(struct pim_rpf *orpf, struct pim_rpf *nrpf,
 }
 
 
-void pim_jp_agg_single_upstream_send(struct pim_rpf *rpf,
+void pim_jp_agg_single_upstream_send(struct pim_instance *pim,
+				     struct pim_rpf *rpf,
 				     struct pim_upstream *up, bool is_join)
 {
 	static struct list *groups = NULL;
@@ -342,5 +347,5 @@ void pim_jp_agg_single_upstream_send(struct pim_rpf *rpf,
 	js.up = up;
 	js.is_join = is_join;
 
-	pim_joinprune_send(rpf, groups);
+	pim_joinprune_send(pim, rpf, groups);
 }

@@ -69,7 +69,9 @@ static int pim_zebra_if_add(int command, struct zclient *zclient,
 			    zebra_size_t length, vrf_id_t vrf_id)
 {
 	struct interface *ifp;
+	struct pim_instance *pim;
 
+	pim = pim_get_pim_instance(vrf_id);
 	/*
 	  zebra api adds/dels interfaces using the same call
 	  interface_add_read below, see comments in lib/zclient.c
@@ -87,7 +89,7 @@ static int pim_zebra_if_add(int command, struct zclient *zclient,
 	}
 
 	if (if_is_operative(ifp))
-		pim_if_addr_add_all(ifp);
+		pim_if_addr_add_all(pim, ifp);
 
 	/*
 	 * If we are a vrf device that is up, open up the pim_socket for
@@ -99,11 +101,11 @@ static int pim_zebra_if_add(int command, struct zclient *zclient,
 		struct pim_interface *pim_ifp;
 
 		if (!ifp->info) {
-			pim_ifp = pim_if_new(ifp, 0, 0);
+			pim_ifp = pim_if_new(pim, ifp, 0, 0);
 			ifp->info = pim_ifp;
 		}
 
-		pim_sock_add(ifp);
+		pim_sock_add(pim, ifp);
 	}
 
 	return 0;
@@ -113,6 +115,7 @@ static int pim_zebra_if_del(int command, struct zclient *zclient,
 			    zebra_size_t length, vrf_id_t vrf_id)
 {
 	struct interface *ifp;
+	struct pim_instance *pim;
 
 	/*
 	  zebra api adds/dels interfaces using the same call
@@ -128,6 +131,7 @@ static int pim_zebra_if_del(int command, struct zclient *zclient,
 	if (!ifp)
 		return 0;
 
+	pim = pim_get_pim_instance(vrf_id);
 	if (PIM_DEBUG_ZEBRA) {
 		zlog_debug(
 			"%s: %s index %d(%u) flags %ld metric %d mtu %d operative %d",
@@ -137,7 +141,7 @@ static int pim_zebra_if_del(int command, struct zclient *zclient,
 	}
 
 	if (!if_is_operative(ifp))
-		pim_if_addr_del_all(ifp);
+		pim_if_addr_del_all(pim, ifp);
 
 	return 0;
 }
@@ -145,6 +149,7 @@ static int pim_zebra_if_del(int command, struct zclient *zclient,
 static int pim_zebra_if_state_up(int command, struct zclient *zclient,
 				 zebra_size_t length, vrf_id_t vrf_id)
 {
+	struct pim_instance *pim;
 	struct interface *ifp;
 	uint32_t table_id;
 
@@ -164,12 +169,13 @@ static int pim_zebra_if_state_up(int command, struct zclient *zclient,
 			if_is_operative(ifp));
 	}
 
+	pim = pim_get_pim_instance(vrf_id);
 	if (if_is_operative(ifp)) {
 		/*
 		  pim_if_addr_add_all() suffices for bringing up both IGMP and
 		  PIM
 		*/
-		pim_if_addr_add_all(ifp);
+		pim_if_addr_add_all(pim, ifp);
 	}
 
 	/*
@@ -202,11 +208,13 @@ static int pim_zebra_if_state_down(int command, struct zclient *zclient,
 				   zebra_size_t length, vrf_id_t vrf_id)
 {
 	struct interface *ifp;
+	struct pim_instance *pim;
 
+	pim = pim_get_pim_instance(vrf_id);
 	/*
-	  zebra api notifies interface up/down events by using the same call
-	  zebra_interface_state_read below, see comments in lib/zclient.c
-	*/
+	 * zebra api notifies interface up/down events by using the same call
+	 * zebra_interface_state_read below, see comments in lib/zclient.c
+	 */
 	ifp = zebra_interface_state_read(zclient->ibuf, vrf_id);
 	if (!ifp)
 		return 0;
@@ -220,12 +228,12 @@ static int pim_zebra_if_state_down(int command, struct zclient *zclient,
 	}
 
 	if (!if_is_operative(ifp)) {
-		pim_ifchannel_delete_all(ifp);
+		pim_ifchannel_delete_all(pim, ifp);
 		/*
 		  pim_if_addr_del_all() suffices for shutting down IGMP,
 		  but not for shutting down PIM
 		*/
-		pim_if_addr_del_all(ifp);
+		pim_if_addr_del_all(pim, ifp);
 
 		/*
 		  pim_sock_delete() closes the socket, stops read and timer
@@ -233,12 +241,12 @@ static int pim_zebra_if_state_down(int command, struct zclient *zclient,
 		  and kills all neighbors.
 		*/
 		if (ifp->info) {
-			pim_sock_delete(ifp, "link down");
+			pim_sock_delete(pim, ifp, "link down");
 		}
 	}
 
 	if (ifp->info)
-		pim_if_del_vif(ifp);
+		pim_if_del_vif(pim, ifp);
 
 	return 0;
 }
@@ -274,7 +282,9 @@ static int pim_zebra_if_address_add(int command, struct zclient *zclient,
 	struct connected *c;
 	struct prefix *p;
 	struct pim_interface *pim_ifp;
+	struct pim_instance *pim;
 
+	pim = pim_get_pim_instance(vrf_id);
 	/*
 	  zebra api notifies address adds/dels events by using the same call
 	  interface_add_read below, see comments in lib/zclient.c
@@ -326,9 +336,9 @@ static int pim_zebra_if_address_add(int command, struct zclient *zclient,
 		}
 	}
 
-	pim_if_addr_add(c);
+	pim_if_addr_add(pim, c);
 	if (pim_ifp)
-		pim_rp_check_on_if_add(pim_ifp);
+		pim_rp_check_on_if_add(pim, pim_ifp);
 
 	if (if_is_loopback(c->ifp)) {
 		struct vrf *vrf = vrf_lookup_by_id(VRF_DEFAULT);
@@ -336,7 +346,7 @@ static int pim_zebra_if_address_add(int command, struct zclient *zclient,
 
 		FOR_ALL_INTERFACES (vrf, ifp) {
 			if (!if_is_loopback(ifp) && if_is_operative(ifp))
-				pim_if_addr_add_all(ifp);
+				pim_if_addr_add_all(pim, ifp);
 		}
 	}
 
@@ -385,7 +395,7 @@ static int pim_zebra_if_address_del(int command, struct zclient *client,
 #endif
 		}
 
-		pim_if_addr_del(c, 0);
+		pim_if_addr_del(pim, c, 0);
 		pim_rp_setup(pim);
 		pim_i_am_rp_re_evaluate(pim);
 	}
@@ -466,7 +476,7 @@ static void scan_upstream_rpf_cache(struct pim_instance *pim)
 				 */
 				pim_jp_agg_switch_interface(&old, &up->rpf, up);
 
-				pim_upstream_join_timer_restart(up, &old);
+				pim_upstream_join_timer_restart(pim, up, &old);
 			} /* up->join_state == PIM_UPSTREAM_JOINED */
 
 			/* FIXME can join_desired actually be changed by
@@ -489,7 +499,7 @@ static void scan_upstream_rpf_cache(struct pim_instance *pim)
 
 				rpf.source_nexthop.interface = ifp;
 				rpf.rpf_addr.u.prefix4 = us->address;
-				pim_joinprune_send(&rpf, us->us);
+				pim_joinprune_send(pim, &rpf, us->us);
 				pim_jp_agg_clear_group(us->us);
 			}
 		}
@@ -763,7 +773,7 @@ void igmp_anysource_forward_start(struct pim_instance *pim,
 	zassert(group->group_filtermode_isexcl);
 	zassert(listcount(group->group_source_list) < 1);
 
-	source = source_new(group, src_addr);
+	source = source_new(pim, group, src_addr);
 	if (!source) {
 		zlog_warn("%s: Failure to create * source",
 			  __PRETTY_FUNCTION__);
@@ -773,14 +783,15 @@ void igmp_anysource_forward_start(struct pim_instance *pim,
 	igmp_source_forward_start(pim, source);
 }
 
-void igmp_anysource_forward_stop(struct igmp_group *group)
+void igmp_anysource_forward_stop(struct pim_instance *pim,
+				 struct igmp_group *group)
 {
 	struct igmp_source *source;
 	struct in_addr star = {.s_addr = 0};
 
 	source = igmp_find_source_by_addr(group, star);
 	if (source)
-		igmp_source_forward_stop(source);
+		igmp_source_forward_stop(pim, source);
 }
 
 static void igmp_source_forward_reevaluate_one(struct pim_instance *pim,
@@ -808,7 +819,7 @@ static void igmp_source_forward_reevaluate_one(struct pim_instance *pim,
 					"local membership del for %s as G is now SSM",
 					pim_str_sg_dump(&sg));
 			pim_ifchannel_local_membership_del(
-				group->group_igmp_sock->interface, &sg);
+				pim, group->group_igmp_sock->interface, &sg);
 		}
 	} else {
 		/* If ASM group add local membership */
@@ -819,7 +830,7 @@ static void igmp_source_forward_reevaluate_one(struct pim_instance *pim,
 					"local membership add for %s as G is now ASM",
 					pim_str_sg_dump(&sg));
 			pim_ifchannel_local_membership_add(
-				group->group_igmp_sock->interface, &sg);
+				pim, group->group_igmp_sock->interface, &sg);
 		}
 	}
 }
@@ -1036,7 +1047,7 @@ void igmp_source_forward_start(struct pim_instance *pim,
 	  per-interface (S,G) state.
 	 */
 	if (!pim_ifchannel_local_membership_add(
-		    group->group_igmp_sock->interface, &sg)) {
+		    pim, group->group_igmp_sock->interface, &sg)) {
 		if (PIM_DEBUG_MROUTE)
 			zlog_warn("%s: Failure to add local membership for %s",
 				  __PRETTY_FUNCTION__, pim_str_sg_dump(&sg));
@@ -1050,7 +1061,8 @@ void igmp_source_forward_start(struct pim_instance *pim,
   igmp_source_forward_stop: stop fowarding, but keep the source
   igmp_source_delete:       stop fowarding, and delete the source
  */
-void igmp_source_forward_stop(struct igmp_source *source)
+void igmp_source_forward_stop(struct pim_instance *pim,
+			      struct igmp_source *source)
 {
 	struct igmp_group *group;
 	struct prefix_sg sg;
@@ -1103,22 +1115,17 @@ void igmp_source_forward_stop(struct igmp_source *source)
 	  Feed IGMPv3-gathered local membership information into PIM
 	  per-interface (S,G) state.
 	 */
-	pim_ifchannel_local_membership_del(group->group_igmp_sock->interface,
-					   &sg);
+	pim_ifchannel_local_membership_del(
+		pim, group->group_igmp_sock->interface, &sg);
 
 	IGMP_SOURCE_DONT_FORWARDING(source->source_flags);
 }
 
-void pim_forward_start(struct pim_ifchannel *ch)
+void pim_forward_start(struct pim_instance *pim, struct pim_ifchannel *ch)
 {
 	struct pim_upstream *up = ch->upstream;
 	uint32_t mask = PIM_OIF_FLAG_PROTO_PIM;
 	int input_iface_vif_index = 0;
-	struct pim_instance *pim;
-	struct pim_interface *pim_ifp;
-
-	pim_ifp = ch->interface->info;
-	pim = pim_ifp->pim;
 
 	if (PIM_DEBUG_PIM_TRACE) {
 		char source_str[INET_ADDRSTRLEN];

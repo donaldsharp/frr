@@ -608,16 +608,16 @@ static int mtrace_send_response(struct pim_instance *pim,
 				  mtracep->rsp_addr, mtracep->grp_addr);
 }
 
-int igmp_mtrace_recv_qry_req(struct igmp_sock *igmp, struct ip *ip_hdr,
-			     struct in_addr from, const char *from_str,
-			     char *igmp_msg, int igmp_msg_len)
+int igmp_mtrace_recv_qry_req(struct pim_instance *pim, struct igmp_sock *igmp,
+			     struct ip *ip_hdr, struct in_addr from,
+			     const char *from_str, char *igmp_msg,
+			     int igmp_msg_len)
 {
 	static uint32_t qry_id, qry_src;
 	char mtrace_buf[MTRACE_HDR_SIZE + MTRACE_MAX_HOPS * MTRACE_RSP_SIZE];
 	struct interface *ifp;
 	struct interface *out_ifp;
 	struct pim_interface *pim_ifp;
-	struct pim_instance *pim;
 	struct igmp_mtrace *mtracep;
 	struct igmp_mtrace_rsp *rspp;
 	struct in_addr nh_addr;
@@ -632,7 +632,6 @@ int igmp_mtrace_recv_qry_req(struct igmp_sock *igmp, struct ip *ip_hdr,
 
 	ifp = igmp->interface;
 	pim_ifp = ifp->info;
-	pim = pim_ifp->pim;
 
 	/*
 	 * 6. Router Behaviour
@@ -745,8 +744,7 @@ int igmp_mtrace_recv_qry_req(struct igmp_sock *igmp, struct ip *ip_hdr,
 		/* ...there was no room... */
 		mtracep->rsp[MTRACE_MAX_HOPS - 1].fwd_code =
 			MTRACE_FWD_CODE_NO_SPACE;
-		return mtrace_send_response(pim_ifp->pim, mtracep,
-					    igmp_msg_len);
+		return mtrace_send_response(pim, mtracep, igmp_msg_len);
 	}
 
 	/* ...insert new response block... */
@@ -846,21 +844,20 @@ int igmp_mtrace_recv_qry_req(struct igmp_sock *igmp, struct ip *ip_hdr,
 }
 
 /* 6.3. Traceroute responses */
-int igmp_mtrace_recv_response(struct igmp_sock *igmp, struct ip *ip_hdr,
-			      struct in_addr from, const char *from_str,
-			      char *igmp_msg, int igmp_msg_len)
+int igmp_mtrace_recv_response(struct pim_instance *pim, struct igmp_sock *igmp,
+			      struct ip *ip_hdr, struct in_addr from,
+			      const char *from_str, char *igmp_msg,
+			      int igmp_msg_len)
 {
 	static uint32_t qry_id, rsp_dst;
 	struct interface *ifp;
 	struct pim_interface *pim_ifp;
-	struct pim_instance *pim;
 	struct igmp_mtrace *mtracep;
 	uint16_t recv_checksum;
 	uint16_t checksum;
 
 	ifp = igmp->interface;
 	pim_ifp = ifp->info;
-	pim = pim_ifp->pim;
 
 	mtracep = (struct igmp_mtrace *)igmp_msg;
 

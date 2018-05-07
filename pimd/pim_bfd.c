@@ -220,6 +220,7 @@ static int pim_bfd_interface_dest_update(int command, struct zclient *zclient,
 	struct listnode *neigh_node = NULL;
 	struct listnode *neigh_nextnode = NULL;
 	struct pim_neighbor *neigh = NULL;
+	struct pim_instance *pim;
 
 	ifp = bfd_get_peer_info(zclient->ibuf, &p, NULL, &status, vrf_id);
 
@@ -229,6 +230,8 @@ static int pim_bfd_interface_dest_update(int command, struct zclient *zclient,
 	pim_ifp = ifp->info;
 	if (!pim_ifp)
 		return 0;
+
+	pim = pim_get_pim_instance(ifp->vrf_id);
 
 	if (!pim_ifp->bfd_info) {
 		if (PIM_DEBUG_PIM_TRACE)
@@ -276,7 +279,7 @@ static int pim_bfd_interface_dest_update(int command, struct zclient *zclient,
 		if ((status == BFD_STATUS_DOWN)
 		    && (old_status == BFD_STATUS_UP)) {
 			snprintf(msg, sizeof(msg), "BFD Session Expired");
-			pim_neighbor_delete(ifp, neigh, msg);
+			pim_neighbor_delete(pim, ifp, neigh, msg);
 		}
 	}
 	return 0;

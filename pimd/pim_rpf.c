@@ -273,8 +273,8 @@ enum pim_rpf_result pim_rpf_update(struct pim_instance *pim,
 		}
 
 		pim_upstream_update_join_desired(pim, up);
-		pim_upstream_update_could_assert(up);
-		pim_upstream_update_my_assert_metric(up);
+		pim_upstream_update_could_assert(pim, up);
+		pim_upstream_update_my_assert_metric(pim, up);
 	}
 
 	/* detect change in RPF_interface(S) */
@@ -290,7 +290,7 @@ enum pim_rpf_result pim_rpf_update(struct pim_instance *pim,
 		}
 
 		pim_upstream_rpf_interface_changed(
-			up, saved.source_nexthop.interface);
+			pim, up, saved.source_nexthop.interface);
 	}
 
 	/* detect change in RPF'(S,G) */

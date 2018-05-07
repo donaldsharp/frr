@@ -66,7 +66,8 @@ void pim_if_terminate(struct pim_instance *pim)
 	return;
 }
 
-static void *if_list_clean(struct pim_interface *pim_ifp)
+static void *if_list_clean(struct pim_instance *pim,
+			   struct pim_interface *pim_ifp)
 {
 	struct pim_ifchannel *ch;
 
@@ -88,7 +89,7 @@ static void *if_list_clean(struct pim_interface *pim_ifp)
 	while (!RB_EMPTY(pim_ifchannel_rb, &pim_ifp->ifchannel_rb)) {
 		ch = RB_ROOT(pim_ifchannel_rb, &pim_ifp->ifchannel_rb);
 
-		pim_ifchannel_delete(ch);
+		pim_ifchannel_delete(pim, ch);
 	}
 
 	XFREE(MTYPE_PIM_INTERFACE, pim_ifp);
@@ -128,7 +129,8 @@ static int pim_sec_addr_comp(const void *p1, const void *p2)
 	return 0;
 }
 
-struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
+struct pim_interface *pim_if_new(struct pim_instance *pim,
+				 struct interface *ifp, int igmp, int usepim)
 {
 	struct pim_interface *pim_ifp;
 
@@ -142,7 +144,6 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
 	}
 
 	pim_ifp->options = 0;
-	pim_ifp->pim = pim_get_pim_instance(ifp->vrf_id);
 	pim_ifp->mroute_vif_index = -1;
 
 	pim_ifp->igmp_version = IGMP_DEFAULT_VERSION;
@@ -162,7 +163,7 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
 	zassert(pim_ifp->igmp_query_max_response_time_dsec
 		< pim_ifp->igmp_default_query_interval);
 
-	if (pim)
+	if (usepim)
 		PIM_IF_DO_PIM(pim_ifp->options);
 	if (igmp)
 		PIM_IF_DO_IGMP(pim_ifp->options);
@@ -180,7 +181,7 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
 	if (!pim_ifp->igmp_socket_list) {
 		zlog_err("%s: failure: igmp_socket_list=list_new()",
 			 __PRETTY_FUNCTION__);
-		return if_list_clean(pim_ifp);
+		return if_list_clean(pim, pim_ifp);
 	}
 	pim_ifp->igmp_socket_list->del = (void (*)(void *))igmp_sock_free;
 
@@ -189,7 +190,7 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
 	if (!pim_ifp->pim_neighbor_list) {
 		zlog_err("%s: failure: pim_neighbor_list=list_new()",
 			 __PRETTY_FUNCTION__);
-		return if_list_clean(pim_ifp);
+		return if_list_clean(pim, pim_ifp);
 	}
 	pim_ifp->pim_neighbor_list->del = (void (*)(void *))pim_neighbor_free;
 
@@ -197,7 +198,7 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
 	if (!pim_ifp->upstream_switch_list) {
 		zlog_err("%s: failure: upstream_switch_list=list_new()",
 			 __PRETTY_FUNCTION__);
-		return if_list_clean(pim_ifp);
+		return if_list_clean(pim, pim_ifp);
 	}
 	pim_ifp->upstream_switch_list->del =
 		(void (*)(void *))pim_jp_agg_group_list_free;
@@ -207,7 +208,7 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
 	if (!pim_ifp->sec_addr_list) {
 		zlog_err("%s: failure: secondary addresslist",
 			 __PRETTY_FUNCTION__);
-		return if_list_clean(pim_ifp);
+		return if_list_clean(pim, pim_ifp);
 	}
 	pim_ifp->sec_addr_list->del = (void (*)(void *))pim_sec_addr_free;
 	pim_ifp->sec_addr_list->cmp =
@@ -219,12 +220,12 @@ struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim)
 
 	pim_sock_reset(ifp);
 
-	pim_if_add_vif(ifp);
+	pim_if_add_vif(pim, ifp);
 
 	return pim_ifp;
 }
 
-void pim_if_delete(struct interface *ifp)
+void pim_if_delete(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 	struct pim_ifchannel *ch;
@@ -237,12 +238,13 @@ void pim_if_delete(struct interface *ifp)
 		pim_if_igmp_join_del_all(ifp);
 	}
 
-	pim_ifchannel_delete_all(ifp);
-	igmp_sock_delete_all(ifp);
+	pim_ifchannel_delete_all(pim, ifp);
+	igmp_sock_delete_all(pim, ifp);
 
-	pim_neighbor_delete_all(ifp, "Interface removed from configuration");
+	pim_neighbor_delete_all(pim, ifp,
+				"Interface removed from configuration");
 
-	pim_if_del_vif(ifp);
+	pim_if_del_vif(pim, ifp);
 
 	list_delete_and_null(&pim_ifp->igmp_socket_list);
 	list_delete_and_null(&pim_ifp->pim_neighbor_list);
@@ -255,7 +257,7 @@ void pim_if_delete(struct interface *ifp)
 	while (!RB_EMPTY(pim_ifchannel_rb, &pim_ifp->ifchannel_rb)) {
 		ch = RB_ROOT(pim_ifchannel_rb, &pim_ifp->ifchannel_rb);
 
-		pim_ifchannel_delete(ch);
+		pim_ifchannel_delete(pim, ch);
 	}
 
 	XFREE(MTYPE_PIM_INTERFACE, pim_ifp);
@@ -263,7 +265,7 @@ void pim_if_delete(struct interface *ifp)
 	ifp->info = NULL;
 }
 
-void pim_if_update_could_assert(struct interface *ifp)
+void pim_if_update_could_assert(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 	struct pim_ifchannel *ch;
@@ -272,11 +274,12 @@ void pim_if_update_could_assert(struct interface *ifp)
 	zassert(pim_ifp);
 
 	RB_FOREACH (ch, pim_ifchannel_rb, &pim_ifp->ifchannel_rb) {
-		pim_ifchannel_update_could_assert(ch);
+		pim_ifchannel_update_could_assert(pim, ch);
 	}
 }
 
-static void pim_if_update_my_assert_metric(struct interface *ifp)
+static void pim_if_update_my_assert_metric(struct pim_instance *pim,
+					   struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 	struct pim_ifchannel *ch;
@@ -285,24 +288,24 @@ static void pim_if_update_my_assert_metric(struct interface *ifp)
 	zassert(pim_ifp);
 
 	RB_FOREACH (ch, pim_ifchannel_rb, &pim_ifp->ifchannel_rb) {
-		pim_ifchannel_update_my_assert_metric(ch);
+		pim_ifchannel_update_my_assert_metric(pim, ch);
 	}
 }
 
-static void pim_addr_change(struct interface *ifp)
+static void pim_addr_change(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 
 	pim_ifp = ifp->info;
 	zassert(pim_ifp);
 
-	pim_if_dr_election(ifp); /* router's own DR Priority (addr) changes --
-				    Done TODO T30 */
-	pim_if_update_join_desired(pim_ifp); /* depends on DR */
-	pim_if_update_could_assert(ifp);     /* depends on DR */
-	pim_if_update_my_assert_metric(ifp); /* depends on could_assert */
-	pim_if_update_assert_tracking_desired(
-		ifp); /* depends on DR, join_desired */
+	/* router's own DR Priority (addr) changes */
+	pim_if_dr_election(pim, ifp);
+	pim_if_update_join_desired(pim, pim_ifp); /* depends on DR */
+	pim_if_update_could_assert(pim, ifp);     /* depends on DR */
+	pim_if_update_my_assert_metric(pim, ifp); /* depends on could_assert */
+	/* depends on DR, join desired */
+	pim_if_update_assert_tracking_desired(pim, ifp);
 
 	/*
 	  RFC 4601: 4.3.1.  Sending Hello Messages
@@ -324,7 +327,7 @@ static void pim_addr_change(struct interface *ifp)
 	pim_ifp->pim_ifstat_hello_sent = 0; /* reset hello counter */
 	if (pim_ifp->pim_sock_fd < 0)
 		return;
-	pim_hello_restart_now(ifp); /* send hello and restart timer */
+	pim_hello_restart_now(pim, ifp); /* send hello and restart timer */
 }
 
 static int detect_primary_address_change(struct interface *ifp,
@@ -480,7 +483,8 @@ static int detect_secondary_address_change(struct interface *ifp,
 	return changed;
 }
 
-static void detect_address_change(struct interface *ifp, int force_prim_as_any,
+static void detect_address_change(struct pim_instance *pim,
+				  struct interface *ifp, int force_prim_as_any,
 				  const char *caller)
 {
 	int changed = 0;
@@ -504,14 +508,15 @@ static void detect_address_change(struct interface *ifp, int force_prim_as_any,
 			return;
 		}
 
-		pim_addr_change(ifp);
+		pim_addr_change(pim, ifp);
 	}
 
 	/* XXX: if we have unnumbered interfaces we need to run detect address
 	 * address change on all of them when the lo address changes */
 }
 
-int pim_update_source_set(struct interface *ifp, struct in_addr source)
+int pim_update_source_set(struct pim_instance *pim, struct interface *ifp,
+			  struct in_addr source)
 {
 	struct pim_interface *pim_ifp = ifp->info;
 
@@ -524,13 +529,13 @@ int pim_update_source_set(struct interface *ifp, struct in_addr source)
 	}
 
 	pim_ifp->update_source = source;
-	detect_address_change(ifp, 0 /* force_prim_as_any */,
+	detect_address_change(pim, ifp, 0 /* force_prim_as_any */,
 			      __PRETTY_FUNCTION__);
 
 	return PIM_SUCCESS;
 }
 
-void pim_if_addr_add(struct connected *ifc)
+void pim_if_addr_add(struct pim_instance *pim, struct connected *ifc)
 {
 	struct pim_interface *pim_ifp;
 	struct interface *ifp;
@@ -559,7 +564,7 @@ void pim_if_addr_add(struct connected *ifc)
 
 	ifaddr = ifc->address->u.prefix4;
 
-	detect_address_change(ifp, 0, __PRETTY_FUNCTION__);
+	detect_address_change(pim, ifp, 0, __PRETTY_FUNCTION__);
 
 	// if (ifc->address->family != AF_INET)
 	//  return;
@@ -576,7 +581,7 @@ void pim_if_addr_add(struct connected *ifc)
 				pim_igmp_sock_add(pim_ifp->igmp_socket_list,
 						  ifaddr, ifp, false);
 		} else if (igmp->mtrace_only) {
-			igmp_sock_delete(igmp);
+			igmp_sock_delete(pim, igmp);
 			pim_igmp_sock_add(pim_ifp->igmp_socket_list, ifaddr,
 					  ifp, false);
 		}
@@ -623,7 +628,7 @@ void pim_if_addr_add(struct connected *ifc)
 						   ifaddr);
 		if (ifc->address->family == AF_INET) {
 			if (igmp)
-				igmp_sock_delete(igmp);
+				igmp_sock_delete(pim, igmp);
 			/* if addr new, add IGMP socket */
 			pim_igmp_sock_add(pim_ifp->igmp_socket_list, ifaddr,
 					  ifp, true);
@@ -636,7 +641,7 @@ void pim_if_addr_add(struct connected *ifc)
 
 			/* Interface has a valid socket ? */
 			if (pim_ifp->pim_sock_fd < 0) {
-				if (pim_sock_add(ifp)) {
+				if (pim_sock_add(pim, ifp)) {
 					zlog_warn(
 						"Failure creating PIM socket for interface %s",
 						ifp->name);
@@ -659,10 +664,9 @@ void pim_if_addr_add(struct connected *ifc)
 			rpf.rpf_addr.family = AF_INET;
 			rpf.rpf_addr.prefixlen = IPV4_MAX_BITLEN;
 			rpf.rpf_addr.u.prefix4 = ifc->address->u.prefix4;
-			pnc = pim_nexthop_cache_find(pim_ifp->pim, &rpf);
+			pnc = pim_nexthop_cache_find(pim, &rpf);
 			if (pnc)
-				pim_sendmsg_zebra_rnh(pim_ifp->pim, zclient,
-						      pnc,
+				pim_sendmsg_zebra_rnh(pim, zclient, pnc,
 						      ZEBRA_NEXTHOP_REGISTER);
 		}
 	} /* pim */
@@ -672,12 +676,13 @@ void pim_if_addr_add(struct connected *ifc)
 	  address assigned, then try to create a vif_index.
 	*/
 	if (pim_ifp->mroute_vif_index < 0) {
-		pim_if_add_vif(ifp);
+		pim_if_add_vif(pim, ifp);
 	}
-	pim_ifchannel_scan_forward_start(ifp);
+	pim_ifchannel_scan_forward_start(pim, ifp);
 }
 
-static void pim_if_addr_del_igmp(struct connected *ifc)
+static void pim_if_addr_del_igmp(struct pim_instance *pim,
+				 struct connected *ifc)
 {
 	struct pim_interface *pim_ifp = ifc->ifp->info;
 	struct igmp_sock *igmp;
@@ -699,11 +704,11 @@ static void pim_if_addr_del_igmp(struct connected *ifc)
 	igmp = pim_igmp_sock_lookup_ifaddr(pim_ifp->igmp_socket_list, ifaddr);
 	if (igmp) {
 		/* if addr found, del IGMP socket */
-		igmp_sock_delete(igmp);
+		igmp_sock_delete(pim, igmp);
 	}
 }
 
-static void pim_if_addr_del_pim(struct connected *ifc)
+static void pim_if_addr_del_pim(struct pim_instance *pim, struct connected *ifc)
 {
 	struct pim_interface *pim_ifp = ifc->ifp->info;
 
@@ -731,11 +736,12 @@ static void pim_if_addr_del_pim(struct connected *ifc)
 	  pim_sock_delete() closes the socket, stops read and timer threads,
 	  and kills all neighbors.
 	 */
-	pim_sock_delete(ifc->ifp,
+	pim_sock_delete(pim, ifc->ifp,
 			"last address has been removed from interface");
 }
 
-void pim_if_addr_del(struct connected *ifc, int force_prim_as_any)
+void pim_if_addr_del(struct pim_instance *pim, struct connected *ifc,
+		     int force_prim_as_any)
 {
 	struct interface *ifp;
 
@@ -753,13 +759,13 @@ void pim_if_addr_del(struct connected *ifc, int force_prim_as_any)
 				   : "primary");
 	}
 
-	detect_address_change(ifp, force_prim_as_any, __PRETTY_FUNCTION__);
+	detect_address_change(pim, ifp, force_prim_as_any, __PRETTY_FUNCTION__);
 
-	pim_if_addr_del_igmp(ifc);
-	pim_if_addr_del_pim(ifc);
+	pim_if_addr_del_igmp(pim, ifc);
+	pim_if_addr_del_pim(pim, ifc);
 }
 
-void pim_if_addr_add_all(struct interface *ifp)
+void pim_if_addr_add_all(struct pim_instance *pim, struct interface *ifp)
 {
 	struct connected *ifc;
 	struct listnode *node;
@@ -767,7 +773,6 @@ void pim_if_addr_add_all(struct interface *ifp)
 	int v4_addrs = 0;
 	int v6_addrs = 0;
 	struct pim_interface *pim_ifp = ifp->info;
-
 
 	/* PIM/IGMP enabled ? */
 	if (!pim_ifp)
@@ -780,7 +785,7 @@ void pim_if_addr_add_all(struct interface *ifp)
 			v6_addrs++;
 		else
 			v4_addrs++;
-		pim_if_addr_add(ifc);
+		pim_if_addr_add(pim, ifc);
 	}
 
 	if (!v4_addrs && v6_addrs && !if_is_loopback(ifp)) {
@@ -791,7 +796,7 @@ void pim_if_addr_add_all(struct interface *ifp)
 
 				/* Interface has a valid socket ? */
 				if (pim_ifp->pim_sock_fd < 0) {
-					if (pim_sock_add(ifp)) {
+					if (pim_sock_add(pim, ifp)) {
 						zlog_warn(
 							"Failure creating PIM socket for interface %s",
 							ifp->name);
@@ -805,25 +810,23 @@ void pim_if_addr_add_all(struct interface *ifp)
 	 * address assigned, then try to create a vif_index.
 	 */
 	if (pim_ifp->mroute_vif_index < 0) {
-		pim_if_add_vif(ifp);
+		pim_if_add_vif(pim, ifp);
 	}
-	pim_ifchannel_scan_forward_start(ifp);
+	pim_ifchannel_scan_forward_start(pim, ifp);
 
-	pim_rp_setup(pim_ifp->pim);
-	pim_rp_check_on_if_add(pim_ifp);
+	pim_rp_setup(pim);
+	pim_rp_check_on_if_add(pim, pim_ifp);
 }
 
-void pim_if_addr_del_all(struct interface *ifp)
+void pim_if_addr_del_all(struct pim_instance *pim, struct interface *ifp)
 {
 	struct connected *ifc;
 	struct listnode *node;
 	struct listnode *nextnode;
 	struct vrf *vrf = vrf_lookup_by_id(ifp->vrf_id);
-	struct pim_instance *pim;
 
 	if (!vrf)
 		return;
-	pim = vrf->info;
 
 	/* PIM/IGMP enabled ? */
 	if (!ifp->info)
@@ -835,14 +838,14 @@ void pim_if_addr_del_all(struct interface *ifp)
 		if (p->family != AF_INET)
 			continue;
 
-		pim_if_addr_del(ifc, 1 /* force_prim_as_any=true */);
+		pim_if_addr_del(pim, ifc, 1 /* force_prim_as_any=true */);
 	}
 
 	pim_rp_setup(pim);
 	pim_i_am_rp_re_evaluate(pim);
 }
 
-void pim_if_addr_del_all_igmp(struct interface *ifp)
+void pim_if_addr_del_all_igmp(struct pim_instance *pim, struct interface *ifp)
 {
 	struct connected *ifc;
 	struct listnode *node;
@@ -858,11 +861,11 @@ void pim_if_addr_del_all_igmp(struct interface *ifp)
 		if (p->family != AF_INET)
 			continue;
 
-		pim_if_addr_del_igmp(ifc);
+		pim_if_addr_del_igmp(pim, ifc);
 	}
 }
 
-void pim_if_addr_del_all_pim(struct interface *ifp)
+void pim_if_addr_del_all_pim(struct pim_instance *pim, struct interface *ifp)
 {
 	struct connected *ifc;
 	struct listnode *node;
@@ -878,7 +881,7 @@ void pim_if_addr_del_all_pim(struct interface *ifp)
 		if (p->family != AF_INET)
 			continue;
 
-		pim_if_addr_del_pim(ifc);
+		pim_if_addr_del_pim(pim, ifc);
 	}
 }
 
@@ -945,10 +948,9 @@ struct in_addr pim_find_primary_addr(struct interface *ifp)
 	return addr;
 }
 
-static int pim_iface_next_vif_index(struct interface *ifp)
+static int pim_iface_next_vif_index(struct pim_instance *pim,
+				    struct interface *ifp)
 {
-	struct pim_interface *pim_ifp = ifp->info;
-	struct pim_instance *pim = pim_ifp->pim;
 	int i;
 
 	/*
@@ -970,7 +972,7 @@ static int pim_iface_next_vif_index(struct interface *ifp)
 
   see also pim_if_find_vifindex_by_ifindex()
  */
-int pim_if_add_vif(struct interface *ifp)
+int pim_if_add_vif(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp = ifp->info;
 	struct in_addr ifaddr;
@@ -1000,7 +1002,7 @@ int pim_if_add_vif(struct interface *ifp)
 		return -4;
 	}
 
-	pim_ifp->mroute_vif_index = pim_iface_next_vif_index(ifp);
+	pim_ifp->mroute_vif_index = pim_iface_next_vif_index(pim, ifp);
 
 	if (pim_ifp->mroute_vif_index >= MAXVIFS) {
 		zlog_warn(
@@ -1016,16 +1018,16 @@ int pim_if_add_vif(struct interface *ifp)
 		flags = VIFF_USE_IFINDEX;
 #endif
 
-	if (pim_mroute_add_vif(ifp, ifaddr, flags)) {
+	if (pim_mroute_add_vif(pim, ifp, ifaddr, flags)) {
 		/* pim_mroute_add_vif reported error */
 		return -5;
 	}
 
-	pim_ifp->pim->iface_vif_index[pim_ifp->mroute_vif_index] = 1;
+	pim->iface_vif_index[pim_ifp->mroute_vif_index] = 1;
 	return 0;
 }
 
-int pim_if_del_vif(struct interface *ifp)
+int pim_if_del_vif(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp = ifp->info;
 
@@ -1036,12 +1038,12 @@ int pim_if_del_vif(struct interface *ifp)
 		return -1;
 	}
 
-	pim_mroute_del_vif(ifp);
+	pim_mroute_del_vif(pim, ifp);
 
 	/*
 	  Update vif_index
 	 */
-	pim_ifp->pim->iface_vif_index[pim_ifp->mroute_vif_index] = 0;
+	pim->iface_vif_index[pim_ifp->mroute_vif_index] = 0;
 
 	pim_ifp->mroute_vif_index = -1;
 
@@ -1443,7 +1445,8 @@ static void pim_if_igmp_join_del_all(struct interface *ifp)
   gone down (and may have come back up), and so we must assume it no
   longer knows it was the winner.
  */
-void pim_if_assert_on_neighbor_down(struct interface *ifp,
+void pim_if_assert_on_neighbor_down(struct pim_instance *pim,
+				    struct interface *ifp,
 				    struct in_addr neigh_addr)
 {
 	struct pim_interface *pim_ifp;
@@ -1460,11 +1463,12 @@ void pim_if_assert_on_neighbor_down(struct interface *ifp,
 		if (ch->ifassert_winner.s_addr != neigh_addr.s_addr)
 			continue;
 
-		assert_action_a5(ch);
+		assert_action_a5(pim, ch);
 	}
 }
 
-void pim_if_update_join_desired(struct pim_interface *pim_ifp)
+void pim_if_update_join_desired(struct pim_instance *pim,
+				struct pim_interface *pim_ifp)
 {
 	struct pim_ifchannel *ch;
 
@@ -1482,12 +1486,13 @@ void pim_if_update_join_desired(struct pim_interface *pim_ifp)
 			continue;
 
 		/* update join_desired for the global (S,G) state */
-		pim_upstream_update_join_desired(pim_ifp->pim, up);
+		pim_upstream_update_join_desired(pim, up);
 		PIM_UPSTREAM_FLAG_SET_DR_JOIN_DESIRED_UPDATED(up->flags);
 	}
 }
 
-void pim_if_update_assert_tracking_desired(struct interface *ifp)
+void pim_if_update_assert_tracking_desired(struct pim_instance *pim,
+					   struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 	struct pim_ifchannel *ch;
@@ -1497,7 +1502,7 @@ void pim_if_update_assert_tracking_desired(struct interface *ifp)
 		return;
 
 	RB_FOREACH (ch, pim_ifchannel_rb, &pim_ifp->ifchannel_rb) {
-		pim_ifchannel_update_assert_tracking_desired(ch);
+		pim_ifchannel_update_assert_tracking_desired(pim, ch);
 	}
 }
 
@@ -1520,7 +1525,7 @@ void pim_if_create_pimreg(struct pim_instance *pim)
 		pim->regiface = if_create(pimreg_name, pim->vrf_id);
 		pim->regiface->ifindex = PIM_OIF_PIM_REGISTER_VIF;
 
-		pim_if_new(pim->regiface, 0, 0);
+		pim_if_new(pim, pim->regiface, 0, 0);
 	}
 }
 

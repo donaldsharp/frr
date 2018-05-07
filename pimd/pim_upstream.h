@@ -140,7 +140,8 @@ struct pim_upstream {
 void pim_upstream_free(struct pim_upstream *up);
 struct pim_upstream *pim_upstream_find(struct pim_instance *pim,
 				       struct prefix_sg *sg);
-struct pim_upstream *pim_upstream_find_or_add(struct prefix_sg *sg,
+struct pim_upstream *pim_upstream_find_or_add(struct pim_instance *pim,
+					      struct prefix_sg *sg,
 					      struct interface *ifp, int flags,
 					      const char *name);
 struct pim_upstream *pim_upstream_add(struct pim_instance *pim,
@@ -167,15 +168,19 @@ void pim_upstream_join_suppress(struct pim_upstream *up,
 void pim_upstream_join_timer_decrease_to_t_override(const char *debug_label,
 						    struct pim_upstream *up);
 
-void pim_upstream_join_timer_restart(struct pim_upstream *up,
+void pim_upstream_join_timer_restart(struct pim_instance *pim,
+				     struct pim_upstream *up,
 				     struct pim_rpf *old);
 void pim_upstream_rpf_genid_changed(struct pim_instance *pim,
 				    struct in_addr neigh_addr);
-void pim_upstream_rpf_interface_changed(struct pim_upstream *up,
+void pim_upstream_rpf_interface_changed(struct pim_instance *pim,
+					struct pim_upstream *up,
 					struct interface *old_rpf_ifp);
 
-void pim_upstream_update_could_assert(struct pim_upstream *up);
-void pim_upstream_update_my_assert_metric(struct pim_upstream *up);
+void pim_upstream_update_could_assert(struct pim_instance *pim,
+				      struct pim_upstream *up);
+void pim_upstream_update_my_assert_metric(struct pim_instance *pim,
+					  struct pim_upstream *up);
 
 void pim_upstream_keep_alive_timer_start(struct pim_upstream *up,
 					 uint32_t time);
@@ -191,7 +196,7 @@ void pim_upstream_set_sptbit(struct pim_upstream *up,
 void pim_upstream_start_register_stop_timer(struct pim_upstream *up,
 					    int null_register);
 
-void pim_upstream_send_join(struct pim_upstream *up);
+void pim_upstream_send_join(struct pim_instance *pim, struct pim_upstream *up);
 
 void pim_upstream_switch(struct pim_instance *pim, struct pim_upstream *up,
 			 enum pim_upstream_state new_state);
@@ -212,7 +217,7 @@ void pim_upstream_msdp_reg_timer_start(struct pim_upstream *up);
 void pim_upstream_init(struct pim_instance *pim);
 void pim_upstream_terminate(struct pim_instance *pim);
 
-void join_timer_start(struct pim_upstream *up);
+void join_timer_start(struct pim_instance *pim, struct pim_upstream *up);
 int pim_upstream_compare(void *arg1, void *arg2);
 void pim_upstream_register_reevaluate(struct pim_instance *pim);
 

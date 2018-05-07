@@ -40,7 +40,8 @@
 #include "pim_register.h"
 
 static int on_pim_hello_send(struct thread *t);
-static int pim_hello_send(struct interface *ifp, uint16_t holdtime);
+static int pim_hello_send(struct pim_instance *pim, struct interface *ifp,
+			  uint16_t holdtime);
 
 static const char *pim_pim_msgtype2str(enum pim_msg_type type)
 {
@@ -109,7 +110,8 @@ static void sock_close(struct interface *ifp)
 	pim_ifp->pim_sock_creation = 0;
 }
 
-void pim_sock_delete(struct interface *ifp, const char *delete_message)
+void pim_sock_delete(struct pim_instance *pim, struct interface *ifp,
+		     const char *delete_message)
 {
 	zlog_info("PIM INTERFACE DOWN: on interface %s: %s", ifp->name,
 		  delete_message);
@@ -127,14 +129,15 @@ void pim_sock_delete(struct interface *ifp, const char *delete_message)
 	  message with a zero HoldTime should be sent immediately (with the
 	  old IP address if the IP address changed).
 	*/
-	pim_hello_send(ifp, 0 /* zero-sec holdtime */);
+	pim_hello_send(pim, ifp, 0 /* zero-sec holdtime */);
 
-	pim_neighbor_delete_all(ifp, delete_message);
+	pim_neighbor_delete_all(pim, ifp, delete_message);
 
 	sock_close(ifp);
 }
 
-int pim_pim_packet(struct interface *ifp, uint8_t *buf, size_t len)
+int pim_pim_packet(struct pim_instance *pim, struct interface *ifp,
+		   uint8_t *buf, size_t len)
 {
 	struct ip *ip_hdr;
 	size_t ip_hlen; /* ip header length in bytes */
@@ -228,17 +231,19 @@ int pim_pim_packet(struct interface *ifp, uint8_t *buf, size_t len)
 
 	switch (header->type) {
 	case PIM_MSG_TYPE_HELLO:
-		return pim_hello_recv(ifp, ip_hdr->ip_src,
+		return pim_hello_recv(pim, ifp, ip_hdr->ip_src,
 				      pim_msg + PIM_MSG_HEADER_LEN,
 				      pim_msg_len - PIM_MSG_HEADER_LEN);
 		break;
 	case PIM_MSG_TYPE_REGISTER:
-		return pim_register_recv(ifp, ip_hdr->ip_dst, ip_hdr->ip_src,
+		return pim_register_recv(pim,
+					 ifp, ip_hdr->ip_dst, ip_hdr->ip_src,
 					 pim_msg + PIM_MSG_HEADER_LEN,
 					 pim_msg_len - PIM_MSG_HEADER_LEN);
 		break;
 	case PIM_MSG_TYPE_REG_STOP:
-		return pim_register_stop_recv(ifp, pim_msg + PIM_MSG_HEADER_LEN,
+		return pim_register_stop_recv(pim,
+					      ifp, pim_msg + PIM_MSG_HEADER_LEN,
 					      pim_msg_len - PIM_MSG_HEADER_LEN);
 		break;
 	case PIM_MSG_TYPE_JOIN_PRUNE:
@@ -252,7 +257,7 @@ int pim_pim_packet(struct interface *ifp, uint8_t *buf, size_t len)
 			return -1;
 		}
 		pim_neighbor_timer_reset(neigh, neigh->holdtime);
-		return pim_joinprune_recv(ifp, neigh, ip_hdr->ip_src,
+		return pim_joinprune_recv(pim, ifp, neigh, ip_hdr->ip_src,
 					  pim_msg + PIM_MSG_HEADER_LEN,
 					  pim_msg_len - PIM_MSG_HEADER_LEN);
 		break;
@@ -267,7 +272,7 @@ int pim_pim_packet(struct interface *ifp, uint8_t *buf, size_t len)
 			return -1;
 		}
 		pim_neighbor_timer_reset(neigh, neigh->holdtime);
-		return pim_assert_recv(ifp, neigh, ip_hdr->ip_src,
+		return pim_assert_recv(pim, ifp, neigh, ip_hdr->ip_src,
 				       pim_msg + PIM_MSG_HEADER_LEN,
 				       pim_msg_len - PIM_MSG_HEADER_LEN);
 		break;
@@ -288,6 +293,7 @@ static int pim_sock_read(struct thread *t)
 {
 	struct interface *ifp, *orig_ifp;
 	struct pim_interface *pim_ifp;
+	struct pim_instance *pim;
 	int fd;
 	struct sockaddr_in from;
 	struct sockaddr_in to;
@@ -304,6 +310,7 @@ static int pim_sock_read(struct thread *t)
 	fd = THREAD_FD(t);
 
 	pim_ifp = ifp->info;
+	pim = pim_get_pim_instance(ifp->vrf_id);
 
 	while (cont) {
 		len = pim_socket_recvfromto(fd, buf, sizeof(buf), &from,
@@ -326,7 +333,7 @@ static int pim_sock_read(struct thread *t)
 		 * the right ifindex, so just use it.  We know
 		 * it's the right interface because we bind to it
 		 */
-		ifp = if_lookup_by_index(ifindex, pim_ifp->pim->vrf_id);
+		ifp = if_lookup_by_index(ifindex, pim->vrf_id);
 		if (!ifp || !ifp->info) {
 			if (PIM_DEBUG_PIM_PACKETS)
 				zlog_debug(
@@ -334,7 +341,7 @@ static int pim_sock_read(struct thread *t)
 					__PRETTY_FUNCTION__);
 			goto done;
 		}
-		int fail = pim_pim_packet(ifp, buf, len);
+		int fail = pim_pim_packet(pim, ifp, buf, len);
 		if (fail) {
 			if (PIM_DEBUG_PIM_PACKETS)
 				zlog_debug("%s: pim_pim_packet() return=%d",
@@ -362,7 +369,6 @@ done:
 static void pim_sock_read_on(struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
-
 	zassert(ifp);
 	zassert(ifp->info);
 
@@ -593,7 +599,8 @@ int pim_msg_send(int fd, struct in_addr src, struct in_addr dst,
 	return 0;
 }
 
-static int hello_send(struct interface *ifp, uint16_t holdtime)
+static int hello_send(struct pim_instance *pim, struct interface *ifp,
+		      uint16_t holdtime)
 {
 	uint8_t pim_msg[PIM_PIM_BUFSIZE_WRITE];
 	struct pim_interface *pim_ifp;
@@ -618,7 +625,7 @@ static int hello_send(struct interface *ifp, uint16_t holdtime)
 	}
 
 	pim_tlv_size = pim_hello_build_tlv(
-		ifp, pim_msg + PIM_PIM_MIN_LEN,
+		pim, ifp, pim_msg + PIM_PIM_MIN_LEN,
 		sizeof(pim_msg) - PIM_PIM_MIN_LEN, holdtime,
 		pim_ifp->pim_dr_priority, pim_ifp->pim_generation_id,
 		pim_ifp->pim_propagation_delay_msec,
@@ -649,14 +656,15 @@ static int hello_send(struct interface *ifp, uint16_t holdtime)
 	return 0;
 }
 
-static int pim_hello_send(struct interface *ifp, uint16_t holdtime)
+static int pim_hello_send(struct pim_instance *pim, struct interface *ifp,
+			  uint16_t holdtime)
 {
 	struct pim_interface *pim_ifp = ifp->info;
 
 	if (pim_if_is_loopback(ifp))
 		return 0;
 
-	if (hello_send(ifp, holdtime)) {
+	if (hello_send(pim, ifp, holdtime)) {
 		++pim_ifp->pim_ifstat_hello_sendfail;
 
 		if (PIM_DEBUG_PIM_HELLO) {
@@ -693,11 +701,12 @@ static void hello_resched(struct interface *ifp)
 static int on_pim_hello_send(struct thread *t)
 {
 	struct pim_interface *pim_ifp;
+	struct pim_instance *pim;
 	struct interface *ifp;
 
 	ifp = THREAD_ARG(t);
 	pim_ifp = ifp->info;
-
+	pim = pim_get_pim_instance(ifp->vrf_id);
 	/*
 	 * Schedule next hello
 	 */
@@ -706,7 +715,7 @@ static int on_pim_hello_send(struct thread *t)
 	/*
 	 * Send hello
 	 */
-	return pim_hello_send(ifp, PIM_IF_DEFAULT_HOLDTIME(pim_ifp));
+	return pim_hello_send(pim, ifp, PIM_IF_DEFAULT_HOLDTIME(pim_ifp));
 }
 
 /*
@@ -718,7 +727,7 @@ static int on_pim_hello_send(struct thread *t)
   relevant Hello message without waiting for the Hello Timer to
   expire, followed by the Join/Prune or Assert message.
  */
-void pim_hello_restart_now(struct interface *ifp)
+void pim_hello_restart_now(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 
@@ -732,7 +741,7 @@ void pim_hello_restart_now(struct interface *ifp)
 	/*
 	 * Immediately send hello
 	 */
-	pim_hello_send(ifp, PIM_IF_DEFAULT_HOLDTIME(pim_ifp));
+	pim_hello_send(pim, ifp, PIM_IF_DEFAULT_HOLDTIME(pim_ifp));
 }
 
 /*
@@ -744,7 +753,8 @@ void pim_hello_restart_now(struct interface *ifp)
   new Hello message should be sent on this interface after a
   randomized delay between 0 and Triggered_Hello_Delay.
  */
-void pim_hello_restart_triggered(struct interface *ifp)
+void pim_hello_restart_triggered(struct pim_instance *pim,
+				 struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 	int triggered_hello_delay_msec;
@@ -799,7 +809,7 @@ void pim_hello_restart_triggered(struct interface *ifp)
 			      &pim_ifp->t_pim_hello_timer);
 }
 
-int pim_sock_add(struct interface *ifp)
+int pim_sock_add(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 	uint32_t old_genid;
@@ -852,7 +862,7 @@ int pim_sock_add(struct interface *ifp)
 	/*
 	 * Start sending PIM hello's
 	 */
-	pim_hello_restart_triggered(ifp);
+	pim_hello_restart_triggered(pim, ifp);
 
 	return 0;
 }

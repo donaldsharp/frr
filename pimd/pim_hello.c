@@ -136,8 +136,8 @@ static void tlv_trace_list(const char *label, const char *tlv_name,
 		return (code);                                                 \
 	}
 
-int pim_hello_recv(struct interface *ifp, struct in_addr src_addr,
-		   uint8_t *tlv_buf, int tlv_buf_size)
+int pim_hello_recv(struct pim_instance *pim, struct interface *ifp,
+		   struct in_addr src_addr, uint8_t *tlv_buf, int tlv_buf_size)
 {
 	struct pim_interface *pim_ifp;
 	struct pim_neighbor *neigh;
@@ -350,8 +350,8 @@ int pim_hello_recv(struct interface *ifp, struct in_addr src_addr,
 		/* Add as new neighbor */
 
 		neigh = pim_neighbor_add(
-			ifp, src_addr, hello_options, hello_option_holdtime,
-			hello_option_propagation_delay,
+			pim, ifp, src_addr, hello_options,
+			hello_option_holdtime, hello_option_propagation_delay,
 			hello_option_override_interval,
 			hello_option_dr_priority, hello_option_generation_id,
 			hello_option_addr_list, PIM_NEIGHBOR_SEND_DELAY);
@@ -395,18 +395,17 @@ int pim_hello_recv(struct interface *ifp, struct in_addr src_addr,
 					ifp->name);
 			}
 
-			pim_upstream_rpf_genid_changed(pim_ifp->pim,
-						       neigh->source_addr);
+			pim_upstream_rpf_genid_changed(pim, neigh->source_addr);
 
-			pim_neighbor_delete(ifp, neigh, "GenID mismatch");
-			neigh = pim_neighbor_add(ifp, src_addr, hello_options,
-						 hello_option_holdtime,
-						 hello_option_propagation_delay,
-						 hello_option_override_interval,
-						 hello_option_dr_priority,
-						 hello_option_generation_id,
-						 hello_option_addr_list,
-						 PIM_NEIGHBOR_SEND_NOW);
+			pim_neighbor_delete(pim, ifp, neigh, "GenID mismatch");
+			neigh = pim_neighbor_add(
+				pim, ifp, src_addr, hello_options,
+				hello_option_holdtime,
+				hello_option_propagation_delay,
+				hello_option_override_interval,
+				hello_option_dr_priority,
+				hello_option_generation_id,
+				hello_option_addr_list, PIM_NEIGHBOR_SEND_NOW);
 			if (!neigh) {
 				if (PIM_DEBUG_PIM_HELLO) {
 					char src_str[INET_ADDRSTRLEN];
@@ -431,14 +430,14 @@ int pim_hello_recv(struct interface *ifp, struct in_addr src_addr,
 	  Update existing neighbor
 	*/
 
-	pim_neighbor_update(neigh, hello_options, hello_option_holdtime,
+	pim_neighbor_update(pim, neigh, hello_options, hello_option_holdtime,
 			    hello_option_dr_priority, hello_option_addr_list);
 	/* actual addr list is saved under neighbor */
 	return 0;
 }
 
-int pim_hello_build_tlv(struct interface *ifp, uint8_t *tlv_buf,
-			int tlv_buf_size, uint16_t holdtime,
+int pim_hello_build_tlv(struct pim_instance *pim, struct interface *ifp,
+			uint8_t *tlv_buf, int tlv_buf_size, uint16_t holdtime,
 			uint32_t dr_priority, uint32_t generation_id,
 			uint16_t propagation_delay, uint16_t override_interval,
 			int can_disable_join_suppression)
@@ -446,8 +445,6 @@ int pim_hello_build_tlv(struct interface *ifp, uint8_t *tlv_buf,
 	uint8_t *curr = tlv_buf;
 	uint8_t *pastend = tlv_buf + tlv_buf_size;
 	uint8_t *tmp;
-	struct pim_interface *pim_ifp = ifp->info;
-	struct pim_instance *pim = pim_ifp->pim;
 
 	/*
 	 * Append options
@@ -545,7 +542,7 @@ int pim_hello_build_tlv(struct interface *ifp, uint8_t *tlv_buf,
   relevant Hello message without waiting for the Hello Timer to
   expire, followed by the Join/Prune or Assert message.
 */
-void pim_hello_require(struct interface *ifp)
+void pim_hello_require(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 
@@ -558,5 +555,5 @@ void pim_hello_require(struct interface *ifp)
 	if (pim_ifp->pim_ifstat_hello_sent)
 		return;
 
-	pim_hello_restart_now(ifp); /* Send hello and restart timer */
+	pim_hello_restart_now(pim, ifp); /* Send hello and restart timer */
 }

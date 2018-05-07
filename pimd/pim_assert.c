@@ -36,18 +36,20 @@
 #include "pim_assert.h"
 #include "pim_ifchannel.h"
 
-static int assert_action_a3(struct pim_ifchannel *ch);
-static void assert_action_a2(struct pim_ifchannel *ch,
+static int assert_action_a3(struct pim_instance *pim, struct pim_ifchannel *ch);
+static void assert_action_a2(struct pim_instance *pim,
+			     struct pim_ifchannel *ch,
 			     struct pim_assert_metric winner_metric);
-static void assert_action_a6(struct pim_ifchannel *ch,
+static void assert_action_a6(struct pim_instance *pim,
+			     struct pim_ifchannel *ch,
 			     struct pim_assert_metric winner_metric);
 
-void pim_ifassert_winner_set(struct pim_ifchannel *ch,
+void pim_ifassert_winner_set(struct pim_instance *pim,
+			     struct pim_ifchannel *ch,
 			     enum pim_ifassert_state new_state,
 			     struct in_addr winner,
 			     struct pim_assert_metric winner_metric)
 {
-	struct pim_interface *pim_ifp = ch->interface->info;
 	int winner_changed = (ch->ifassert_winner.s_addr != winner.s_addr);
 	int metric_changed = !pim_assert_metric_match(
 		&ch->ifassert_winner_metric, &winner_metric);
@@ -82,9 +84,9 @@ void pim_ifassert_winner_set(struct pim_ifchannel *ch,
 	ch->ifassert_creation = pim_time_monotonic_sec();
 
 	if (winner_changed || metric_changed) {
-		pim_upstream_update_join_desired(pim_ifp->pim, ch->upstream);
-		pim_ifchannel_update_could_assert(ch);
-		pim_ifchannel_update_assert_tracking_desired(ch);
+		pim_upstream_update_join_desired(pim, ch->upstream);
+		pim_ifchannel_update_could_assert(pim, ch);
+		pim_ifchannel_update_assert_tracking_desired(pim, ch);
 	}
 }
 
@@ -124,10 +126,11 @@ static int cancel_assert(const struct pim_assert_metric *recv_metric)
 	       && (recv_metric->route_metric == PIM_ASSERT_ROUTE_METRIC_MAX);
 }
 
-static void if_could_assert_do_a1(const char *caller, struct pim_ifchannel *ch)
+static void if_could_assert_do_a1(struct pim_instance *pim,
+				  const char *caller, struct pim_ifchannel *ch)
 {
 	if (PIM_IF_FLAG_TEST_COULD_ASSERT(ch->flags)) {
-		if (assert_action_a1(ch)) {
+		if (assert_action_a1(pim, ch)) {
 			zlog_warn(
 				"%s: %s: (S,G)=%s assert_action_a1 failure on interface %s",
 				__PRETTY_FUNCTION__, caller, ch->sg_str,
@@ -137,7 +140,8 @@ static void if_could_assert_do_a1(const char *caller, struct pim_ifchannel *ch)
 	}
 }
 
-static int dispatch_assert(struct interface *ifp, struct in_addr source_addr,
+static int dispatch_assert(struct pim_instance *pim,
+			   struct interface *ifp, struct in_addr source_addr,
 			   struct in_addr group_addr,
 			   struct pim_assert_metric recv_metric)
 {
@@ -147,7 +151,7 @@ static int dispatch_assert(struct interface *ifp, struct in_addr source_addr,
 	memset(&sg, 0, sizeof(struct prefix_sg));
 	sg.src = source_addr;
 	sg.grp = group_addr;
-	ch = pim_ifchannel_add(ifp, &sg, 0, 0);
+	ch = pim_ifchannel_add(pim, ifp, &sg, 0, 0);
 	if (!ch) {
 		zlog_warn(
 			"%s: (S,G)=%s failure creating channel on interface %s",
@@ -159,28 +163,29 @@ static int dispatch_assert(struct interface *ifp, struct in_addr source_addr,
 	case PIM_IFASSERT_NOINFO:
 		if (recv_metric.rpt_bit_flag) {
 			/* RPT bit set */
-			if_could_assert_do_a1(__PRETTY_FUNCTION__, ch);
+			if_could_assert_do_a1(pim, __PRETTY_FUNCTION__, ch);
 		} else {
 			/* RPT bit clear */
 			if (inferior_assert(&ch->ifassert_my_metric,
 					    &recv_metric)) {
-				if_could_assert_do_a1(__PRETTY_FUNCTION__, ch);
+				if_could_assert_do_a1(pim,
+						      __PRETTY_FUNCTION__, ch);
 			} else if (acceptable_assert(&ch->ifassert_my_metric,
 						     &recv_metric)) {
 				if (PIM_IF_FLAG_TEST_ASSERT_TRACKING_DESIRED(
 					    ch->flags)) {
-					assert_action_a6(ch, recv_metric);
+					assert_action_a6(pim, ch, recv_metric);
 				}
 			}
 		}
 		break;
 	case PIM_IFASSERT_I_AM_WINNER:
 		if (preferred_assert(ch, &recv_metric)) {
-			assert_action_a2(ch, recv_metric);
+			assert_action_a2(pim, ch, recv_metric);
 		} else {
 			if (inferior_assert(&ch->ifassert_my_metric,
 					    &recv_metric)) {
-				assert_action_a3(ch);
+				assert_action_a3(pim, ch);
 			}
 		}
 		break;
@@ -190,22 +195,22 @@ static int dispatch_assert(struct interface *ifp, struct in_addr source_addr,
 			/* Assert from current winner */
 
 			if (cancel_assert(&recv_metric)) {
-				assert_action_a5(ch);
+				assert_action_a5(pim, ch);
 			} else {
 				if (inferior_assert(&ch->ifassert_my_metric,
 						    &recv_metric)) {
-					assert_action_a5(ch);
+					assert_action_a5(pim, ch);
 				} else if (acceptable_assert(
 						   &ch->ifassert_my_metric,
 						   &recv_metric)) {
 					if (!recv_metric.rpt_bit_flag) {
-						assert_action_a2(ch,
+						assert_action_a2(pim, ch,
 								 recv_metric);
 					}
 				}
 			}
 		} else if (preferred_assert(ch, &recv_metric)) {
-			assert_action_a2(ch, recv_metric);
+			assert_action_a2(pim, ch, recv_metric);
 		}
 		break;
 	default: {
@@ -220,7 +225,8 @@ static int dispatch_assert(struct interface *ifp, struct in_addr source_addr,
 	return 0;
 }
 
-int pim_assert_recv(struct interface *ifp, struct pim_neighbor *neigh,
+int pim_assert_recv(struct pim_instance *pim,
+		    struct interface *ifp, struct pim_neighbor *neigh,
 		    struct in_addr src_addr, uint8_t *buf, int buf_size)
 {
 	struct prefix_sg sg;
@@ -315,7 +321,7 @@ int pim_assert_recv(struct interface *ifp, struct pim_neighbor *neigh,
 	zassert(pim_ifp);
 	++pim_ifp->pim_ifstat_assert_recv;
 
-	return dispatch_assert(ifp, msg_source_addr.u.prefix4, sg.grp,
+	return dispatch_assert(pim, ifp, msg_source_addr.u.prefix4, sg.grp,
 			       msg_metric);
 }
 
@@ -423,7 +429,7 @@ int pim_assert_build_msg(uint8_t *pim_msg, int buf_size, struct interface *ifp,
 	return pim_msg_size;
 }
 
-static int pim_assert_do(struct pim_ifchannel *ch,
+static int pim_assert_do(struct pim_instance *pim, struct pim_ifchannel *ch,
 			 struct pim_assert_metric metric)
 {
 	struct interface *ifp;
@@ -467,7 +473,7 @@ static int pim_assert_do(struct pim_ifchannel *ch,
 	  relevant Hello message without waiting for the Hello Timer to
 	  expire, followed by the Join/Prune or Assert message.
 	*/
-	pim_hello_require(ifp);
+	pim_hello_require(pim, ifp);
 
 	if (PIM_DEBUG_PIM_TRACE) {
 		zlog_debug("%s: to %s: (S,G)=%s pref=%u metric=%u rpt_bit=%u",
@@ -488,9 +494,9 @@ static int pim_assert_do(struct pim_ifchannel *ch,
 	return 0;
 }
 
-int pim_assert_send(struct pim_ifchannel *ch)
+static int pim_assert_send(struct pim_instance *pim, struct pim_ifchannel *ch)
 {
-	return pim_assert_do(ch, ch->ifassert_my_metric);
+	return pim_assert_do(pim, ch, ch->ifassert_my_metric);
 }
 
 /*
@@ -499,7 +505,7 @@ int pim_assert_send(struct pim_ifchannel *ch)
   An AssertCancel(S,G) is an infinite metric assert with the RPT bit
   set that names S as the source.
  */
-static int pim_assert_cancel(struct pim_ifchannel *ch)
+static int pim_assert_cancel(struct pim_instance *pim, struct pim_ifchannel *ch)
 {
 	struct pim_assert_metric metric;
 
@@ -508,17 +514,19 @@ static int pim_assert_cancel(struct pim_ifchannel *ch)
 	metric.route_metric = PIM_ASSERT_ROUTE_METRIC_MAX;
 	metric.ip_address = ch->sg.src;
 
-	return pim_assert_do(ch, metric);
+	return pim_assert_do(pim, ch, metric);
 }
 
 static int on_assert_timer(struct thread *t)
 {
+	struct pim_instance *pim;
 	struct pim_ifchannel *ch;
 	struct interface *ifp;
 
 	ch = THREAD_ARG(t);
 
 	ifp = ch->interface;
+	pim = pim_get_pim_instance(ifp->vrf_id);
 
 	if (PIM_DEBUG_PIM_TRACE) {
 		zlog_debug("%s: (S,G)=%s timer expired on interface %s",
@@ -529,10 +537,10 @@ static int on_assert_timer(struct thread *t)
 
 	switch (ch->ifassert_state) {
 	case PIM_IFASSERT_I_AM_WINNER:
-		assert_action_a3(ch);
+		assert_action_a3(pim, ch);
 		break;
 	case PIM_IFASSERT_I_AM_LOSER:
-		assert_action_a5(ch);
+		assert_action_a5(pim, ch);
 		break;
 	default: {
 		if (PIM_DEBUG_PIM_EVENTS)
@@ -589,7 +597,7 @@ static void pim_assert_timer_reset(struct pim_ifchannel *ch)
   Store self as AssertWinner(S,G,I).
   Store spt_assert_metric(S,I) as AssertWinnerMetric(S,G,I).
 */
-int assert_action_a1(struct pim_ifchannel *ch)
+int assert_action_a1(struct pim_instance *pim, struct pim_ifchannel *ch)
 {
 	struct interface *ifp = ch->interface;
 	struct pim_interface *pim_ifp;
@@ -602,12 +610,12 @@ int assert_action_a1(struct pim_ifchannel *ch)
 	}
 
 	/* Switch to I_AM_WINNER before performing action_a3 below */
-	pim_ifassert_winner_set(
-		ch, PIM_IFASSERT_I_AM_WINNER, pim_ifp->primary_address,
-		pim_macro_spt_assert_metric(&ch->upstream->rpf,
-					    pim_ifp->primary_address));
+	pim_ifassert_winner_set(pim, ch, PIM_IFASSERT_I_AM_WINNER,
+				pim_ifp->primary_address,
+				pim_macro_spt_assert_metric(&ch->upstream->rpf,
+							    pim_ifp->primary_address));
 
-	if (assert_action_a3(ch)) {
+	if (assert_action_a3(pim, ch)) {
 		zlog_warn(
 			"%s: (S,G)=%s assert_action_a3 failure on interface %s",
 			__PRETTY_FUNCTION__, ch->sg_str, ifp->name);
@@ -633,10 +641,11 @@ int assert_action_a1(struct pim_ifchannel *ch)
 	  winner metric as AssertWinnerMetric(S,G,I).
 	  Set Assert Timer to Assert_Time.
 */
-static void assert_action_a2(struct pim_ifchannel *ch,
+static void assert_action_a2(struct pim_instance *pim,
+			     struct pim_ifchannel *ch,
 			     struct pim_assert_metric winner_metric)
 {
-	pim_ifassert_winner_set(ch, PIM_IFASSERT_I_AM_LOSER,
+	pim_ifassert_winner_set(pim, ch, PIM_IFASSERT_I_AM_LOSER,
 				winner_metric.ip_address, winner_metric);
 
 	pim_assert_timer_set(ch, PIM_ASSERT_TIME);
@@ -657,7 +666,7 @@ static void assert_action_a2(struct pim_ifchannel *ch,
   A3:  Send Assert(S,G).
   Set Assert Timer to (Assert_Time - Assert_Override_Interval).
 */
-static int assert_action_a3(struct pim_ifchannel *ch)
+static int assert_action_a3(struct pim_instance *pim, struct pim_ifchannel *ch)
 {
 	if (ch->ifassert_state != PIM_IFASSERT_I_AM_WINNER) {
 		if (PIM_DEBUG_PIM_EVENTS)
@@ -669,7 +678,7 @@ static int assert_action_a3(struct pim_ifchannel *ch)
 
 	pim_assert_timer_reset(ch);
 
-	if (pim_assert_send(ch)) {
+	if (pim_assert_send(pim, ch)) {
 		zlog_warn("%s: (S,G)=%s failure sending assert on interface %s",
 			  __PRETTY_FUNCTION__, ch->sg_str, ch->interface->name);
 		return -1;
@@ -688,15 +697,15 @@ static int assert_action_a3(struct pim_ifchannel *ch)
 	  AssertWinnerMetric(S,G,I) will then return their default
 	  values).
 */
-void assert_action_a4(struct pim_ifchannel *ch)
+void assert_action_a4(struct pim_instance *pim, struct pim_ifchannel *ch)
 {
-	if (pim_assert_cancel(ch)) {
+	if (pim_assert_cancel(pim, ch)) {
 		zlog_warn("%s: failure sending AssertCancel%s on interface %s",
 			  __PRETTY_FUNCTION__, ch->sg_str, ch->interface->name);
 		/* log warning only */
 	}
 
-	assert_action_a5(ch);
+	assert_action_a5(pim, ch);
 
 	if (ch->ifassert_state != PIM_IFASSERT_NOINFO) {
 		if (PIM_DEBUG_PIM_EVENTS)
@@ -714,9 +723,9 @@ void assert_action_a4(struct pim_ifchannel *ch)
   A5: Delete assert info (AssertWinner(S,G,I) and
   AssertWinnerMetric(S,G,I) will then return their default values).
 */
-void assert_action_a5(struct pim_ifchannel *ch)
+void assert_action_a5(struct pim_instance *pim, struct pim_ifchannel *ch)
 {
-	reset_ifassert_state(ch);
+	reset_ifassert_state(pim, ch);
 	if (ch->ifassert_state != PIM_IFASSERT_NOINFO) {
 		if (PIM_DEBUG_PIM_EVENTS)
 			zlog_warn(
@@ -736,10 +745,11 @@ void assert_action_a5(struct pim_ifchannel *ch)
 	  If (I is RPF_interface(S)) AND (UpstreamJPState(S,G) == true)
 	  set SPTbit(S,G) to TRUE.
 */
-static void assert_action_a6(struct pim_ifchannel *ch,
+static void assert_action_a6(struct pim_instance *pim,
+			     struct pim_ifchannel *ch,
 			     struct pim_assert_metric winner_metric)
 {
-	assert_action_a2(ch, winner_metric);
+	assert_action_a2(pim, ch, winner_metric);
 
 	/*
 	  If (I is RPF_interface(S)) AND (UpstreamJPState(S,G) == true) set

@@ -115,27 +115,34 @@ RB_PROTOTYPE(pim_ifchannel_rb, pim_ifchannel, pim_ifp_rb,
 	     pim_ifchannel_compare);
 
 void pim_ifchannel_free(struct pim_ifchannel *ch);
-void pim_ifchannel_delete(struct pim_ifchannel *ch);
-void pim_ifchannel_delete_all(struct interface *ifp);
-void pim_ifchannel_membership_clear(struct interface *ifp);
-void pim_ifchannel_delete_on_noinfo(struct interface *ifp);
+void pim_ifchannel_delete(struct pim_instance *pim, struct pim_ifchannel *ch);
+void pim_ifchannel_delete_all(struct pim_instance *pim, struct interface *ifp);
+void pim_ifchannel_membership_clear(struct pim_instance *pim,
+				    struct interface *ifp);
+void pim_ifchannel_delete_on_noinfo(struct pim_instance *pim,
+				    struct interface *ifp);
 struct pim_ifchannel *pim_ifchannel_find(struct interface *ifp,
 					 struct prefix_sg *sg);
-struct pim_ifchannel *pim_ifchannel_add(struct interface *ifp,
+struct pim_ifchannel *pim_ifchannel_add(struct pim_instance *pim,
+					struct interface *ifp,
 					struct prefix_sg *sg, uint8_t ch_flags,
 					int up_flags);
-void pim_ifchannel_join_add(struct interface *ifp, struct in_addr neigh_addr,
-			    struct in_addr upstream, struct prefix_sg *sg,
-			    uint8_t source_flags, uint16_t holdtime);
-void pim_ifchannel_prune(struct interface *ifp, struct in_addr upstream,
-			 struct prefix_sg *sg, uint8_t source_flags,
-			 uint16_t holdtime);
-int pim_ifchannel_local_membership_add(struct interface *ifp,
+void pim_ifchannel_join_add(struct pim_instance *pim, struct interface *ifp,
+			    struct in_addr neigh_addr, struct in_addr upstream,
+			    struct prefix_sg *sg, uint8_t source_flags,
+			    uint16_t holdtime);
+void pim_ifchannel_prune(struct pim_instance *pim, struct interface *ifp,
+			 struct in_addr upstream, struct prefix_sg *sg,
+			 uint8_t source_flags, uint16_t holdtime);
+int pim_ifchannel_local_membership_add(struct pim_instance *pim,
+				       struct interface *ifp,
 				       struct prefix_sg *sg);
-void pim_ifchannel_local_membership_del(struct interface *ifp,
+void pim_ifchannel_local_membership_del(struct pim_instance *pim,
+					struct interface *ifp,
 					struct prefix_sg *sg);
 
-void pim_ifchannel_ifjoin_switch(const char *caller, struct pim_ifchannel *ch,
+void pim_ifchannel_ifjoin_switch(struct pim_instance *pim, const char *caller,
+				 struct pim_ifchannel *ch,
 				 enum pim_ifjoin_state new_state);
 const char *pim_ifchannel_ifjoin_name(enum pim_ifjoin_state ifjoin_state,
 				      int flags);
@@ -143,14 +150,19 @@ const char *pim_ifchannel_ifassert_name(enum pim_ifassert_state ifassert_state);
 
 int pim_ifchannel_isin_oiflist(struct pim_ifchannel *ch);
 
-void reset_ifassert_state(struct pim_ifchannel *ch);
+void reset_ifassert_state(struct pim_instance *pim, struct pim_ifchannel *ch);
 
-void pim_ifchannel_update_could_assert(struct pim_ifchannel *ch);
-void pim_ifchannel_update_my_assert_metric(struct pim_ifchannel *ch);
-void pim_ifchannel_update_assert_tracking_desired(struct pim_ifchannel *ch);
+void pim_ifchannel_update_could_assert(struct pim_instance *pim,
+				       struct pim_ifchannel *ch);
+void pim_ifchannel_update_my_assert_metric(struct pim_instance *pim,
+					   struct pim_ifchannel *ch);
+void pim_ifchannel_update_assert_tracking_desired(struct pim_instance *pim,
+						  struct pim_ifchannel *ch);
 
-void pim_ifchannel_scan_forward_start(struct interface *new_ifp);
-void pim_ifchannel_set_star_g_join_state(struct pim_ifchannel *ch, int eom,
+void pim_ifchannel_scan_forward_start(struct pim_instance *pim,
+				      struct interface *new_ifp);
+void pim_ifchannel_set_star_g_join_state(struct pim_instance *pim,
+					 struct pim_ifchannel *ch, int eom,
 					 uint8_t join);
 
 int pim_ifchannel_compare(const struct pim_ifchannel *ch1,

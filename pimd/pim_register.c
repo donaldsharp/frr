@@ -111,10 +111,9 @@ void pim_register_stop_send(struct interface *ifp, struct prefix_sg *sg,
 	++pinfo->pim_ifstat_reg_stop_send;
 }
 
-int pim_register_stop_recv(struct interface *ifp, uint8_t *buf, int buf_size)
+int pim_register_stop_recv(struct pim_instance *pim,
+			   struct interface *ifp, uint8_t *buf, int buf_size)
 {
-	struct pim_interface *pim_ifp = ifp->info;
-	struct pim_instance *pim = pim_ifp->pim;
 	struct pim_upstream *upstream = NULL;
 	struct prefix source;
 	struct prefix_sg sg;
@@ -263,7 +262,8 @@ void pim_register_send(const uint8_t *buf, int buf_size, struct in_addr src,
  *      }
  *  }
  */
-int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
+int pim_register_recv(struct pim_instance *pim,
+		      struct interface *ifp, struct in_addr dest_addr,
 		      struct in_addr src_addr, uint8_t *tlv_buf,
 		      int tlv_buf_size)
 {
@@ -279,7 +279,7 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 #define PIM_MSG_REGISTER_BIT_RESERVED_LEN 4
 	ip_hdr = (struct ip *)(tlv_buf + PIM_MSG_REGISTER_BIT_RESERVED_LEN);
 
-	if (!pim_rp_check_is_my_ip_address(pim_ifp->pim, ip_hdr->ip_dst,
+	if (!pim_rp_check_is_my_ip_address(pim, ip_hdr->ip_dst,
 					   dest_addr)) {
 		if (PIM_DEBUG_PIM_REG) {
 			char dest[INET_ADDRSTRLEN];
@@ -324,7 +324,7 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 	sg.src = ip_hdr->ip_src;
 	sg.grp = ip_hdr->ip_dst;
 
-	i_am_rp = I_am_RP(pim_ifp->pim, sg.grp);
+	i_am_rp = I_am_RP(pim, sg.grp);
 
 	if (PIM_DEBUG_PIM_REG) {
 		char src_str[INET_ADDRSTRLEN];
@@ -337,7 +337,7 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 
 	if (i_am_rp
 	    && (dest_addr.s_addr
-		== ((RP(pim_ifp->pim, sg.grp))->rpf_addr.u.prefix4.s_addr))) {
+		== ((RP(pim, sg.grp))->rpf_addr.u.prefix4.s_addr))) {
 		sentRegisterStop = 0;
 
 		if (*bits & PIM_REGISTER_BORDER_BIT) {
@@ -362,13 +362,13 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 		}
 
 		struct pim_upstream *upstream =
-			pim_upstream_find(pim_ifp->pim, &sg);
+			pim_upstream_find(pim, &sg);
 		/*
 		 * If we don't have a place to send ignore the packet
 		 */
 		if (!upstream) {
 			upstream = pim_upstream_add(
-				pim_ifp->pim, &sg, ifp,
+				pim, &sg, ifp,
 				PIM_UPSTREAM_FLAG_MASK_SRC_STREAM,
 				__PRETTY_FUNCTION__, NULL);
 			if (!upstream) {
@@ -402,8 +402,8 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 		}
 
 		if ((upstream->sptbit == PIM_UPSTREAM_SPTBIT_TRUE)
-		    || ((SwitchToSptDesired(pim_ifp->pim, &sg))
-			&& pim_upstream_inherited_olist(pim_ifp->pim, upstream)
+		    || ((SwitchToSptDesired(pim, &sg))
+			&& pim_upstream_inherited_olist(pim, upstream)
 				   == 0)) {
 			// pim_scan_individual_oil (upstream->channel_oil);
 			pim_register_stop_send(ifp, &sg, dest_addr, src_addr);
@@ -414,15 +414,15 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 					   upstream->sptbit);
 		}
 		if ((upstream->sptbit == PIM_UPSTREAM_SPTBIT_TRUE)
-		    || (SwitchToSptDesired(pim_ifp->pim, &sg))) {
+		    || (SwitchToSptDesired(pim, &sg))) {
 			if (sentRegisterStop) {
 				pim_upstream_keep_alive_timer_start(
 					upstream,
-					pim_ifp->pim->rp_keep_alive_time);
+					pim->rp_keep_alive_time);
 			} else {
 				pim_upstream_keep_alive_timer_start(
 					upstream,
-					pim_ifp->pim->keep_alive_time);
+					pim->keep_alive_time);
 			}
 		}
 

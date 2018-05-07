@@ -270,10 +270,10 @@ void pim_igmp_other_querier_timer_off(struct igmp_sock *igmp)
 	THREAD_OFF(igmp->t_other_querier_timer);
 }
 
-static int igmp_recv_query(struct igmp_sock *igmp, int query_version,
-			   int max_resp_code, struct in_addr from,
-			   const char *from_str, char *igmp_msg,
-			   int igmp_msg_len)
+static int igmp_recv_query(struct pim_instance *pim, struct igmp_sock *igmp,
+			   int query_version, int max_resp_code,
+			   struct in_addr from, const char *from_str,
+			   char *igmp_msg, int igmp_msg_len)
 {
 	struct interface *ifp;
 	struct pim_interface *pim_ifp;
@@ -364,7 +364,7 @@ static int igmp_recv_query(struct igmp_sock *igmp, int query_version,
 
 	/* IGMP version 3 is the only one where we process the RXed query */
 	if (query_version == 3) {
-		igmp_v3_recv_query(igmp, from_str, igmp_msg);
+		igmp_v3_recv_query(pim, igmp, from_str, igmp_msg);
 	}
 
 	return 0;
@@ -380,9 +380,9 @@ static void on_trace(const char *label, struct interface *ifp,
 	}
 }
 
-static int igmp_v1_recv_report(struct igmp_sock *igmp, struct in_addr from,
-			       const char *from_str, char *igmp_msg,
-			       int igmp_msg_len)
+static int igmp_v1_recv_report(struct pim_instance *pim, struct igmp_sock *igmp,
+			       struct in_addr from, const char *from_str,
+			       char *igmp_msg, int igmp_msg_len)
 {
 	struct interface *ifp = igmp->interface;
 	struct igmp_group *group;
@@ -411,7 +411,7 @@ static int igmp_v1_recv_report(struct igmp_sock *igmp, struct in_addr from,
 		return -1;
 
 	/* non-existant group is created as INCLUDE {empty} */
-	group = igmp_add_group_by_addr(igmp, group_addr);
+	group = igmp_add_group_by_addr(pim, igmp, group_addr);
 	if (!group) {
 		return -1;
 	}
@@ -421,7 +421,8 @@ static int igmp_v1_recv_report(struct igmp_sock *igmp, struct in_addr from,
 	return 0;
 }
 
-int pim_igmp_packet(struct igmp_sock *igmp, char *buf, size_t len)
+int pim_igmp_packet(struct pim_instance *pim, struct igmp_sock *igmp, char *buf,
+		    size_t len)
 {
 	struct ip *ip_hdr;
 	size_t ip_hlen; /* ip header length in bytes */
@@ -491,35 +492,35 @@ int pim_igmp_packet(struct igmp_sock *igmp, char *buf, size_t len)
 			return -1;
 		}
 
-		return igmp_recv_query(igmp, query_version, max_resp_code,
+		return igmp_recv_query(pim, igmp, query_version, max_resp_code,
 				       ip_hdr->ip_src, from_str, igmp_msg,
 				       igmp_msg_len);
 	}
 
 	case PIM_IGMP_V3_MEMBERSHIP_REPORT:
-		return igmp_v3_recv_report(igmp, ip_hdr->ip_src, from_str,
+		return igmp_v3_recv_report(pim, igmp, ip_hdr->ip_src, from_str,
 					   igmp_msg, igmp_msg_len);
 
 	case PIM_IGMP_V2_MEMBERSHIP_REPORT:
-		return igmp_v2_recv_report(igmp, ip_hdr->ip_src, from_str,
+		return igmp_v2_recv_report(pim, igmp, ip_hdr->ip_src, from_str,
 					   igmp_msg, igmp_msg_len);
 
 	case PIM_IGMP_V1_MEMBERSHIP_REPORT:
-		return igmp_v1_recv_report(igmp, ip_hdr->ip_src, from_str,
+		return igmp_v1_recv_report(pim, igmp, ip_hdr->ip_src, from_str,
 					   igmp_msg, igmp_msg_len);
 
 	case PIM_IGMP_V2_LEAVE_GROUP:
-		return igmp_v2_recv_leave(igmp, ip_hdr->ip_src, from_str,
+		return igmp_v2_recv_leave(pim, igmp, ip_hdr->ip_src, from_str,
 					  igmp_msg, igmp_msg_len);
 
 	case PIM_IGMP_MTRACE_RESPONSE:
-		return igmp_mtrace_recv_response(igmp, ip_hdr, ip_hdr->ip_src,
-						 from_str, igmp_msg,
-						 igmp_msg_len);
+		return igmp_mtrace_recv_response(pim, igmp, ip_hdr,
+						 ip_hdr->ip_src, from_str,
+						 igmp_msg, igmp_msg_len);
 	case PIM_IGMP_MTRACE_QUERY_REQUEST:
-		return igmp_mtrace_recv_qry_req(igmp, ip_hdr, ip_hdr->ip_src,
-						from_str, igmp_msg,
-						igmp_msg_len);
+		return igmp_mtrace_recv_qry_req(pim, igmp, ip_hdr,
+						ip_hdr->ip_src, from_str,
+						igmp_msg, igmp_msg_len);
 	}
 
 	zlog_warn("Ignoring unsupported IGMP message type: %d", msg_type);
@@ -717,7 +718,8 @@ static void igmp_group_free(struct igmp_group *group)
 	XFREE(MTYPE_PIM_IGMP_GROUP, group);
 }
 
-static void igmp_group_delete(struct igmp_group *group)
+static void igmp_group_delete(struct pim_instance *pim,
+			      struct igmp_group *group)
 {
 	struct listnode *src_node;
 	struct listnode *src_nextnode;
@@ -734,7 +736,7 @@ static void igmp_group_delete(struct igmp_group *group)
 
 	for (ALL_LIST_ELEMENTS(group->group_source_list, src_node, src_nextnode,
 			       src)) {
-		igmp_source_delete(src);
+		igmp_source_delete(pim, src);
 	}
 
 	if (group->t_group_query_retransmit_timer) {
@@ -748,12 +750,13 @@ static void igmp_group_delete(struct igmp_group *group)
 	igmp_group_free(group);
 }
 
-void igmp_group_delete_empty_include(struct igmp_group *group)
+void igmp_group_delete_empty_include(struct pim_instance *pim,
+				     struct igmp_group *group)
 {
 	zassert(!group->group_filtermode_isexcl);
 	zassert(!listcount(group->group_source_list));
 
-	igmp_group_delete(group);
+	igmp_group_delete(pim, group);
 }
 
 void igmp_sock_free(struct igmp_sock *igmp)
@@ -770,7 +773,7 @@ void igmp_sock_free(struct igmp_sock *igmp)
 	XFREE(MTYPE_PIM_IGMP_SOCKET, igmp);
 }
 
-void igmp_sock_delete(struct igmp_sock *igmp)
+void igmp_sock_delete(struct pim_instance *pim, struct igmp_sock *igmp)
 {
 	struct pim_interface *pim_ifp;
 	struct listnode *grp_node;
@@ -779,7 +782,7 @@ void igmp_sock_delete(struct igmp_sock *igmp)
 
 	for (ALL_LIST_ELEMENTS(igmp->igmp_group_list, grp_node, grp_nextnode,
 			       grp)) {
-		igmp_group_delete(grp);
+		igmp_group_delete(pim, grp);
 	}
 
 	sock_close(igmp);
@@ -791,7 +794,7 @@ void igmp_sock_delete(struct igmp_sock *igmp)
 	igmp_sock_free(igmp);
 }
 
-void igmp_sock_delete_all(struct interface *ifp)
+void igmp_sock_delete_all(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 	struct listnode *igmp_node, *igmp_nextnode;
@@ -801,7 +804,7 @@ void igmp_sock_delete_all(struct interface *ifp)
 
 	for (ALL_LIST_ELEMENTS(pim_ifp->igmp_socket_list, igmp_node,
 			       igmp_nextnode, igmp)) {
-		igmp_sock_delete(igmp);
+		igmp_sock_delete(pim, igmp);
 	}
 }
 
@@ -985,6 +988,8 @@ static int igmp_group_timer(struct thread *t)
 	struct igmp_group *group;
 
 	group = THREAD_ARG(t);
+	struct pim_instance *pim =
+		pim_get_pim_instance(group->group_igmp_sock->interface->vrf_id);
 
 	if (PIM_DEBUG_IGMP_TRACE) {
 		char group_str[INET_ADDRSTRLEN];
@@ -1000,9 +1005,9 @@ static int igmp_group_timer(struct thread *t)
 	group->group_filtermode_isexcl = 0;
 
 	/* Any source (*,G) is forwarded only if mode is EXCLUDE {empty} */
-	igmp_anysource_forward_stop(group);
+	igmp_anysource_forward_stop(pim, group);
 
-	igmp_source_delete_expired(group->group_source_list);
+	igmp_source_delete_expired(pim, group->group_source_list);
 
 	zassert(!group->group_filtermode_isexcl);
 
@@ -1013,7 +1018,7 @@ static int igmp_group_timer(struct thread *t)
 	  record.
 	*/
 	if (listcount(group->group_source_list) < 1) {
-		igmp_group_delete_empty_include(group);
+		igmp_group_delete_empty_include(pim, group);
 	}
 
 	return 0;
@@ -1072,7 +1077,8 @@ struct igmp_group *find_group_by_addr(struct igmp_sock *igmp,
 	return hash_lookup(igmp->igmp_group_hash, &lookup);
 }
 
-struct igmp_group *igmp_add_group_by_addr(struct igmp_sock *igmp,
+struct igmp_group *igmp_add_group_by_addr(struct pim_instance *pim,
+					  struct igmp_sock *igmp,
 					  struct in_addr group_addr)
 {
 	struct igmp_group *group;
@@ -1158,7 +1164,7 @@ struct igmp_group *igmp_add_group_by_addr(struct igmp_sock *igmp,
 	zassert(!group->t_group_timer);		  /* group timer == 0 */
 
 	/* Any source (*,G) is forwarded only if mode is EXCLUDE {empty} */
-	igmp_anysource_forward_stop(group);
+	igmp_anysource_forward_stop(pim, group);
 
 	return group;
 }

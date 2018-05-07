@@ -49,12 +49,15 @@ enum pim_msg_type {
 
 void pim_ifstat_reset(struct interface *ifp);
 void pim_sock_reset(struct interface *ifp);
-int pim_sock_add(struct interface *ifp);
-void pim_sock_delete(struct interface *ifp, const char *delete_message);
-void pim_hello_restart_now(struct interface *ifp);
-void pim_hello_restart_triggered(struct interface *ifp);
+int pim_sock_add(struct pim_instance *pim, struct interface *ifp);
+void pim_sock_delete(struct pim_instance *pim, struct interface *ifp,
+		     const char *delete_message);
+void pim_hello_restart_now(struct pim_instance *pim, struct interface *ifp);
+void pim_hello_restart_triggered(struct pim_instance *pim,
+				 struct interface *ifp);
 
-int pim_pim_packet(struct interface *ifp, uint8_t *buf, size_t len);
+int pim_pim_packet(struct pim_instance *pim, struct interface *ifp,
+		   uint8_t *buf, size_t len);
 
 int pim_msg_send(int fd, struct in_addr src, struct in_addr dst,
 		 uint8_t *pim_msg, int pim_msg_size, const char *ifname);

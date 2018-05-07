@@ -50,7 +50,8 @@ static void on_trace(const char *label, struct interface *ifp,
 	}
 }
 
-static void recv_join(struct interface *ifp, struct pim_neighbor *neigh,
+static void recv_join(struct pim_instance *pim,
+		      struct interface *ifp, struct pim_neighbor *neigh,
 		      uint16_t holdtime, struct in_addr upstream,
 		      struct prefix_sg *sg, uint8_t source_flags)
 {
@@ -81,7 +82,7 @@ static void recv_join(struct interface *ifp, struct pim_neighbor *neigh,
 	 */
 	if ((source_flags & PIM_RPT_BIT_MASK)
 	    && (source_flags & PIM_WILDCARD_BIT_MASK)) {
-		struct pim_rpf *rp = RP(pim_ifp->pim, sg->grp);
+		struct pim_rpf *rp = RP(pim, sg->grp);
 
 		/*
 		 * If the RP sent in the message is not
@@ -106,11 +107,12 @@ static void recv_join(struct interface *ifp, struct pim_neighbor *neigh,
 	}
 
 	/* Restart join expiry timer */
-	pim_ifchannel_join_add(ifp, neigh->source_addr, upstream, sg,
+	pim_ifchannel_join_add(pim, ifp, neigh->source_addr, upstream, sg,
 			       source_flags, holdtime);
 }
 
-static void recv_prune(struct interface *ifp, struct pim_neighbor *neigh,
+static void recv_prune(struct pim_instance *pim,
+		       struct interface *ifp, struct pim_neighbor *neigh,
 		       uint16_t holdtime, struct in_addr upstream,
 		       struct prefix_sg *sg, uint8_t source_flags)
 {
@@ -137,7 +139,7 @@ static void recv_prune(struct interface *ifp, struct pim_neighbor *neigh,
 
 	if ((source_flags & PIM_RPT_BIT_MASK)
 	    && (source_flags & PIM_WILDCARD_BIT_MASK)) {
-		struct pim_rpf *rp = RP(pim_ifp->pim, sg->grp);
+		struct pim_rpf *rp = RP(pim, sg->grp);
 
 		// Ignoring Prune *,G's at the moment.
 		if (sg->src.s_addr != rp->rpf_addr.u.prefix4.s_addr)
@@ -146,10 +148,11 @@ static void recv_prune(struct interface *ifp, struct pim_neighbor *neigh,
 		sg->src.s_addr = INADDR_ANY;
 	}
 
-	pim_ifchannel_prune(ifp, upstream, sg, source_flags, holdtime);
+	pim_ifchannel_prune(pim, ifp, upstream, sg, source_flags, holdtime);
 }
 
-int pim_joinprune_recv(struct interface *ifp, struct pim_neighbor *neigh,
+int pim_joinprune_recv(struct pim_instance *pim,
+		       struct interface *ifp, struct pim_neighbor *neigh,
 		       struct in_addr src_addr, uint8_t *tlv_buf,
 		       int tlv_buf_size)
 {
@@ -294,7 +297,7 @@ int pim_joinprune_recv(struct interface *ifp, struct pim_neighbor *neigh,
 			if (filtered)
 				continue;
 
-			recv_join(ifp, neigh, msg_holdtime,
+			recv_join(pim, ifp, neigh, msg_holdtime,
 				  msg_upstream_addr.u.prefix4, &sg,
 				  msg_source_flags);
 
@@ -302,7 +305,7 @@ int pim_joinprune_recv(struct interface *ifp, struct pim_neighbor *neigh,
 				starg_ch = pim_ifchannel_find(ifp, &sg);
 				if (starg_ch)
 					pim_ifchannel_set_star_g_join_state(
-						starg_ch, 0, 1);
+						pim, starg_ch, 0, 1);
 			}
 		}
 
@@ -320,7 +323,7 @@ int pim_joinprune_recv(struct interface *ifp, struct pim_neighbor *neigh,
 			if (filtered)
 				continue;
 
-			recv_prune(ifp, neigh, msg_holdtime,
+			recv_prune(pim, ifp, neigh, msg_holdtime,
 				   msg_upstream_addr.u.prefix4, &sg,
 				   msg_source_flags);
 
@@ -352,7 +355,8 @@ int pim_joinprune_recv(struct interface *ifp, struct pim_neighbor *neigh,
 			}
 		}
 		if (starg_ch && !filtered)
-			pim_ifchannel_set_star_g_join_state(starg_ch, 1, 0);
+			pim_ifchannel_set_star_g_join_state(pim, starg_ch, 1,
+							    0);
 		starg_ch = NULL;
 	} /* scan groups */
 
@@ -425,7 +429,8 @@ int pim_joinprune_recv(struct interface *ifp, struct pim_neighbor *neigh,
  *  |        Pruned Source Address n (Encoded-Source format)        |
  *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  */
-int pim_joinprune_send(struct pim_rpf *rpf, struct list *groups)
+int pim_joinprune_send(struct pim_instance *pim, struct pim_rpf *rpf,
+		       struct list *groups)
 {
 	struct pim_jp_agg_group *group;
 	struct pim_interface *pim_ifp = NULL;
@@ -478,7 +483,7 @@ int pim_joinprune_send(struct pim_rpf *rpf, struct list *groups)
 	  relevant Hello message without waiting for the Hello Timer to
 	  expire, followed by the Join/Prune or Assert message.
 	*/
-	pim_hello_require(rpf->source_nexthop.interface);
+	pim_hello_require(pim, rpf->source_nexthop.interface);
 
 	for (ALL_LIST_ELEMENTS(groups, node, nnode, group)) {
 		if (new_packet) {

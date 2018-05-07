@@ -106,7 +106,7 @@ static void dr_election_by_pri(struct interface *ifp)
   PIM Hello message is received, when a neighbor times out, or when a
   router's own DR Priority changes.
  */
-int pim_if_dr_election(struct interface *ifp)
+int pim_if_dr_election(struct pim_instance *pim, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp = ifp->info;
 	struct in_addr old_dr_addr;
@@ -139,16 +139,17 @@ int pim_if_dr_election(struct interface *ifp)
 		pim_ifp->pim_dr_election_last =
 			pim_time_monotonic_sec(); /* timestamp */
 		++pim_ifp->pim_dr_election_changes;
-		pim_if_update_join_desired(pim_ifp);
-		pim_if_update_could_assert(ifp);
-		pim_if_update_assert_tracking_desired(ifp);
+		pim_if_update_join_desired(pim, pim_ifp);
+		pim_if_update_could_assert(pim, ifp);
+		pim_if_update_assert_tracking_desired(pim, ifp);
 		return 1;
 	}
 
 	return 0;
 }
 
-static void update_dr_priority(struct pim_neighbor *neigh,
+static void update_dr_priority(struct pim_instance *pim,
+			       struct pim_neighbor *neigh,
 			       pim_hello_options hello_options,
 			       uint32_t dr_priority)
 {
@@ -193,20 +194,22 @@ static void update_dr_priority(struct pim_neighbor *neigh,
 		  when a
 		  router's own DR Priority changes.
 		*/
-		pim_if_dr_election(
-			neigh->interface); // router's own DR Priority changes
+		pim_if_dr_election(pim, neigh->interface);
 	}
 }
 
 static int on_neighbor_timer(struct thread *t)
 {
 	struct pim_neighbor *neigh;
+	struct pim_instance *pim;
 	struct interface *ifp;
 	char msg[100];
 
 	neigh = THREAD_ARG(t);
 
 	ifp = neigh->interface;
+
+	pim = pim_get_pim_instance(ifp->vrf_id);
 
 	if (PIM_DEBUG_PIM_TRACE) {
 		char src_str[INET_ADDRSTRLEN];
@@ -218,7 +221,7 @@ static int on_neighbor_timer(struct thread *t)
 	}
 
 	snprintf(msg, sizeof(msg), "%d-sec holdtime expired", neigh->holdtime);
-	pim_neighbor_delete(ifp, neigh, msg);
+	pim_neighbor_delete(pim, ifp, neigh, msg);
 
 	/*
 	  RFC 4601: 4.3.2.  DR Election
@@ -227,7 +230,7 @@ static int on_neighbor_timer(struct thread *t)
 	  PIM Hello message is received, when a neighbor times out, or when a
 	  router's own DR Priority changes.
 	*/
-	pim_if_dr_election(ifp); // neighbor times out
+	pim_if_dr_election(pim, ifp);
 
 	return 0;
 }
@@ -261,6 +264,7 @@ void pim_neighbor_timer_reset(struct pim_neighbor *neigh, uint16_t holdtime)
 static int on_neighbor_jp_timer(struct thread *t)
 {
 	struct pim_neighbor *neigh = THREAD_ARG(t);
+	struct pim_instance *pim;
 	struct pim_rpf rpf;
 
 	if (PIM_DEBUG_PIM_TRACE) {
@@ -272,9 +276,11 @@ static int on_neighbor_jp_timer(struct thread *t)
 			   neigh->upstream_jp_agg->count);
 	}
 
+	pim = pim_get_pim_instance(neigh->interface->vrf_id);
 	rpf.source_nexthop.interface = neigh->interface;
 	rpf.rpf_addr.u.prefix4 = neigh->source_addr;
-	pim_joinprune_send(&rpf, neigh->upstream_jp_agg);
+
+	pim_joinprune_send(pim, &rpf, neigh->upstream_jp_agg);
 
 	thread_add_timer(master, on_neighbor_jp_timer, neigh, qpim_t_periodic,
 			 &neigh->jp_timer);
@@ -478,11 +484,12 @@ struct pim_neighbor *pim_neighbor_find_if(struct interface *ifp)
 }
 
 struct pim_neighbor *
-pim_neighbor_add(struct interface *ifp, struct in_addr source_addr,
-		 pim_hello_options hello_options, uint16_t holdtime,
-		 uint16_t propagation_delay, uint16_t override_interval,
-		 uint32_t dr_priority, uint32_t generation_id,
-		 struct list *addr_list, int send_hello_now)
+pim_neighbor_add(struct pim_instance *pim, struct interface *ifp,
+		 struct in_addr source_addr, pim_hello_options hello_options,
+		 uint16_t holdtime, uint16_t propagation_delay,
+		 uint16_t override_interval, uint32_t dr_priority,
+		 uint32_t generation_id, struct list *addr_list,
+		 int send_hello_now)
 {
 	struct pim_interface *pim_ifp;
 	struct pim_neighbor *neigh;
@@ -511,8 +518,7 @@ pim_neighbor_add(struct interface *ifp, struct in_addr source_addr,
 	  PIM Hello message is received, when a neighbor times out, or when a
 	  router's own DR Priority changes.
 	*/
-	pim_if_dr_election(neigh->interface); // new neighbor -- should not
-					      // trigger dr election...
+	pim_if_dr_election(pim, neigh->interface);
 
 	/*
 	  RFC 4601: 4.3.1.  Sending Hello Messages
@@ -529,11 +535,11 @@ pim_neighbor_add(struct interface *ifp, struct in_addr source_addr,
 	  interface.
 	*/
 	if (send_hello_now)
-		pim_hello_restart_now(ifp);
+		pim_hello_restart_now(pim, ifp);
 	else
-		pim_hello_restart_triggered(neigh->interface);
+		pim_hello_restart_triggered(pim, neigh->interface);
 
-	pim_upstream_find_new_rpf(pim_ifp->pim);
+	pim_upstream_find_new_rpf(pim);
 
 	/* RNH can send nexthop update prior to PIM neibhor UP
 	   in that case nexthop cache would not consider this neighbor
@@ -541,11 +547,11 @@ pim_neighbor_add(struct interface *ifp, struct in_addr source_addr,
 	   Upon PIM neighbor UP, iterate all RPs and update
 	   nexthop cache with this neighbor.
 	 */
-	pim_resolve_rp_nh(pim_ifp->pim);
+	pim_resolve_rp_nh(pim);
 
-	pim_rp_setup(pim_ifp->pim);
+	pim_rp_setup(pim);
 
-	sched_rpf_cache_refresh(pim_ifp->pim);
+	sched_rpf_cache_refresh(pim);
 	return neigh;
 }
 
@@ -598,8 +604,8 @@ static uint16_t find_neighbors_next_highest_override_interval_msec(
 	return next_highest_interval_msec;
 }
 
-void pim_neighbor_delete(struct interface *ifp, struct pim_neighbor *neigh,
-			 const char *delete_message)
+void pim_neighbor_delete(struct pim_instance *pim, struct interface *ifp,
+			 struct pim_neighbor *neigh, const char *delete_message)
 {
 	struct pim_interface *pim_ifp;
 	char src_str[INET_ADDRSTRLEN];
@@ -613,7 +619,7 @@ void pim_neighbor_delete(struct interface *ifp, struct pim_neighbor *neigh,
 
 	THREAD_OFF(neigh->t_expire_timer);
 
-	pim_if_assert_on_neighbor_down(ifp, neigh->source_addr);
+	pim_if_assert_on_neighbor_down(pim, ifp, neigh->source_addr);
 
 	if (!PIM_OPTION_IS_SET(neigh->hello_options,
 			       PIM_OPTION_MASK_LAN_PRUNE_DELAY)) {
@@ -667,10 +673,11 @@ void pim_neighbor_delete(struct interface *ifp, struct pim_neighbor *neigh,
 
 	pim_neighbor_free(neigh);
 
-	sched_rpf_cache_refresh(pim_ifp->pim);
+	sched_rpf_cache_refresh(pim);
 }
 
-void pim_neighbor_delete_all(struct interface *ifp, const char *delete_message)
+void pim_neighbor_delete_all(struct pim_instance *pim, struct interface *ifp,
+			     const char *delete_message)
 {
 	struct pim_interface *pim_ifp;
 	struct listnode *neigh_node;
@@ -682,7 +689,7 @@ void pim_neighbor_delete_all(struct interface *ifp, const char *delete_message)
 
 	for (ALL_LIST_ELEMENTS(pim_ifp->pim_neighbor_list, neigh_node,
 			       neigh_nextnode, neigh)) {
-		pim_neighbor_delete(ifp, neigh, delete_message);
+		pim_neighbor_delete(pim, ifp, neigh, delete_message);
 	}
 }
 
@@ -776,7 +783,7 @@ static void delete_from_neigh_addr(struct interface *ifp,
 	} /* scan addr list */
 }
 
-void pim_neighbor_update(struct pim_neighbor *neigh,
+void pim_neighbor_update(struct pim_instance *pim, struct pim_neighbor *neigh,
 			 pim_hello_options hello_options, uint16_t holdtime,
 			 uint32_t dr_priority, struct list *addr_list)
 {
@@ -818,7 +825,7 @@ void pim_neighbor_update(struct pim_neighbor *neigh,
 	/* Replace secondary address list */
 	neigh->prefix_list = addr_list;
 
-	update_dr_priority(neigh, hello_options, dr_priority);
+	update_dr_priority(pim, neigh, hello_options, dr_priority);
 	/*
 	  Copy flags
 	 */

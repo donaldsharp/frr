@@ -55,8 +55,6 @@
 #include "pim_ssm.h"
 
 static void join_timer_stop(struct pim_upstream *up);
-static void
-pim_upstream_update_assert_tracking_desired(struct pim_upstream *up);
 
 /*
  * A (*,G) or a (*,*) is going away
@@ -181,7 +179,7 @@ struct pim_upstream *pim_upstream_del(struct pim_instance *pim,
 	THREAD_OFF(up->t_msdp_reg_timer);
 
 	if (up->join_state == PIM_UPSTREAM_JOINED) {
-		pim_jp_agg_single_upstream_send(&up->rpf, up, 0);
+		pim_jp_agg_single_upstream_send(pim, &up->rpf, up, 0);
 
 		if (up->sg.src.s_addr == INADDR_ANY) {
 			/* if a (*, G) entry in the joined state is being
@@ -192,7 +190,7 @@ struct pim_upstream *pim_upstream_del(struct pim_instance *pim,
 	}
 
 	join_timer_stop(up);
-	pim_jp_agg_upstream_verification(up, false);
+	pim_jp_agg_upstream_verification(pim, up, false);
 	up->rpf.source_nexthop.interface = NULL;
 
 	if (up->sg.src.s_addr != INADDR_ANY) {
@@ -242,7 +240,7 @@ struct pim_upstream *pim_upstream_del(struct pim_instance *pim,
 	return NULL;
 }
 
-void pim_upstream_send_join(struct pim_upstream *up)
+void pim_upstream_send_join(struct pim_instance *pim, struct pim_upstream *up)
 {
 	if (PIM_DEBUG_TRACE) {
 		char rpf_str[PREFIX_STRLEN];
@@ -260,15 +258,15 @@ void pim_upstream_send_join(struct pim_upstream *up)
 	}
 
 	/* send Join(S,G) to the current upstream neighbor */
-	pim_jp_agg_single_upstream_send(&up->rpf, up, 1 /* join */);
+	pim_jp_agg_single_upstream_send(pim, &up->rpf, up, 1 /* join */);
 }
 
 static int on_join_timer(struct thread *t)
 {
+	struct pim_instance *pim;
 	struct pim_upstream *up;
 
 	up = THREAD_ARG(t);
-
 	/*
 	 * In the case of a HFR we will not ahve anyone to send this to.
 	 */
@@ -280,10 +278,13 @@ static int on_join_timer(struct thread *t)
 	 * But since this might change leave the join timer running
 	 */
 	if (up->rpf.source_nexthop
-		    .interface && !if_is_loopback(up->rpf.source_nexthop.interface))
-		pim_upstream_send_join(up);
+		    .interface && !if_is_loopback(up->rpf.source_nexthop.interface)) {
+		pim = pim_get_pim_instance(
+			up->rpf.source_nexthop.interface->vrf_id);
+		pim_upstream_send_join(pim, up);
+	}
 
-	join_timer_start(up);
+	join_timer_start(pim, up);
 
 	return 0;
 }
@@ -291,6 +292,7 @@ static int on_join_timer(struct thread *t)
 static void join_timer_stop(struct pim_upstream *up)
 {
 	struct pim_neighbor *nbr;
+	struct pim_instance *pim;
 
 	THREAD_OFF(up->t_join_timer);
 
@@ -300,10 +302,11 @@ static void join_timer_stop(struct pim_upstream *up)
 	if (nbr)
 		pim_jp_agg_remove_group(nbr->upstream_jp_agg, up);
 
-	pim_jp_agg_upstream_verification(up, false);
+	pim = pim_get_pim_instance(up->rpf.source_nexthop.interface->vrf_id);
+	pim_jp_agg_upstream_verification(pim, up, false);
 }
 
-void join_timer_start(struct pim_upstream *up)
+void join_timer_start(struct pim_instance *pim, struct pim_upstream *up)
 {
 	struct pim_neighbor *nbr = NULL;
 
@@ -326,7 +329,8 @@ void join_timer_start(struct pim_upstream *up)
 		thread_add_timer(master, on_join_timer, up, qpim_t_periodic,
 				 &up->t_join_timer);
 	}
-	pim_jp_agg_upstream_verification(up, true);
+
+	pim_jp_agg_upstream_verification(pim, up, true);
 }
 
 /*
@@ -336,11 +340,12 @@ void join_timer_start(struct pim_upstream *up)
  * As such we need to remove from the old list and
  * add to the new list.
  */
-void pim_upstream_join_timer_restart(struct pim_upstream *up,
+void pim_upstream_join_timer_restart(struct pim_instance *pim,
+				     struct pim_upstream *up,
 				     struct pim_rpf *old)
 {
 	// THREAD_OFF(up->t_join_timer);
-	join_timer_start(up);
+	join_timer_start(pim, up);
 }
 
 static void pim_upstream_join_timer_restart_msec(struct pim_upstream *up,
@@ -420,7 +425,7 @@ void pim_upstream_join_timer_decrease_to_t_override(const char *debug_label,
 	}
 }
 
-static void forward_on(struct pim_upstream *up)
+static void forward_on(struct pim_instance *pim, struct pim_upstream *up)
 {
 	struct listnode *chnode;
 	struct listnode *chnextnode;
@@ -429,7 +434,7 @@ static void forward_on(struct pim_upstream *up)
 	/* scan (S,G) state */
 	for (ALL_LIST_ELEMENTS(up->ifchannels, chnode, chnextnode, ch)) {
 		if (pim_macro_chisin_oiflist(ch))
-			pim_forward_start(ch);
+			pim_forward_start(pim, ch);
 
 	} /* scan iface channel list */
 }
@@ -512,6 +517,28 @@ void pim_upstream_register_reevaluate(struct pim_instance *pim)
 	}
 }
 
+static void
+pim_upstream_update_assert_tracking_desired(struct pim_instance *pim,
+					    struct pim_upstream *up)
+{
+	struct listnode *chnode;
+	struct listnode *chnextnode;
+	struct pim_interface *pim_ifp;
+	struct pim_ifchannel *ch;
+
+	/* scan per-interface (S,G) state */
+	for (ALL_LIST_ELEMENTS(up->ifchannels, chnode, chnextnode, ch)) {
+		if (!ch->interface)
+			continue;
+		pim_ifp = ch->interface->info;
+		if (!pim_ifp)
+			continue;
+
+		pim_ifchannel_update_assert_tracking_desired(pim, ch);
+
+	} /* scan iface channel list */
+}
+
 void pim_upstream_switch(struct pim_instance *pim, struct pim_upstream *up,
 			 enum pim_upstream_state new_state)
 {
@@ -528,12 +555,12 @@ void pim_upstream_switch(struct pim_instance *pim, struct pim_upstream *up,
 	if (old_state != new_state)
 		up->state_transition = pim_time_monotonic_sec();
 
-	pim_upstream_update_assert_tracking_desired(up);
+	pim_upstream_update_assert_tracking_desired(pim, up);
 
 	if (new_state == PIM_UPSTREAM_JOINED) {
 		if (old_state != PIM_UPSTREAM_JOINED) {
 			int old_fhr = PIM_UPSTREAM_FLAG_TEST_FHR(up->flags);
-			forward_on(up);
+			forward_on(pim, up);
 			pim_msdp_up_join_state_changed(pim, up);
 			if (pim_upstream_could_register(up)) {
 				PIM_UPSTREAM_FLAG_SET_FHR(up->flags);
@@ -545,11 +572,11 @@ void pim_upstream_switch(struct pim_instance *pim, struct pim_upstream *up,
 					pim_register_join(up);
 				}
 			} else {
-				pim_upstream_send_join(up);
-				join_timer_start(up);
+				pim_upstream_send_join(pim, up);
+				join_timer_start(pim, up);
 			}
 		} else {
-			forward_on(up);
+			forward_on(pim, up);
 		}
 	} else {
 
@@ -569,11 +596,11 @@ void pim_upstream_switch(struct pim_instance *pim, struct pim_upstream *up,
 					up->parent->rpf.source_nexthop
 						.interface->name,
 					up->rpf.source_nexthop.interface->name);
-			pim_jp_agg_single_upstream_send(&up->parent->rpf,
+			pim_jp_agg_single_upstream_send(pim, &up->parent->rpf,
 							up->parent,
 							1 /* (W,G) Join */);
 		} else
-			pim_jp_agg_single_upstream_send(&up->rpf, up,
+			pim_jp_agg_single_upstream_send(pim, &up->rpf, up,
 							0 /* prune */);
 		join_timer_stop(up);
 	}
@@ -732,16 +759,14 @@ struct pim_upstream *pim_upstream_find(struct pim_instance *pim,
 	return up;
 }
 
-struct pim_upstream *pim_upstream_find_or_add(struct prefix_sg *sg,
+struct pim_upstream *pim_upstream_find_or_add(struct pim_instance *pim,
+					      struct prefix_sg *sg,
 					      struct interface *incoming,
 					      int flags, const char *name)
 {
 	struct pim_upstream *up;
-	struct pim_interface *pim_ifp;
 
-	pim_ifp = incoming->info;
-
-	up = pim_upstream_find(pim_ifp->pim, sg);
+	up = pim_upstream_find(pim, sg);
 
 	if (up) {
 		if (!(up->flags & flags)) {
@@ -754,8 +779,7 @@ struct pim_upstream *pim_upstream_find_or_add(struct prefix_sg *sg,
 					up->ref_count);
 		}
 	} else
-		up = pim_upstream_add(pim_ifp->pim, sg, incoming, flags, name,
-				      NULL);
+		up = pim_upstream_add(pim, sg, incoming, flags, name, NULL);
 
 	return up;
 }
@@ -968,8 +992,8 @@ void pim_upstream_rpf_genid_changed(struct pim_instance *pim,
 	}
 }
 
-
-void pim_upstream_rpf_interface_changed(struct pim_upstream *up,
+void pim_upstream_rpf_interface_changed(struct pim_instance *pim,
+					struct pim_upstream *up,
 					struct interface *old_rpf_ifp)
 {
 	struct listnode *chnode;
@@ -985,15 +1009,16 @@ void pim_upstream_rpf_interface_changed(struct pim_upstream *up,
 				/* RPF_interface(S) stopped being I */
 				(ch->upstream->rpf.source_nexthop
 					 .interface != ch->interface)) {
-				assert_action_a5(ch);
+				assert_action_a5(pim, ch);
 			}
 		} /* PIM_IFASSERT_I_AM_LOSER */
 
-		pim_ifchannel_update_assert_tracking_desired(ch);
+		pim_ifchannel_update_assert_tracking_desired(pim, ch);
 	}
 }
 
-void pim_upstream_update_could_assert(struct pim_upstream *up)
+void pim_upstream_update_could_assert(struct pim_instance *pim,
+				      struct pim_upstream *up)
 {
 	struct listnode *chnode;
 	struct listnode *chnextnode;
@@ -1001,11 +1026,12 @@ void pim_upstream_update_could_assert(struct pim_upstream *up)
 
 	/* scan per-interface (S,G) state */
 	for (ALL_LIST_ELEMENTS(up->ifchannels, chnode, chnextnode, ch)) {
-		pim_ifchannel_update_could_assert(ch);
+		pim_ifchannel_update_could_assert(pim, ch);
 	} /* scan iface channel list */
 }
 
-void pim_upstream_update_my_assert_metric(struct pim_upstream *up)
+void pim_upstream_update_my_assert_metric(struct pim_instance *pim,
+					  struct pim_upstream *up)
 {
 	struct listnode *chnode;
 	struct listnode *chnextnode;
@@ -1013,27 +1039,7 @@ void pim_upstream_update_my_assert_metric(struct pim_upstream *up)
 
 	/* scan per-interface (S,G) state */
 	for (ALL_LIST_ELEMENTS(up->ifchannels, chnode, chnextnode, ch)) {
-		pim_ifchannel_update_my_assert_metric(ch);
-
-	} /* scan iface channel list */
-}
-
-static void pim_upstream_update_assert_tracking_desired(struct pim_upstream *up)
-{
-	struct listnode *chnode;
-	struct listnode *chnextnode;
-	struct pim_interface *pim_ifp;
-	struct pim_ifchannel *ch;
-
-	/* scan per-interface (S,G) state */
-	for (ALL_LIST_ELEMENTS(up->ifchannels, chnode, chnextnode, ch)) {
-		if (!ch->interface)
-			continue;
-		pim_ifp = ch->interface->info;
-		if (!pim_ifp)
-			continue;
-
-		pim_ifchannel_update_assert_tracking_desired(ch);
+		pim_ifchannel_update_my_assert_metric(pim, ch);
 
 	} /* scan iface channel list */
 }
@@ -1119,8 +1125,8 @@ static int pim_upstream_keep_alive_timer(struct thread *t)
 		pim_upstream_del(pim, up, __PRETTY_FUNCTION__);
 
 		if (parent) {
-			pim_jp_agg_single_upstream_send(&parent->rpf, parent,
-							true);
+			pim_jp_agg_single_upstream_send(pim, &parent->rpf,
+							parent, true);
 		}
 	}
 
@@ -1364,14 +1370,14 @@ static int pim_upstream_register_stop_timer(struct thread *t)
 
 		if (((up->channel_oil->cc.lastused / 100)
 		     > pim->keep_alive_time)
-		    && (I_am_RP(pim_ifp->pim, up->sg.grp))) {
+		    && (I_am_RP(pim, up->sg.grp))) {
 			if (PIM_DEBUG_TRACE)
 				zlog_debug(
 					"%s: Stop sending the register, because I am the RP and we haven't seen a packet in a while",
 					__PRETTY_FUNCTION__);
 			return 0;
 		}
-		rpg = RP(pim_ifp->pim, up->sg.grp);
+		rpg = RP(pim, up->sg.grp);
 		if (!rpg) {
 			if (PIM_DEBUG_TRACE)
 				zlog_debug(
@@ -1500,7 +1506,7 @@ int pim_upstream_inherited_olist(struct pim_instance *pim,
 	if (output_intf)
 		pim_upstream_switch(pim, up, PIM_UPSTREAM_JOINED);
 	else
-		forward_on(up);
+		forward_on(pim, up);
 
 	return output_intf;
 }

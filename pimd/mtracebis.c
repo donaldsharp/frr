@@ -19,7 +19,7 @@
 
 #ifdef __linux__
 
-#include "pim_igmp_mtrace.h"
+#include <zebra.h>
 
 #include "checksum.h"
 #include "prefix.h"
@@ -39,6 +39,11 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <netdb.h>
+
+#include "vty.h"
+
+#include "pim_instance.h"
+#include "pim_igmp_mtrace.h"
 
 #define MTRACEBIS_VERSION "0.1"
 #define MTRACE_TIMEOUT (5)

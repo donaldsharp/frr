@@ -74,7 +74,6 @@ struct pim_secondary_addr {
 struct pim_interface {
 	uint32_t options; /* bit vector */
 	ifindex_t mroute_vif_index;
-	struct pim_instance *pim;
 
 	struct in_addr primary_address; /* remember addr to detect change */
 	struct list *sec_addr_list;     /* list of struct pim_secondary_addr */
@@ -154,17 +153,19 @@ struct pim_interface {
 void pim_if_init(struct pim_instance *pim);
 void pim_if_terminate(struct pim_instance *pim);
 
-struct pim_interface *pim_if_new(struct interface *ifp, int igmp, int pim);
-void pim_if_delete(struct interface *ifp);
-void pim_if_addr_add(struct connected *ifc);
-void pim_if_addr_del(struct connected *ifc, int force_prim_as_any);
-void pim_if_addr_add_all(struct interface *ifp);
-void pim_if_addr_del_all(struct interface *ifp);
-void pim_if_addr_del_all_igmp(struct interface *ifp);
-void pim_if_addr_del_all_pim(struct interface *ifp);
+struct pim_interface *pim_if_new(struct pim_instance *pim,
+				 struct interface *ifp, int igmp, int usepim);
+void pim_if_delete(struct pim_instance *pim, struct interface *ifp);
+void pim_if_addr_add(struct pim_instance *pim, struct connected *ifc);
+void pim_if_addr_del(struct pim_instance *pim, struct connected *ifc,
+		     int force_prim_as_any);
+void pim_if_addr_add_all(struct pim_instance *pim, struct interface *ifp);
+void pim_if_addr_del_all(struct pim_instance *pim, struct interface *ifp);
+void pim_if_addr_del_all_igmp(struct pim_instance *pim, struct interface *ifp);
+void pim_if_addr_del_all_pim(struct pim_instance *pim, struct interface *ifp);
 
-int pim_if_add_vif(struct interface *ifp);
-int pim_if_del_vif(struct interface *ifp);
+int pim_if_add_vif(struct pim_instance *pim, struct interface *ifp);
+int pim_if_del_vif(struct pim_instance *pim, struct interface *ifp);
 void pim_if_add_vif_all(struct pim_instance *pim);
 void pim_if_del_vif_all(struct pim_instance *pim);
 
@@ -190,22 +191,27 @@ ferr_r pim_if_igmp_join_add(struct interface *ifp, struct in_addr group_addr,
 int pim_if_igmp_join_del(struct interface *ifp, struct in_addr group_addr,
 			 struct in_addr source_addr);
 
-void pim_if_update_could_assert(struct interface *ifp);
+void pim_if_update_could_assert(struct pim_instance *pim,
+				struct interface *ifp);
 
-void pim_if_assert_on_neighbor_down(struct interface *ifp,
+void pim_if_assert_on_neighbor_down(struct pim_instance *pim,
+				    struct interface *ifp,
 				    struct in_addr neigh_addr);
 
 void pim_if_rpf_interface_changed(struct interface *old_rpf_ifp,
 				  struct pim_upstream *up);
 
-void pim_if_update_join_desired(struct pim_interface *pim_ifp);
+void pim_if_update_join_desired(struct pim_instance *pim,
+				struct pim_interface *pim_ifp);
 
-void pim_if_update_assert_tracking_desired(struct interface *ifp);
+void pim_if_update_assert_tracking_desired(struct pim_instance *pim,
+					   struct interface *ifp);
 
 void pim_if_create_pimreg(struct pim_instance *pim);
 
 int pim_if_connected_to_source(struct interface *ifp, struct in_addr src);
-int pim_update_source_set(struct interface *ifp, struct in_addr source);
+int pim_update_source_set(struct pim_instance *pim, struct interface *ifp,
+			  struct in_addr source);
 
 bool pim_if_is_loopback(struct interface *ifp);
 

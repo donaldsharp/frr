@@ -103,10 +103,11 @@ struct igmp_sock *pim_igmp_sock_add(struct list *igmp_sock_list,
 				    struct in_addr ifaddr,
 				    struct interface *ifp,
 				    bool mtrace_only);
-void igmp_sock_delete(struct igmp_sock *igmp);
+void igmp_sock_delete(struct pim_instance *pim, struct igmp_sock *igmp);
 void igmp_sock_free(struct igmp_sock *igmp);
-void igmp_sock_delete_all(struct interface *ifp);
-int pim_igmp_packet(struct igmp_sock *igmp, char *buf, size_t len);
+void igmp_sock_delete_all(struct pim_instance *pim, struct interface *ifp);
+int pim_igmp_packet(struct pim_instance *pim, struct igmp_sock *igmp, char *buf,
+		    size_t len);
 
 void pim_igmp_general_query_on(struct igmp_sock *igmp);
 void pim_igmp_general_query_off(struct igmp_sock *igmp);
@@ -174,18 +175,17 @@ struct igmp_group {
 
 struct igmp_group *find_group_by_addr(struct igmp_sock *igmp,
 				      struct in_addr group_addr);
-struct igmp_group *igmp_add_group_by_addr(struct igmp_sock *igmp,
+struct igmp_group *igmp_add_group_by_addr(struct pim_instance *pim,
+					  struct igmp_sock *igmp,
 					  struct in_addr group_addr);
 
-void igmp_group_delete_empty_include(struct igmp_group *group);
+void igmp_group_delete_empty_include(struct pim_instance *pim,
+				     struct igmp_group *group);
 
 void igmp_startup_mode_on(struct igmp_sock *igmp);
 
 void igmp_group_timer_on(struct igmp_group *group, long interval_msec,
 			 const char *ifname);
-
-struct igmp_source *source_new(struct igmp_group *group,
-			       struct in_addr src_addr);
 
 void igmp_send_query(int igmp_version, struct igmp_group *group, int fd,
 		     const char *ifname, char *query_buf, int query_buf_size,

@@ -52,34 +52,38 @@
 #define PIM_IGMP_OHPI_DSEC(qrv,qqi,qri_dsec) ((qrv) * (10 * (qqi)) + (qri_dsec))
 
 void igmp_group_reset_gmi(struct igmp_group *group);
-void igmp_source_reset_gmi(struct igmp_sock *igmp, struct igmp_group *group,
+void igmp_source_reset_gmi(struct pim_instance *pim, struct igmp_sock *igmp,
+			   struct igmp_group *group,
 			   struct igmp_source *source);
 
 void igmp_source_free(struct igmp_source *source);
-void igmp_source_delete(struct igmp_source *source);
-void igmp_source_delete_expired(struct list *source_list);
+void igmp_source_delete(struct pim_instance *pim, struct igmp_source *source);
+void igmp_source_delete_expired(struct pim_instance *pim,
+				struct list *source_list);
 
-void igmpv3_report_isin(struct igmp_sock *igmp, struct in_addr from,
-			struct in_addr group_addr, int num_sources,
-			struct in_addr *sources);
-void igmpv3_report_isex(struct igmp_sock *igmp, struct in_addr from,
-			struct in_addr group_addr, int num_sources,
-			struct in_addr *sources, int from_igmp_v2_report);
-void igmpv3_report_toin(struct igmp_sock *igmp, struct in_addr from,
-			struct in_addr group_addr, int num_sources,
-			struct in_addr *sources);
-void igmpv3_report_toex(struct igmp_sock *igmp, struct in_addr from,
-			struct in_addr group_addr, int num_sources,
-			struct in_addr *sources);
-void igmpv3_report_allow(struct igmp_sock *igmp, struct in_addr from,
-			 struct in_addr group_addr, int num_sources,
-			 struct in_addr *sources);
-void igmpv3_report_block(struct igmp_sock *igmp, struct in_addr from,
-			 struct in_addr group_addr, int num_sources,
-			 struct in_addr *sources);
+void igmpv3_report_isin(struct pim_instance *pim, struct igmp_sock *igmp,
+			struct in_addr from, struct in_addr group_addr,
+			int num_sources, struct in_addr *sources);
+void igmpv3_report_isex(struct pim_instance *pim, struct igmp_sock *igmp,
+			struct in_addr from, struct in_addr group_addr,
+			int num_sources, struct in_addr *sources,
+			int from_igmp_v2_report);
+void igmpv3_report_toin(struct pim_instance *pim, struct igmp_sock *igmp,
+			struct in_addr from, struct in_addr group_addr,
+			int num_sources, struct in_addr *sources);
+void igmpv3_report_toex(struct pim_instance *pim, struct igmp_sock *igmp,
+			struct in_addr from, struct in_addr group_addr,
+			int num_sources, struct in_addr *sources);
+void igmpv3_report_allow(struct pim_instance *pim, struct igmp_sock *igmp,
+			 struct in_addr from, struct in_addr group_addr,
+			 int num_sources, struct in_addr *sources);
+void igmpv3_report_block(struct pim_instance *pim, struct igmp_sock *igmp,
+			 struct in_addr from, struct in_addr group_addr,
+			 int num_sources, struct in_addr *sources);
 
 void igmp_group_timer_lower_to_lmqt(struct igmp_group *group);
-void igmp_source_timer_lower_to_lmqt(struct igmp_source *source);
+void igmp_source_timer_lower_to_lmqt(struct pim_instance *pim,
+				     struct igmp_source *source);
 
 struct igmp_source *igmp_find_source_by_addr(struct igmp_group *group,
 					     struct in_addr src_addr);
@@ -91,10 +95,14 @@ void igmp_v3_send_query(struct igmp_group *group, int fd, const char *ifname,
 			uint8_t querier_robustness_variable,
 			uint16_t querier_query_interval);
 
-void igmp_v3_recv_query(struct igmp_sock *igmp, const char *from_str,
-			char *igmp_msg);
+void igmp_v3_recv_query(struct pim_instance *pim, struct igmp_sock *igmp,
+			const char *from_str, char *igmp_msg);
 
-int igmp_v3_recv_report(struct igmp_sock *igmp, struct in_addr from,
-			const char *from_str, char *igmp_msg, int igmp_msg_len);
+int igmp_v3_recv_report(struct pim_instance *pim, struct igmp_sock *igmp,
+			struct in_addr from, const char *from_str,
+			char *igmp_msg, int igmp_msg_len);
 
+struct igmp_source *source_new(struct pim_instance *pim,
+			       struct igmp_group *group,
+			       struct in_addr src_addr);
 #endif /* PIM_IGMPV3_H */

@@ -85,7 +85,8 @@ static struct vrf *pim_cmd_lookup_vrf(struct vty *vty, struct cmd_token *argv[],
 	return vrf;
 }
 
-static void pim_if_membership_clear(struct interface *ifp)
+static void pim_if_membership_clear(struct pim_instance *pim,
+				    struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
 
@@ -97,7 +98,7 @@ static void pim_if_membership_clear(struct interface *ifp)
 		return;
 	}
 
-	pim_ifchannel_membership_clear(ifp);
+	pim_ifchannel_membership_clear(pim, ifp);
 }
 
 /*
@@ -112,6 +113,7 @@ static void pim_if_membership_clear(struct interface *ifp)
 static void pim_if_membership_refresh(struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
+	struct pim_instance *pim;
 	struct listnode *sock_node;
 	struct igmp_sock *igmp;
 
@@ -123,12 +125,13 @@ static void pim_if_membership_refresh(struct interface *ifp)
 	if (!PIM_IF_TEST_IGMP(pim_ifp->options))
 		return;
 
+	pim = pim_get_pim_instance(ifp->vrf_id);
 	/*
 	  First clear off membership from all PIM (S,G) entries on the
 	  interface
 	*/
 
-	pim_ifchannel_membership_clear(ifp);
+	pim_ifchannel_membership_clear(pim, ifp);
 
 	/*
 	  Then restore PIM (S,G) membership from all IGMPv3 (S,G) entries on
@@ -158,8 +161,8 @@ static void pim_if_membership_refresh(struct interface *ifp)
 					       sizeof(struct prefix_sg));
 					sg.src = src->source_addr;
 					sg.grp = grp->group_addr;
-					pim_ifchannel_local_membership_add(ifp,
-									   &sg);
+					pim_ifchannel_local_membership_add(
+						pim, ifp, &sg);
 				}
 
 			} /* scan group sources */
@@ -170,7 +173,7 @@ static void pim_if_membership_refresh(struct interface *ifp)
 	  Finally delete every PIM (S,G) entry lacking all state info
 	 */
 
-	pim_ifchannel_delete_on_noinfo(ifp);
+	pim_ifchannel_delete_on_noinfo(pim, ifp);
 }
 
 static void pim_show_assert_helper(struct vty *vty,
@@ -3079,10 +3082,10 @@ static void clear_igmp_interfaces(struct pim_instance *pim)
 	struct interface *ifp;
 
 	FOR_ALL_INTERFACES (pim->vrf, ifp)
-		pim_if_addr_del_all_igmp(ifp);
+		pim_if_addr_del_all_igmp(pim, ifp);
 
 	FOR_ALL_INTERFACES (pim->vrf, ifp)
-		pim_if_addr_add_all(ifp);
+		pim_if_addr_add_all(pim, ifp);
 }
 
 static void clear_pim_interfaces(struct pim_instance *pim)
@@ -3091,7 +3094,7 @@ static void clear_pim_interfaces(struct pim_instance *pim)
 
 	FOR_ALL_INTERFACES (pim->vrf, ifp) {
 		if (ifp->info) {
-			pim_neighbor_delete_all(ifp, "interface cleared");
+			pim_neighbor_delete_all(pim, ifp, "interface cleared");
 		}
 	}
 }
@@ -5689,12 +5692,15 @@ DEFUN (no_ip_pim_ecmp_rebalance,
 static int pim_cmd_igmp_start(struct vty *vty, struct interface *ifp)
 {
 	struct pim_interface *pim_ifp;
+	struct pim_instance *pim;
 	uint8_t need_startup = 0;
 
 	pim_ifp = ifp->info;
+	pim = pim_get_pim_instance(ifp->vrf_id);
 
 	if (!pim_ifp) {
-		pim_ifp = pim_if_new(ifp, 1 /* igmp=true */, 0 /* pim=false */);
+		pim_ifp = pim_if_new(pim, ifp, 1 /* igmp=true */,
+				     0 /* pim=false */);
 		if (!pim_ifp) {
 			vty_out(vty, "Could not enable IGMP on interface %s\n",
 				ifp->name);
@@ -5711,7 +5717,7 @@ static int pim_cmd_igmp_start(struct vty *vty, struct interface *ifp)
 	/* 'ip igmp' executed multiple times, with need_startup
 	  avoid multiple if add all and membership refresh */
 	if (need_startup) {
-		pim_if_addr_add_all(ifp);
+		pim_if_addr_add_all(pim, ifp);
 		pim_if_membership_refresh(ifp);
 	}
 
@@ -5738,18 +5744,20 @@ DEFUN (interface_no_ip_igmp,
 {
 	VTY_DECLVAR_CONTEXT(interface, ifp);
 	struct pim_interface *pim_ifp = ifp->info;
+	struct pim_instance *pim;
 
 	if (!pim_ifp)
 		return CMD_SUCCESS;
 
+	pim = pim_get_pim_instance(ifp->vrf_id);
 	PIM_IF_DONT_IGMP(pim_ifp->options);
 
-	pim_if_membership_clear(ifp);
+	pim_if_membership_clear(pim, ifp);
 
-	pim_if_addr_del_all_igmp(ifp);
+	pim_if_addr_del_all_igmp(pim, ifp);
 
 	if (!PIM_IF_TEST_PIM(pim_ifp->options)) {
-		pim_if_delete(ifp);
+		pim_if_delete(pim, ifp);
 	}
 
 	return CMD_SUCCESS;
@@ -5927,7 +5935,8 @@ static void change_query_interval(struct pim_interface *pim_ifp,
 	}
 }
 
-static void change_query_max_response_time(struct pim_interface *pim_ifp,
+static void change_query_max_response_time(struct pim_instance *pim,
+					   struct pim_interface *pim_ifp,
 					   int query_max_response_time_dsec)
 {
 	struct listnode *sock_node;
@@ -5968,7 +5977,8 @@ static void change_query_max_response_time(struct pim_interface *pim_ifp,
 				/* reset source timers for sources with running
 				 * timers */
 				if (src->t_source_timer) {
-					igmp_source_reset_gmi(igmp, grp, src);
+					igmp_source_reset_gmi(pim, igmp, grp,
+							      src);
 				}
 			}
 		}
@@ -6075,6 +6085,7 @@ DEFUN (interface_ip_igmp_version,
 	struct pim_interface *pim_ifp = ifp->info;
 	int igmp_version, old_version = 0;
 	int ret;
+	struct pim_instance *pim;
 
 	if (!pim_ifp) {
 		ret = pim_cmd_igmp_start(vty, ifp);
@@ -6083,6 +6094,9 @@ DEFUN (interface_ip_igmp_version,
 		pim_ifp = ifp->info;
 	}
 
+	pim = pim_get_pim_instance(ifp->vrf_id);
+	;
+
 	igmp_version = atoi(argv[3]->arg);
 	old_version = pim_ifp->igmp_version;
 	pim_ifp->igmp_version = igmp_version;
@@ -6090,7 +6104,7 @@ DEFUN (interface_ip_igmp_version,
 	// Check if IGMP is Enabled otherwise, enable on interface
 	if (!PIM_IF_TEST_IGMP(pim_ifp->options)) {
 		PIM_IF_DO_IGMP(pim_ifp->options);
-		pim_if_addr_add_all(ifp);
+		pim_if_addr_add_all(pim, ifp);
 		pim_if_membership_refresh(ifp);
 		old_version = igmp_version;
 		// avoid refreshing membership again.
@@ -6136,6 +6150,7 @@ DEFUN (interface_ip_igmp_query_max_response_time,
 {
 	VTY_DECLVAR_CONTEXT(interface, ifp);
 	struct pim_interface *pim_ifp = ifp->info;
+	struct pim_instance *pim;
 	int query_max_response_time;
 	int ret;
 
@@ -6146,6 +6161,7 @@ DEFUN (interface_ip_igmp_query_max_response_time,
 		pim_ifp = ifp->info;
 	}
 
+	pim = pim_get_pim_instance(ifp->vrf_id);
 	query_max_response_time = atoi(argv[3]->arg);
 
 	if (query_max_response_time
@@ -6157,7 +6173,7 @@ DEFUN (interface_ip_igmp_query_max_response_time,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
-	change_query_max_response_time(pim_ifp, query_max_response_time);
+	change_query_max_response_time(pim, pim_ifp, query_max_response_time);
 
 	return CMD_SUCCESS;
 }
@@ -6173,11 +6189,13 @@ DEFUN (interface_no_ip_igmp_query_max_response_time,
 {
 	VTY_DECLVAR_CONTEXT(interface, ifp);
 	struct pim_interface *pim_ifp = ifp->info;
+	struct pim_instance *pim;
 
 	if (!pim_ifp)
 		return CMD_SUCCESS;
 
-	change_query_max_response_time(pim_ifp,
+	pim = pim_get_pim_instance(ifp->vrf_id);
+	change_query_max_response_time(pim, pim_ifp,
 				       IGMP_QUERY_MAX_RESPONSE_TIME_DSEC);
 
 	return CMD_SUCCESS;
@@ -6196,6 +6214,7 @@ DEFUN_HIDDEN (interface_ip_igmp_query_max_response_time_dsec,
 {
 	VTY_DECLVAR_CONTEXT(interface, ifp);
 	struct pim_interface *pim_ifp = ifp->info;
+	struct pim_instance *pim;
 	int query_max_response_time_dsec;
 	int default_query_interval_dsec;
 	int ret;
@@ -6219,7 +6238,9 @@ DEFUN_HIDDEN (interface_ip_igmp_query_max_response_time_dsec,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
-	change_query_max_response_time(pim_ifp, query_max_response_time_dsec);
+	pim = pim_get_pim_instance(ifp->vrf_id);
+	change_query_max_response_time(pim, pim_ifp,
+				       query_max_response_time_dsec);
 
 	return CMD_SUCCESS;
 }
@@ -6234,11 +6255,13 @@ DEFUN_HIDDEN (interface_no_ip_igmp_query_max_response_time_dsec,
 {
 	VTY_DECLVAR_CONTEXT(interface, ifp);
 	struct pim_interface *pim_ifp = ifp->info;
+	struct pim_instance *pim;
 
 	if (!pim_ifp)
 		return CMD_SUCCESS;
 
-	change_query_max_response_time(pim_ifp,
+	pim = pim_get_pim_instance(ifp->vrf_id);
+	change_query_max_response_time(pim, pim_ifp,
 				       IGMP_QUERY_MAX_RESPONSE_TIME_DSEC);
 
 	return CMD_SUCCESS;
@@ -6255,6 +6278,7 @@ DEFUN (interface_ip_pim_drprio,
 	VTY_DECLVAR_CONTEXT(interface, ifp);
 	int idx_number = 3;
 	struct pim_interface *pim_ifp = ifp->info;
+	struct pim_instance *pim;
 	uint32_t old_dr_prio;
 
 	if (!pim_ifp) {
@@ -6262,13 +6286,14 @@ DEFUN (interface_ip_pim_drprio,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
+	pim = pim_get_pim_instance(ifp->vrf_id);
 	old_dr_prio = pim_ifp->pim_dr_priority;
 
 	pim_ifp->pim_dr_priority = strtol(argv[idx_number]->arg, NULL, 10);
 
 	if (old_dr_prio != pim_ifp->pim_dr_priority) {
-		if (pim_if_dr_election(ifp))
-			pim_hello_restart_now(ifp);
+		if (pim_if_dr_election(pim, ifp))
+			pim_hello_restart_now(pim, ifp);
 	}
 
 	return CMD_SUCCESS;
@@ -6285,16 +6310,18 @@ DEFUN (interface_no_ip_pim_drprio,
 {
 	VTY_DECLVAR_CONTEXT(interface, ifp);
 	struct pim_interface *pim_ifp = ifp->info;
+	struct pim_instance *pim;
 
 	if (!pim_ifp) {
 		vty_out(vty, "Pim not enabled on this interface\n");
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
+	pim = pim_get_pim_instance(ifp->vrf_id);
 	if (pim_ifp->pim_dr_priority != PIM_DEFAULT_DR_PRIORITY) {
 		pim_ifp->pim_dr_priority = PIM_DEFAULT_DR_PRIORITY;
-		if (pim_if_dr_election(ifp))
-			pim_hello_restart_now(ifp);
+		if (pim_if_dr_election(pim, ifp))
+			pim_hello_restart_now(pim, ifp);
 	}
 
 	return CMD_SUCCESS;
@@ -6303,9 +6330,11 @@ DEFUN (interface_no_ip_pim_drprio,
 static int pim_cmd_interface_add(struct interface *ifp)
 {
 	struct pim_interface *pim_ifp = ifp->info;
+	struct pim_instance *pim = pim_get_pim_instance(ifp->vrf_id);
 
 	if (!pim_ifp) {
-		pim_ifp = pim_if_new(ifp, 0 /* igmp=false */, 1 /* pim=true */);
+		pim_ifp = pim_if_new(pim, ifp, 0 /* igmp=false */,
+				     1 /* pim=true */);
 		if (!pim_ifp) {
 			return 0;
 		}
@@ -6313,7 +6342,7 @@ static int pim_cmd_interface_add(struct interface *ifp)
 		PIM_IF_DO_PIM(pim_ifp->options);
 	}
 
-	pim_if_addr_add_all(ifp);
+	pim_if_addr_add_all(pim, ifp);
 	pim_if_membership_refresh(ifp);
 	return 1;
 }
@@ -6345,7 +6374,7 @@ DEFUN (interface_ip_pim_sm,
        PIM_STR
        IFACE_PIM_SM_STR)
 {
-	struct pim_interface *pim_ifp;
+	struct pim_instance *pim;
 
 	VTY_DECLVAR_CONTEXT(interface, ifp);
 	if (!pim_cmd_interface_add(ifp)) {
@@ -6353,9 +6382,8 @@ DEFUN (interface_ip_pim_sm,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
-	pim_ifp = ifp->info;
-
-	pim_if_create_pimreg(pim_ifp->pim);
+	pim = pim_get_pim_instance(ifp->vrf_id);
+	pim_if_create_pimreg(pim);
 
 	return CMD_SUCCESS;
 }
@@ -6363,23 +6391,27 @@ DEFUN (interface_ip_pim_sm,
 static int pim_cmd_interface_delete(struct interface *ifp)
 {
 	struct pim_interface *pim_ifp = ifp->info;
+	struct pim_instance *pim;
 
 	if (!pim_ifp)
 		return 1;
 
+	/* FIXME - DBS */
+	pim = pim_get_pim_instance(ifp->vrf_id);
+
 	PIM_IF_DONT_PIM(pim_ifp->options);
 
-	pim_if_membership_clear(ifp);
+	pim_if_membership_clear(pim, ifp);
 
 	/*
 	  pim_sock_delete() removes all neighbors from
 	  pim_ifp->pim_neighbor_list.
 	 */
-	pim_sock_delete(ifp, "pim unconfigured on interface");
+	pim_sock_delete(pim, ifp, "pim unconfigured on interface");
 
 	if (!PIM_IF_TEST_IGMP(pim_ifp->options)) {
-		pim_if_addr_del_all(ifp);
-		pim_if_delete(ifp);
+		pim_if_addr_del_all(pim, ifp);
+		pim_if_delete(pim, ifp);
 	}
 
 	return 1;
@@ -6492,7 +6524,7 @@ DEFUN (interface_ip_mroute,
 	int result;
 
 	PIM_GET_PIM_INTERFACE(pim_ifp, iif);
-	pim = pim_ifp->pim;
+	pim = pim_get_pim_instance(iif->vrf_id);
 
 	oifname = argv[idx_interface]->arg;
 	oif = if_lookup_by_name(oifname, pim->vrf_id);
@@ -6543,7 +6575,8 @@ DEFUN (interface_ip_mroute_source,
 	int result;
 
 	PIM_GET_PIM_INTERFACE(pim_ifp, iif);
-	pim = pim_ifp->pim;
+	pim = pim_get_pim_instance(iif->vrf_id);
+	;
 
 	oifname = argv[idx_interface]->arg;
 	oif = if_lookup_by_name(oifname, pim->vrf_id);
@@ -6598,7 +6631,7 @@ DEFUN (interface_no_ip_mroute,
 	int result;
 
 	PIM_GET_PIM_INTERFACE(pim_ifp, iif);
-	pim = pim_ifp->pim;
+	pim = pim_get_pim_instance(iif->vrf_id);
 
 	oifname = argv[idx_interface]->arg;
 	oif = if_lookup_by_name(oifname, pim->vrf_id);
@@ -6650,7 +6683,7 @@ DEFUN (interface_no_ip_mroute_source,
 	int result;
 
 	PIM_GET_PIM_INTERFACE(pim_ifp, iif);
-	pim = pim_ifp->pim;
+	pim = pim_get_pim_instance(iif->vrf_id);
 
 	oifname = argv[idx_interface]->arg;
 	oif = if_lookup_by_name(oifname, pim->vrf_id);
@@ -7341,6 +7374,7 @@ static int interface_pim_use_src_cmd_worker(struct vty *vty, const char *source)
 	struct in_addr source_addr;
 	int ret = CMD_SUCCESS;
 	VTY_DECLVAR_CONTEXT(interface, ifp);
+	struct pim_instance *pim;
 
 	result = inet_pton(AF_INET, source, &source_addr);
 	if (result <= 0) {
@@ -7349,7 +7383,8 @@ static int interface_pim_use_src_cmd_worker(struct vty *vty, const char *source)
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
-	result = pim_update_source_set(ifp, source_addr);
+	pim = pim_get_pim_instance(ifp->vrf_id);
+	result = pim_update_source_set(pim, ifp, source_addr);
 	switch (result) {
 	case PIM_SUCCESS:
 		break;

@@ -716,12 +716,12 @@ void pim_rp_setup(struct pim_instance *pim)
  * Checks to see if we should elect ourself the actual RP when new if
  * addresses are added against an interface.
  */
-void pim_rp_check_on_if_add(struct pim_interface *pim_ifp)
+void pim_rp_check_on_if_add(struct pim_instance *pim,
+			    struct pim_interface *pim_ifp)
 {
 	struct listnode *node;
 	struct rp_info *rp_info;
 	bool i_am_rp_changed = false;
-	struct pim_instance *pim = pim_ifp->pim;
 
 	if (pim->rp_list == NULL)
 		return;
