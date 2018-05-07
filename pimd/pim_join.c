@@ -348,7 +348,7 @@ int pim_joinprune_recv(struct pim_instance *pim,
 							__PRETTY_FUNCTION__,
 							up->sg_str);
 					pim_channel_del_oif(
-						up->channel_oil,
+						pim, up->channel_oil,
 						starg_ch->interface,
 						PIM_OIF_FLAG_PROTO_STAR);
 				}
@@ -565,7 +565,7 @@ int pim_joinprune_send(struct pim_instance *pim, struct pim_rpf *rpf,
 		curr_ptr += group_size;
 		packet_left -= group_size;
 		packet_size += group_size;
-		pim_msg_build_jp_groups(grp, group, group_size);
+		pim_msg_build_jp_groups(pim, grp, group, group_size);
 
 		pim_ifp->pim_ifstat_join_send += ntohs(grp->joins);
 		pim_ifp->pim_ifstat_prune_send += ntohs(grp->prunes);

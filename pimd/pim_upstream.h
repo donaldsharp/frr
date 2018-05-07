@@ -182,7 +182,8 @@ void pim_upstream_update_could_assert(struct pim_instance *pim,
 void pim_upstream_update_my_assert_metric(struct pim_instance *pim,
 					  struct pim_upstream *up);
 
-void pim_upstream_keep_alive_timer_start(struct pim_upstream *up,
+void pim_upstream_keep_alive_timer_start(struct pim_instance *pim,
+					 struct pim_upstream *up,
 					 uint32_t time);
 
 int pim_upstream_switch_to_spt_desired(struct pim_instance *pim,
@@ -212,7 +213,8 @@ int pim_upstream_inherited_olist(struct pim_instance *pim,
 int pim_upstream_empty_inherited_olist(struct pim_upstream *up);
 
 void pim_upstream_find_new_rpf(struct pim_instance *pim);
-void pim_upstream_msdp_reg_timer_start(struct pim_upstream *up);
+void pim_upstream_msdp_reg_timer_start(struct pim_instance *pim,
+				       struct pim_upstream *up);
 
 void pim_upstream_init(struct pim_instance *pim);
 void pim_upstream_terminate(struct pim_instance *pim);

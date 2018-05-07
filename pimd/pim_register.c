@@ -46,10 +46,8 @@
 
 struct thread *send_test_packet_timer = NULL;
 
-void pim_register_join(struct pim_upstream *up)
+void pim_register_join(struct pim_instance *pim, struct pim_upstream *up)
 {
-	struct pim_instance *pim = up->channel_oil->pim;
-
 	if (pim_is_grp_ssm(pim, up->sg.grp)) {
 		if (PIM_DEBUG_PIM_EVENTS)
 			zlog_debug("%s register setup skipped as group is SSM",
@@ -57,7 +55,7 @@ void pim_register_join(struct pim_upstream *up)
 		return;
 	}
 
-	pim_channel_add_oif(up->channel_oil, pim->regiface,
+	pim_channel_add_oif(pim, up->channel_oil, pim->regiface,
 			    PIM_OIF_FLAG_PROTO_PIM);
 	up->reg_state = PIM_REG_JOIN;
 }
@@ -141,7 +139,7 @@ int pim_register_stop_recv(struct pim_instance *pim,
 		break;
 	case PIM_REG_JOIN:
 		upstream->reg_state = PIM_REG_PRUNE;
-		pim_channel_del_oif(upstream->channel_oil, pim->regiface,
+		pim_channel_del_oif(pim, upstream->channel_oil, pim->regiface,
 				    PIM_OIF_FLAG_PROTO_PIM);
 		pim_upstream_start_register_stop_timer(upstream, 0);
 		break;
@@ -388,7 +386,7 @@ int pim_register_recv(struct pim_instance *pim,
 			 */
 			if (upstream->sptbit != PIM_UPSTREAM_SPTBIT_TRUE) {
 				pim_mroute_update_counters(
-					upstream->channel_oil);
+					pim, upstream->channel_oil);
 				/*
 				 * Have we seen packets?
 				 */
@@ -417,12 +415,10 @@ int pim_register_recv(struct pim_instance *pim,
 		    || (SwitchToSptDesired(pim, &sg))) {
 			if (sentRegisterStop) {
 				pim_upstream_keep_alive_timer_start(
-					upstream,
-					pim->rp_keep_alive_time);
+					pim, upstream, pim->rp_keep_alive_time);
 			} else {
 				pim_upstream_keep_alive_timer_start(
-					upstream,
-					pim->keep_alive_time);
+					pim, upstream, pim->keep_alive_time);
 			}
 		}
 
@@ -432,7 +428,7 @@ int pim_register_recv(struct pim_instance *pim,
 			// inherited_olist(S,G,rpt)
 			// This is taken care of by the kernel for us
 		}
-		pim_upstream_msdp_reg_timer_start(upstream);
+		pim_upstream_msdp_reg_timer_start(pim, upstream);
 	} else {
 		if (PIM_DEBUG_PIM_REG) {
 			if (!i_am_rp)

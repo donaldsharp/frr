@@ -468,7 +468,8 @@ void pim_zlookup_show_ip_multicast(struct vty *vty)
 	}
 }
 
-int pim_zlookup_sg_statistics(struct channel_oil *c_oil)
+int pim_zlookup_sg_statistics(struct pim_instance *pim,
+			      struct channel_oil *c_oil)
 {
 	struct stream *s = zlookup->obuf;
 	uint16_t command = 0;
@@ -477,7 +478,7 @@ int pim_zlookup_sg_statistics(struct channel_oil *c_oil)
 	int count = 0;
 	int ret;
 	struct interface *ifp =
-		pim_if_find_by_vif_index(c_oil->pim, c_oil->oil.mfcc_parent);
+		pim_if_find_by_vif_index(pim, c_oil->oil.mfcc_parent);
 
 	if (PIM_DEBUG_ZEBRA) {
 		struct prefix_sg more;
@@ -487,14 +488,14 @@ int pim_zlookup_sg_statistics(struct channel_oil *c_oil)
 		zlog_debug(
 			"Sending Request for New Channel Oil Information(%s) VIIF %d(%s)",
 			pim_str_sg_dump(&more), c_oil->oil.mfcc_parent,
-			c_oil->pim->vrf->name);
+			pim->vrf->name);
 	}
 
 	if (!ifp)
 		return -1;
 
 	stream_reset(s);
-	zclient_create_header(s, ZEBRA_IPMR_ROUTE_STATS, c_oil->pim->vrf_id);
+	zclient_create_header(s, ZEBRA_IPMR_ROUTE_STATS, pim->vrf_id);
 	stream_put_in_addr(s, &c_oil->oil.mfcc_origin);
 	stream_put_in_addr(s, &c_oil->oil.mfcc_mcastgrp);
 	stream_putl(s, ifp->ifindex);
@@ -541,7 +542,7 @@ int pim_zlookup_sg_statistics(struct channel_oil *c_oil)
 			zlog_err(
 				"%s: Received wrong %s(%s) information requested",
 				__PRETTY_FUNCTION__, pim_str_sg_dump(&more),
-				c_oil->pim->vrf->name);
+				pim->vrf->name);
 		}
 		zclient_lookup_failed(zlookup);
 		return -3;

@@ -332,10 +332,11 @@ void igmp_source_free(struct igmp_source *source)
 	XFREE(MTYPE_PIM_IGMP_GROUP_SOURCE, source);
 }
 
-static void source_channel_oil_detach(struct igmp_source *source)
+static void source_channel_oil_detach(struct pim_instance *pim,
+				      struct igmp_source *source)
 {
 	if (source->source_channel_oil) {
-		pim_channel_oil_del(source->source_channel_oil);
+		pim_channel_oil_del(pim, source->source_channel_oil);
 		source->source_channel_oil = NULL;
 	}
 }
@@ -386,7 +387,7 @@ void igmp_source_delete(struct pim_instance *pim, struct igmp_source *source)
 		/* warning only */
 	}
 
-	source_channel_oil_detach(source);
+	source_channel_oil_detach(pim, source);
 
 	/*
 	  notice that listnode_delete() can't be moved

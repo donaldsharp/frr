@@ -29,7 +29,8 @@
 void pim_zebra_init(void);
 void pim_zebra_zclient_update(struct vty *vty);
 
-void pim_scan_individual_oil(struct channel_oil *c_oil, int in_vif_index);
+void pim_scan_individual_oil(struct pim_instance *pim,
+			     struct channel_oil *c_oil, int in_vif_index);
 void pim_scan_oil(struct pim_instance *pim_matcher);
 
 void igmp_anysource_forward_start(struct pim_instance *pim,
@@ -44,7 +45,8 @@ void igmp_source_forward_stop(struct pim_instance *pim,
 void igmp_source_forward_reevaluate_all(struct pim_instance *pim);
 
 void pim_forward_start(struct pim_instance *pim, struct pim_ifchannel *ch);
-void pim_forward_stop(struct pim_ifchannel *ch, bool install_it);
+void pim_forward_stop(struct pim_instance *pim, struct pim_ifchannel *ch,
+		      bool install_it);
 
 void sched_rpf_cache_refresh(struct pim_instance *pim);
 struct zclient *pim_zebra_zclient_get(void);

@@ -290,7 +290,7 @@ static int pim_update_upstream_nh_helper(struct hash_backet *backet, void *arg)
 	old.source_nexthop.interface = up->rpf.source_nexthop.interface;
 	rpf_result = pim_rpf_update(pim, up, &old, 0);
 	if (rpf_result == PIM_RPF_FAILURE) {
-		pim_mroute_del(up->channel_oil, __PRETTY_FUNCTION__);
+		pim_mroute_del(pim, up->channel_oil, __PRETTY_FUNCTION__);
 		return HASHWALK_CONTINUE;
 	}
 
@@ -302,7 +302,8 @@ static int pim_update_upstream_nh_helper(struct hash_backet *backet, void *arg)
 		/* Pass Current selected NH vif index to mroute download
 		 */
 		if (vif_index)
-			pim_scan_individual_oil(up->channel_oil, vif_index);
+			pim_scan_individual_oil(pim, up->channel_oil,
+						vif_index);
 		else {
 			if (PIM_DEBUG_PIM_NHT)
 				zlog_debug(
@@ -336,7 +337,7 @@ static int pim_update_upstream_nh_helper(struct hash_backet *backet, void *arg)
 			 * so install it.
 			 */
 			if (up->channel_oil && !up->channel_oil->installed)
-				pim_mroute_add(up->channel_oil,
+				pim_mroute_add(pim, up->channel_oil,
 					       __PRETTY_FUNCTION__);
 
 			/*

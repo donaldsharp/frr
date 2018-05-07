@@ -3158,7 +3158,7 @@ static void mroute_add_all(struct pim_instance *pim)
 	struct channel_oil *c_oil;
 
 	for (ALL_LIST_ELEMENTS_RO(pim->channel_oil_list, node, c_oil)) {
-		if (pim_mroute_add(c_oil, __PRETTY_FUNCTION__)) {
+		if (pim_mroute_add(pim, c_oil, __PRETTY_FUNCTION__)) {
 			/* just log warning */
 			char source_str[INET_ADDRSTRLEN];
 			char group_str[INET_ADDRSTRLEN];
@@ -3179,7 +3179,7 @@ static void mroute_del_all(struct pim_instance *pim)
 	struct channel_oil *c_oil;
 
 	for (ALL_LIST_ELEMENTS_RO(pim->channel_oil_list, node, c_oil)) {
-		if (pim_mroute_del(c_oil, __PRETTY_FUNCTION__)) {
+		if (pim_mroute_del(pim, c_oil, __PRETTY_FUNCTION__)) {
 			/* just log warning */
 			char source_str[INET_ADDRSTRLEN];
 			char group_str[INET_ADDRSTRLEN];
@@ -4804,7 +4804,7 @@ static void show_mroute_count(struct pim_instance *pim, struct vty *vty)
 		if (!c_oil->installed)
 			continue;
 
-		pim_mroute_update_counters(c_oil);
+		pim_mroute_update_counters(pim, c_oil);
 
 		pim_inet4_dump("<group?>", c_oil->oil.mfcc_mcastgrp, group_str,
 			       sizeof(group_str));
@@ -4824,7 +4824,7 @@ static void show_mroute_count(struct pim_instance *pim, struct vty *vty)
 		if (!s_route->c_oil.installed)
 			continue;
 
-		pim_mroute_update_counters(&s_route->c_oil);
+		pim_mroute_update_counters(pim, &s_route->c_oil);
 
 		pim_inet4_dump("<group?>", s_route->c_oil.oil.mfcc_mcastgrp,
 			       group_str, sizeof(group_str));

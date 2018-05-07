@@ -178,7 +178,8 @@ size_t pim_msg_get_jp_group_size(struct list *sources)
 	return size;
 }
 
-size_t pim_msg_build_jp_groups(struct pim_jp_groups *grp,
+size_t pim_msg_build_jp_groups(struct pim_instance *pim,
+			       struct pim_jp_groups *grp,
 			       struct pim_jp_agg_group *sgs, size_t size)
 {
 	struct listnode *node, *nnode;
@@ -199,7 +200,6 @@ size_t pim_msg_build_jp_groups(struct pim_jp_groups *grp,
 			grp->prunes++;
 
 		if (source->up->sg.src.s_addr == INADDR_ANY) {
-			struct pim_instance *pim = source->up->channel_oil->pim;
 			struct pim_rpf *rpf = pim_rp_g(pim, source->up->sg.grp);
 			bits = PIM_ENCODE_SPARSE_BIT | PIM_ENCODE_WC_BIT
 			       | PIM_ENCODE_RPT_BIT;

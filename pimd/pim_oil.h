@@ -67,8 +67,6 @@ struct channel_counts {
 */
 
 struct channel_oil {
-	struct pim_instance *pim;
-
 	struct mfcctl oil;
 	int installed;
 	int oil_inherited_rescan;
@@ -91,12 +89,12 @@ struct channel_oil *pim_find_channel_oil(struct pim_instance *pim,
 struct channel_oil *pim_channel_oil_add(struct pim_instance *pim,
 					struct prefix_sg *sg,
 					int input_vif_index);
-void pim_channel_oil_del(struct channel_oil *c_oil);
+void pim_channel_oil_del(struct pim_instance *pim, struct channel_oil *c_oil);
 
-int pim_channel_add_oif(struct channel_oil *c_oil, struct interface *oif,
-			uint32_t proto_mask);
-int pim_channel_del_oif(struct channel_oil *c_oil, struct interface *oif,
-			uint32_t proto_mask);
+int pim_channel_add_oif(struct pim_instance *pim, struct channel_oil *c_oil,
+			struct interface *oif, uint32_t proto_mask);
+int pim_channel_del_oif(struct pim_instance *pim, struct channel_oil *c_oil,
+			struct interface *oif, uint32_t proto_mask);
 
 int pim_channel_oil_empty(struct channel_oil *c_oil);
 

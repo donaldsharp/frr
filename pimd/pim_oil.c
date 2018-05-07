@@ -196,14 +196,13 @@ struct channel_oil *pim_channel_oil_add(struct pim_instance *pim,
 	c_oil->oil_ref_count = 1;
 	c_oil->installed = 0;
 	c_oil->up = pim_upstream_find(pim, sg);
-	c_oil->pim = pim;
 
 	listnode_add_sort(pim->channel_oil_list, c_oil);
 
 	return c_oil;
 }
 
-void pim_channel_oil_del(struct channel_oil *c_oil)
+void pim_channel_oil_del(struct pim_instance *pim, struct channel_oil *c_oil)
 {
 	--c_oil->oil_ref_count;
 
@@ -214,14 +213,15 @@ void pim_channel_oil_del(struct channel_oil *c_oil)
 		 * called by list_delete_all_node()
 		 */
 		c_oil->up = NULL;
-		listnode_delete(c_oil->pim->channel_oil_list, c_oil);
-		hash_release(c_oil->pim->channel_oil_hash, c_oil);
+		listnode_delete(pim->channel_oil_list, c_oil);
+		hash_release(pim->channel_oil_hash, c_oil);
 
 		pim_channel_oil_free(c_oil);
 	}
 }
 
-int pim_channel_del_oif(struct channel_oil *channel_oil, struct interface *oif,
+int pim_channel_del_oif(struct pim_instance *pim,
+			struct channel_oil *channel_oil, struct interface *oif,
 			uint32_t proto_mask)
 {
 	struct pim_interface *pim_ifp;
@@ -283,7 +283,7 @@ int pim_channel_del_oif(struct channel_oil *channel_oil, struct interface *oif,
 
 	channel_oil->oil.mfcc_ttls[pim_ifp->mroute_vif_index] = 0;
 
-	if (pim_mroute_add(channel_oil, __PRETTY_FUNCTION__)) {
+	if (pim_mroute_add(pim, channel_oil, __PRETTY_FUNCTION__)) {
 		if (PIM_DEBUG_MROUTE) {
 			char group_str[INET_ADDRSTRLEN];
 			char source_str[INET_ADDRSTRLEN];
@@ -322,7 +322,8 @@ int pim_channel_del_oif(struct channel_oil *channel_oil, struct interface *oif,
 }
 
 
-int pim_channel_add_oif(struct channel_oil *channel_oil, struct interface *oif,
+int pim_channel_add_oif(struct pim_instance *pim,
+			struct channel_oil *channel_oil, struct interface *oif,
 			uint32_t proto_mask)
 {
 	struct pim_interface *pim_ifp;
@@ -454,7 +455,7 @@ int pim_channel_add_oif(struct channel_oil *channel_oil, struct interface *oif,
 	channel_oil->oil.mfcc_ttls[pim_ifp->mroute_vif_index] =
 		PIM_MROUTE_MIN_TTL;
 
-	if (pim_mroute_add(channel_oil, __PRETTY_FUNCTION__)) {
+	if (pim_mroute_add(pim, channel_oil, __PRETTY_FUNCTION__)) {
 		if (PIM_DEBUG_MROUTE) {
 			char group_str[INET_ADDRSTRLEN];
 			char source_str[INET_ADDRSTRLEN];

@@ -446,9 +446,9 @@ void pim_msdp_sa_ref(struct pim_instance *pim, struct pim_msdp_peer *mp,
  *    b. We rxed a pim register (null or data encapsulated) within the last
  *       (3 * (1.5 * register_suppression_timer))).
  */
-static bool pim_msdp_sa_local_add_ok(struct pim_upstream *up)
+static bool pim_msdp_sa_local_add_ok(struct pim_instance *pim,
+				     struct pim_upstream *up)
 {
-	struct pim_instance *pim = up->channel_oil->pim;
 
 	if (!(pim->msdp.flags & PIM_MSDPF_ENABLE)) {
 		return false;
@@ -555,11 +555,9 @@ static void pim_msdp_sa_local_del_on_up_del(struct pim_instance *pim,
  *    FHR is also the RP.
  * 4. When msdp_reg timer is started or stopped
  */
-void pim_msdp_sa_local_update(struct pim_upstream *up)
+void pim_msdp_sa_local_update(struct pim_instance *pim, struct pim_upstream *up)
 {
-	struct pim_instance *pim = up->channel_oil->pim;
-
-	if (pim_msdp_sa_local_add_ok(up)) {
+	if (pim_msdp_sa_local_add_ok(pim, up)) {
 		pim_msdp_sa_local_add(pim, &up->sg);
 	} else {
 		pim_msdp_sa_local_del(pim, &up->sg);
@@ -572,7 +570,7 @@ static void pim_msdp_sa_local_setup(struct pim_instance *pim)
 	struct listnode *up_node;
 
 	for (ALL_LIST_ELEMENTS_RO(pim->upstream_list, up_node, up)) {
-		pim_msdp_sa_local_update(up);
+		pim_msdp_sa_local_update(pim, up);
 	}
 }
 

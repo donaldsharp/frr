@@ -144,14 +144,15 @@ void pim_upstream_free(struct pim_upstream *up)
 	up = NULL;
 }
 
-static void upstream_channel_oil_detach(struct pim_upstream *up)
+static void upstream_channel_oil_detach(struct pim_instance *pim,
+					struct pim_upstream *up)
 {
 	if (up->channel_oil) {
 		/* Detaching from channel_oil, channel_oil may exist post del,
 		   but upstream would not keep reference of it
 		 */
 		up->channel_oil->up = NULL;
-		pim_channel_oil_del(up->channel_oil);
+		pim_channel_oil_del(pim, up->channel_oil);
 		up->channel_oil = NULL;
 	}
 }
@@ -202,8 +203,8 @@ struct pim_upstream *pim_upstream_del(struct pim_instance *pim,
 	if (up->sources)
 		list_delete_and_null(&up->sources);
 
-	pim_mroute_del(up->channel_oil, __PRETTY_FUNCTION__);
-	upstream_channel_oil_detach(up);
+	pim_mroute_del(pim, up->channel_oil, __PRETTY_FUNCTION__);
+	upstream_channel_oil_detach(pim, up);
 
 	list_delete_and_null(&up->ifchannels);
 
@@ -439,7 +440,7 @@ static void forward_on(struct pim_instance *pim, struct pim_upstream *up)
 	} /* scan iface channel list */
 }
 
-static void forward_off(struct pim_upstream *up)
+static void forward_off(struct pim_instance *pim, struct pim_upstream *up)
 {
 	struct listnode *chnode;
 	struct listnode *chnextnode;
@@ -448,7 +449,7 @@ static void forward_off(struct pim_upstream *up)
 	/* scan per-interface (S,G) state */
 	for (ALL_LIST_ELEMENTS(up->ifchannels, chnode, chnextnode, ch)) {
 
-		pim_forward_stop(ch, false);
+		pim_forward_stop(pim, ch, false);
 
 	} /* scan iface channel list */
 }
@@ -496,7 +497,7 @@ void pim_upstream_register_reevaluate(struct pim_instance *pim)
 						"Clear register for %s as G is now SSM",
 						up->sg_str);
 				/* remove regiface from the OIL if it is there*/
-				pim_channel_del_oif(up->channel_oil,
+				pim_channel_del_oif(pim, up->channel_oil,
 						    pim->regiface,
 						    PIM_OIF_FLAG_PROTO_PIM);
 				up->reg_state = PIM_REG_NOINFO;
@@ -508,7 +509,7 @@ void pim_upstream_register_reevaluate(struct pim_instance *pim)
 					zlog_debug(
 						"Register %s as G is now ASM",
 						up->sg_str);
-				pim_channel_add_oif(up->channel_oil,
+				pim_channel_add_oif(pim, up->channel_oil,
 						    pim->regiface,
 						    PIM_OIF_FLAG_PROTO_PIM);
 				up->reg_state = PIM_REG_JOIN;
@@ -568,8 +569,8 @@ void pim_upstream_switch(struct pim_instance *pim, struct pim_upstream *up,
 				    && PIM_UPSTREAM_FLAG_TEST_SRC_STREAM(
 					       up->flags)) {
 					pim_upstream_keep_alive_timer_start(
-						up, pim->keep_alive_time);
-					pim_register_join(up);
+						pim, up, pim->keep_alive_time);
+					pim_register_join(pim, up);
 				}
 			} else {
 				pim_upstream_send_join(pim, up);
@@ -580,7 +581,7 @@ void pim_upstream_switch(struct pim_instance *pim, struct pim_upstream *up,
 		}
 	} else {
 
-		forward_off(up);
+		forward_off(pim, up);
 		if (old_state == PIM_UPSTREAM_JOINED)
 			pim_msdp_up_join_state_changed(pim, up);
 
@@ -1060,7 +1061,7 @@ static void pim_upstream_fhr_kat_expiry(struct pim_instance *pim,
 	/* stop reg-stop timer */
 	THREAD_OFF(up->t_rs_timer);
 	/* remove regiface from the OIL if it is there*/
-	pim_channel_del_oif(up->channel_oil, pim->regiface,
+	pim_channel_del_oif(pim, up->channel_oil, pim->regiface,
 			    PIM_OIF_FLAG_PROTO_PIM);
 	/* clear the register state */
 	up->reg_state = PIM_REG_NOINFO;
@@ -1070,7 +1071,8 @@ static void pim_upstream_fhr_kat_expiry(struct pim_instance *pim,
 /* When kat is started CouldRegister can go to true. And if it does we
  * need to transition  the (S, G) on FHR to JOINED state and add reg tunnel
  * to the OIL */
-static void pim_upstream_fhr_kat_start(struct pim_upstream *up)
+static void pim_upstream_fhr_kat_start(struct pim_instance *pim,
+				       struct pim_upstream *up)
 {
 	if (pim_upstream_could_register(up)) {
 		if (PIM_DEBUG_TRACE)
@@ -1080,7 +1082,7 @@ static void pim_upstream_fhr_kat_start(struct pim_upstream *up)
 
 		PIM_UPSTREAM_FLAG_SET_FHR(up->flags);
 		if (up->reg_state == PIM_REG_NOINFO)
-			pim_register_join(up);
+			pim_register_join(pim, up);
 	}
 }
 
@@ -1096,7 +1098,7 @@ static int pim_upstream_keep_alive_timer(struct thread *t)
 	struct pim_instance *pim;
 
 	up = THREAD_ARG(t);
-	pim = up->channel_oil->pim;
+	pim = pim_get_pim_instance(up->rpf.source_nexthop.interface->vrf_id);
 
 	if (I_am_RP(pim, up->sg.grp)) {
 		pim_br_clear_pmbr(&up->sg);
@@ -1133,7 +1135,8 @@ static int pim_upstream_keep_alive_timer(struct thread *t)
 	return 0;
 }
 
-void pim_upstream_keep_alive_timer_start(struct pim_upstream *up, uint32_t time)
+void pim_upstream_keep_alive_timer_start(struct pim_instance *pim,
+					 struct pim_upstream *up, uint32_t time)
 {
 	if (!PIM_UPSTREAM_FLAG_TEST_SRC_STREAM(up->flags)) {
 		if (PIM_DEBUG_TRACE)
@@ -1146,26 +1149,30 @@ void pim_upstream_keep_alive_timer_start(struct pim_upstream *up, uint32_t time)
 
 	/* any time keepalive is started against a SG we will have to
 	 * re-evaluate our active source database */
-	pim_msdp_sa_local_update(up);
+	pim_msdp_sa_local_update(pim, up);
 }
 
 /* MSDP on RP needs to know if a source is registerable to this RP */
 static int pim_upstream_msdp_reg_timer(struct thread *t)
 {
 	struct pim_upstream *up = THREAD_ARG(t);
-	struct pim_instance *pim = up->channel_oil->pim;
+	struct pim_instance *pim;
+
+	pim = pim_get_pim_instance(up->rpf.source_nexthop.interface->vrf_id);
 
 	/* source is no longer active - pull the SA from MSDP's cache */
 	pim_msdp_sa_local_del(pim, &up->sg);
 	return 1;
 }
-void pim_upstream_msdp_reg_timer_start(struct pim_upstream *up)
+
+void pim_upstream_msdp_reg_timer_start(struct pim_instance *pim,
+				       struct pim_upstream *up)
 {
 	THREAD_OFF(up->t_msdp_reg_timer);
 	thread_add_timer(master, pim_upstream_msdp_reg_timer, up,
 			 PIM_MSDP_REG_RXED_PERIOD, &up->t_msdp_reg_timer);
 
-	pim_msdp_sa_local_update(up);
+	pim_msdp_sa_local_update(pim, up);
 }
 
 /*
@@ -1338,8 +1345,8 @@ static int pim_upstream_register_stop_timer(struct thread *t)
 	struct pim_rpf *rpg;
 	struct ip ip_hdr;
 	up = THREAD_ARG(t);
-	pim = up->channel_oil->pim;
 
+	pim = pim_get_pim_instance(up->rpf.source_nexthop.interface->vrf_id);
 	if (PIM_DEBUG_TRACE) {
 		char state_str[PIM_REG_STATE_STR_LEN];
 		zlog_debug("%s: (S,G)=%s[%s] upstream register stop timer %s",
@@ -1350,7 +1357,7 @@ static int pim_upstream_register_stop_timer(struct thread *t)
 	switch (up->reg_state) {
 	case PIM_REG_JOIN_PENDING:
 		up->reg_state = PIM_REG_JOIN;
-		pim_channel_add_oif(up->channel_oil, pim->regiface,
+		pim_channel_add_oif(pim, up->channel_oil, pim->regiface,
 				    PIM_OIF_FLAG_PROTO_PIM);
 		break;
 	case PIM_REG_JOIN:
@@ -1468,7 +1475,7 @@ int pim_upstream_inherited_olist_decide(struct pim_instance *pim,
 			if (!ch)
 				flag = PIM_OIF_FLAG_PROTO_STAR;
 
-			pim_channel_add_oif(up->channel_oil, ifp, flag);
+			pim_channel_add_oif(pim, up->channel_oil, ifp, flag);
 			output_intf++;
 		}
 	}
@@ -1585,10 +1592,9 @@ int pim_upstream_equal(const void *arg1, const void *arg2)
  * set KeepaliveTimer(S,G) to Keepalive_Period
  * }
  */
-static bool pim_upstream_kat_start_ok(struct pim_upstream *up)
+static bool pim_upstream_kat_start_ok(struct pim_instance *pim,
+				      struct pim_upstream *up)
 {
-	struct pim_instance *pim = up->channel_oil->pim;
-
 	/* "iif == RPF_interface(S)" check has to be done by the kernel or hw
 	 * so we will skip that here */
 	if (pim_if_connected_to_source(up->rpf.source_nexthop.interface,
@@ -1622,8 +1628,9 @@ static bool pim_upstream_kat_start_ok(struct pim_upstream *up)
 static void pim_upstream_sg_running(void *arg)
 {
 	struct pim_upstream *up = (struct pim_upstream *)arg;
-	struct pim_instance *pim = up->channel_oil->pim;
+	struct pim_instance *pim;
 
+	pim = pim_get_pim_instance(up->rpf.source_nexthop.interface->vrf_id);
 	// No packet can have arrived here if this is the case
 	if (!up->channel_oil->installed) {
 		if (PIM_DEBUG_TRACE)
@@ -1650,7 +1657,7 @@ static void pim_upstream_sg_running(void *arg)
 		pim_upstream_inherited_olist_decide(pim, up);
 		up->channel_oil->oil_inherited_rescan = 0;
 	}
-	pim_mroute_update_counters(up->channel_oil);
+	pim_mroute_update_counters(pim, up->channel_oil);
 
 	// Have we seen packets?
 	if ((up->channel_oil->cc.oldpktcnt >= up->channel_oil->cc.pktcnt)
@@ -1666,7 +1673,7 @@ static void pim_upstream_sg_running(void *arg)
 		return;
 	}
 
-	if (pim_upstream_kat_start_ok(up)) {
+	if (pim_upstream_kat_start_ok(pim, up)) {
 		/* Add a source reference to the stream if
 		 * one doesn't already exist */
 		if (!PIM_UPSTREAM_FLAG_TEST_SRC_STREAM(up->flags)) {
@@ -1678,11 +1685,13 @@ static void pim_upstream_sg_running(void *arg)
 			pim_upstream_ref(up, PIM_UPSTREAM_FLAG_MASK_SRC_STREAM,
 					 __PRETTY_FUNCTION__);
 			PIM_UPSTREAM_FLAG_SET_SRC_STREAM(up->flags);
-			pim_upstream_fhr_kat_start(up);
+			pim_upstream_fhr_kat_start(pim, up);
 		}
-		pim_upstream_keep_alive_timer_start(up, pim->keep_alive_time);
+		pim_upstream_keep_alive_timer_start(pim, up,
+						    pim->keep_alive_time);
 	} else if (PIM_UPSTREAM_FLAG_TEST_SRC_LHR(up->flags))
-		pim_upstream_keep_alive_timer_start(up, pim->keep_alive_time);
+		pim_upstream_keep_alive_timer_start(pim, up,
+						    pim->keep_alive_time);
 
 	if (up->sptbit != PIM_UPSTREAM_SPTBIT_TRUE) {
 		pim_upstream_set_sptbit(up, up->rpf.source_nexthop.interface);
@@ -1702,7 +1711,7 @@ void pim_upstream_add_lhr_star_pimreg(struct pim_instance *pim)
 		if (!PIM_UPSTREAM_FLAG_TEST_SRC_IGMP(up->flags))
 			continue;
 
-		pim_channel_add_oif(up->channel_oil, pim->regiface,
+		pim_channel_add_oif(pim, up->channel_oil, pim->regiface,
 				    PIM_OIF_FLAG_PROTO_IGMP);
 	}
 }
@@ -1751,17 +1760,17 @@ void pim_upstream_remove_lhr_star_pimreg(struct pim_instance *pim,
 			continue;
 
 		if (!nlist) {
-			pim_channel_del_oif(up->channel_oil, pim->regiface,
+			pim_channel_del_oif(pim, up->channel_oil, pim->regiface,
 					    PIM_OIF_FLAG_PROTO_IGMP);
 			continue;
 		}
 		g.u.prefix4 = up->sg.grp;
 		apply_new = prefix_list_apply(np, &g);
 		if (apply_new == PREFIX_DENY)
-			pim_channel_add_oif(up->channel_oil, pim->regiface,
+			pim_channel_add_oif(pim, up->channel_oil, pim->regiface,
 					    PIM_OIF_FLAG_PROTO_IGMP);
 		else
-			pim_channel_del_oif(up->channel_oil, pim->regiface,
+			pim_channel_del_oif(pim, up->channel_oil, pim->regiface,
 					    PIM_OIF_FLAG_PROTO_IGMP);
 	}
 }

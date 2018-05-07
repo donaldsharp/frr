@@ -205,7 +205,7 @@ static int pim_mroute_msg_nocache(struct pim_instance *pim,
 	}
 
 	PIM_UPSTREAM_FLAG_SET_SRC_STREAM(up->flags);
-	pim_upstream_keep_alive_timer_start(up, pim->keep_alive_time);
+	pim_upstream_keep_alive_timer_start(pim, up, pim->keep_alive_time);
 
 	up->channel_oil->cc.pktcnt++;
 	PIM_UPSTREAM_FLAG_SET_FHR(up->flags);
@@ -216,7 +216,7 @@ static int pim_mroute_msg_nocache(struct pim_instance *pim,
 			pim, up->rpf.source_nexthop.interface->ifindex);
 		up->channel_oil->oil.mfcc_parent = vif_index;
 	}
-	pim_register_join(up);
+	pim_register_join(pim, up);
 
 	return 0;
 }
@@ -259,7 +259,7 @@ static int pim_mroute_msg_wholepkt(struct pim_instance *pim,
 				return 0;
 			}
 			pim_upstream_keep_alive_timer_start(
-				up, pim->keep_alive_time);
+				pim, up, pim->keep_alive_time);
 			pim_upstream_inherited_olist(pim, up);
 			pim_upstream_switch(pim, up,
 					    PIM_UPSTREAM_JOINED);
@@ -496,7 +496,7 @@ static int pim_mroute_msg_wrvifwhole(struct pim_instance *pim,
 					pim_ifp->mroute_vif_index);
 			pim_upstream_inherited_olist(pim, up);
 			if (!up->channel_oil->installed)
-				pim_mroute_add(up->channel_oil,
+				pim_mroute_add(pim, up->channel_oil,
 					       __PRETTY_FUNCTION__);
 		} else {
 			if (I_am_RP(pim, up->sg.grp)) {
@@ -510,7 +510,7 @@ static int pim_mroute_msg_wrvifwhole(struct pim_instance *pim,
 				up->sptbit = PIM_UPSTREAM_SPTBIT_TRUE;
 			}
 			pim_upstream_keep_alive_timer_start(
-				up, pim->keep_alive_time);
+				pim, up, pim->keep_alive_time);
 			pim_upstream_inherited_olist(pim, up);
 			pim_mroute_msg_wholepkt(pim, fd, ifp, buf);
 		}
@@ -520,7 +520,7 @@ static int pim_mroute_msg_wrvifwhole(struct pim_instance *pim,
 	pim_ifp = ifp->info;
 	oil = pim_channel_oil_add(pim, &sg, pim_ifp->mroute_vif_index);
 	if (!oil->installed)
-		pim_mroute_add(oil, __PRETTY_FUNCTION__);
+		pim_mroute_add(pim, oil, __PRETTY_FUNCTION__);
 	if (pim_if_connected_to_source(ifp, sg.src)) {
 		up = pim_upstream_add(pim, &sg, ifp,
 				      PIM_UPSTREAM_FLAG_MASK_FHR,
@@ -533,11 +533,11 @@ static int pim_mroute_msg_wrvifwhole(struct pim_instance *pim,
 			return -2;
 		}
 		PIM_UPSTREAM_FLAG_SET_SRC_STREAM(up->flags);
-		pim_upstream_keep_alive_timer_start(
-			up, pim->keep_alive_time);
+		pim_upstream_keep_alive_timer_start(pim, up,
+						    pim->keep_alive_time);
 		up->channel_oil = oil;
 		up->channel_oil->cc.pktcnt++;
-		pim_register_join(up);
+		pim_register_join(pim, up);
 		pim_upstream_inherited_olist(pim, up);
 
 		// Send the packet to the RP
@@ -868,9 +868,9 @@ int pim_mroute_del_vif(struct pim_instance *pim, struct interface *ifp)
 	return 0;
 }
 
-int pim_mroute_add(struct channel_oil *c_oil, const char *name)
+int pim_mroute_add(struct pim_instance *pim, struct channel_oil *c_oil,
+		   const char *name)
 {
-	struct pim_instance *pim = c_oil->pim;
 	int err;
 	int orig = 0;
 	int orig_iif_vif = 0;
@@ -944,9 +944,9 @@ int pim_mroute_add(struct channel_oil *c_oil, const char *name)
 	return 0;
 }
 
-int pim_mroute_del(struct channel_oil *c_oil, const char *name)
+int pim_mroute_del(struct pim_instance *pim, struct channel_oil *c_oil,
+		   const char *name)
 {
-	struct pim_instance *pim = c_oil->pim;
 	int err;
 
 	pim->mroute_del_last = pim_time_monotonic_sec();
@@ -989,9 +989,9 @@ int pim_mroute_del(struct channel_oil *c_oil, const char *name)
 	return 0;
 }
 
-void pim_mroute_update_counters(struct channel_oil *c_oil)
+void pim_mroute_update_counters(struct pim_instance *pim,
+				struct channel_oil *c_oil)
 {
-	struct pim_instance *pim = c_oil->pim;
 	struct sioc_sg_req sgreq;
 
 	c_oil->cc.oldpktcnt = c_oil->cc.pktcnt;
@@ -1017,7 +1017,7 @@ void pim_mroute_update_counters(struct channel_oil *c_oil)
 	sgreq.src = c_oil->oil.mfcc_origin;
 	sgreq.grp = c_oil->oil.mfcc_mcastgrp;
 
-	pim_zlookup_sg_statistics(c_oil);
+	pim_zlookup_sg_statistics(pim, c_oil);
 	if (ioctl(pim->mroute_socket, SIOCGETSGCNT, &sgreq)) {
 		if (PIM_DEBUG_MROUTE) {
 			struct prefix_sg sg;

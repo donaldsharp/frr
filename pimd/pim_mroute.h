@@ -175,8 +175,11 @@ int pim_mroute_add_vif(struct pim_instance *pim,
 		       unsigned char flags);
 int pim_mroute_del_vif(struct pim_instance *pim, struct interface *ifp);
 
-int pim_mroute_add(struct channel_oil *c_oil, const char *name);
-int pim_mroute_del(struct channel_oil *c_oil, const char *name);
+int pim_mroute_add(struct pim_instance *pim, struct channel_oil *c_oil,
+		   const char *name);
+int pim_mroute_del(struct pim_instance *pim, struct channel_oil *c_oil,
+		   const char *name);
 
-void pim_mroute_update_counters(struct channel_oil *c_oil);
+void pim_mroute_update_counters(struct pim_instance *pim,
+				struct channel_oil *c_oil);
 #endif /* PIM_MROUTE_H */

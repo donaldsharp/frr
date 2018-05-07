@@ -142,7 +142,7 @@ void pim_ifchannel_delete(struct pim_instance *pim, struct pim_ifchannel *ch)
 
 		/* SGRpt entry could have empty oil */
 		if (ch->upstream->channel_oil)
-			pim_channel_del_oif(ch->upstream->channel_oil,
+			pim_channel_del_oif(pim, ch->upstream->channel_oil,
 					    ch->interface, mask);
 		/*
 		 * Do we have any S,G's that are inheriting?
@@ -154,7 +154,7 @@ void pim_ifchannel_delete(struct pim_instance *pim, struct pim_ifchannel *ch)
 
 			for (ALL_LIST_ELEMENTS_RO(ch->upstream->sources,
 						  up_node, child))
-				pim_channel_del_oif(child->channel_oil,
+				pim_channel_del_oif(pim, child->channel_oil,
 						    ch->interface,
 						    PIM_OIF_FLAG_PROTO_STAR);
 		}
@@ -277,7 +277,8 @@ void pim_ifchannel_ifjoin_switch(struct pim_instance *pim, const char *caller,
 					if (!pim_upstream_evaluate_join_desired(
 						    pim, child)) {
 						pim_channel_del_oif(
-							c_oil, ch->interface,
+							pim, c_oil,
+							ch->interface,
 							PIM_OIF_FLAG_PROTO_STAR);
 						pim_upstream_update_join_desired(
 							pim, child);
@@ -294,7 +295,8 @@ void pim_ifchannel_ifjoin_switch(struct pim_instance *pim, const char *caller,
 					if (c_oil->oil.mfcc_ttls
 						    [pim_ifp->mroute_vif_index])
 						pim_channel_del_oif(
-							c_oil, ch->interface,
+							pim, c_oil,
+							ch->interface,
 							PIM_OIF_FLAG_PROTO_STAR);
 				}
 			}
@@ -312,7 +314,7 @@ void pim_ifchannel_ifjoin_switch(struct pim_instance *pim, const char *caller,
 					if (pim_upstream_evaluate_join_desired(
 						    pim, child)) {
 						pim_channel_add_oif(
-							child->channel_oil,
+							pim, child->channel_oil,
 							ch->interface,
 							PIM_OIF_FLAG_PROTO_STAR);
 						pim_upstream_update_join_desired(
@@ -615,7 +617,7 @@ struct pim_ifchannel *pim_ifchannel_add(struct pim_instance *pim,
 static void ifjoin_to_noinfo(struct pim_instance *pim, struct pim_ifchannel *ch,
 			     bool ch_del)
 {
-	pim_forward_stop(ch, !ch_del);
+	pim_forward_stop(pim, ch, !ch_del);
 	pim_ifchannel_ifjoin_switch(pim, __PRETTY_FUNCTION__, ch,
 				    PIM_IFJOIN_NOINFO);
 	if (ch_del)
@@ -860,7 +862,7 @@ void pim_ifchannel_join_add(struct pim_instance *pim, struct interface *ifp,
 					 PIM_UPSTREAM_FLAG_MASK_SRC_LHR,
 					 __PRETTY_FUNCTION__);
 			pim_upstream_keep_alive_timer_start(
-				ch->upstream, pim->keep_alive_time);
+				pim, ch->upstream, pim->keep_alive_time);
 		}
 		break;
 	case PIM_IFJOIN_JOIN:
@@ -1084,7 +1086,8 @@ int pim_ifchannel_local_membership_add(struct pim_instance *pim,
 			ch = pim_ifchannel_find(ifp, &child->sg);
 			if (pim_upstream_evaluate_join_desired_interface(
 				    child, ch, starch)) {
-				pim_channel_add_oif(child->channel_oil, ifp,
+				pim_channel_add_oif(pim, child->channel_oil,
+						    ifp,
 						    PIM_OIF_FLAG_PROTO_STAR);
 				pim_upstream_switch(pim, child,
 						    PIM_UPSTREAM_JOINED);
@@ -1103,12 +1106,13 @@ int pim_ifchannel_local_membership_add(struct pim_instance *pim,
 				if (prefix_list_apply(plist, &g)
 				    == PREFIX_DENY) {
 					pim_channel_add_oif(
-						up->channel_oil, pim->regiface,
+						pim, up->channel_oil,
+						pim->regiface,
 						PIM_OIF_FLAG_PROTO_IGMP);
 				}
 			}
 		} else
-			pim_channel_add_oif(up->channel_oil, pim->regiface,
+			pim_channel_add_oif(pim, up->channel_oil, pim->regiface,
 					    PIM_OIF_FLAG_PROTO_IGMP);
 	}
 
@@ -1157,7 +1161,7 @@ void pim_ifchannel_local_membership_del(struct pim_instance *pim,
 			if (c_oil
 			    && !pim_upstream_evaluate_join_desired_interface(
 				       child, ch, starch))
-				pim_channel_del_oif(c_oil, ifp,
+				pim_channel_del_oif(pim, c_oil, ifp,
 						    PIM_OIF_FLAG_PROTO_STAR);
 
 			/*
@@ -1168,7 +1172,7 @@ void pim_ifchannel_local_membership_del(struct pim_instance *pim,
 			 */
 			if (!chchannel && c_oil
 			    && c_oil->oil.mfcc_ttls[pim_ifp->mroute_vif_index])
-				pim_channel_del_oif(c_oil, ifp,
+				pim_channel_del_oif(pim, c_oil, ifp,
 						    PIM_OIF_FLAG_PROTO_STAR);
 
 			/* Child node removal/ref count-- will happen as part of
@@ -1386,7 +1390,7 @@ void pim_ifchannel_set_star_g_join_state(struct pim_instance *pim,
 
 			if (I_am_RP(pim, child->sg.grp)) {
 				pim_channel_add_oif(
-					child->upstream->channel_oil,
+					pim, child->upstream->channel_oil,
 					ch->interface, PIM_OIF_FLAG_PROTO_STAR);
 				pim_upstream_switch(pim, child->upstream,
 						    PIM_UPSTREAM_JOINED);
