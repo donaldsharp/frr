@@ -70,6 +70,9 @@ struct zclient *zclient_new_notify(struct thread_master *master,
 
 	zclient->receive_notify = opt->receive_notify;
 
+	/* Set -1 to the default socket value. */
+	zclient->sock = -1;
+
 	return zclient;
 }
 
@@ -602,10 +605,7 @@ void zclient_init(struct zclient *zclient, int redist_default,
 {
 	int afi, i;
 
-	/* Set -1 to the default socket value. */
-	zclient->sock = -1;
 	zclient->privs = privs;
-
 	/* Clear redistribution flags. */
 	for (afi = AFI_IP; afi < AFI_MAX; afi++)
 		for (i = 0; i < ZEBRA_ROUTE_MAX; i++)

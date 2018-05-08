@@ -50,7 +50,6 @@ void static_nht_update(struct prefix *p, uint32_t nh_num,
 	if (!stable)
 		return;
 
-	zlog_debug("Nexthop num: %d", nh_num);
 	for (rn = route_top(stable); rn; rn = route_next(rn)) {
 		reinstall = false;
 		for (si = rn->info; si; si = si->next) {
@@ -67,10 +66,8 @@ void static_nht_update(struct prefix *p, uint32_t nh_num,
 			    memcmp(&p->u.prefix6, &si->addr.ipv6, 16) == 0)
 				si->nh_valid = !!nh_num;
 
-			if (orig != si->nh_valid) {
-				zlog_debug("Install the matching si");
+			if (orig != si->nh_valid)
 				reinstall = true;
-			}
 		}
 		if (reinstall)
 			static_zebra_route_add(rn, vrf_id, true);

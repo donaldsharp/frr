@@ -342,7 +342,9 @@ void static_zebra_init(void)
 
 	zclient = zclient_new_notify(master, &opt);
 
-	zclient_init(zclient, ZEBRA_ROUTE_STATIC, 0, &static_privs);
+	zclient->privs = &static_privs;
+	zclient_start(zclient);
+//	zclient_init(zclient, ZEBRA_ROUTE_STATIC, 0, &static_privs);
 	zclient->zebra_capabilities = static_zebra_capabilities;
 	zclient->zebra_connected = zebra_connected;
 	zclient->interface_add = interface_add;
