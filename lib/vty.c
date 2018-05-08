@@ -2360,12 +2360,13 @@ static FILE *vty_use_backup_config(const char *fullpath)
 }
 
 /* Read up configuration file from file_name. */
-void vty_read_config(const char *config_file, char *config_default_dir)
+bool vty_read_config(const char *config_file, char *config_default_dir)
 {
 	char cwd[MAXPATHLEN];
 	FILE *confp = NULL;
 	const char *fullpath;
 	char *tmp = NULL;
+	bool read_success = false;
 
 	/* If -f flag specified. */
 	if (config_file != NULL) {
@@ -2423,8 +2424,10 @@ void vty_read_config(const char *config_file, char *config_default_dir)
 
 		if (strstr(config_default_dir, "vtysh") == NULL) {
 			ret = stat(integrate_default, &conf_stat);
-			if (ret >= 0)
+			if (ret >= 0) {
+				read_success = true;
 				goto tmp_free_and_out;
+			}
 		}
 #endif /* VTYSH */
 		confp = fopen(config_default_dir, "r");
@@ -2448,6 +2451,7 @@ void vty_read_config(const char *config_file, char *config_default_dir)
 	}
 
 	vty_read_file(confp);
+	read_success = true;
 
 	fclose(confp);
 
@@ -2456,6 +2460,8 @@ void vty_read_config(const char *config_file, char *config_default_dir)
 tmp_free_and_out:
 	if (tmp)
 		XFREE(MTYPE_TMP, tmp);
+
+	return read_success;
 }
 
 /* Small utility function which output log to the VTY. */
