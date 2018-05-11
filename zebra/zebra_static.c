@@ -111,10 +111,16 @@ void static_install_route(afi_t afi, safi_t safi, struct prefix *p,
 			nexthop = route_entry_nexthop_ipv4_ifindex_add(
 				re, &si->addr.ipv4, NULL, si->ifindex,
 				si->nh_vrf_id);
+		case STATIC_IPV4_GATEWAY_IFNAME_ONLINK:
+			nexthop = route_entry_nexthop_ipv4_ifindex_add(
+				re, &si->addr.ipv4, NULL, si->ifindex,
+				si->nh_vrf_id);
+			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK);
 			break;
 		case STATIC_IFNAME:
 			nexthop = route_entry_nexthop_ifindex_add(
 				re, si->ifindex, si->nh_vrf_id);
+			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK);
 			break;
 		case STATIC_BLACKHOLE:
 			nexthop =
@@ -190,10 +196,16 @@ void static_install_route(afi_t afi, safi_t safi, struct prefix *p,
 			nexthop = route_entry_nexthop_ipv4_ifindex_add(
 				re, &si->addr.ipv4, NULL, si->ifindex,
 				si->nh_vrf_id);
+		case STATIC_IPV4_GATEWAY_IFNAME_ONLINK:
+			nexthop = route_entry_nexthop_ipv4_ifindex_add(
+				re, &si->addr.ipv4, NULL, si->ifindex,
+				si->nh_vrf_id);
+			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK);
 			break;
 		case STATIC_IFNAME:
 			nexthop = route_entry_nexthop_ifindex_add(
 				re, si->ifindex, si->nh_vrf_id);
+			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK);
 			break;
 		case STATIC_BLACKHOLE:
 			nexthop =
@@ -409,13 +421,16 @@ int static_add_route(afi_t afi, safi_t safi, uint8_t type, struct prefix *p,
 
 	if (!gate && (type == STATIC_IPV4_GATEWAY
 		      || type == STATIC_IPV4_GATEWAY_IFNAME
+		      || type == STATIC_IPV4_GATEWAY_IFNAME_ONLINK
 		      || type == STATIC_IPV6_GATEWAY
 		      || type == STATIC_IPV6_GATEWAY_IFNAME))
 		return -1;
 
 	if (!ifname
-	    && (type == STATIC_IFNAME || type == STATIC_IPV4_GATEWAY_IFNAME
-		|| type == STATIC_IPV6_GATEWAY_IFNAME))
+	    && (type == STATIC_IFNAME ||
+		type == STATIC_IPV4_GATEWAY_IFNAME ||
+		type == STATIC_IPV4_GATEWAY_IFNAME_ONLINK ||
+		type == STATIC_IPV6_GATEWAY_IFNAME))
 		return -1;
 
 	/* Lookup static route prefix. */
@@ -465,6 +480,7 @@ int static_add_route(afi_t afi, safi_t safi, uint8_t type, struct prefix *p,
 	switch (type) {
 	case STATIC_IPV4_GATEWAY:
 	case STATIC_IPV4_GATEWAY_IFNAME:
+	case STATIC_IPV4_GATEWAY_IFNAME_ONLINK:
 		si->addr.ipv4 = gate->ipv4;
 		break;
 	case STATIC_IPV6_GATEWAY:

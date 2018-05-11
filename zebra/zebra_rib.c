@@ -437,12 +437,9 @@ static int nexthop_active(afi_t afi, struct route_entry *re,
 	 */
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK)) {
 		ifp = if_lookup_by_index(nexthop->ifindex, nexthop->vrf_id);
-		if (ifp && connected_is_unnumbered(ifp)) {
-			if (if_is_operative(ifp))
-				return 1;
-			else
-				return 0;
-		} else
+		if (ifp && if_is_operative(ifp))
+			return 1;
+		else
 			return 0;
 	}
 

@@ -91,6 +91,7 @@ struct static_hold_route {
 	char *tag_str;
 	char *distance_str;
 	char *label_str;
+	char *onlink;
 
 	/* processed & masked destination, used for config display */
 	struct prefix dest;
@@ -137,6 +138,8 @@ static void static_list_delete(struct static_hold_route *shr)
 		XFREE(MTYPE_STATIC_ROUTE, shr->distance_str);
 	if (shr->label_str)
 		XFREE(MTYPE_STATIC_ROUTE, shr->label_str);
+	if (shr->onlink)
+		XFREE(MTYPE_STATIC_ROUTE, shr->onlink);
 
 	XFREE(MTYPE_STATIC_ROUTE, shr);
 }
@@ -192,6 +195,10 @@ static int static_list_compare(void *arg1, void *arg2)
 	if (ret)
 		return ret;
 
+	ret = static_list_compare_helper(shr1->onlink, shr2->onlink);
+	if (ret)
+		return ret;
+
 	return static_list_compare_helper(shr1->label_str, shr2->label_str);
 }
 
@@ -202,7 +209,8 @@ static int zebra_static_route_holdem(
 	safi_t safi, const char *negate, struct prefix *dest,
 	const char *dest_str, const char *mask_str, const char *src_str,
 	const char *gate_str, const char *ifname, const char *flag_str,
-	const char *tag_str, const char *distance_str, const char *label_str)
+	const char *tag_str, const char *distance_str, const char *label_str,
+	const char *onlink)
 {
 	struct static_hold_route *shr, *lookup;
 	struct listnode *node;
@@ -235,6 +243,8 @@ static int zebra_static_route_holdem(
 		shr->distance_str = XSTRDUP(MTYPE_STATIC_ROUTE, distance_str);
 	if (label_str)
 		shr->label_str = XSTRDUP(MTYPE_STATIC_ROUTE, label_str);
+	if (onlink)
+		shr->onlink = XSTRDUP(MTYPE_STATIC_ROUTE, onlink);
 
 	for (ALL_LIST_ELEMENTS_RO(static_list, node, lookup)) {
 		if (static_list_compare(shr, lookup) == 0)
@@ -271,7 +281,7 @@ static int zebra_static_route_leak(
 	afi_t afi, safi_t safi, const char *negate, const char *dest_str,
 	const char *mask_str, const char *src_str, const char *gate_str,
 	const char *ifname, const char *flag_str, const char *tag_str,
-	const char *distance_str, const char *label_str)
+	const char *distance_str, const char *label_str, const char *onlink)
 {
 	int ret;
 	uint8_t distance;
@@ -342,7 +352,7 @@ static int zebra_static_route_leak(
 		return zebra_static_route_holdem(
 			zvrf, nh_zvrf, afi, safi, negate, &p, dest_str,
 			mask_str, src_str, gate_str, ifname, flag_str, tag_str,
-			distance_str, label_str);
+			distance_str, label_str, onlink);
 	}
 
 	/* Administrative distance. */
@@ -469,9 +479,11 @@ static int zebra_static_route_leak(
 	if (gate_str == NULL && ifname == NULL)
 		type = STATIC_BLACKHOLE;
 	else if (gate_str && ifname) {
-		if (afi == AFI_IP)
+		if (afi == AFI_IP) {
 			type = STATIC_IPV4_GATEWAY_IFNAME;
-		else
+			if (onlink)
+				type = STATIC_IPV4_GATEWAY_IFNAME_ONLINK;
+		} else
 			type = STATIC_IPV6_GATEWAY_IFNAME;
 	} else if (ifname)
 		type = STATIC_IFNAME;
@@ -533,7 +545,7 @@ static int zebra_static_route(struct vty *vty, afi_t afi, safi_t safi,
 			      const char *gate_str, const char *ifname,
 			      const char *flag_str, const char *tag_str,
 			      const char *distance_str, const char *vrf_name,
-			      const char *label_str)
+			      const char *label_str, const char *onlink)
 {
 	struct zebra_vrf *zvrf;
 
@@ -556,7 +568,7 @@ static int zebra_static_route(struct vty *vty, afi_t afi, safi_t safi,
 	}
 	return zebra_static_route_leak(
 		vty, zvrf, zvrf, afi, safi, negate, dest_str, mask_str, src_str,
-		gate_str, ifname, flag_str, tag_str, distance_str, label_str);
+		gate_str, ifname, flag_str, tag_str, distance_str, label_str, onlink);
 }
 
 void static_config_install_delayed_routes(struct zebra_vrf *zvrf)
@@ -581,7 +593,7 @@ void static_config_install_delayed_routes(struct zebra_vrf *zvrf)
 			NULL, ozvrf, nh_zvrf, shr->afi, shr->safi, NULL,
 			shr->dest_str, shr->mask_str, shr->src_str,
 			shr->gate_str, shr->ifname, shr->flag_str, shr->tag_str,
-			shr->distance_str, shr->label_str);
+			shr->distance_str, shr->label_str, shr->onlink);
 
 		if (installed != CMD_SUCCESS)
 			zlog_debug(
@@ -605,7 +617,7 @@ DEFPY (ip_mroute_dist,
 {
 	return zebra_static_route(vty, AFI_IP, SAFI_MULTICAST, no, prefix_str,
 				  NULL, NULL, gate_str, ifname, NULL, NULL,
-				  distance_str, NULL, NULL);
+				  distance_str, NULL, NULL, NULL);
 }
 
 DEFUN (ip_multicast_mode,
@@ -728,7 +740,7 @@ DEFPY(ip_route_blackhole,
 {
 	return zebra_static_route(vty, AFI_IP, SAFI_UNICAST, no, prefix,
 				  mask_str, NULL, NULL, NULL, flag, tag_str,
-				  distance_str, vrf, label);
+				  distance_str, vrf, label, NULL);
 }
 
 DEFPY(ip_route_blackhole_vrf,
@@ -764,7 +776,7 @@ DEFPY(ip_route_blackhole_vrf,
 	assert(prefix);
 	return zebra_static_route_leak(vty, zvrf, zvrf, AFI_IP, SAFI_UNICAST,
 				       no, prefix, mask_str, NULL, NULL, NULL,
-				       flag, tag_str, distance_str, label);
+				       flag, tag_str, distance_str, label, NULL);
 }
 
 DEFPY(ip_route_address_interface,
@@ -772,7 +784,7 @@ DEFPY(ip_route_address_interface,
       "[no] ip route\
 	<A.B.C.D/M$prefix|A.B.C.D$prefix A.B.C.D$mask> \
 	A.B.C.D$gate                                   \
-	INTERFACE$ifname                               \
+	INTERFACE$ifname [onlink$onlink]               \
 	[{                                             \
 	  tag (1-4294967295)                           \
 	  |(1-255)$distance                            \
@@ -788,6 +800,7 @@ DEFPY(ip_route_address_interface,
       "IP gateway address\n"
       "IP gateway interface name. Specify 'Null0' (case-insensitive) for a \
       null route.\n"
+      "Should we treat the static route as onlink\n"
       "Set tag for this route\n"
       "Tag value\n"
       "Distance value for this route\n"
@@ -822,7 +835,7 @@ DEFPY(ip_route_address_interface,
 
 	return zebra_static_route_leak(
 		vty, zvrf, nh_zvrf, AFI_IP, SAFI_UNICAST, no, prefix, mask_str,
-		NULL, gate_str, ifname, flag, tag_str, distance_str, label);
+		NULL, gate_str, ifname, flag, tag_str, distance_str, label, onlink);
 }
 
 DEFPY(ip_route_address_interface_vrf,
@@ -830,7 +843,7 @@ DEFPY(ip_route_address_interface_vrf,
       "[no] ip route\
 	<A.B.C.D/M$prefix|A.B.C.D$prefix A.B.C.D$mask> \
 	A.B.C.D$gate                                   \
-	INTERFACE$ifname                               \
+	INTERFACE$ifname [onlink$onlink]               \
 	[{                                             \
 	  tag (1-4294967295)                           \
 	  |(1-255)$distance                            \
@@ -845,6 +858,7 @@ DEFPY(ip_route_address_interface_vrf,
       "IP gateway address\n"
       "IP gateway interface name. Specify 'Null0' (case-insensitive) for a \
       null route.\n"
+      "Is the route onlink\n"
       "Set tag for this route\n"
       "Tag value\n"
       "Distance value for this route\n"
@@ -873,7 +887,7 @@ DEFPY(ip_route_address_interface_vrf,
 
 	return zebra_static_route_leak(
 		vty, zvrf, nh_zvrf, AFI_IP, SAFI_UNICAST, no, prefix, mask_str,
-		NULL, gate_str, ifname, flag, tag_str, distance_str, label);
+		NULL, gate_str, ifname, flag, tag_str, distance_str, label, onlink);
 }
 
 DEFPY(ip_route,
@@ -930,7 +944,7 @@ DEFPY(ip_route,
 
 	return zebra_static_route_leak(
 		vty, zvrf, nh_zvrf, AFI_IP, SAFI_UNICAST, no, prefix, mask_str,
-		NULL, gate_str, ifname, flag, tag_str, distance_str, label);
+		NULL, gate_str, ifname, flag, tag_str, distance_str, label, NULL);
 }
 
 DEFPY(ip_route_vrf,
@@ -979,7 +993,7 @@ DEFPY(ip_route_vrf,
 
 	return zebra_static_route_leak(
 		vty, zvrf, nh_zvrf, AFI_IP, SAFI_UNICAST, no, prefix, mask_str,
-		NULL, gate_str, ifname, flag, tag_str, distance_str, label);
+		NULL, gate_str, ifname, flag, tag_str, distance_str, label, NULL);
 }
 
 /* New RIB.  Detailed information for IPv4 route. */
@@ -2292,6 +2306,7 @@ int static_config(struct vty *vty, struct zebra_vrf *zvrf, afi_t afi,
 					break;
 				}
 				break;
+			case STATIC_IPV4_GATEWAY_IFNAME_ONLINK:
 			case STATIC_IPV4_GATEWAY_IFNAME:
 				vty_out(vty, " %s %s",
 					inet_ntop(AF_INET, &si->addr.ipv4, buf,
@@ -2357,7 +2372,7 @@ DEFPY(ipv6_route_blackhole,
 {
 	return zebra_static_route(vty, AFI_IP6, SAFI_UNICAST, no, prefix_str,
 				  NULL, from_str, NULL, NULL, flag, tag_str,
-				  distance_str, vrf, label);
+				  distance_str, vrf, label, NULL);
 }
 
 DEFPY(ipv6_route_blackhole_vrf,
@@ -2394,7 +2409,7 @@ DEFPY(ipv6_route_blackhole_vrf,
 	assert(prefix);
 	return zebra_static_route_leak(
 		vty, zvrf, zvrf, AFI_IP6, SAFI_UNICAST, no, prefix_str, NULL,
-		from_str, NULL, NULL, flag, tag_str, distance_str, label);
+		from_str, NULL, NULL, flag, tag_str, distance_str, label, NULL);
 }
 
 DEFPY(ipv6_route_address_interface,
@@ -2445,7 +2460,7 @@ DEFPY(ipv6_route_address_interface,
 
 	return zebra_static_route_leak(
 		vty, zvrf, nh_zvrf, AFI_IP6, SAFI_UNICAST, no, prefix_str, NULL,
-		from_str, gate_str, ifname, NULL, tag_str, distance_str, label);
+		from_str, gate_str, ifname, NULL, tag_str, distance_str, label, NULL);
 }
 
 DEFPY(ipv6_route_address_interface_vrf,
@@ -2489,7 +2504,7 @@ DEFPY(ipv6_route_address_interface_vrf,
 
 	return zebra_static_route_leak(
 		vty, zvrf, nh_zvrf, AFI_IP6, SAFI_UNICAST, no, prefix_str, NULL,
-		from_str, gate_str, ifname, NULL, tag_str, distance_str, label);
+		from_str, gate_str, ifname, NULL, tag_str, distance_str, label, NULL);
 }
 
 DEFPY(ipv6_route,
@@ -2539,7 +2554,7 @@ DEFPY(ipv6_route,
 
 	return zebra_static_route_leak(
 		vty, zvrf, nh_zvrf, AFI_IP6, SAFI_UNICAST, no, prefix_str, NULL,
-		from_str, gate_str, ifname, NULL, tag_str, distance_str, label);
+		from_str, gate_str, ifname, NULL, tag_str, distance_str, label, NULL);
 }
 
 DEFPY(ipv6_route_vrf,
@@ -2582,7 +2597,7 @@ DEFPY(ipv6_route_vrf,
 
 	return zebra_static_route_leak(
 		vty, zvrf, nh_zvrf, AFI_IP6, SAFI_UNICAST, no, prefix_str, NULL,
-		from_str, gate_str, ifname, NULL, tag_str, distance_str, label);
+		from_str, gate_str, ifname, NULL, tag_str, distance_str, label, NULL);
 }
 
 /*
