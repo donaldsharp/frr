@@ -6641,7 +6641,7 @@ DEFPY(af_import_vrf_route_map, af_import_vrf_route_map_cmd,
 		}
 	}
 
-	vpn_leak_prechange(dir, afi, bgp_get_default(), bgp);
+	vpn_leak_prechange(dir, afi, bgp_default, bgp);
 
 	if (yes) {
 		if (bgp->vpn_policy[afi].rmap_name[dir])
@@ -6661,7 +6661,7 @@ DEFPY(af_import_vrf_route_map, af_import_vrf_route_map_cmd,
 		bgp->vpn_policy[afi].rmap[dir] = NULL;
 	}
 
-	vpn_leak_postchange(dir, afi, bgp_get_default(), bgp);
+	vpn_leak_postchange(dir, afi, bgp_default, bgp);
 
 	return CMD_SUCCESS;
 }

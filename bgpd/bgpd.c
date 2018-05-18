@@ -2855,6 +2855,18 @@ static int bgp_startup_timer_expire(struct thread *thread)
 	return 0;
 }
 
+static void bgp_import_vrf_unlock(void *val)
+{
+	char *name = val;
+	struct bgp *bgp;
+
+	bgp = bgp_lookup_by_name(name);
+	if (bgp)
+		bgp_unlock(bgp);
+
+	XFREE(MTYPE_TMP, name);
+}
+
 /* BGP instance creation by `router bgp' commands. */
 static struct bgp *bgp_create(as_t *as, const char *name,
 			      enum bgp_instance_type inst_type)
@@ -2965,6 +2977,7 @@ static struct bgp *bgp_create(as_t *as, const char *name,
 			MPLS_LABEL_NONE;
 
 		bgp->vpn_policy[afi].import_vrf = list_new();
+		bgp->vpn_policy[afi].import_vrf->del = bgp_import_vrf_unlock;
 		bgp->vpn_policy[afi].export_vrf = list_new();
 	}
 	if (name) {

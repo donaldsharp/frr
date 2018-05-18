@@ -1479,6 +1479,14 @@ void vrf_import_from_vrf(struct bgp *to_bgp, struct bgp *from_bgp,
 	vname = (from_bgp->name ? XSTRDUP(MTYPE_TMP, from_bgp->name)
 			       : XSTRDUP(MTYPE_TMP, BGP_DEFAULT_NAME));
 
+	/*
+	 * When we import from another vrf we gather data
+	 * from that vrf in our pointers, make sure that
+	 * we are locking that other vrf so that when
+	 * it is deleted we don't have memory hard deleted
+	 * from under us.
+	 */
+	bgp_lock(from_bgp);
 	listnode_add(to_bgp->vpn_policy[afi].import_vrf, vname);
 
 	if (!listcount(from_bgp->vpn_policy[afi].export_vrf))
@@ -1555,6 +1563,12 @@ void vrf_unimport_from_vrf(struct bgp *to_bgp, struct bgp *from_bgp,
 	if (!vname)
 		return;
 
+	/*
+	 * When bgp shutsdown bgp hard kills memory associated with
+	 * a particular instance.  We do not need the bgp
+	 * anymore
+	 */
+	bgp_unlock(from_bgp);
 	/* Remove "import_vrf" from our import list. */
 	listnode_delete(to_bgp->vpn_policy[afi].import_vrf, vname);
 	XFREE(MTYPE_TMP, vname);
