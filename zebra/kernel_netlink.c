@@ -498,6 +498,178 @@ const char *nl_rttype_to_str(uint8_t rttype)
 	return lookup_msg(rttype_str, rttype, "");
 }
 
+enum nl_parse_information {
+	/*
+	 * We have received a EOM from the kernel telling
+	 * us that there is no more data to process for
+	 * this particular get request.
+	 *
+	 * For the netlink_cmd socket we are blocking
+	 * so a DONE means there are no more messages
+	 * to read.  Since we are expecting a Synchronous
+	 * response.
+	 *
+	 * For the netlink listen socket we are non-blocking
+	 * we must continue processing because we may
+	 * have read more packets in via the recvmmsg
+	 */
+	NL_DONE,
+	/*
+	 * We have received a ACK message for our command
+	 *
+	 * For the netlink_cmd socket we are blocking
+	 * so a ACK means we are done
+	 *
+	 * I do not believe we should be receiving ACK
+	 * messages for the netlink listen socket.
+	 */
+	NL_ACK_RECEIVED,
+	/*
+	 * Something went wrong in the parsing of
+	 * this data.
+	 */
+	NL_ERROR,
+	NL_PARSED,
+};
+
+static enum nl_parse_information
+kernel_netlink_parse_msg(char *buf, uint32_t *length,
+			 int (*filter)(struct nlmsghdr *, ns_id_t, int),
+			 struct nlsock *nl, struct zebra_ns *zns, int startup,
+			 int *ret, struct sockaddr_nl *snl)
+{
+	struct nlmsghdr *h;
+	int error;
+
+	for (h = (struct nlmsghdr *)buf; NLMSG_OK(h, (unsigned int)*length);
+	     h = NLMSG_NEXT(h, *length)) {
+		/*
+		 * Finish of reading.
+		 *
+		 * If this is GET functionality we get sent back
+		 * a DONE message from the kernel.  This means
+		 * that that particular GET is finished.
+		 */
+		if (h->nlmsg_type == NLMSG_DONE) {
+			return NL_DONE;
+		}
+
+		/* Error handling. */
+		if (h->nlmsg_type == NLMSG_ERROR) {
+			struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(h);
+			int errnum = err->error;
+			int msg_type = err->msg.nlmsg_type;
+
+			/*
+			 * If the error field is zero, then this is an
+			 * ACK
+			 */
+			if (err->error == 0) {
+				if (IS_ZEBRA_DEBUG_KERNEL) {
+					zlog_debug(
+						"%s: %s ACK: type=%s(%u), seq=%u, pid=%u",
+						__FUNCTION__, nl->name,
+						nl_msg_type_to_str(
+							err->msg.nlmsg_type),
+						err->msg.nlmsg_type,
+						err->msg.nlmsg_seq,
+						err->msg.nlmsg_pid);
+				}
+
+				/* return if not a multipart message,
+				 * otherwise continue */
+				if (!(h->nlmsg_flags & NLM_F_MULTI))
+					return NL_ACK_RECEIVED;
+				continue;
+			}
+
+			if (h->nlmsg_len
+			    < NLMSG_LENGTH(sizeof(struct nlmsgerr))) {
+				zlog_err("%s error: message truncated",
+					 nl->name);
+				return NL_ERROR;
+			}
+
+			/*
+			 * Deal with errors that occur because of races
+			 * in link handling
+			 */
+			if (nl == &zns->netlink_cmd &&
+			    ((msg_type == RTM_DELROUTE &&
+			      (-errnum == ENODEV || -errnum == ESRCH))
+			     || (msg_type == RTM_NEWROUTE &&
+				 (-errnum == ENETDOWN || -errnum == EEXIST)))) {
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"%s: error: %s type=%s(%u), seq=%u, pid=%u",
+						nl->name,
+						safe_strerror(-errnum),
+						nl_msg_type_to_str(msg_type),
+						msg_type, err->msg.nlmsg_seq,
+						err->msg.nlmsg_pid);
+				return NL_ACK_RECEIVED;
+			}
+
+			/*
+			 * We see RTM_DELNEIGH when shutting down an
+			 * interface with an IPv4
+			 * link-local.  The kernel should have already
+			 * deleted the neighbor
+			 * so do not log these as an error.
+			 */
+			if (msg_type == RTM_DELNEIGH ||
+			    (nl == &zns->netlink_cmd &&
+			     msg_type == RTM_NEWROUTE &&
+			     (-errnum == ESRCH || -errnum == ENETUNREACH))) {
+				/*
+				 * This is known to happen in some
+				 * situations, don't log
+				 * as error.
+				 */
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"%s error: %s, type=%s(%u), seq=%u, pid=%u",
+						nl->name,
+						safe_strerror(-errnum),
+						nl_msg_type_to_str(msg_type),
+						msg_type, err->msg.nlmsg_seq,
+						err->msg.nlmsg_pid);
+			} else
+				zlog_err(
+					"%s error: %s, type=%s(%u), seq=%u, pid=%u",
+					nl->name, safe_strerror(-errnum),
+					nl_msg_type_to_str(msg_type), msg_type,
+					err->msg.nlmsg_seq, err->msg.nlmsg_pid);
+			return NL_ERROR;
+		}
+
+		/* OK we got netlink message. */
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug(
+				"netlink_parse_info: %s type %s(%u), len=%d, seq=%u, pid=%u",
+				nl->name, nl_msg_type_to_str(h->nlmsg_type),
+				h->nlmsg_type, h->nlmsg_len, h->nlmsg_seq,
+				h->nlmsg_pid);
+
+		/*
+		 * Ignore messages that maybe sent from
+		 * other actors besides the kernel
+		 */
+		if (snl->nl_pid != 0) {
+			zlog_err("Ignoring message from pid %u", snl->nl_pid);
+			return NL_PARSED;
+		}
+
+		error = (*filter)(h, zns->ns_id, startup);
+		if (error < 0) {
+			zlog_err("%s filter function error", nl->name);
+			*ret = error;
+		}
+	}
+
+	return NL_PARSED;
+}
+
 /*
  * netlink_parse_info
  *
@@ -517,23 +689,37 @@ int netlink_parse_info(int (*filter)(struct nlmsghdr *, ns_id_t, int),
 {
 	int status;
 	int ret = 0;
-	int error;
 	int read_in = 0;
+	int err_received = 0;
 
 	while (1) {
-		char buf[NL_RCV_PKT_BUF_SIZE];
-		struct iovec iov = {.iov_base = buf, .iov_len = sizeof buf};
-		struct sockaddr_nl snl;
-		struct msghdr msg = {.msg_name = (void *)&snl,
-				     .msg_namelen = sizeof snl,
-				     .msg_iov = &iov,
-				     .msg_iovlen = 1};
-		struct nlmsghdr *h;
+#define STACK 5
+		char bufs[STACK][NL_RCV_PKT_BUF_SIZE];
+		struct iovec iovs[STACK];
+		struct sockaddr_nl snl[STACK];
+		struct mmsghdr msgs[STACK];
+		/*
+		 * If we are on a blocking socket(netlink_cmd)
+		 * then we should use MSG_WAITFORONE
+		 * as that there is a bug in recvmmsg( see the man page)
+		 * where timeout is not honored if there are no packets
+		 * to receive.
+		 */
+		int flags = (nl == &zns->netlink_cmd) ? MSG_WAITFORONE : 0;
 
 		if (count && read_in >= count)
 			return 0;
 
-		status = recvmsg(nl->sock, &msg, 0);
+		for (int i = 0; i < STACK; i++) {
+			iovs[i].iov_base = bufs[i];
+			iovs[i].iov_len = NL_RCV_PKT_BUF_SIZE;
+			msgs[i].msg_hdr.msg_name = (void *)&snl[i];
+			msgs[i].msg_hdr.msg_namelen = sizeof(snl[i]);
+			msgs[i].msg_hdr.msg_iov = &iovs[i];
+			msgs[i].msg_hdr.msg_iovlen = 1;
+		}
+
+		status = recvmmsg(nl->sock, msgs, STACK, flags, NULL);
 		if (status < 0) {
 			if (errno == EINTR)
 				continue;
@@ -555,159 +741,58 @@ int netlink_parse_info(int (*filter)(struct nlmsghdr *, ns_id_t, int),
 			return -1;
 		}
 
-		if (msg.msg_namelen != sizeof snl) {
-			zlog_err("%s sender address length error: length %d",
-				 nl->name, msg.msg_namelen);
-			return -1;
-		}
-
-		if (IS_ZEBRA_DEBUG_KERNEL_MSGDUMP_RECV) {
-			zlog_debug("%s: << netlink message dump [recv]",
-				   __func__);
-			zlog_hexdump(buf, status);
-		}
-
-		read_in++;
-		for (h = (struct nlmsghdr *)buf;
-		     NLMSG_OK(h, (unsigned int)status);
-		     h = NLMSG_NEXT(h, status)) {
-			/* Finish of reading. */
-			if (h->nlmsg_type == NLMSG_DONE)
-				return ret;
-
-			/* Error handling. */
-			if (h->nlmsg_type == NLMSG_ERROR) {
-				struct nlmsgerr *err =
-					(struct nlmsgerr *)NLMSG_DATA(h);
-				int errnum = err->error;
-				int msg_type = err->msg.nlmsg_type;
-
-				/* If the error field is zero, then this is an
-				 * ACK */
-				if (err->error == 0) {
-					if (IS_ZEBRA_DEBUG_KERNEL) {
-						zlog_debug(
-							"%s: %s ACK: type=%s(%u), seq=%u, pid=%u",
-							__FUNCTION__, nl->name,
-							nl_msg_type_to_str(
-								err->msg.nlmsg_type),
-							err->msg.nlmsg_type,
-							err->msg.nlmsg_seq,
-							err->msg.nlmsg_pid);
-					}
-
-					/* return if not a multipart message,
-					 * otherwise continue */
-					if (!(h->nlmsg_flags & NLM_F_MULTI))
-						return 0;
-					continue;
-				}
-
-				if (h->nlmsg_len
-				    < NLMSG_LENGTH(sizeof(struct nlmsgerr))) {
-					zlog_err("%s error: message truncated",
-						 nl->name);
-					return -1;
-				}
-
-				/* Deal with errors that occur because of races
-				 * in link handling */
-				if (nl == &zns->netlink_cmd
-				    && ((msg_type == RTM_DELROUTE
-					 && (-errnum == ENODEV
-					     || -errnum == ESRCH))
-					|| (msg_type == RTM_NEWROUTE
-					    && (-errnum == ENETDOWN
-						|| -errnum == EEXIST)))) {
-					if (IS_ZEBRA_DEBUG_KERNEL)
-						zlog_debug(
-							"%s: error: %s type=%s(%u), seq=%u, pid=%u",
-							nl->name,
-							safe_strerror(-errnum),
-							nl_msg_type_to_str(
-								msg_type),
-							msg_type,
-							err->msg.nlmsg_seq,
-							err->msg.nlmsg_pid);
-					return 0;
-				}
-
-				/* We see RTM_DELNEIGH when shutting down an
-				 * interface with an IPv4
-				 * link-local.  The kernel should have already
-				 * deleted the neighbor
-				 * so do not log these as an error.
-				 */
-				if (msg_type == RTM_DELNEIGH
-				    || (nl == &zns->netlink_cmd
-					&& msg_type == RTM_NEWROUTE
-					&& (-errnum == ESRCH
-					    || -errnum == ENETUNREACH))) {
-					/* This is known to happen in some
-					 * situations, don't log
-					 * as error.
-					 */
-					if (IS_ZEBRA_DEBUG_KERNEL)
-						zlog_debug(
-							"%s error: %s, type=%s(%u), seq=%u, pid=%u",
-							nl->name,
-							safe_strerror(-errnum),
-							nl_msg_type_to_str(
-								msg_type),
-							msg_type,
-							err->msg.nlmsg_seq,
-							err->msg.nlmsg_pid);
-				} else
-					zlog_err(
-						"%s error: %s, type=%s(%u), seq=%u, pid=%u",
-						nl->name,
-						safe_strerror(-errnum),
-						nl_msg_type_to_str(msg_type),
-						msg_type, err->msg.nlmsg_seq,
-						err->msg.nlmsg_pid);
-
+		for (int i = 0; i < status; i++) {
+			if (msgs[i].msg_hdr.msg_namelen != sizeof(snl[i])) {
+				zlog_err(
+					"%s sender address length error: length %d",
+					nl->name, msgs[i].msg_hdr.msg_namelen);
 				return -1;
 			}
 
-			/* OK we got netlink message. */
-			if (IS_ZEBRA_DEBUG_KERNEL)
-				zlog_debug(
-					"netlink_parse_info: %s type %s(%u), len=%d, seq=%u, pid=%u",
-					nl->name,
-					nl_msg_type_to_str(h->nlmsg_type),
-					h->nlmsg_type, h->nlmsg_len,
-					h->nlmsg_seq, h->nlmsg_pid);
+			if (IS_ZEBRA_DEBUG_KERNEL_MSGDUMP_RECV) {
+				zlog_debug("%s: << netlink message dump [recv]",
+					   __func__);
+				zlog_hexdump(bufs[i], msgs[i].msg_len);
+			}
 
+			read_in++;
+			switch (kernel_netlink_parse_msg(
+				bufs[i], &msgs[i].msg_len, filter, nl, zns,
+				startup, &ret, &snl[i])) {
+			case NL_DONE:
+				if (count == 0)
+					return 0;
+				break;
+			case NL_ACK_RECEIVED:
+				if (count == 0)
+					return 0;
+				else
+					zlog_err("Unexpected ACK received");
+				break;
+			case NL_ERROR:
+				if (count == 0)
+					return -1;
+				else
+					err_received++;
+				break;
+			case NL_PARSED:
+				break;
+			}
 
-			/*
-			 * Ignore messages that maybe sent from
-			 * other actors besides the kernel
-			 */
-			if (snl.nl_pid != 0) {
-				zlog_err("Ignoring message from pid %u",
-					 snl.nl_pid);
+			/* After error care. */
+			if (msgs[i].msg_hdr.msg_flags & MSG_TRUNC) {
+				zlog_err("%s error: message truncated",
+					 nl->name);
 				continue;
 			}
-
-			error = (*filter)(h, zns->ns_id, startup);
-			if (error < 0) {
-				zlog_err("%s filter function error", nl->name);
-				ret = error;
+			if (msgs[i].msg_len) {
+				zlog_err("%s error: data remnant size %d",
+					 nl->name, msgs[i].msg_len);
+				return -1;
 			}
 		}
-
-		/* After error care. */
-		if (msg.msg_flags & MSG_TRUNC) {
-			zlog_err("%s error: message truncated", nl->name);
-			continue;
-		}
-		if (status) {
-			zlog_err("%s error: data remnant size %d", nl->name,
-				 status);
-			return -1;
-		}
 	}
-	return ret;
+	return err_received;
 }
 
 /*
