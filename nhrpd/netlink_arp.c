@@ -34,6 +34,7 @@ void netlink_update_binding(struct interface *ifp, union sockunion *proto,
 	struct ndmsg *ndm;
 	struct zbuf *zb = zbuf_alloc(512);
 
+	zlog_debug("$s: SEnding %p", nbma);
 	n = znl_nlmsg_push(zb, nbma ? RTM_NEWNEIGH : RTM_DELNEIGH,
 			   NLM_F_REQUEST | NLM_F_REPLACE | NLM_F_CREATE);
 	ndm = znl_push(zb, sizeof(*ndm));
@@ -215,8 +216,8 @@ static int netlink_log_recv(struct thread *t)
 	while (zbuf_recv(&zb, fd) > 0) {
 		while ((n = znl_nlmsg_pull(&zb, &payload)) != 0) {
 			debugf(NHRP_DEBUG_KERNEL,
-			       "Netlink-log: Received msg_type %u, msg_flags %u",
-			       n->nlmsg_type, n->nlmsg_flags);
+			       "Netlink-log: Received msg_type %u, msg_flags %u pid: %u",
+			       n->nlmsg_type, n->nlmsg_flags, n->nlmsg_pid);
 			switch (n->nlmsg_type) {
 			case (NFNL_SUBSYS_ULOG << 8) | NFULNL_MSG_PACKET:
 				netlink_log_indication(n, &payload);
