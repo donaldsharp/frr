@@ -1325,6 +1325,7 @@ static int netlink_neigh_update(int cmd, int ifindex, uint32_t addr, char *lla,
 	addattr_l(&req.n, sizeof(req), NDA_DST, &addr, 4);
 	addattr_l(&req.n, sizeof(req), NDA_LLADDR, lla, llalen);
 
+	zlog_debug("%s", __PRETTY_FUNCTION__);
 	return netlink_talk(netlink_talk_filter, &req.n, &zns->netlink_cmd, zns,
 			    0);
 }
@@ -1775,6 +1776,7 @@ static int netlink_vxlan_flood_list_update(struct interface *ifp,
 	req.ndm.ndm_ifindex = ifp->ifindex;
 	addattr_l(&req.n, sizeof(req), NDA_DST, &vtep_ip->s_addr, 4);
 
+	zlog_debug("%s", __PRETTY_FUNCTION__);
 	return netlink_talk(netlink_talk_filter, &req.n, &zns->netlink_cmd, zns,
 			    0);
 }
@@ -2104,7 +2106,7 @@ static int netlink_macfdb_update(struct interface *ifp, vlanid_t vid,
 	}
 	addattr32(&req.n, sizeof(req), NDA_MASTER, br_if->ifindex);
 
-	if (IS_ZEBRA_DEBUG_KERNEL)
+	//if (IS_ZEBRA_DEBUG_KERNEL)
 		zlog_debug("Tx %s family %s IF %s(%u)%s %sMAC %s%s",
 			   nl_msg_type_to_str(cmd),
 			   nl_family_to_str(req.ndm.ndm_family), ifp->name,
@@ -2404,7 +2406,7 @@ static int netlink_neigh_update2(struct interface *ifp, struct ipaddr *ip,
 	if (mac)
 		addattr_l(&req.n, sizeof(req), NDA_LLADDR, mac, 6);
 
-	if (IS_ZEBRA_DEBUG_KERNEL)
+	//if (IS_ZEBRA_DEBUG_KERNEL)
 		zlog_debug("Tx %s family %s IF %s(%u) Neigh %s MAC %s",
 			   nl_msg_type_to_str(cmd),
 			   nl_family_to_str(req.ndm.ndm_family), ifp->name,

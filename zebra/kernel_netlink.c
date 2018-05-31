@@ -519,6 +519,7 @@ int netlink_parse_info(int (*filter)(struct nlmsghdr *, ns_id_t, int),
 	int ret = 0;
 	int error;
 	int read_in = 0;
+	int orig_length;
 
 	while (1) {
 		char buf[NL_RCV_PKT_BUF_SIZE];
@@ -568,6 +569,7 @@ int netlink_parse_info(int (*filter)(struct nlmsghdr *, ns_id_t, int),
 		}
 
 		read_in++;
+		orig_length = status;
 		for (h = (struct nlmsghdr *)buf;
 		     NLMSG_OK(h, (unsigned int)status);
 		     h = NLMSG_NEXT(h, status)) {
@@ -670,14 +672,16 @@ int netlink_parse_info(int (*filter)(struct nlmsghdr *, ns_id_t, int),
 			}
 
 			/* OK we got netlink message. */
-			if (IS_ZEBRA_DEBUG_KERNEL)
+			if (h->nlmsg_type == RTM_NEWNEIGH) {
 				zlog_debug(
-					"netlink_parse_info: %s type %s(%u), len=%d, seq=%u, pid=%u",
+					"netlink_parse_info: %s type %s(%u), len=%d, seq=%u, pid=%u:%u",
 					nl->name,
 					nl_msg_type_to_str(h->nlmsg_type),
 					h->nlmsg_type, h->nlmsg_len,
-					h->nlmsg_seq, h->nlmsg_pid);
-
+					h->nlmsg_seq, h->nlmsg_pid,
+					   snl.nl_pid);
+				zlog_hexdump(buf, orig_length);
+			}
 
 			/*
 			 * Ignore messages that maybe sent from
