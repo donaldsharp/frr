@@ -36,6 +36,36 @@
 DEFINE_MTYPE_STATIC(LIB, NEXTHOP, "Nexthop")
 DEFINE_MTYPE_STATIC(LIB, NH_LABEL, "Nexthop label")
 
+int nexthop_cmp(const struct nexthop *next1, const struct nexthop *next2)
+{
+	int ret;
+
+	if (next1->vrf_id < next2->vrf_id)
+		return -1;
+
+	if (next1->vrf_id > next2->vrf_id)
+		return 1;
+
+	if (next1->type < next2->type)
+		return -1;
+
+	if (next1->type > next2->type)
+		return 1;
+
+	if (next1->ifindex < next2->ifindex)
+		return -1;
+
+	if (next1->ifindex > next2->ifindex)
+		return 1;
+
+	ret = memcmp(&next1->gate, &next2->gate, sizeof(union g_addr));
+	if (!ret)
+		return ret;
+
+	ret = memcmp(&next1->src, &next2->src, sizeof(union g_addr));
+	return ret;
+}
+
 /* check if nexthops are same, non-recursive */
 int nexthop_same_no_recurse(const struct nexthop *next1,
 			    const struct nexthop *next2)
