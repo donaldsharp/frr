@@ -551,6 +551,9 @@ static int config_write_host(struct vty *vty)
 		if (host.encrypt)
 			vty_out(vty, "service password-encryption\n");
 
+		if (host.obfuscate)
+			vty_out(vty, "service password-obfuscation\n");
+
 		if (host.lines >= 0)
 			vty_out(vty, "service terminal-length %d\n",
 				host.lines);
@@ -2117,6 +2120,17 @@ DEFUN (service_password_encrypt,
 	return CMD_SUCCESS;
 }
 
+DEFUN (service_password_obfuscate,
+       service_password_obfuscate_cmd,
+       "[no] service password-obfuscation",
+       "Set up miscellaneous service\n"
+       "Obfuscate unencrypted passwords\n")
+{
+	host.obfuscate = !strmatch(argv[0]->text, "no");
+
+	return CMD_SUCCESS;
+}
+
 DEFUN (no_service_password_encrypt,
        no_service_password_encrypt_cmd,
        "no service password-encryption",
@@ -2599,6 +2613,7 @@ void cmd_init(int terminal)
 		install_element(CONFIG_NODE, &no_enable_password_cmd);
 
 		install_element(CONFIG_NODE, &service_password_encrypt_cmd);
+		install_element(CONFIG_NODE, &service_password_obfuscate_cmd);
 		install_element(CONFIG_NODE, &no_service_password_encrypt_cmd);
 		install_element(CONFIG_NODE, &banner_motd_default_cmd);
 		install_element(CONFIG_NODE, &banner_motd_file_cmd);

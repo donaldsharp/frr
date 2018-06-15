@@ -16888,9 +16888,15 @@ static void bgp_config_write_peer_global(struct vty *vty, struct bgp *bgp,
 		bgp_bfd_peer_config_write(vty, peer, addr);
 
 	/* password */
+	if (host.obfuscate)
+		caesar(true, peer->password,
+		       BGP_PASSWD_OBFUSCATION_KEY);
 	if (peergroup_flag_check(peer, PEER_FLAG_PASSWORD))
 		vty_out(vty, " neighbor %s password %s\n", addr,
 			peer->password);
+	if (host.obfuscate)
+		caesar(false, peer->password,
+		       BGP_PASSWD_OBFUSCATION_KEY);
 
 	/* neighbor solo */
 	if (CHECK_FLAG(peer->flags, PEER_FLAG_LONESOUL)) {
