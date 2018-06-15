@@ -553,17 +553,23 @@ struct route_map_rule {
 
 /* Making route map list. */
 struct route_map_list {
-	struct route_map *head;
-	struct route_map *tail;
-
 	void (*add_hook)(const char *);
 	void (*delete_hook)(const char *);
 	void (*event_hook)(route_map_event_t, const char *);
 };
 
+static __inline int route_map_rb_compare(const struct route_map *rm1,
+					 const struct route_map *rm2)
+{
+	return strcmp(rm1->name, rm2->name);
+}
+
+RB_GENERATE(rm_head, route_map, rm_entry, route_map_rb_compare);
+
 /* Master list of route map. */
-static struct route_map_list route_map_master = {NULL, NULL, NULL, NULL, NULL};
+static struct route_map_list route_map_master = {NULL, NULL, NULL};
 struct hash *route_map_master_hash = NULL;
+struct rm_head rm_rb_tree = RB_INITIALIZER(&rm_rb_tree);
 
 static unsigned int route_map_hash_key_make(void *p)
 {
@@ -648,23 +654,7 @@ static struct route_map *route_map_add(const char *name)
 	/* Add map to the hash */
 	hash_get(route_map_master_hash, map, hash_alloc_intern);
 
-	/* Add new entry to the head of the list to match how it is added in the
-	 * hash table. This is to ensure that if the same route-map has been
-	 * created more than once and then marked for deletion (which can happen
-	 * if prior deletions haven't completed as BGP hasn't yet done the
-	 * route-map processing), the order of the entities is the same in both
-	 * the list and the hash table. Otherwise, since there is nothing to
-	 * distinguish between the two entries, the wrong entry could get freed.
-	 * TODO: This needs to be re-examined to handle it better - e.g., revive
-	 * a deleted entry if the route-map is created again.
-	 */
-	map->prev = NULL;
-	map->next = list->head;
-	if (list->head)
-		list->head->prev = map;
-	list->head = map;
-	if (!list->tail)
-		list->tail = map;
+	RB_INSERT(rm_head, &rm_rb_tree, map);
 
 	/* Execute hook. */
 	if (route_map_master.add_hook) {
@@ -693,15 +683,7 @@ static void route_map_free_map(struct route_map *map)
 
 	QOBJ_UNREG(map);
 
-	if (map->next)
-		map->next->prev = map->prev;
-	else
-		list->tail = map->prev;
-
-	if (map->prev)
-		map->prev->next = map->next;
-	else
-		list->head = map->next;
+	RB_REMOVE(rm_head, &rm_rb_tree, map);
 
 	hash_release(route_map_master_hash, map);
 	XFREE(MTYPE_ROUTE_MAP_NAME, map->name);
@@ -809,17 +791,14 @@ static struct route_map *route_map_get(const char *name)
 
 void route_map_walk_update_list(int (*route_map_update_fn)(char *name))
 {
-	struct route_map *node;
-	struct route_map *nnode = NULL;
+	struct route_map *node, *next;
 
-	for (node = route_map_master.head; node; node = nnode) {
+	RB_FOREACH_SAFE (node, rm_head, &rm_rb_tree, next) {
 		if (node->to_be_processed) {
 			/* DD: Should we add any thread yield code here */
 			route_map_update_fn(node->name);
-			nnode = node->next;
 			route_map_clear_updated(node);
-		} else
-			nnode = node->next;
+		}
 	}
 }
 
@@ -907,7 +886,7 @@ static int vty_show_route_map(struct vty *vty, const char *name)
 			return CMD_SUCCESS;
 		}
 	} else {
-		for (map = route_map_master.head; map; map = map->next)
+		RB_FOREACH (map, rm_head, &rm_rb_tree)
 			if (!map->deleted)
 				vty_show_route_map_entry(vty, map);
 	}
@@ -2683,7 +2662,7 @@ static int route_map_config_write(struct vty *vty)
 	int first = 1;
 	int write = 0;
 
-	for (map = route_map_master.head; map; map = map->next)
+	RB_FOREACH (map, rm_head, &rm_rb_tree)
 		for (index = map->head; index; index = index->next) {
 			if (!first)
 				vty_out(vty, "!\n");
@@ -2756,8 +2735,8 @@ void route_map_finish(void)
 	route_set_vec = NULL;
 
 	/* cleanup route_map */
-	while (route_map_master.head) {
-		struct route_map *map = route_map_master.head;
+	while (!RB_EMPTY(rm_head, &rm_rb_tree)) {
+		struct route_map *map = RB_ROOT(rm_head, &rm_rb_tree);
 		map->to_be_processed = false;
 		route_map_delete(map);
 	}
@@ -2775,7 +2754,7 @@ static void rmap_autocomplete(vector comps, struct cmd_token *token)
 {
 	struct route_map *map;
 
-	for (map = route_map_master.head; map; map = map->next)
+	RB_FOREACH (map, rm_head, &rm_rb_tree)
 		vector_set(comps, XSTRDUP(MTYPE_COMPLETION, map->name));
 }
 

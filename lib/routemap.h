@@ -146,6 +146,8 @@ DECLARE_QOBJ_TYPE(route_map_index)
 
 /* Route map list structure. */
 struct route_map {
+	RB_ENTRY(route_map) rm_entry;
+
 	/* Name of route map. */
 	char *name;
 
@@ -153,16 +155,14 @@ struct route_map {
 	struct route_map_index *head;
 	struct route_map_index *tail;
 
-	/* Make linked list. */
-	struct route_map *next;
-	struct route_map *prev;
-
 	/* Maintain update info */
 	bool to_be_processed; /* True if modification isn't acted on yet */
 	bool deleted;         /* If 1, then this node will be deleted */
 
 	QOBJ_FIELDS
 };
+RB_HEAD(rm_head, route_map);
+RB_PROTOTYPE(rm_head, route_map, rm_entry, route_map_rb_compare);
 DECLARE_QOBJ_TYPE(route_map)
 
 /* Prototypes. */
