@@ -87,6 +87,7 @@ struct ospf_if_params {
 	DECLARE_IF_PARAM(bool, prefix_suppression);
 
 	/* Authentication data. */
+#define OSPF_PASSWD_OBFUSCATION_KEY "4d48bc58afd8379d2795926dc3484c00"
 	uint8_t auth_simple[OSPF_AUTH_SIMPLE_SIZE + 1]; /* Simple password. */
 	uint8_t auth_simple__config : 1;
 
