@@ -32,6 +32,9 @@ struct area_addr {
 	uint8_t area_addr[20];
 };
 
+/* Key used to obfuscate passwords in config files */
+#define ISIS_PASSWD_OBFUSCATION_KEY "8098f63eb10810955117d86072df905a"
+
 struct isis_passwd {
 	uint8_t len;
 #define ISIS_PASSWD_TYPE_UNUSED   0
@@ -43,6 +46,7 @@ struct isis_passwd {
 #define SNP_AUTH_SEND   0x01
 #define SNP_AUTH_RECV   0x02
 	uint8_t snp_auth;
+
 	uint8_t passwd[255];
 };
 
