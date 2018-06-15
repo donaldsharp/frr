@@ -80,6 +80,7 @@ struct host {
 	/* Flags for services */
 	int advanced;
 	int encrypt;
+	int obfuscate;
 
 	/* Banner configuration. */
 	char *motd;
