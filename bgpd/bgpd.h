@@ -1387,6 +1387,7 @@ struct peer {
 
 	enum bgp_addpath_strat addpath_type[AFI_MAX][SAFI_MAX];
 
+#define BGP_PASSWD_OBFUSCATION_KEY "71c990efaec2a62d95c768341563bc0c"
 	/* MD5 password */
 	char *password;
 

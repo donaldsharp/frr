@@ -1401,6 +1401,11 @@ static int isis_interface_config_write(struct vty *vty)
 					}
 				}
 			}
+
+			if (host.obfuscate)
+				caesar(true, (char *)circuit->passwd.passwd,
+				       ISIS_PASSWD_OBFUSCATION_KEY);
+
 			if (circuit->passwd.type == ISIS_PASSWD_TYPE_HMAC_MD5) {
 				vty_out(vty, " " PROTO_NAME " password md5 %s\n",
 					circuit->passwd.passwd);
@@ -1411,6 +1416,9 @@ static int isis_interface_config_write(struct vty *vty)
 					circuit->passwd.passwd);
 				write++;
 			}
+			if (host.obfuscate)
+				caesar(false, (char *)circuit->passwd.passwd,
+				       ISIS_PASSWD_OBFUSCATION_KEY);
 			if (circuit->bfd_config.enabled) {
 				vty_out(vty, " " PROTO_NAME " bfd\n");
 				write++;
@@ -1516,6 +1524,9 @@ ferr_r isis_circuit_passwd_set(struct isis_circuit *circuit,
 	circuit->passwd.len = len;
 	strlcpy((char *)circuit->passwd.passwd, passwd,
 		sizeof(circuit->passwd.passwd));
+	if (host.obfuscate)
+		caesar(false, (char *)circuit->passwd.passwd,
+		       ISIS_PASSWD_OBFUSCATION_KEY);
 	circuit->passwd.type = passwd_type;
 	return ferr_ok();
 }
