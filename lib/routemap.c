@@ -2378,6 +2378,21 @@ DEFUN_NOSH (route_map,
 		argv[idx_permit_deny]->arg[0] == 'p' ? RMAP_PERMIT : RMAP_DENY;
 	unsigned long pref = strtoul(argv[idx_number]->arg, &endptr, 10);
 	const char *mapname = argv[idx_word]->arg;
+	struct route_map tmp_map;
+
+	memset(&tmp_map, 0, sizeof(struct route_map));
+	tmp_map.name = XSTRDUP(MTYPE_ROUTE_MAP_NAME, mapname);
+	tmp_map.deleted = true;
+	map = hash_lookup(route_map_master_hash, &tmp_map);
+	XFREE(MTYPE_ROUTE_MAP_NAME, tmp_map.name);
+
+	if (map) {
+		vty_out(vty,
+			"route-map %s is in the process of being deleted\n",
+			mapname);
+		vty_out(vty, "Please try again in a few seconds\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
 
 	/* Get route map. */
 	map = route_map_get(mapname);
