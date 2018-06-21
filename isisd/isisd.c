@@ -3477,12 +3477,14 @@ static int isis_config_write(struct vty *vty)
 			if (area->area_passwd.type
 			    == ISIS_PASSWD_TYPE_HMAC_MD5) {
 				if (host.obfuscate)
-					caesar(true, (char *) area->area_passwd.passwd,
+					caesar(true,
+					       (char *)area->area_passwd.passwd,
 					       ISIS_PASSWD_OBFUSCATION_KEY);
 				vty_out(vty, " area-password md5 %s",
 					area->area_passwd.passwd);
 				if (host.obfuscate)
-					caesar(false, (char *) area->area_passwd.passwd,
+					caesar(false,
+					       (char *)area->area_passwd.passwd,
 					       ISIS_PASSWD_OBFUSCATION_KEY);
 				if (CHECK_FLAG(area->area_passwd.snp_auth,
 					       SNP_AUTH_SEND)) {
@@ -3499,12 +3501,14 @@ static int isis_config_write(struct vty *vty)
 			} else if (area->area_passwd.type
 				   == ISIS_PASSWD_TYPE_CLEARTXT) {
 				if (host.obfuscate)
-					caesar(true, (char *) area->area_passwd.passwd,
+					caesar(true,
+					       (char *)area->area_passwd.passwd,
 					       ISIS_PASSWD_OBFUSCATION_KEY);
 				vty_out(vty, " area-password clear %s",
 					area->area_passwd.passwd);
 				if (host.obfuscate)
-					caesar(false, (char *) area->area_passwd.passwd,
+					caesar(false,
+					       (char *)area->area_passwd.passwd,
 					       ISIS_PASSWD_OBFUSCATION_KEY);
 				if (CHECK_FLAG(area->area_passwd.snp_auth,
 					       SNP_AUTH_SEND)) {
@@ -3522,13 +3526,16 @@ static int isis_config_write(struct vty *vty)
 			if (area->domain_passwd.type
 			    == ISIS_PASSWD_TYPE_HMAC_MD5) {
 				if (host.obfuscate)
-					caesar(true, (char *) area->domain_passwd.passwd,
+					caesar(true,
+					       (char *)area->domain_passwd
+						       .passwd,
 					       ISIS_PASSWD_OBFUSCATION_KEY);
 				vty_out(vty, " domain-password md5 %s",
 					area->domain_passwd.passwd);
 				if (host.obfuscate)
-					caesar(false, (char *)
-					       area->domain_passwd.passwd,
+					caesar(false,
+					       (char *)area->domain_passwd
+						       .passwd,
 					       ISIS_PASSWD_OBFUSCATION_KEY);
 				if (CHECK_FLAG(area->domain_passwd.snp_auth,
 					       SNP_AUTH_SEND)) {
