@@ -442,6 +442,36 @@ static char *zencrypt(const char *passwd)
 
 static bool full_cli;
 
+#define MOD(a, b) ((((a) % (b)) + (b)) % (b))
+
+char *caesar(bool encrypt, char *text, const char *key)
+{
+        size_t kl = strlen(key);
+        size_t tl = strlen(text);
+        int16_t w[tl + 1];
+
+        for (size_t i = 0; i < tl; ++i)
+                if (!(text[i] >= 33 && text[i] <= 126))
+                        return NULL;
+
+        for (size_t i = 0; i < kl; ++i)
+                if (!(key[i] >= 33 && key[i] <= 126))
+                        return NULL;
+
+        for (size_t i = 0; i < tl; ++i) {
+                w[i] = text[i];
+                w[i] += -33 + (2 * !!encrypt - 1) * key[i % kl];
+                w[i] = MOD((w[i]), (127 - 33)) + 33;
+        }
+
+        for (size_t i = 0; i < tl; i++)
+                text[i] = w[i];
+
+        w[tl] = 0x00;
+
+        return text;
+}
+
 /* This function write configuration of this host. */
 static int config_write_host(struct vty *vty)
 {
