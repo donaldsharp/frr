@@ -450,30 +450,30 @@ static bool full_cli;
 
 char *caesar(bool encrypt, char *text, const char *key)
 {
-        size_t kl = strlen(key);
-        size_t tl = strlen(text);
-        int16_t w[tl + 1];
+	size_t kl = strlen(key);
+	size_t tl = strlen(text);
+	int16_t w[tl + 1];
 
-        for (size_t i = 0; i < tl; ++i)
-                if (!(text[i] >= 33 && text[i] <= 126))
-                        return NULL;
+	for (size_t i = 0; i < tl; ++i)
+		if (!(text[i] >= 33 && text[i] <= 126))
+			return NULL;
 
-        for (size_t i = 0; i < kl; ++i)
-                if (!(key[i] >= 33 && key[i] <= 126))
-                        return NULL;
+	for (size_t i = 0; i < kl; ++i)
+		if (!(key[i] >= 33 && key[i] <= 126))
+			return NULL;
 
-        for (size_t i = 0; i < tl; ++i) {
-                w[i] = text[i];
-                w[i] += -33 + (2 * !!encrypt - 1) * key[i % kl];
-                w[i] = MOD((w[i]), (127 - 33)) + 33;
-        }
+	for (size_t i = 0; i < tl; ++i) {
+		w[i] = text[i];
+		w[i] += -33 + (2 * !!encrypt - 1) * key[i % kl];
+		w[i] = MOD((w[i]), (127 - 33)) + 33;
+	}
 
-        for (size_t i = 0; i < tl; i++)
-                text[i] = w[i];
+	for (size_t i = 0; i < tl; i++)
+		text[i] = w[i];
 
-        w[tl] = 0x00;
+	w[tl] = 0x00;
 
-        return text;
+	return text;
 }
 
 /* This function write configuration of this host. */
@@ -2120,11 +2120,10 @@ DEFUN (service_password_encrypt,
 	return CMD_SUCCESS;
 }
 
-DEFUN (service_password_obfuscate,
-       service_password_obfuscate_cmd,
-       "[no] service password-obfuscation",
-       "Set up miscellaneous service\n"
-       "Obfuscate unencrypted passwords\n")
+DEFUN(service_password_obfuscate, service_password_obfuscate_cmd,
+      "[no] service password-obfuscation",
+      "Set up miscellaneous service\n"
+      "Obfuscate unencrypted passwords\n")
 {
 	host.obfuscate = !strmatch(argv[0]->text, "no");
 
