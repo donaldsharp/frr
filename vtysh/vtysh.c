@@ -3189,6 +3189,7 @@ DEFUNSH(VTYSH_ALL, no_vtysh_service_password_encrypt,
 
 DEFUNSH(VTYSH_ALL, service_password_obfuscate, service_password_obfuscate_cmd,
 	"[no] service password-obfuscation",
+	NO_STR
 	"Set up miscellaneous service\n"
 	"Obfuscate unencrypted passwords\n")
 {
