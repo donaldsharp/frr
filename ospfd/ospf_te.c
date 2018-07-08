@@ -1451,6 +1451,8 @@ static struct ospf_lsa *ospf_mpls_te_lsa_refresh(struct ospf_lsa *lsa)
 		zlog_warn("ospf_mpls_te_lsa_refresh: Invalid parameter?");
 		lsa->data->ls_age =
 			htons(OSPF_LSA_MAXAGE); /* Flush it anyway. */
+		ospf_opaque_lsa_flush_schedule(lsa);
+		return NULL;
 	}
 
 	/* Check if lp was not disable in the interval */
@@ -1463,8 +1465,7 @@ static struct ospf_lsa *ospf_mpls_te_lsa_refresh(struct ospf_lsa *lsa)
 
 	/* If the lsa's age reached to MaxAge, start flushing procedure. */
 	if (IS_LSA_MAXAGE(lsa)) {
-		if (lp)
-			UNSET_FLAG(lp->flags, LPFLG_LSA_ENGAGED);
+		UNSET_FLAG(lp->flags, LPFLG_LSA_ENGAGED);
 		ospf_opaque_lsa_flush_schedule(lsa);
 		return NULL;
 	}
@@ -2050,12 +2051,11 @@ static uint16_t ospf_mpls_te_show_link_subtlv(struct vty *vty,
 					      struct tlv_header *tlvh0,
 					      uint16_t subtotal, uint16_t total)
 {
-	struct tlv_header *tlvh, *next;
+	struct tlv_header *tlvh;
 	uint16_t sum = subtotal;
 
 	for (tlvh = tlvh0; sum < total;
-	     tlvh = (next ? next : TLV_HDR_NEXT(tlvh))) {
-		next = NULL;
+	     tlvh = TLV_HDR_NEXT(tlvh)) {
 		switch (ntohs(tlvh->type)) {
 		case TE_LINK_SUBTLV_LINK_TYPE:
 			sum += show_vty_link_subtlv_link_type(vty, tlvh);

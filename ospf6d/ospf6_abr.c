@@ -161,9 +161,10 @@ int ospf6_abr_originate_summary_to_area(struct ospf6_route *route,
 	    && route->type != OSPF6_DEST_TYPE_RANGE
 	    && ((route->type != OSPF6_DEST_TYPE_ROUTER)
 		|| !CHECK_FLAG(route->path.router_bits, OSPF6_ROUTER_BIT_E))) {
-		if (is_debug)
-			zlog_debug(
-				"Route type is none of network, range nor ASBR, ignore");
+#if 0
+		zlog_debug(
+			"Route type is none of network, range nor ASBR, ignore");
+#endif
 		return 0;
 	}
 
@@ -177,16 +178,17 @@ int ospf6_abr_originate_summary_to_area(struct ospf6_route *route,
 
 	/* do not generate if the path's area is the same as target area */
 	if (route->path.area_id == area->area_id) {
-		if (is_debug)
-			zlog_debug("The route is in the area itself, ignore");
+#if 0
+		zlog_debug("The route is in the area itself, ignore");
+#endif
 		return 0;
 	}
 
 	/* do not generate if the nexthops belongs to the target area */
 	if (ospf6_abr_nexthops_belong_to_area(route, area)) {
-		if (is_debug)
-			zlog_debug(
-				"The route's nexthop is in the same area, ignore");
+#if 0
+		zlog_debug("The route's nexthop is in the same area, ignore");
+#endif
 		return 0;
 	}
 
@@ -641,6 +643,11 @@ void ospf6_abr_originate_summary(struct ospf6_route *route)
 
 	if (route->type == OSPF6_DEST_TYPE_NETWORK) {
 		oa = ospf6_area_lookup(route->path.area_id, ospf6);
+		if (!oa) {
+			zlog_err("OSPFv6 area lookup failed");
+			return;
+		}
+
 		range = ospf6_route_lookup_bestmatch(&route->prefix,
 						     oa->range_table);
 		if (range) {
@@ -864,7 +871,8 @@ void ospf6_abr_examin_summary(struct ospf6_lsa *lsa, struct ospf6_area *oa)
 				lsa->header);
 		prefix.family = AF_INET6;
 		prefix.prefixlen = prefix_lsa->prefix.prefix_length;
-		ospf6_prefix_in6_addr(&prefix.u.prefix6, &prefix_lsa->prefix);
+		ospf6_prefix_in6_addr(&prefix.u.prefix6, prefix_lsa,
+				      &prefix_lsa->prefix);
 		if (is_debug)
 			prefix2str(&prefix, buf, sizeof(buf));
 		table = oa->ospf6->route_table;
@@ -1284,7 +1292,7 @@ static char *ospf6_inter_area_prefix_lsa_get_prefix_str(struct ospf6_lsa *lsa,
 			(struct ospf6_inter_prefix_lsa *)OSPF6_LSA_HEADER_END(
 				lsa->header);
 
-		ospf6_prefix_in6_addr(&in6, &prefix_lsa->prefix);
+		ospf6_prefix_in6_addr(&in6, prefix_lsa, &prefix_lsa->prefix);
 		if (buf) {
 			inet_ntop(AF_INET6, &in6, buf, buflen);
 			sprintf(&buf[strlen(buf)], "/%d",

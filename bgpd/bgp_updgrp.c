@@ -812,7 +812,7 @@ static void update_subgroup_delete(struct update_subgroup *subgrp)
 		THREAD_TIMER_OFF(subgrp->t_coalesce);
 	sync_delete(subgrp);
 
-	if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
+	if (BGP_DEBUG(update_groups, UPDATE_GROUPS) && subgrp->update_group)
 		zlog_debug("delete subgroup u%" PRIu64 ":s%" PRIu64,
 			   subgrp->update_group->id, subgrp->id);
 
@@ -905,7 +905,7 @@ static void update_subgroup_add_peer(struct update_subgroup *subgrp,
 static void update_subgroup_remove_peer_internal(struct update_subgroup *subgrp,
 						 struct peer_af *paf)
 {
-	assert(subgrp && paf);
+	assert(subgrp && paf && subgrp->update_group);
 
 	if (bgp_debug_peer_updout_enabled(paf->peer->host)) {
 		UPDGRP_PEER_DBG_DIS(subgrp->update_group);

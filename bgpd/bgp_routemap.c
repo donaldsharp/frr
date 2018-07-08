@@ -37,6 +37,7 @@
 #include "sockunion.h"
 #include "hash.h"
 #include "queue.h"
+#include "frrstr.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_table.h"
@@ -675,6 +676,9 @@ static route_map_result_t route_match_vni(void *rule, struct prefix *prefix,
 	if (type == RMAP_BGP) {
 		vni = *((vni_t *)rule);
 		bgp_info = (struct bgp_info *)object;
+
+		if (bgp_info->extra == NULL)
+			return RMAP_NOMATCH;
 
 		if (vni == label2vni(&bgp_info->extra->label[0]))
 			return RMAP_MATCH;
@@ -3109,7 +3113,7 @@ static void bgp_route_map_process_update(struct bgp *bgp, const char *rmap_name,
 	}
 }
 
-static int bgp_route_map_process_update_cb(char *rmap_name)
+static void bgp_route_map_process_update_cb(char *rmap_name)
 {
 	struct listnode *node, *nnode;
 	struct bgp *bgp;
@@ -3124,8 +3128,6 @@ static int bgp_route_map_process_update_cb(char *rmap_name)
 	}
 
 	vpn_policy_routemap_event(rmap_name);
-
-	return 0;
 }
 
 int bgp_route_map_update_timer(struct thread *thread)
@@ -3169,7 +3171,7 @@ static void bgp_route_map_mark_update(const char *rmap_name)
 
 static void bgp_route_map_add(const char *rmap_name)
 {
-	if (route_map_mark_updated(rmap_name, 0) == 0)
+	if (route_map_mark_updated(rmap_name) == 0)
 		bgp_route_map_mark_update(rmap_name);
 
 	route_map_notify_dependencies(rmap_name, RMAP_EVENT_MATCH_ADDED);
@@ -3177,7 +3179,7 @@ static void bgp_route_map_add(const char *rmap_name)
 
 static void bgp_route_map_delete(const char *rmap_name)
 {
-	if (route_map_mark_updated(rmap_name, 1) == 0)
+	if (route_map_mark_updated(rmap_name) == 0)
 		bgp_route_map_mark_update(rmap_name);
 
 	route_map_notify_dependencies(rmap_name, RMAP_EVENT_MATCH_DELETED);
@@ -3185,7 +3187,7 @@ static void bgp_route_map_delete(const char *rmap_name)
 
 static void bgp_route_map_event(route_map_event_t event, const char *rmap_name)
 {
-	if (route_map_mark_updated(rmap_name, 0) == 0)
+	if (route_map_mark_updated(rmap_name) == 0)
 		bgp_route_map_mark_update(rmap_name);
 
 	route_map_notify_dependencies(rmap_name, RMAP_EVENT_MATCH_ADDED);

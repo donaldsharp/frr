@@ -25,17 +25,17 @@
  */
 
 #include <zebra.h>
+#include <lib/version.h>
 
-
+#include "command.h"
+#include "frrstr.h"
 #include "memory.h"
 #include "log.h"
 #include "log_int.h"
-#include <lib/version.h>
 #include "thread.h"
 #include "vector.h"
 #include "linklist.h"
 #include "vty.h"
-#include "command.h"
 #include "workqueue.h"
 #include "vrf.h"
 #include "command_match.h"
@@ -44,9 +44,9 @@
 #include "defaults.h"
 #include "libfrr.h"
 #include "jhash.h"
+#include "hook.h"
 
 DEFINE_MTYPE(LIB, HOST, "Host config")
-DEFINE_MTYPE(LIB, STRVEC, "String vector")
 DEFINE_MTYPE(LIB, COMPLETION, "Completion item")
 
 #define item(x)                                                                \
@@ -259,30 +259,52 @@ void print_version(const char *progname)
 	printf("configured with:\n\t%s\n", FRR_CONFIG_ARGS);
 }
 
-
-/* Utility function to concatenate argv argument into a single string
-   with inserting ' ' character between each argument.  */
 char *argv_concat(struct cmd_token **argv, int argc, int shift)
 {
-	int i;
-	size_t len;
-	char *str;
-	char *p;
+	int cnt = MAX(argc - shift, 0);
+	const char *argstr[cnt + 1];
 
-	len = 0;
-	for (i = shift; i < argc; i++)
-		len += strlen(argv[i]->arg) + 1;
-	if (!len)
+	if (!cnt)
 		return NULL;
-	p = str = XMALLOC(MTYPE_TMP, len);
-	for (i = shift; i < argc; i++) {
-		size_t arglen;
-		memcpy(p, argv[i]->arg, (arglen = strlen(argv[i]->arg)));
-		p += arglen;
-		*p++ = ' ';
+
+	for (int i = 0; i < cnt; i++)
+		argstr[i] = argv[i + shift]->arg;
+
+	return frrstr_join(argstr, cnt, " ");
+}
+
+vector cmd_make_strvec(const char *string)
+{
+	if (!string)
+		return NULL;
+
+	const char *copy = string;
+
+	/* skip leading whitespace */
+	while (isspace((int)*copy) && *copy != '\0')
+		copy++;
+
+	/* if the entire string was whitespace or a comment, return */
+	if (*copy == '\0' || *copy == '!' || *copy == '#')
+		return NULL;
+
+	vector result = frrstr_split_vec(copy, "\n\r\t ");
+
+	for (unsigned int i = 0; i < vector_active(result); i++) {
+		if (strlen(vector_slot(result, i)) == 0) {
+			XFREE(MTYPE_TMP, vector_slot(result, i));
+			vector_unset(result, i);
+		}
 	}
-	*(p - 1) = '\0';
-	return str;
+
+	vector_compact(result);
+
+	return result;
+}
+
+void cmd_free_strvec(vector v)
+{
+	frrstr_strvec_free(v);
 }
 
 /**
@@ -330,61 +352,6 @@ void install_node(struct cmd_node *node, int (*func)(struct vty *))
 		       (void (*)(void *)) & cmd_token_del);
 	node->cmd_hash = hash_create_size(16, cmd_hash_key, cmd_hash_cmp,
 					  "Command Hash");
-}
-
-/**
- * Tokenizes a string, storing tokens in a vector.
- * Whitespace is ignored.
- *
- * Delimiter string = " \n\r\t".
- *
- * @param string to tokenize
- * @return tokenized string
- */
-vector cmd_make_strvec(const char *string)
-{
-	if (!string)
-		return NULL;
-
-	char *copy, *copystart;
-	copystart = copy = XSTRDUP(MTYPE_TMP, string);
-
-	// skip leading whitespace
-	while (isspace((int)*copy) && *copy != '\0')
-		copy++;
-
-	// if the entire string was whitespace or a comment, return
-	if (*copy == '\0' || *copy == '!' || *copy == '#') {
-		XFREE(MTYPE_TMP, copystart);
-		return NULL;
-	}
-
-	vector strvec = vector_init(VECTOR_MIN_SIZE);
-	const char *delim = " \n\r\t", *tok = NULL;
-	while (copy) {
-		tok = strsep(&copy, delim);
-		if (*tok != '\0')
-			vector_set(strvec, XSTRDUP(MTYPE_STRVEC, tok));
-	}
-
-	XFREE(MTYPE_TMP, copystart);
-	return strvec;
-}
-
-/* Free allocated string vector. */
-void cmd_free_strvec(vector v)
-{
-	unsigned int i;
-	char *cp;
-
-	if (!v)
-		return;
-
-	for (i = 0; i < vector_active(v); i++)
-		if ((cp = vector_slot(v, i)) != NULL)
-			XFREE(MTYPE_STRVEC, cp);
-
-	vector_free(v);
 }
 
 /* Return prompt character of specified node. */
@@ -549,13 +516,6 @@ static int config_write_host(struct vty *vty)
 			if (host.enable)
 				vty_out(vty, "enable password %s\n",
 					host.enable);
-		}
-
-		if (zlog_default->default_lvl != LOG_DEBUG) {
-			vty_out(vty,
-				"! N.B. The 'log trap' command is deprecated.\n");
-			vty_out(vty, "log trap %s\n",
-				zlog_priority[zlog_default->default_lvl]);
 		}
 
 		if (host.logfile
@@ -1179,6 +1139,124 @@ int cmd_execute_command_strict(vector vline, struct vty *vty,
 {
 	return cmd_execute_command_real(vline, FILTER_STRICT, vty, cmd);
 }
+
+/*
+ * Hook for preprocessing command string before executing.
+ *
+ * All subscribers are called with the raw command string that is to be
+ * executed. If any changes are to be made, a new string should be allocated
+ * with MTYPE_TMP and *cmd_out updated to point to this new string. The caller
+ * is then responsible for freeing this string.
+ *
+ * All processing functions must be mutually exclusive in their action, i.e. if
+ * one subscriber decides to modify the command, all others must not modify it
+ * when called. Feeding the output of one processing command into a subsequent
+ * one is not supported.
+ *
+ * This hook is intentionally internal to the command processing system.
+ *
+ * cmd_in
+ *    The raw command string.
+ *
+ * cmd_out
+ *    The result of any processing.
+ */
+DECLARE_HOOK(cmd_execute,
+	     (struct vty *vty, const char *cmd_in, char **cmd_out),
+	     (vty, cmd_in, cmd_out));
+DEFINE_HOOK(cmd_execute, (struct vty *vty, const char *cmd_in, char **cmd_out),
+	    (vty, cmd_in, cmd_out));
+
+/* Hook executed after a CLI command. */
+DECLARE_KOOH(cmd_execute_done, (struct vty *vty, const char *cmd_exec),
+	     (vty, cmd_exec));
+DEFINE_KOOH(cmd_execute_done, (struct vty *vty, const char *cmd_exec),
+	    (vty, cmd_exec));
+
+/*
+ * cmd_execute hook subscriber to handle `|` actions.
+ */
+static int handle_pipe_action(struct vty *vty, const char *cmd_in,
+			      char **cmd_out)
+{
+	/* look for `|` */
+	char *orig, *working, *token, *u;
+	char *pipe = strstr(cmd_in, "| ");
+
+	if (!pipe)
+		return 0;
+
+	/* duplicate string for processing purposes, not including pipe */
+	orig = working = XSTRDUP(MTYPE_TMP, pipe + 2);
+
+	/* retrieve action */
+	token = strsep(&working, " ");
+
+	/* match result to known actions */
+	if (strmatch(token, "include")) {
+		/* the remaining text should be a regexp */
+		char *regexp = working;
+
+		if (!regexp) {
+			vty_out(vty, "%% Need a regexp to filter with\n");
+			goto fail;
+		}
+
+		bool succ = vty_set_include(vty, regexp);
+
+		if (!succ) {
+			vty_out(vty, "%% Bad regexp '%s'\n", regexp);
+			goto fail;
+		}
+		*cmd_out = XSTRDUP(MTYPE_TMP, cmd_in);
+		u = *cmd_out;
+		strsep(&u, "|");
+	} else {
+		vty_out(vty, "%% Unknown action '%s'\n", token);
+		goto fail;
+	}
+
+fail:
+	XFREE(MTYPE_TMP, orig);
+	return 0;
+}
+
+static int handle_pipe_action_done(struct vty *vty, const char *cmd_exec)
+{
+	if (vty->filter)
+		vty_set_include(vty, NULL);
+
+	return 0;
+}
+
+int cmd_execute(struct vty *vty, const char *cmd,
+		const struct cmd_element **matched, int vtysh)
+{
+	int ret;
+	char *cmd_out = NULL;
+	const char *cmd_exec;
+	vector vline;
+
+	hook_call(cmd_execute, vty, cmd, &cmd_out);
+	cmd_exec = cmd_out ? (const char *)cmd_out : cmd;
+
+	vline = cmd_make_strvec(cmd_exec);
+
+	if (vline) {
+		ret = cmd_execute_command(vline, vty, matched, vtysh);
+		cmd_free_strvec(vline);
+	} else {
+		ret = CMD_SUCCESS;
+	}
+
+	hook_call(cmd_execute_done, vty, cmd_exec);
+
+	if (cmd_out)
+		XFREE(MTYPE_TMP, cmd_out);
+
+	return ret;
+}
+
 
 /**
  * Parse one line of config, walking up the parse tree attempting to find a
@@ -2347,7 +2425,8 @@ static int set_log_file(struct vty *vty, const char *fname, int loglevel)
 		XFREE(MTYPE_TMP, p);
 
 	if (!ret) {
-		vty_out(vty, "can't open logfile %s\n", fname);
+		if (vty)
+			vty_out(vty, "can't open logfile %s\n", fname);
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
@@ -2361,6 +2440,39 @@ static int set_log_file(struct vty *vty, const char *fname, int loglevel)
 		zlog_set_level(ZLOG_DEST_SYSLOG, ZLOG_DISABLED);
 #endif
 	return CMD_SUCCESS;
+}
+
+void command_setup_early_logging(const char *dest, const char *level)
+{
+	char *token;
+
+	if (level) {
+		int nlevel = level_match(level);
+
+		if (nlevel != ZLOG_DISABLED)
+			zlog_default->default_lvl = nlevel;
+	}
+
+	if (!dest)
+		return;
+
+	if (strcmp(dest, "stdout") == 0) {
+		zlog_set_level(ZLOG_DEST_STDOUT, zlog_default->default_lvl);
+		return;
+	}
+
+	if (strcmp(dest, "syslog") == 0) {
+		zlog_set_level(ZLOG_DEST_SYSLOG, zlog_default->default_lvl);
+		return;
+	}
+
+	token = strstr(dest, ":");
+	if (token == NULL)
+		return;
+
+	token++;
+
+	set_log_file(NULL, token, zlog_default->default_lvl);
 }
 
 DEFUN (config_log_file,
@@ -2467,36 +2579,6 @@ DEFUN (no_config_log_facility,
        LOG_FACILITY_DESC)
 {
 	zlog_default->facility = LOG_DAEMON;
-	return CMD_SUCCESS;
-}
-
-DEFUN_DEPRECATED(
-	config_log_trap, config_log_trap_cmd,
-	"log trap <emergencies|alerts|critical|errors|warnings|notifications|informational|debugging>",
-	"Logging control\n"
-	"(Deprecated) Set logging level and default for all destinations\n" LOG_LEVEL_DESC)
-{
-	int new_level;
-	int i;
-
-	if ((new_level = level_match(argv[2]->arg)) == ZLOG_DISABLED)
-		return CMD_ERR_NO_MATCH;
-
-	zlog_default->default_lvl = new_level;
-	for (i = 0; i < ZLOG_NUM_DESTS; i++)
-		if (zlog_default->maxlvl[i] != ZLOG_DISABLED)
-			zlog_default->maxlvl[i] = new_level;
-	return CMD_SUCCESS;
-}
-
-DEFUN_DEPRECATED(
-	no_config_log_trap, no_config_log_trap_cmd,
-	"no log trap [emergencies|alerts|critical|errors|warnings|notifications|informational|debugging]",
-	NO_STR
-	"Logging control\n"
-	"Permit all logging information\n" LOG_LEVEL_DESC)
-{
-	zlog_default->default_lvl = LOG_DEBUG;
 	return CMD_SUCCESS;
 }
 
@@ -2697,6 +2779,10 @@ void cmd_init(int terminal)
 	uname(&names);
 	qobj_init();
 
+	/* register command preprocessors */
+	hook_register(cmd_execute, handle_pipe_action);
+	hook_register(cmd_execute_done, handle_pipe_action_done);
+
 	varhandlers = list_new();
 
 	/* Allocate initial top vector of commands. */
@@ -2785,8 +2871,6 @@ void cmd_init(int terminal)
 		install_element(CONFIG_NODE, &no_config_log_syslog_cmd);
 		install_element(CONFIG_NODE, &config_log_facility_cmd);
 		install_element(CONFIG_NODE, &no_config_log_facility_cmd);
-		install_element(CONFIG_NODE, &config_log_trap_cmd);
-		install_element(CONFIG_NODE, &no_config_log_trap_cmd);
 		install_element(CONFIG_NODE, &config_log_record_priority_cmd);
 		install_element(CONFIG_NODE,
 				&no_config_log_record_priority_cmd);
@@ -2813,6 +2897,9 @@ void cmd_init(int terminal)
 void cmd_terminate()
 {
 	struct cmd_node *cmd_node;
+
+	hook_unregister(cmd_execute, handle_pipe_action);
+	hook_unregister(cmd_execute_done, handle_pipe_action_done);
 
 	if (cmdvec) {
 		for (unsigned int i = 0; i < vector_active(cmdvec); i++)

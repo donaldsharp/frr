@@ -59,7 +59,8 @@ static int bgp_fs_nlri_validate(uint8_t *nlri_content, uint32_t len)
 						   len - offset, NULL, &error);
 			break;
 		case FLOWSPEC_TCP_FLAGS:
-			ret = bgp_flowspec_tcpflags_decode(
+		case FLOWSPEC_FRAGMENT:
+			ret = bgp_flowspec_bitmask_decode(
 						   BGP_FLOWSPEC_VALIDATE_ONLY,
 						   nlri_content + offset,
 						   len - offset, NULL, &error);
@@ -67,12 +68,6 @@ static int bgp_fs_nlri_validate(uint8_t *nlri_content, uint32_t len)
 		case FLOWSPEC_PKT_LEN:
 		case FLOWSPEC_DSCP:
 			ret = bgp_flowspec_op_decode(
-						BGP_FLOWSPEC_VALIDATE_ONLY,
-						nlri_content + offset,
-						len - offset, NULL, &error);
-			break;
-		case FLOWSPEC_FRAGMENT:
-			ret = bgp_flowspec_fragment_type_decode(
 						BGP_FLOWSPEC_VALIDATE_ONLY,
 						nlri_content + offset,
 						len - offset, NULL, &error);
@@ -148,7 +143,7 @@ int bgp_nlri_parse_flowspec(struct peer *peer, struct attr *attr,
 
 		if (BGP_DEBUG(flowspec, FLOWSPEC)) {
 			char return_string[BGP_FLOWSPEC_NLRI_STRING_MAX];
-			char local_string[BGP_FLOWSPEC_NLRI_STRING_MAX];
+			char local_string[BGP_FLOWSPEC_NLRI_STRING_MAX * 2];
 			char ec_string[BGP_FLOWSPEC_NLRI_STRING_MAX];
 			char *s = NULL;
 
@@ -157,20 +152,19 @@ int bgp_nlri_parse_flowspec(struct peer *peer, struct attr *attr,
 					       p.u.prefix_flowspec.prefixlen,
 					       return_string,
 					       NLRI_STRING_FORMAT_MIN, NULL);
-			snprintf(ec_string, BGP_FLOWSPEC_NLRI_STRING_MAX,
+			snprintf(ec_string, sizeof(ec_string),
 				 "EC{none}");
 			if (attr && attr->ecommunity) {
 				s = ecommunity_ecom2str(attr->ecommunity,
 						ECOMMUNITY_FORMAT_ROUTE_MAP, 0);
-				snprintf(ec_string,
-					 BGP_FLOWSPEC_NLRI_STRING_MAX,
+				snprintf(ec_string, sizeof(ec_string),
 					 "EC{%s}",
 					s == NULL ? "none" : s);
 
 				if (s)
 					ecommunity_strfree(&s);
 			}
-			snprintf(local_string, BGP_FLOWSPEC_NLRI_STRING_MAX,
+			snprintf(local_string, sizeof(local_string),
 				 "FS Rx %s %s %s %s", withdraw ?
 				 "Withdraw":"Update",
 				 afi2str(afi), return_string,

@@ -586,8 +586,13 @@ static int netlink_interface(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 		return 0;
 
 	len = h->nlmsg_len - NLMSG_LENGTH(sizeof(struct ifinfomsg));
-	if (len < 0)
+	if (len < 0) {
+		zlog_err("%s: Message received from netlink is of a broken size: %d %zu",
+			 __PRETTY_FUNCTION__,
+			 h->nlmsg_len,
+			 (size_t)NLMSG_LENGTH(sizeof(struct ifinfomsg)));
 		return -1;
+	}
 
 	/* We are interested in some AF_BRIDGE notifications. */
 	if (ifi->ifi_family == AF_BRIDGE)
@@ -619,10 +624,8 @@ static int netlink_interface(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 		if (linkinfo[IFLA_INFO_KIND])
 			kind = RTA_DATA(linkinfo[IFLA_INFO_KIND]);
 
-#if HAVE_DECL_IFLA_INFO_SLAVE_KIND
 		if (linkinfo[IFLA_INFO_SLAVE_KIND])
 			slave_kind = RTA_DATA(linkinfo[IFLA_INFO_SLAVE_KIND]);
-#endif
 
 		netlink_determine_zebra_iftype(kind, &zif_type);
 	}
@@ -895,8 +898,13 @@ int netlink_interface_addr(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 		return 0;
 
 	len = h->nlmsg_len - NLMSG_LENGTH(sizeof(struct ifaddrmsg));
-	if (len < 0)
+	if (len < 0) {
+		zlog_err("%s: Message received from netlink is of a broken size: %d %zu",
+			 __PRETTY_FUNCTION__,
+			 h->nlmsg_len,
+			 (size_t)NLMSG_LENGTH(sizeof(struct ifaddrmsg)));
 		return -1;
+	}
 
 	memset(tb, 0, sizeof tb);
 	netlink_parse_rtattr(tb, IFA_MAX, IFA_RTA(ifa), len);
@@ -1107,8 +1115,12 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	}
 
 	len = h->nlmsg_len - NLMSG_LENGTH(sizeof(struct ifinfomsg));
-	if (len < 0)
+	if (len < 0) {
+		zlog_err("%s: Message received from netlink is of a broken size %d %zu",
+			 __PRETTY_FUNCTION__, h->nlmsg_len,
+			 (size_t)NLMSG_LENGTH(sizeof(struct ifinfomsg)));
 		return -1;
+	}
 
 	/* We are interested in some AF_BRIDGE notifications. */
 	if (ifi->ifi_family == AF_BRIDGE)
@@ -1137,10 +1149,8 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 		if (linkinfo[IFLA_INFO_KIND])
 			kind = RTA_DATA(linkinfo[IFLA_INFO_KIND]);
 
-#if HAVE_DECL_IFLA_INFO_SLAVE_KIND
 		if (linkinfo[IFLA_INFO_SLAVE_KIND])
 			slave_kind = RTA_DATA(linkinfo[IFLA_INFO_SLAVE_KIND]);
-#endif
 
 		netlink_determine_zebra_iftype(kind, &zif_type);
 	}

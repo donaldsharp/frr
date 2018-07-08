@@ -449,7 +449,7 @@ int pim_ecmp_nexthop_search(struct pim_instance *pim,
 		   metric is less than nexthop update.
 		 */
 
-		if (qpim_ecmp_rebalance_enable == 0) {
+		if (pim->ecmp_rebalance_enable == 0) {
 			uint8_t curr_route_valid = 0;
 			// Check if current nexthop is present in new updated
 			// Nexthop list.
@@ -499,7 +499,7 @@ int pim_ecmp_nexthop_search(struct pim_instance *pim,
 			}
 		}
 	}
-	if (qpim_ecmp_enable) {
+	if (pim->ecmp_enable) {
 		// PIM ECMP flag is enable then choose ECMP path.
 		hash_val = pim_compute_ecmp_hash(src, grp);
 		mod_val = hash_val % pnc->nexthop_num;
@@ -586,7 +586,7 @@ int pim_ecmp_nexthop_search(struct pim_instance *pim,
 					"%s: (%s,%s)(%s) selected nhop interface %s addr %s mod_val %u iter %d ecmp %d",
 					__PRETTY_FUNCTION__, buf2, buf3,
 					pim->vrf->name, ifp->name, buf, mod_val,
-					nh_iter, qpim_ecmp_enable);
+					nh_iter, pim->ecmp_enable);
 			}
 		}
 		nh_iter++;
@@ -657,10 +657,19 @@ int pim_parse_nexthop_update(int command, struct zclient *zclient,
 			nexthop = nexthop_from_zapi_nexthop(&nhr.nexthops[i]);
 			switch (nexthop->type) {
 			case NEXTHOP_TYPE_IPV4:
-			case NEXTHOP_TYPE_IFINDEX:
 			case NEXTHOP_TYPE_IPV4_IFINDEX:
 			case NEXTHOP_TYPE_IPV6:
 			case NEXTHOP_TYPE_BLACKHOLE:
+				break;
+			case NEXTHOP_TYPE_IFINDEX:
+				/*
+				 * Connected route (i.e. no nexthop), use
+				 * RPF address from nexthop cache (i.e.
+				 * destination) as PIM nexthop.
+				 */
+				nexthop->type = NEXTHOP_TYPE_IPV4_IFINDEX;
+				nexthop->gate.ipv4 =
+					pnc->rpf.rpf_addr.u.prefix4;
 				break;
 			case NEXTHOP_TYPE_IPV6_IFINDEX:
 				ifp1 = if_lookup_by_index(nexthop->ifindex,
@@ -808,7 +817,7 @@ int pim_ecmp_nexthop_lookup(struct pim_instance *pim,
 	}
 
 	// If PIM ECMP enable then choose ECMP path.
-	if (qpim_ecmp_enable) {
+	if (pim->ecmp_enable) {
 		hash_val = pim_compute_ecmp_hash(src, grp);
 		mod_val = hash_val % num_ifindex;
 		if (PIM_DEBUG_PIM_NHT_DETAIL)
@@ -893,7 +902,7 @@ int pim_ecmp_nexthop_lookup(struct pim_instance *pim,
 					nexthop_tab[i].route_metric,
 					nexthop_tab[i].protocol_distance);
 			}
-			/* update nextop data */
+			/* update nexthop data */
 			nexthop->interface = ifp;
 			nexthop->mrib_nexthop_addr =
 				nexthop_tab[i].nexthop_addr;
@@ -942,7 +951,7 @@ int pim_ecmp_fib_lookup_if_vif_index(struct pim_instance *pim,
 	}
 
 	// If PIM ECMP enable then choose ECMP path.
-	if (qpim_ecmp_enable) {
+	if (pim->ecmp_enable) {
 		hash_val = pim_compute_ecmp_hash(src, grp);
 		mod_val = hash_val % num_ifindex;
 		if (PIM_DEBUG_PIM_NHT_DETAIL)

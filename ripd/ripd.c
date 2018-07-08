@@ -799,11 +799,11 @@ static int rip_auth_simple_password(struct rte *rte, struct sockaddr_in *from,
 				    struct interface *ifp)
 {
 	struct rip_interface *ri;
-	char *auth_str = (char *)&rte->prefix;
+	char *auth_str = (char *)rte + offsetof(struct rte, prefix);
 	int i;
 
 	/* reject passwords with zeros in the middle of the string */
-	for (i = strlen(auth_str); i < 16; i++) {
+	for (i = strnlen(auth_str, 16); i < 16; i++) {
 		if (auth_str[i] != '\0')
 			return 0;
 	}
@@ -1641,7 +1641,7 @@ static void rip_request_process(struct rip_packet *packet, int size,
 		}
 		packet->command = RIP_RESPONSE;
 
-		rip_send_packet((uint8_t *)packet, size, from, ifc);
+		(void)rip_send_packet((uint8_t *)packet, size, from, ifc);
 	}
 	rip_global_queries++;
 }

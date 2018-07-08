@@ -1323,6 +1323,8 @@ static void ospf6_intra_prefix_update_route_origin(struct ospf6_route *oa_route)
 	g_route = ospf6_route_lookup(&oa_route->prefix,
 				     ospf6->route_table);
 
+	assert(g_route);
+
 	for (ospf6_route_lock(g_route); g_route &&
 	     ospf6_route_is_prefix(&oa_route->prefix, g_route);
 	     g_route = nroute) {
@@ -1698,7 +1700,8 @@ void ospf6_intra_prefix_lsa_add(struct ospf6_lsa *lsa)
 		memset(&route->prefix, 0, sizeof(struct prefix));
 		route->prefix.family = AF_INET6;
 		route->prefix.prefixlen = op->prefix_length;
-		ospf6_prefix_in6_addr(&route->prefix.u.prefix6, op);
+		ospf6_prefix_in6_addr(&route->prefix.u.prefix6,
+				      intra_prefix_lsa, op);
 
 		route->type = OSPF6_DEST_TYPE_NETWORK;
 		route->path.origin.type = lsa->header->type;
@@ -1880,7 +1883,7 @@ void ospf6_intra_prefix_lsa_remove(struct ospf6_lsa *lsa)
 		memset(&prefix, 0, sizeof(struct prefix));
 		prefix.family = AF_INET6;
 		prefix.prefixlen = op->prefix_length;
-		ospf6_prefix_in6_addr(&prefix.u.prefix6, op);
+		ospf6_prefix_in6_addr(&prefix.u.prefix6, intra_prefix_lsa, op);
 
 		route = ospf6_route_lookup(&prefix, oa->route_table);
 		if (route == NULL)

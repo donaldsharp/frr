@@ -1177,7 +1177,6 @@ static bgp_attr_parse_ret_t bgp_attr_aspath_check(struct peer *const peer,
 	 * not right.
 	 * So do the checks later, i.e. here
 	 */
-	struct bgp *bgp = peer->bgp;
 	struct aspath *aspath;
 
 	/* Confederation sanity check. */
@@ -1192,7 +1191,7 @@ static bgp_attr_parse_ret_t bgp_attr_aspath_check(struct peer *const peer,
 	}
 
 	/* First AS check for EBGP. */
-	if (bgp != NULL && bgp_flag_check(bgp, BGP_FLAG_ENFORCE_FIRST_AS)) {
+	if (CHECK_FLAG(peer->flags, PEER_FLAG_ENFORCE_FIRST_AS)) {
 		if (peer->sort == BGP_PEER_EBGP
 		    && !aspath_firstas_check(attr->aspath, peer->as)) {
 			zlog_err("%s incorrect first AS (must be %u)",
@@ -1514,6 +1513,9 @@ bgp_attr_munge_as4_attrs(struct peer *const peer, struct attr *const attr,
 	if (!ignore_as4_path
 	    && (attr->flag & (ATTR_FLAG_BIT(BGP_ATTR_AS4_PATH)))) {
 		newpath = aspath_reconcile_as4(attr->aspath, as4_path);
+		if (!newpath)
+			return BGP_ATTR_PARSE_ERROR;
+
 		aspath_unintern(&attr->aspath);
 		attr->aspath = aspath_intern(newpath);
 	}

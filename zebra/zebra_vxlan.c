@@ -82,7 +82,6 @@ static void *zvni_neigh_alloc(void *p);
 static zebra_neigh_t *zvni_neigh_add(zebra_vni_t *zvni, struct ipaddr *ip,
 				     struct ethaddr *mac);
 static int zvni_neigh_del(zebra_vni_t *zvni, zebra_neigh_t *n);
-static int zvni_neigh_del_hash_entry(struct hash_backet *backet, void *arg);
 static void zvni_neigh_del_from_vtep(zebra_vni_t *zvni, int uninstall,
 				     struct in_addr *r_vtep_ip);
 static void zvni_neigh_del_all(zebra_vni_t *zvni, int uninstall, int upd_client,
@@ -138,7 +137,6 @@ static int mac_cmp(const void *p1, const void *p2);
 static void *zvni_mac_alloc(void *p);
 static zebra_mac_t *zvni_mac_add(zebra_vni_t *zvni, struct ethaddr *macaddr);
 static int zvni_mac_del(zebra_vni_t *zvni, zebra_mac_t *mac);
-static int zvni_mac_del_hash_entry(struct hash_backet *backet, void *arg);
 static void zvni_mac_del_from_vtep(zebra_vni_t *zvni, int uninstall,
 				   struct in_addr *r_vtep_ip);
 static void zvni_mac_del_all(zebra_vni_t *zvni, int uninstall, int upd_client,
@@ -1195,7 +1193,7 @@ static int zvni_macip_send_msg_to_client(vni_t vni, struct ethaddr *macaddr,
 	struct zserv *client = NULL;
 	struct stream *s = NULL;
 
-	client = zebra_find_client(ZEBRA_ROUTE_BGP, 0);
+	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	/* BGP may not be running. */
 	if (!client)
 		return 0;
@@ -1237,7 +1235,7 @@ static int zvni_macip_send_msg_to_client(vni_t vni, struct ethaddr *macaddr,
 	else
 		client->macipdel_cnt++;
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /*
@@ -1335,7 +1333,7 @@ static int zvni_neigh_del(zebra_vni_t *zvni, zebra_neigh_t *n)
 /*
  * Free neighbor hash entry (callback)
  */
-static int zvni_neigh_del_hash_entry(struct hash_backet *backet, void *arg)
+static void zvni_neigh_del_hash_entry(struct hash_backet *backet, void *arg)
 {
 	struct neigh_walk_ctx *wctx = arg;
 	zebra_neigh_t *n = backet->data;
@@ -1353,10 +1351,10 @@ static int zvni_neigh_del_hash_entry(struct hash_backet *backet, void *arg)
 		if (wctx->uninstall)
 			zvni_neigh_uninstall(wctx->zvni, n);
 
-		return zvni_neigh_del(wctx->zvni, n);
+		zvni_neigh_del(wctx->zvni, n);
 	}
 
-	return 0;
+	return;
 }
 
 /*
@@ -1376,10 +1374,7 @@ static void zvni_neigh_del_from_vtep(zebra_vni_t *zvni, int uninstall,
 	wctx.flags = DEL_REMOTE_NEIGH_FROM_VTEP;
 	wctx.r_vtep_ip = *r_vtep_ip;
 
-	hash_iterate(zvni->neigh_table,
-		     (void (*)(struct hash_backet *,
-			       void *))zvni_neigh_del_hash_entry,
-		     &wctx);
+	hash_iterate(zvni->neigh_table, zvni_neigh_del_hash_entry, &wctx);
 }
 
 /*
@@ -1399,10 +1394,7 @@ static void zvni_neigh_del_all(zebra_vni_t *zvni, int uninstall, int upd_client,
 	wctx.upd_client = upd_client;
 	wctx.flags = flags;
 
-	hash_iterate(zvni->neigh_table,
-		     (void (*)(struct hash_backet *,
-			       void *))zvni_neigh_del_hash_entry,
-		     &wctx);
+	hash_iterate(zvni->neigh_table, zvni_neigh_del_hash_entry, &wctx);
 }
 
 /*
@@ -1872,7 +1864,7 @@ static int zvni_gw_macip_del(struct interface *ifp, zebra_vni_t *zvni,
 		zlog_debug(
 			"%u:SVI %s(%u) VNI %u, sending GW MAC %s IP %s del to BGP",
 			ifp->vrf_id, ifp->name, ifp->ifindex, zvni->vni,
-			prefix_mac2str(&(n->emac), NULL, ETHER_ADDR_STRLEN),
+			prefix_mac2str(&(n->emac), buf1, sizeof(buf1)),
 			ipaddr2str(ip, buf2, sizeof(buf2)));
 
 	/* Remove neighbor from BGP. */
@@ -2230,7 +2222,7 @@ static int zvni_mac_del(zebra_vni_t *zvni, zebra_mac_t *mac)
 /*
  * Free MAC hash entry (callback)
  */
-static int zvni_mac_del_hash_entry(struct hash_backet *backet, void *arg)
+static void zvni_mac_del_hash_entry(struct hash_backet *backet, void *arg)
 {
 	struct mac_walk_ctx *wctx = arg;
 	zebra_mac_t *mac = backet->data;
@@ -2250,10 +2242,10 @@ static int zvni_mac_del_hash_entry(struct hash_backet *backet, void *arg)
 		if (wctx->uninstall)
 			zvni_mac_uninstall(wctx->zvni, mac, 0);
 
-		return zvni_mac_del(wctx->zvni, mac);
+		zvni_mac_del(wctx->zvni, mac);
 	}
 
-	return 0;
+	return;
 }
 
 /*
@@ -2273,9 +2265,7 @@ static void zvni_mac_del_from_vtep(zebra_vni_t *zvni, int uninstall,
 	wctx.flags = DEL_REMOTE_MAC_FROM_VTEP;
 	wctx.r_vtep_ip = *r_vtep_ip;
 
-	hash_iterate(zvni->mac_table, (void (*)(struct hash_backet *,
-						void *))zvni_mac_del_hash_entry,
-		     &wctx);
+	hash_iterate(zvni->mac_table, zvni_mac_del_hash_entry, &wctx);
 }
 
 /*
@@ -2295,9 +2285,7 @@ static void zvni_mac_del_all(zebra_vni_t *zvni, int uninstall, int upd_client,
 	wctx.upd_client = upd_client;
 	wctx.flags = flags;
 
-	hash_iterate(zvni->mac_table, (void (*)(struct hash_backet *,
-						void *))zvni_mac_del_hash_entry,
-		     &wctx);
+	hash_iterate(zvni->mac_table, zvni_mac_del_hash_entry, &wctx);
 }
 
 /*
@@ -2779,7 +2767,7 @@ static int zvni_send_add_to_client(zebra_vni_t *zvni)
 	struct zserv *client;
 	struct stream *s;
 
-	client = zebra_find_client(ZEBRA_ROUTE_BGP, 0);
+	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	/* BGP may not be running. */
 	if (!client)
 		return 0;
@@ -2801,7 +2789,7 @@ static int zvni_send_add_to_client(zebra_vni_t *zvni)
 			   zebra_route_string(client->proto));
 
 	client->vniadd_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /*
@@ -2812,7 +2800,7 @@ static int zvni_send_del_to_client(vni_t vni)
 	struct zserv *client;
 	struct stream *s;
 
-	client = zebra_find_client(ZEBRA_ROUTE_BGP, 0);
+	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	/* BGP may not be running. */
 	if (!client)
 		return 0;
@@ -2831,7 +2819,7 @@ static int zvni_send_del_to_client(vni_t vni)
 			   zebra_route_string(client->proto));
 
 	client->vnidel_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /*
@@ -3111,8 +3099,10 @@ static void rb_delete_host(struct host_rb_tree_entry *hrbe, struct prefix *host)
 	memcpy(&lookup.p, host, sizeof(*host));
 
 	hle = RB_FIND(host_rb_tree_entry, hrbe, &lookup);
-	if (hle)
+	if (hle) {
 		RB_REMOVE(host_rb_tree_entry, hrbe, hle);
+		XFREE(MTYPE_HOST_PREFIX, hle);
+	}
 
 	return;
 }
@@ -3745,7 +3735,7 @@ static int zl3vni_send_add_to_client(zebra_l3vni_t *zl3vni)
 	struct ethaddr rmac;
 	char buf[ETHER_ADDR_STRLEN];
 
-	client = zebra_find_client(ZEBRA_ROUTE_BGP, 0);
+	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	/* BGP may not be running. */
 	if (!client)
 		return 0;
@@ -3777,7 +3767,7 @@ static int zl3vni_send_add_to_client(zebra_l3vni_t *zl3vni)
 			zebra_route_string(client->proto));
 
 	client->l3vniadd_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /*
@@ -3788,7 +3778,7 @@ static int zl3vni_send_del_to_client(zebra_l3vni_t *zl3vni)
 	struct stream *s = NULL;
 	struct zserv *client = NULL;
 
-	client = zebra_find_client(ZEBRA_ROUTE_BGP, 0);
+	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	/* BGP may not be running. */
 	if (!client)
 		return 0;
@@ -3807,7 +3797,7 @@ static int zl3vni_send_del_to_client(zebra_l3vni_t *zl3vni)
 			   zebra_route_string(client->proto));
 
 	client->l3vnidel_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 static void zebra_vxlan_process_l3vni_oper_up(zebra_l3vni_t *zl3vni)
@@ -3920,7 +3910,7 @@ static int ip_prefix_send_to_client(vrf_id_t vrf_id, struct prefix *p,
 	struct stream *s = NULL;
 	char buf[PREFIX_STRLEN];
 
-	client = zebra_find_client(ZEBRA_ROUTE_BGP, 0);
+	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	/* BGP may not be running. */
 	if (!client)
 		return 0;
@@ -3944,7 +3934,7 @@ static int ip_prefix_send_to_client(vrf_id_t vrf_id, struct prefix *p,
 	else
 		client->prefixdel_cnt++;
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /* re-add remote rmac if needed */

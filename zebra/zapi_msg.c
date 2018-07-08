@@ -162,7 +162,7 @@ int zsend_interface_add(struct zserv *client, struct interface *ifp)
 	zserv_encode_interface(s, ifp);
 
 	client->ifadd_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /* Interface deletion from zebra daemon. */
@@ -174,7 +174,7 @@ int zsend_interface_delete(struct zserv *client, struct interface *ifp)
 	zserv_encode_interface(s, ifp);
 
 	client->ifdel_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 int zsend_vrf_add(struct zserv *client, struct zebra_vrf *zvrf)
@@ -185,7 +185,7 @@ int zsend_vrf_add(struct zserv *client, struct zebra_vrf *zvrf)
 	zserv_encode_vrf(s, zvrf);
 
 	client->vrfadd_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /* VRF deletion from zebra daemon. */
@@ -198,7 +198,7 @@ int zsend_vrf_delete(struct zserv *client, struct zebra_vrf *zvrf)
 	zserv_encode_vrf(s, zvrf);
 
 	client->vrfdel_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 int zsend_interface_link_params(struct zserv *client, struct interface *ifp)
@@ -230,7 +230,7 @@ int zsend_interface_link_params(struct zserv *client, struct interface *ifp)
 	/* Write packet size. */
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /* Interface address is added/deleted. Send ZEBRA_INTERFACE_ADDRESS_ADD or
@@ -309,7 +309,7 @@ int zsend_interface_address(int cmd, struct zserv *client,
 	stream_putw_at(s, 0, stream_get_endp(s));
 
 	client->connected_rt_add_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 static int zsend_interface_nbr_address(int cmd, struct zserv *client,
@@ -340,7 +340,7 @@ static int zsend_interface_nbr_address(int cmd, struct zserv *client,
 	/* Write packet size. */
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /* Interface address addition. */
@@ -438,7 +438,7 @@ int zsend_interface_vrf_update(struct zserv *client, struct interface *ifp,
 	stream_putw_at(s, 0, stream_get_endp(s));
 
 	client->if_vrfchg_cnt++;
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /* Add new nbr connected IPv6 address */
@@ -448,7 +448,7 @@ void nbr_connected_add_ipv6(struct interface *ifp, struct in6_addr *address)
 	struct prefix p;
 
 	p.family = AF_INET6;
-	IPV6_ADDR_COPY(&p.u.prefix, address);
+	IPV6_ADDR_COPY(&p.u.prefix6, address);
 	p.prefixlen = IPV6_MAX_PREFIXLEN;
 
 	ifc = listnode_head(ifp->nbr_connected);
@@ -473,7 +473,7 @@ void nbr_connected_delete_ipv6(struct interface *ifp, struct in6_addr *address)
 	struct prefix p;
 
 	p.family = AF_INET6;
-	IPV6_ADDR_COPY(&p.u.prefix, address);
+	IPV6_ADDR_COPY(&p.u.prefix6, address);
 	p.prefixlen = IPV6_MAX_PREFIXLEN;
 
 	ifc = nbr_connected_check(ifp, &p);
@@ -511,7 +511,7 @@ int zsend_interface_update(int cmd, struct zserv *client, struct interface *ifp)
 	else
 		client->ifdown_cnt++;
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 int zsend_redistribute_route(int cmd, struct zserv *client, struct prefix *p,
@@ -521,12 +521,31 @@ int zsend_redistribute_route(int cmd, struct zserv *client, struct prefix *p,
 	struct zapi_nexthop *api_nh;
 	struct nexthop *nexthop;
 	int count = 0;
+	afi_t afi;
 
 	memset(&api, 0, sizeof(api));
 	api.vrf_id = re->vrf_id;
 	api.type = re->type;
 	api.instance = re->instance;
 	api.flags = re->flags;
+
+	afi = family2afi(p->family);
+	switch (afi) {
+	case AFI_IP:
+		if (cmd == ZEBRA_REDISTRIBUTE_ROUTE_ADD)
+			client->redist_v4_add_cnt++;
+		else
+			client->redist_v4_del_cnt++;
+		break;
+	case AFI_IP6:
+		if (cmd == ZEBRA_REDISTRIBUTE_ROUTE_ADD)
+			client->redist_v6_add_cnt++;
+		else
+			client->redist_v6_del_cnt++;
+		break;
+	default:
+		break;
+	}
 
 	/* Prefix. */
 	api.prefix = *p;
@@ -602,7 +621,7 @@ int zsend_redistribute_route(int cmd, struct zserv *client, struct prefix *p,
 			   zebra_route_string(api.type), api.vrf_id,
 			   buf_prefix);
 	}
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /*
@@ -655,7 +674,7 @@ static int zsend_ipv4_nexthop_lookup_mrib(struct zserv *client,
 
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 int zsend_route_notify_owner(struct route_entry *re, struct prefix *p,
@@ -665,7 +684,7 @@ int zsend_route_notify_owner(struct route_entry *re, struct prefix *p,
 	struct stream *s;
 	uint8_t blen;
 
-	client = zebra_find_client(re->type, re->instance);
+	client = zserv_find_client(re->type, re->instance);
 	if (!client || !client->notify_owner) {
 		if (IS_ZEBRA_DEBUG_PACKET) {
 			char buff[PREFIX_STRLEN];
@@ -703,7 +722,7 @@ int zsend_route_notify_owner(struct route_entry *re, struct prefix *p,
 
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 void zsend_rule_notify_owner(struct zebra_pbr_rule *rule,
@@ -739,7 +758,7 @@ void zsend_rule_notify_owner(struct zebra_pbr_rule *rule,
 
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	zebra_server_send_message(client, s);
+	zserv_send_message(client, s);
 }
 
 void zsend_ipset_notify_owner(struct zebra_pbr_ipset *ipset,
@@ -769,7 +788,7 @@ void zsend_ipset_notify_owner(struct zebra_pbr_ipset *ipset,
 	stream_put(s, ipset->ipset_name, ZEBRA_IPSET_NAME_SIZE);
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	zebra_server_send_message(client, s);
+	zserv_send_message(client, s);
 }
 
 void zsend_ipset_entry_notify_owner(struct zebra_pbr_ipset_entry *ipset,
@@ -799,7 +818,7 @@ void zsend_ipset_entry_notify_owner(struct zebra_pbr_ipset_entry *ipset,
 	stream_put(s, ipset->backpointer->ipset_name, ZEBRA_IPSET_NAME_SIZE);
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	zebra_server_send_message(client, s);
+	zserv_send_message(client, s);
 }
 
 void zsend_iptable_notify_owner(struct zebra_pbr_iptable *iptable,
@@ -828,7 +847,7 @@ void zsend_iptable_notify_owner(struct zebra_pbr_iptable *iptable,
 	stream_putl(s, iptable->unique);
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	zebra_server_send_message(client, s);
+	zserv_send_message(client, s);
 }
 
 /* Router-id is updated. Send ZEBRA_ROUTER_ID_ADD to client. */
@@ -855,7 +874,7 @@ int zsend_router_id_update(struct zserv *client, struct prefix *p,
 	/* Write packet size. */
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /*
@@ -873,7 +892,7 @@ int zsend_pw_update(struct zserv *client, struct zebra_pw *pw)
 	/* Put length at the first point of the stream. */
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /* Send response to a get label chunk request to client */
@@ -952,7 +971,7 @@ static int zsend_assign_table_chunk_response(struct zserv *client,
 	/* Write packet size. */
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 static int zsend_table_manager_connect_response(struct zserv *client,
@@ -968,7 +987,7 @@ static int zsend_table_manager_connect_response(struct zserv *client,
 
 	stream_putw_at(s, 0, stream_get_endp(s));
 
-	return zebra_server_send_message(client, s);
+	return zserv_send_message(client, s);
 }
 
 /* Inbound message handling ------------------------------------------------ */
@@ -2194,7 +2213,7 @@ static void zsend_capabilities(struct zserv *client, struct zebra_vrf *zvrf)
 	stream_putl(s, multipath_num);
 
 	stream_putw_at(s, 0, stream_get_endp(s));
-	zebra_server_send_message(client, s);
+	zserv_send_message(client, s);
 }
 
 /* Tie up route-type and client->sock */
@@ -2896,9 +2915,9 @@ static inline void zread_ipset_entry(ZAPI_HANDLER_ARGS)
 
 		if (!is_default_prefix(&zpi.dst))
 			zpi.filter_bm |= PBR_FILTER_DST_IP;
-		if (zpi.dst_port_min != 0)
+		if (zpi.dst_port_min != 0 || zpi.proto == IPPROTO_ICMP)
 			zpi.filter_bm |= PBR_FILTER_DST_PORT;
-		if (zpi.src_port_min != 0)
+		if (zpi.src_port_min != 0 || zpi.proto == IPPROTO_ICMP)
 			zpi.filter_bm |= PBR_FILTER_SRC_PORT;
 		if (zpi.dst_port_max != 0)
 			zpi.filter_bm |= PBR_FILTER_DST_PORT_RANGE;
@@ -2938,6 +2957,12 @@ static inline void zread_iptable(ZAPI_HANDLER_ARGS)
 	STREAM_GETL(s, zpi.action);
 	STREAM_GETL(s, zpi.fwmark);
 	STREAM_GET(&zpi.ipset_name, s, ZEBRA_IPSET_NAME_SIZE);
+	STREAM_GETW(s, zpi.pkt_len_min);
+	STREAM_GETW(s, zpi.pkt_len_max);
+	STREAM_GETW(s, zpi.tcp_flags);
+	STREAM_GETW(s, zpi.tcp_mask_flags);
+	STREAM_GETC(s, zpi.dscp_value);
+	STREAM_GETC(s, zpi.fragment);
 	STREAM_GETL(s, zpi.nb_interface);
 	zebra_pbr_iptable_update_interfacelist(s, &zpi);
 
@@ -3017,14 +3042,53 @@ void (*zserv_handlers[])(ZAPI_HANDLER_ARGS) = {
 	[ZEBRA_IPTABLE_DELETE] = zread_iptable,
 };
 
-void zserv_handle_commands(struct zserv *client, struct zmsghdr *hdr,
-			   struct stream *msg, struct zebra_vrf *zvrf)
-{
-	if (hdr->command > array_size(zserv_handlers)
-	    || zserv_handlers[hdr->command] == NULL)
-		zlog_info("Zebra received unknown command %d", hdr->command);
-	else
-		zserv_handlers[hdr->command](client, hdr, msg, zvrf);
+#if defined(HANDLE_ZAPI_FUZZING)
+extern struct zebra_privs_t zserv_privs;
 
-	stream_free(msg);
+static void zserv_write_incoming(struct stream *orig, uint16_t command)
+{
+	char fname[MAXPATHLEN];
+	struct stream *copy;
+	int fd = -1;
+
+	copy = stream_dup(orig);
+	stream_set_getp(copy, 0);
+
+	zserv_privs.change(ZPRIVS_RAISE);
+	snprintf(fname, MAXPATHLEN, "%s/%u", DAEMON_VTY_DIR, command);
+	fd = open(fname, O_CREAT | O_WRONLY | O_EXCL, 0644);
+	stream_flush(copy, fd);
+	close(fd);
+	zserv_privs.change(ZPRIVS_LOWER);
+	stream_free(copy);
+}
+#endif
+
+void zserv_handle_commands(struct zserv *client, struct stream *msg)
+{
+	struct zmsghdr hdr;
+	struct zebra_vrf *zvrf;
+
+	zapi_parse_header(msg, &hdr);
+
+#if defined(HANDLE_ZAPI_FUZZING)
+	zserv_write_incoming(msg, hdr.command);
+#endif
+
+	hdr.length -= ZEBRA_HEADER_SIZE;
+
+	/* lookup vrf */
+	zvrf = zebra_vrf_lookup_by_id(hdr.vrf_id);
+	if (!zvrf) {
+		if (IS_ZEBRA_DEBUG_PACKET && IS_ZEBRA_DEBUG_RECV)
+			zlog_warn("ZAPI message specifies unknown VRF: %d",
+				  hdr.vrf_id);
+		return;
+	}
+
+	if (hdr.command >= array_size(zserv_handlers)
+	    || zserv_handlers[hdr.command] == NULL)
+		zlog_info("Zebra received unknown command %d", hdr.command);
+	else
+		zserv_handlers[hdr.command](client, &hdr, msg, zvrf);
 }

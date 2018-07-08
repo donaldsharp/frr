@@ -1741,6 +1741,8 @@ struct ospf_lsa *ospf_apiserver_lsa_refresher(struct ospf_lsa *lsa)
 	struct ospf_lsa *new = NULL;
 	struct ospf *ospf;
 
+	assert(lsa);
+
 	ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
 	assert(ospf);
 
@@ -1751,6 +1753,7 @@ struct ospf_lsa *ospf_apiserver_lsa_refresher(struct ospf_lsa *lsa)
 			dump_lsa_key(lsa));
 		lsa->data->ls_age =
 			htons(OSPF_LSA_MAXAGE); /* Flush it anyway. */
+		goto out;
 	}
 
 	if (IS_LSA_MAXAGE(lsa)) {
