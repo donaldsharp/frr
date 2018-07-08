@@ -39,6 +39,9 @@
 #include "zebra_pbr.h"
 #include "rib.h"
 #include "table_manager.h"
+#if defined DEV_BUILD
+#include "zebra_nhgs.h"
+#endif
 
 extern struct zebra_privs_t zserv_privs;
 
@@ -153,6 +156,13 @@ int zebra_ns_enable(ns_id_t ns_id, void **info)
 		hash_create_size(8, zebra_pbr_iptable_hash_key,
 				 zebra_pbr_iptable_hash_equal,
 				 "IPtable Hash Entry");
+
+#if defined DEV_BUILD
+	zns->nhgs =
+		hash_create_size(8, zebra_nhgs_hash_key,
+				 zebra_nhgs_hash_equal,
+				 "Nexthop Groups");
+#endif
 
 #if defined(HAVE_RTADV)
 	rtadv_init(zns);

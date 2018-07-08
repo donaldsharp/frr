@@ -82,6 +82,14 @@ struct zebra_ns {
 
 	struct hash *iptable_hash;
 
+#if defined DEV_BUILD
+	/*
+	 * The hash of nexthop groups associated with
+	 * this namespace
+	 */
+	struct hash *nhgs;
+#endif
+
 	/* Back pointer */
 	struct ns *ns;
 };

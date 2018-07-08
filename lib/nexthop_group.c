@@ -94,6 +94,28 @@ void nexthop_add(struct nexthop **target, struct nexthop *nexthop)
 	nexthop->prev = last;
 }
 
+void nexthop_group_add_sorted(struct nexthop_group *nhg,
+			      struct nexthop *nexthop)
+{
+	struct nexthop **position, *prev;
+
+	prev = NULL;
+	position = &nhg->nexthop;
+	while (*position && nexthop_cmp(*position, nexthop) < 0) {
+		prev = *position;
+		*position = (*position)->next;
+	}
+
+	nexthop->next = *position;
+	nexthop->prev = prev;
+	if (prev)
+		prev->next = nexthop;
+	if (*position)
+		(*position)->prev = nexthop;
+	else
+		nhg->nexthop = nexthop;
+}
+
 /* Delete nexthop from a nexthop list.  */
 void nexthop_del(struct nexthop_group *nhg, struct nexthop *nh)
 {
