@@ -39,6 +39,7 @@ static zebra_capabilities_t _caps_p[] = {
 	ZCAP_NET_RAW, ZCAP_NET_ADMIN,
 	ZCAP_DAC_OVERRIDE, /* for now needed to write to
 			      /proc/sys/net/ipv4/<if>/send_redirect */
+	ZCAP_SYS_ADMIN,
 };
 
 struct zebra_privs_t nhrpd_privs = {
