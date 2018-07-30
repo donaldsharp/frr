@@ -4948,7 +4948,7 @@ void bgp_static_add(struct bgp *bgp)
 	FOREACH_AFI_SAFI (afi, safi)
 		for (rn = bgp_table_top(bgp->route[afi][safi]); rn;
 		     rn = bgp_route_next(rn)) {
-			if (rn->info == NULL)
+			if (!bgp_has_info_data(rn))
 				continue;
 
 			if ((safi == SAFI_MPLS_VPN) || (safi == SAFI_ENCAP)
@@ -4985,7 +4985,7 @@ void bgp_static_delete(struct bgp *bgp)
 	FOREACH_AFI_SAFI (afi, safi)
 		for (rn = bgp_table_top(bgp->route[afi][safi]); rn;
 		     rn = bgp_route_next(rn)) {
-			if (rn->info == NULL)
+			if (!bgp_has_info_data(rn))
 				continue;
 
 			if ((safi == SAFI_MPLS_VPN) || (safi == SAFI_ENCAP)
@@ -5027,7 +5027,7 @@ void bgp_static_redo_import_check(struct bgp *bgp)
 	FOREACH_AFI_SAFI (afi, safi) {
 		for (rn = bgp_table_top(bgp->route[afi][safi]); rn;
 		     rn = bgp_route_next(rn)) {
-			if (rn->info == NULL)
+			if (!bgp_has_info_data(rn))
 				continue;
 
 			if ((safi == SAFI_MPLS_VPN) || (safi == SAFI_ENCAP)
@@ -5177,7 +5177,7 @@ int bgp_static_set_safi(afi_t afi, safi_t safi, struct vty *vty,
 
 	rn = bgp_node_get(table, &p);
 
-	if (rn->info) {
+	if (bgp_has_info_data(rn)) {
 		vty_out(vty, "%% Same network configuration exists\n");
 		bgp_unlock_node(rn);
 	} else {
@@ -5881,7 +5881,7 @@ static int bgp_aggregate_set(struct vty *vty, const char *prefix_str, afi_t afi,
 	/* Old configuration check. */
 	rn = bgp_node_get(bgp->aggregate[afi][safi], &p);
 
-	if (rn->info) {
+	if (bgp_has_info_data(rn)) {
 		vty_out(vty, "There is already same aggregate network.\n");
 		/* try to remove the old entry */
 		ret = bgp_aggregate_unset(vty, prefix_str, afi, safi);
@@ -9667,21 +9667,14 @@ static int bgp_table_stats_walker(struct thread *t)
 		if (rn == top)
 			continue;
 
-		if (!rn->info)
+		if (!bgp_has_info_data(rn))
 			continue;
 
 		ts->counts[BGP_STATS_PREFIXES]++;
 		ts->counts[BGP_STATS_TOTPLEN] += rn->p.prefixlen;
 
-#if 0
-      ts->counts[BGP_STATS_AVGPLEN]
-        = ravg_tally (ts->counts[BGP_STATS_PREFIXES],
-                      ts->counts[BGP_STATS_AVGPLEN],
-                      rn->p.prefixlen);
-#endif
-
 		/* check if the prefix is included by any other announcements */
-		while (prn && !prn->info)
+		while (prn && !bgp_has_info_data(prn))
 			prn = bgp_node_parent_nolock(prn);
 
 		if (prn == NULL || prn == top) {
@@ -9690,7 +9683,7 @@ static int bgp_table_stats_walker(struct thread *t)
 			if (space)
 				ts->total_space +=
 					pow(2.0, space - rn->p.prefixlen);
-		} else if (prn->info)
+		} else if (bgp_has_info_data(prn))
 			ts->counts[BGP_STATS_MAX_AGGREGATEABLE]++;
 
 		for (ri = bgp_info_from_node(rn); ri; ri = ri->next) {
