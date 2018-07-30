@@ -556,7 +556,8 @@ static void show_esi_routes(struct bgp *bgp,
 		if (json)
 			json_prefix = json_object_new_object();
 
-		if (rn->info) {
+		ri = bgp_info_from_node(rn);
+		if (ri) {
 			/* Overall header/legend displayed once. */
 			if (header) {
 				bgp_evpn_show_route_header(vty, bgp,
@@ -573,7 +574,7 @@ static void show_esi_routes(struct bgp *bgp,
 		/* For EVPN, the prefix is displayed for each path (to fit in
 		 * with code that already exists).
 		 */
-		for (ri = rn->info; ri; ri = ri->next) {
+		for (; ri; ri = ri->next) {
 			json_object *json_path = NULL;
 
 			if (json)
@@ -643,7 +644,8 @@ static void show_vni_routes(struct bgp *bgp, struct bgpevpn *vpn, int type,
 		if (json)
 			json_prefix = json_object_new_object();
 
-		if (rn->info) {
+		ri = bgp_info_from_node(rn);
+		if (ri) {
 			/* Overall header/legend displayed once. */
 			if (header) {
 				bgp_evpn_show_route_header(vty, bgp,
@@ -660,7 +662,7 @@ static void show_vni_routes(struct bgp *bgp, struct bgpevpn *vpn, int type,
 		/* For EVPN, the prefix is displayed for each path (to fit in
 		 * with code that already exists).
 		 */
-		for (ri = rn->info; ri; ri = ri->next) {
+		for (; ri; ri = ri->next) {
 			json_object *json_path = NULL;
 
 			if (vtep_ip.s_addr
@@ -1046,7 +1048,7 @@ static int bgp_show_ethernet_vpn(struct vty *vty, struct prefix_rd *prd,
 		tbl_ver = table->version;
 
 		for (rm = bgp_table_top(table); rm; rm = bgp_route_next(rm))
-			for (ri = rm->info; ri; ri = ri->next) {
+			for (ri = bgp_info_from_node(rm); ri; ri = ri->next) {
 				total_count++;
 				if (type == bgp_show_type_neighbor) {
 					union sockunion *su = output_arg;
@@ -2049,7 +2051,7 @@ static void evpn_show_route_vni_multicast(struct vty *vty, struct bgp *bgp,
 	route_vty_out_detail_header(vty, bgp, rn, NULL, afi, safi, json);
 
 	/* Display each path for this prefix. */
-	for (ri = rn->info; ri; ri = ri->next) {
+	for (ri = bgp_info_from_node(rn); ri; ri = ri->next) {
 		json_object *json_path = NULL;
 
 		if (json)
@@ -2119,7 +2121,7 @@ static void evpn_show_route_vni_macip(struct vty *vty, struct bgp *bgp,
 	route_vty_out_detail_header(vty, bgp, rn, NULL, afi, safi, json);
 
 	/* Display each path for this prefix. */
-	for (ri = rn->info; ri; ri = ri->next) {
+	for (ri = bgp_info_from_node(rn); ri; ri = ri->next) {
 		json_object *json_path = NULL;
 
 		if (json)
@@ -2226,7 +2228,7 @@ static void evpn_show_route_rd_macip(struct vty *vty, struct bgp *bgp,
 		json_paths = json_object_new_array();
 
 	/* Display each path for this prefix. */
-	for (ri = rn->info; ri; ri = ri->next) {
+	for (ri = bgp_info_from_node(rn); ri; ri = ri->next) {
 		json_object *json_path = NULL;
 
 		if (json)
@@ -2307,7 +2309,8 @@ static void evpn_show_route_rd(struct vty *vty, struct bgp *bgp,
 		if (json)
 			json_prefix = json_object_new_object();
 
-		if (rn->info) {
+		ri = bgp_info_from_node(rn);
+		if (ri) {
 			/* RD header and legend - once overall. */
 			if (rd_header && !json) {
 				vty_out(vty,
@@ -2330,7 +2333,7 @@ static void evpn_show_route_rd(struct vty *vty, struct bgp *bgp,
 			json_paths = json_object_new_array();
 
 		/* Display each path for this prefix. */
-		for (ri = rn->info; ri; ri = ri->next) {
+		for (; ri; ri = ri->next) {
 			json_object *json_path = NULL;
 
 			if (json)
@@ -2435,7 +2438,8 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 			if (type && evp->prefix.route_type != type)
 				continue;
 
-			if (rn->info) {
+			ri = bgp_info_from_node(rn);
+			if (ri) {
 				/* Overall header/legend displayed once. */
 				if (header) {
 					bgp_evpn_show_route_header(vty, bgp,
@@ -2467,7 +2471,7 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 			 * fit in
 			 * with code that already exists).
 			 */
-			for (ri = rn->info; ri; ri = ri->next) {
+			for (; ri; ri = ri->next) {
 				json_object *json_path = NULL;
 				path_cnt++;
 				add_prefix_to_json = 1;

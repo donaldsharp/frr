@@ -508,7 +508,7 @@ leak_update(
 	/*
 	 * match parent
 	 */
-	for (bi = bn->info; bi; bi = bi->next) {
+	for (bi = bgp_info_from_node(bn); bi; bi = bi->next) {
 		if (bi->extra && bi->extra->parent == parent)
 			break;
 	}
@@ -929,11 +929,13 @@ void vpn_leak_from_vrf_withdraw(struct bgp *bgp_vpn,       /* to */
 	bn = bgp_afi_node_get(bgp_vpn->rib[afi][safi], afi, safi, p,
 			      &(bgp_vrf->vpn_policy[afi].tovpn_rd));
 
+	if (!bn)
+		return;
 	/*
 	 * vrf -> vpn
 	 * match original bi imported from
 	 */
-	for (bi = (bn ? bn->info : NULL); bi; bi = bi->next) {
+	for (bi = bgp_info_from_node(bn); bi; bi = bi->next) {
 		if (bi->extra && bi->extra->parent == info_vrf) {
 			break;
 		}
@@ -978,13 +980,14 @@ void vpn_leak_from_vrf_withdraw_all(struct bgp *bgp_vpn, /* to */
 
 			char buf[PREFIX2STR_BUFFER];
 
-			if (debug && bn->info) {
+			bi = bgp_info_from_node(bn);
+			if (debug && bi) {
 				zlog_debug(
 					"%s: looking at prefix %s", __func__,
 					prefix2str(&bn->p, buf, sizeof(buf)));
 			}
 
-			for (bi = bn->info; bi; bi = bi->next) {
+			for (; bi; bi = bi->next) {
 				if (debug)
 					zlog_debug("%s: type %d, sub_type %d",
 						   __func__, bi->type,
@@ -1027,7 +1030,7 @@ void vpn_leak_from_vrf_update_all(struct bgp *bgp_vpn, /* to */
 		if (debug)
 			zlog_debug("%s: node=%p", __func__, bn);
 
-		for (bi = bn->info; bi; bi = bi->next) {
+		for (bi = bgp_info_from_node(bn); bi; bi = bi->next) {
 			if (debug)
 				zlog_debug(
 					"%s: calling vpn_leak_from_vrf_update",
@@ -1308,7 +1311,8 @@ void vpn_leak_to_vrf_withdraw(struct bgp *bgp_vpn,       /* from */
 				   bgp->name_pretty);
 
 		bn = bgp_afi_node_get(bgp->rib[afi][safi], afi, safi, p, NULL);
-		for (bi = (bn ? bn->info : NULL); bi; bi = bi->next) {
+
+		for (bi = bgp_info_from_node(bn); bi; bi = bi->next) {
 			if (bi->extra
 			    && (struct bgp_info *)bi->extra->parent
 				       == info_vpn) {
@@ -1343,7 +1347,7 @@ void vpn_leak_to_vrf_withdraw_all(struct bgp *bgp_vrf, /* to */
 	for (bn = bgp_table_top(bgp_vrf->rib[afi][safi]); bn;
 	     bn = bgp_route_next(bn)) {
 
-		for (bi = bn->info; bi; bi = bi->next) {
+		for (bi = bgp_info_from_node(bn); bi; bi = bi->next) {
 			if (bi->extra && bi->extra->bgp_orig != bgp_vrf) {
 
 				/* delete route */
@@ -1389,7 +1393,7 @@ void vpn_leak_to_vrf_update_all(struct bgp *bgp_vrf, /* to */
 
 		for (bn = bgp_table_top(table); bn; bn = bgp_route_next(bn)) {
 
-			for (bi = bn->info; bi; bi = bi->next) {
+			for (bi = bgp_info_from_node(bn); bi; bi = bi->next) {
 
 				if (bi->extra && bi->extra->bgp_orig == bgp_vrf)
 					continue;

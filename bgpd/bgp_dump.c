@@ -410,7 +410,7 @@ static unsigned int bgp_dump_routes_func(int afi, int first_run,
 	table = bgp->rib[afi][SAFI_UNICAST];
 
 	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
-		info = rn->info;
+		info = bgp_info_from_node(rn);
 		while (info) {
 			info = bgp_dump_route_node_record(afi, rn, info, seq);
 			seq++;

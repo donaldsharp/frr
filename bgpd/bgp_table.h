@@ -372,4 +372,19 @@ static inline void bgp_nexthop_set_node_info(struct bgp_node *node,
 	node->info = bnc;
 }
 
+static inline struct bgp_info *bgp_info_from_node(struct bgp_node *node)
+{
+	return node->info;
+}
+
+static inline void bgp_info_set_node_info(struct bgp_node *node,
+					  struct bgp_info *bi)
+{
+	node->info = bi;
+}
+
+static inline bool bgp_has_info_data(struct bgp_node *node)
+{
+	return !!node->info;
+}
 #endif /* _QUAGGA_BGP_TABLE_H */

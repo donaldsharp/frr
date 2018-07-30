@@ -714,7 +714,8 @@ static struct bgp_info *bgp4PathAttrLookup(struct variable *v, oid name[],
 		if (rn) {
 			bgp_unlock_node(rn);
 
-			for (binfo = rn->info; binfo; binfo = binfo->next)
+			for (binfo = bgp_info_from_node(rn); binfo;
+			     binfo = binfo->next)
 				if (sockunion_same(&binfo->peer->su, &su))
 					return binfo;
 		}
@@ -761,7 +762,8 @@ static struct bgp_info *bgp4PathAttrLookup(struct variable *v, oid name[],
 		do {
 			min = NULL;
 
-			for (binfo = rn->info; binfo; binfo = binfo->next) {
+			for (binfo = bgp_info_from_node(rn); binfo;
+			     binfo = binfo->next) {
 				if (binfo->peer->su.sin.sin_family == AF_INET
 				    && ntohl(paddr.s_addr)
 					       < ntohl(binfo->peer->su.sin

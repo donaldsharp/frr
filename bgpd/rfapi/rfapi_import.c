@@ -4234,32 +4234,30 @@ static void rfapiBgpTableFilteredImport(struct bgp *bgp,
 	for (rn1 = bgp_table_top(bgp->rib[afi][safi]); rn1;
 	     rn1 = bgp_route_next(rn1)) {
 
-		if (rn1->info) {
-			for (rn2 = bgp_table_top(rn1->info); rn2;
-			     rn2 = bgp_route_next(rn2)) {
+		if (!bgp_has_info_data(rn1))
+			continue;
 
-				struct bgp_info *bi;
+		for (rn2 = bgp_table_top(rn1->info); rn2;
+		     rn2 = bgp_route_next(rn2)) {
 
-				for (bi = rn2->info; bi; bi = bi->next) {
-					uint32_t label = 0;
+			struct bgp_info *bi;
 
-					if (CHECK_FLAG(bi->flags,
-						       BGP_INFO_REMOVED))
-						continue;
+			for (bi = bgp_info_from_node(rn2); bi; bi = bi->next) {
+				uint32_t label = 0;
 
-					if (bi->extra)
-						label = decode_label(
-							&bi->extra->label[0]);
-					(*rfapiBgpInfoFilteredImportFunction(
-						safi))(
-						it, /* which import table */
-						FIF_ACTION_UPDATE, bi->peer,
-						NULL, &rn2->p, /* prefix */
-						NULL, afi,
-						(struct prefix_rd *)&rn1->p,
-						bi->attr, bi->type,
-						bi->sub_type, &label);
-				}
+				if (CHECK_FLAG(bi->flags, BGP_INFO_REMOVED))
+					continue;
+
+				if (bi->extra)
+					label = decode_label(
+						&bi->extra->label[0]);
+				(*rfapiBgpInfoFilteredImportFunction(safi))(
+					it, /* which import table */
+					FIF_ACTION_UPDATE, bi->peer, NULL,
+					&rn2->p, /* prefix */
+					NULL, afi, (struct prefix_rd *)&rn1->p,
+					bi->attr, bi->type, bi->sub_type,
+					&label);
 			}
 		}
 	}

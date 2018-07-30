@@ -384,7 +384,7 @@ void del_vnc_route(struct rfapi_descriptor *rfd,
 		__func__, peer, buf, prefix_rd2str(prd, buf2, sizeof(buf2)),
 		afi, safi, bn, (bn ? bn->info : NULL));
 
-	for (bi = (bn ? bn->info : NULL); bi; bi = bi->next) {
+	for (bi = (bn ? bgp_info_from_node(bn) : NULL); bi; bi = bi->next) {
 
 		vnc_zlog_debug_verbose(
 			"%s: trying bi=%p, bi->peer=%p, bi->type=%d, bi->sub_type=%d, bi->extra->vnc.export.rfapi_handle=%p, local_pref=%u",
@@ -946,7 +946,7 @@ void add_vnc_route(struct rfapi_descriptor *rfd, /* cookie, VPN UN addr, peer */
 	 *      ecommunity: POINTS TO interned/refcounted dynamic 2-part AS attr
 	 *  aspath: POINTS TO interned/refcounted hashed block
 	 */
-	for (bi = bn->info; bi; bi = bi->next) {
+	for (bi = bgp_info_from_node(bn); bi; bi = bi->next) {
 		/* probably only need to check
 		 * bi->extra->vnc.export.rfapi_handle */
 		if (bi->peer == rfd->peer && bi->type == type
@@ -3702,10 +3702,12 @@ static void rfapi_print_exported(struct bgp *bgp)
 		fprintf(stderr, "%s: vpn rdn=%p\n", __func__, rdn);
 		for (rn = bgp_table_top(rdn->info); rn;
 		     rn = bgp_route_next(rn)) {
-			if (!rn->info)
+			bi = bgp_info_from_node(rn);
+
+			if (!bi)
 				continue;
 			fprintf(stderr, "%s: rn=%p\n", __func__, rn);
-			for (bi = rn->info; bi; bi = bi->next) {
+			for (; bi; bi = bi->next) {
 				rfapiPrintBi((void *)2, bi); /* 2 => stderr */
 			}
 		}
@@ -3717,10 +3719,11 @@ static void rfapi_print_exported(struct bgp *bgp)
 		fprintf(stderr, "%s: encap rdn=%p\n", __func__, rdn);
 		for (rn = bgp_table_top(rdn->info); rn;
 		     rn = bgp_route_next(rn)) {
-			if (!rn->info)
+			bi = bgp_info_from_node(rn);
+			if (!bi)
 				continue;
 			fprintf(stderr, "%s: rn=%p\n", __func__, rn);
-			for (bi = rn->info; bi; bi = bi->next) {
+			for (; bi; bi = bi->next) {
 				rfapiPrintBi((void *)2, bi); /* 2 => stderr */
 			}
 		}

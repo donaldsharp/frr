@@ -318,7 +318,7 @@ static void vnc_redistribute_withdraw(struct bgp *bgp, afi_t afi, uint8_t type)
 
 			struct bgp_info *ri;
 
-			for (ri = rn->info; ri; ri = ri->next) {
+			for (ri = bgp_info_from_node(rn); ri; ri = ri->next) {
 				if (ri->type
 				    == type) { /* has matching redist type */
 					break;

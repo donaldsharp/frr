@@ -140,8 +140,9 @@ static int group_announce_route_walkcb(struct update_group *updgrp, void *arg)
 					adj_next = adj->next;
 
 					if (adj->subgroup == subgrp) {
-						for (ri = ctx->rn->info; ri;
-						     ri = ri->next) {
+						for (ri = bgp_info_from_node(
+							     ctx->rn);
+						     ri; ri = ri->next) {
 							if (ri->addpath_tx_id
 							    == adj->addpath_tx_id) {
 								break;
@@ -157,7 +158,8 @@ static int group_announce_route_walkcb(struct update_group *updgrp, void *arg)
 					}
 				}
 
-				for (ri = ctx->rn->info; ri; ri = ri->next) {
+				for (ri = bgp_info_from_node(ctx->rn); ri;
+				     ri = ri->next) {
 					/* Skip the bestpath for now */
 					if (ri == ctx->ri)
 						continue;
@@ -592,7 +594,7 @@ void subgroup_announce_table(struct update_subgroup *subgrp,
 		subgroup_default_originate(subgrp, 0);
 
 	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn))
-		for (ri = rn->info; ri; ri = ri->next)
+		for (ri = bgp_info_from_node(rn); ri; ri = ri->next)
 
 			if (CHECK_FLAG(ri->flags, BGP_INFO_SELECTED)
 			    || (addpath_capable
