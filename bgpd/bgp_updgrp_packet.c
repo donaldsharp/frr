@@ -816,9 +816,11 @@ struct bpacket *subgroup_update_packet(struct update_subgroup *subgrp)
 			stream_put_prefix_addpath(s, &rn->p, addpath_encode,
 						  addpath_tx_id);
 		else {
+			struct bgp_dest *dest = bgp_dest_from_node(rn);
+
 			/* Encode the prefix in MP_REACH_NLRI attribute */
-			if (rn->prn)
-				prd = (struct prefix_rd *)&rn->prn->p;
+			if (dest->prn)
+				prd = (struct prefix_rd *)&dest->prn->p;
 
 			if (safi == SAFI_LABELED_UNICAST) {
 				label = bgp_adv_label(rn, binfo, peer, afi,
@@ -992,8 +994,10 @@ struct bpacket *subgroup_withdraw_packet(struct update_subgroup *subgrp)
 			stream_put_prefix_addpath(s, &rn->p, addpath_encode,
 						  addpath_tx_id);
 		else {
-			if (rn->prn)
-				prd = (struct prefix_rd *)&rn->prn->p;
+			struct bgp_dest *dest = bgp_dest_from_node(rn);
+
+			if (dest->prn)
+				prd = (struct prefix_rd *)&dest->prn->p;
 
 			/* If first time, format the MP_UNREACH header */
 			if (first_time) {

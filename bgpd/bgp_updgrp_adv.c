@@ -64,10 +64,12 @@ static inline struct bgp_adj_out *adj_lookup(struct bgp_node *rn,
 	afi_t afi;
 	safi_t safi;
 	int addpath_capable;
+	struct bgp_dest *dest;
 
 	if (!rn || !subgrp)
 		return NULL;
 
+	dest = bgp_dest_from_node(rn);
 	peer = SUBGRP_PEER(subgrp);
 	afi = SUBGRP_AFI(subgrp);
 	safi = SUBGRP_SAFI(subgrp);
@@ -75,7 +77,7 @@ static inline struct bgp_adj_out *adj_lookup(struct bgp_node *rn,
 
 	/* update-groups that do not support addpath will pass 0 for
 	 * addpath_tx_id so do not both matching against it */
-	for (adj = rn->adj_out; adj; adj = adj->next) {
+	for (adj = dest->adj_out; adj; adj = adj->next) {
 		if (adj->subgroup == subgrp) {
 			if (addpath_capable) {
 				if (adj->addpath_tx_id == addpath_tx_id) {
@@ -131,12 +133,14 @@ static int group_announce_route_walkcb(struct update_group *updgrp, void *arg)
 		if (!subgrp->t_coalesce) {
 			/* An update-group that uses addpath */
 			if (addpath_capable) {
+				struct bgp_dest *dest =
+					bgp_dest_from_node(ctx->rn);
+
 				/* Look through all of the paths we have
 				 * advertised for this rn and
 				 * send a withdraw for the ones that are no
 				 * longer present */
-				for (adj = ctx->rn->adj_out; adj;
-				     adj = adj_next) {
+				for (adj = dest->adj_out; adj; adj = adj_next) {
 					adj_next = adj->next;
 
 					if (adj->subgroup == subgrp) {
@@ -186,10 +190,13 @@ static int group_announce_route_walkcb(struct update_group *updgrp, void *arg)
 						subgrp, ctx->ri, ctx->rn,
 						ctx->ri->addpath_tx_id);
 				} else {
+					struct bgp_dest *dest =
+						bgp_dest_from_node(ctx->rn);
+
 					/* Find the addpath_tx_id of the path we
 					 * had advertised and
 					 * send a withdraw */
-					for (adj = ctx->rn->adj_out; adj;
+					for (adj = dest->adj_out; adj;
 					     adj = adj_next) {
 						adj_next = adj->next;
 
@@ -227,8 +234,10 @@ static void subgrp_show_adjq_vty(struct update_subgroup *subgrp,
 
 	output_count = 0;
 
-	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn))
-		for (adj = rn->adj_out; adj; adj = adj->next)
+	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
+		struct bgp_dest *dest = bgp_dest_from_node(rn);
+
+		for (adj = dest->adj_out; adj; adj = adj->next)
 			if (adj->subgroup == subgrp) {
 				if (header1) {
 					vty_out(vty,
@@ -260,6 +269,7 @@ static void subgrp_show_adjq_vty(struct update_subgroup *subgrp,
 					output_count++;
 				}
 			}
+	}
 	if (output_count != 0)
 		vty_out(vty, "\nTotal number of prefixes %ld\n", output_count);
 }
@@ -379,7 +389,9 @@ struct bgp_adj_out *bgp_adj_out_alloc(struct update_subgroup *subgrp,
 	adj = XCALLOC(MTYPE_BGP_ADJ_OUT, sizeof(struct bgp_adj_out));
 	adj->subgroup = subgrp;
 	if (rn) {
-		BGP_ADJ_OUT_ADD(rn, adj);
+		struct bgp_dest *dest = bgp_dest_from_node(rn);
+
+		BGP_ADJ_OUT_ADD(dest, adj);
 		bgp_lock_node(rn);
 		adj->rn = rn;
 	}
@@ -433,6 +445,7 @@ void bgp_adj_out_set_subgroup(struct bgp_node *rn,
 			      struct update_subgroup *subgrp, struct attr *attr,
 			      struct bgp_info *binfo)
 {
+	struct bgp_dest *dest = bgp_dest_from_node(rn);
 	struct bgp_adj_out *adj = NULL;
 	struct bgp_advertise *adv;
 
@@ -480,7 +493,7 @@ void bgp_adj_out_set_subgroup(struct bgp_node *rn,
 
 	BGP_ADV_FIFO_ADD(&subgrp->sync->update, &adv->fifo);
 
-	subgrp->version = max(subgrp->version, rn->version);
+	subgrp->version = max(subgrp->version, dest->version);
 }
 
 /* The only time 'withdraw' will be false is if we are sending
@@ -491,6 +504,7 @@ void bgp_adj_out_unset_subgroup(struct bgp_node *rn,
 				struct update_subgroup *subgrp, char withdraw,
 				uint32_t addpath_tx_id)
 {
+	struct bgp_dest *dest = bgp_dest_from_node(rn);
 	struct bgp_adj_out *adj;
 	struct bgp_advertise *adv;
 	bool trigger_write;
@@ -523,7 +537,7 @@ void bgp_adj_out_unset_subgroup(struct bgp_node *rn,
 				subgroup_trigger_write(subgrp);
 		} else {
 			/* Remove myself from adjacency. */
-			BGP_ADJ_OUT_DEL(rn, adj);
+			BGP_ADJ_OUT_DEL(dest, adj);
 
 			/* Free allocated information.  */
 			adj_free(adj);
@@ -532,19 +546,21 @@ void bgp_adj_out_unset_subgroup(struct bgp_node *rn,
 		}
 	}
 
-	subgrp->version = max(subgrp->version, rn->version);
+	subgrp->version = max(subgrp->version, dest->version);
 }
 
 void bgp_adj_out_remove_subgroup(struct bgp_node *rn, struct bgp_adj_out *adj,
 				 struct update_subgroup *subgrp)
 {
+	struct bgp_dest *dest = bgp_dest_from_node(rn);
+
 	if (adj->attr)
 		bgp_attr_unintern(&adj->attr);
 
 	if (adj->adv)
 		bgp_advertise_clean_subgroup(subgrp, adj);
 
-	BGP_ADJ_OUT_DEL(rn, adj);
+	BGP_ADJ_OUT_DEL(dest, adj);
 	adj_free(adj);
 }
 

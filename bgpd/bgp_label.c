@@ -47,6 +47,7 @@ int bgp_parse_fec_update(void)
 	struct stream *s;
 	struct bgp_node *rn;
 	struct bgp *bgp;
+	struct bgp_dest *dest;
 	struct bgp_table *table;
 	struct prefix p;
 	uint32_t label;
@@ -81,14 +82,15 @@ int bgp_parse_fec_update(void)
 		return -1;
 	}
 
+	dest = bgp_dest_from_node(rn);
 	/* treat it as implicit withdraw - the label is invalid */
 	if (label == MPLS_INVALID_LABEL)
-		bgp_unset_valid_label(&rn->local_label);
+		bgp_unset_valid_label(&dest->local_label);
 	else {
-		label_ntop(label, 1, &rn->local_label);
-		bgp_set_valid_label(&rn->local_label);
+		label_ntop(label, 1, &dest->local_label);
+		bgp_set_valid_label(&dest->local_label);
 	}
-	SET_FLAG(rn->flags, BGP_NODE_LABEL_CHANGED);
+	SET_FLAG(dest->flags, BGP_NODE_LABEL_CHANGED);
 	bgp_unlock_node(rn);
 	bgp_process(bgp, rn, afi, safi);
 	return 1;
@@ -100,10 +102,12 @@ mpls_label_t bgp_adv_label(struct bgp_node *rn, struct bgp_info *ri,
 	struct peer *from;
 	mpls_label_t remote_label;
 	int reflect;
+	struct bgp_dest *dest;
 
 	if (!rn || !ri || !to)
 		return MPLS_INVALID_LABEL;
 
+	dest = bgp_dest_from_node(rn);
 	remote_label = ri->extra ? ri->extra->label[0] : MPLS_INVALID_LABEL;
 	from = ri->peer;
 	reflect =
@@ -117,7 +121,7 @@ mpls_label_t bgp_adv_label(struct bgp_node *rn, struct bgp_info *ri,
 	if (CHECK_FLAG(to->af_flags[afi][safi], PEER_FLAG_NEXTHOP_UNCHANGED))
 		return remote_label;
 
-	return rn->local_label;
+	return dest->local_label;
 }
 
 void bgp_reg_dereg_for_label(struct bgp_node *rn, struct bgp_info *ri, int reg)
@@ -127,6 +131,7 @@ void bgp_reg_dereg_for_label(struct bgp_node *rn, struct bgp_info *ri, int reg)
 	int command;
 	uint16_t flags = 0;
 	size_t flags_pos = 0;
+	struct bgp_dest *dest = bgp_dest_from_node(rn);
 
 	/* Check socket. */
 	if (!zclient || zclient->sock < 0)
@@ -149,9 +154,9 @@ void bgp_reg_dereg_for_label(struct bgp_node *rn, struct bgp_info *ri, int reg)
 				stream_putl(s, ri->attr->label_index);
 			}
 		}
-		SET_FLAG(rn->flags, BGP_NODE_REGISTERED_FOR_LABEL);
+		SET_FLAG(dest->flags, BGP_NODE_REGISTERED_FOR_LABEL);
 	} else
-		UNSET_FLAG(rn->flags, BGP_NODE_REGISTERED_FOR_LABEL);
+		UNSET_FLAG(dest->flags, BGP_NODE_REGISTERED_FOR_LABEL);
 
 	/* Set length and flags */
 	stream_putw_at(s, 0, stream_get_endp(s));

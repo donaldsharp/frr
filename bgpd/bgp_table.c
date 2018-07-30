@@ -66,6 +66,8 @@ static struct route_node *bgp_node_create(route_table_delegate_t *delegate,
 {
 	struct bgp_node *node;
 	node = XCALLOC(MTYPE_BGP_NODE, sizeof(struct bgp_node));
+
+	node->dest.bn = node;
 	return bgp_node_to_rnode(node);
 }
 

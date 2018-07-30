@@ -322,7 +322,7 @@ enum bgp_path_type { BGP_PATH_ALL, BGP_PATH_BESTPATH, BGP_PATH_MULTIPATH };
 
 static inline void bgp_bump_version(struct bgp_node *node)
 {
-	node->version = bgp_table_next_version(bgp_node_table(node));
+	node->dest.version = bgp_table_next_version(bgp_node_table(node));
 }
 
 static inline int bgp_fibupd_safi(safi_t safi)

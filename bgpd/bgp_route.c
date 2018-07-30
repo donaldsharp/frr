@@ -130,8 +130,11 @@ struct bgp_node *bgp_afi_node_get(struct bgp_table *table, afi_t afi,
 	rn = bgp_node_get(table, p);
 
 	if ((safi == SAFI_MPLS_VPN) || (safi == SAFI_ENCAP)
-	    || (safi == SAFI_EVPN))
-		rn->prn = prn;
+	    || (safi == SAFI_EVPN)) {
+		struct bgp_dest *dest = bgp_dest_from_node(rn);
+
+		dest->prn = prn;
+	}
 
 	return rn;
 }
@@ -2157,7 +2160,7 @@ int bgp_zebra_has_route_changed(struct bgp_node *rn, struct bgp_info *selected)
 
 struct bgp_process_queue {
 	struct bgp *bgp;
-	STAILQ_HEAD(, bgp_node) pqueue;
+	STAILQ_HEAD(, bgp_dest) pqueue;
 #define BGP_PROCESS_QUEUE_EOIU_MARKER		(1 << 0)
 	unsigned int flags;
 	unsigned int queued;
@@ -2188,6 +2191,7 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_node *rn,
 	struct bgp_info *new_select;
 	struct bgp_info *old_select;
 	struct bgp_info_pair old_and_new;
+	struct bgp_dest *dest;
 	char pfx_buf[PREFIX2STR_BUFFER];
 	int debug = 0;
 
@@ -2216,6 +2220,8 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_node *rn,
 			   afi2str(afi), safi2str(safi));
 	}
 
+	dest = bgp_dest_from_node(rn);
+
 	/* Best path selection. */
 	bgp_best_selection(bgp, rn, &bgp->maxpaths[afi][safi], &old_and_new,
 			   afi, safi);
@@ -2239,20 +2245,20 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_node *rn,
 				    && new_select->attr->label_index
 					       != BGP_INVALID_LABEL_INDEX) {
 					if (CHECK_FLAG(
-						    rn->flags,
+						    dest->flags,
 						    BGP_NODE_REGISTERED_FOR_LABEL))
 						bgp_unregister_for_label(rn);
 					label_ntop(MPLS_LABEL_IMPLICIT_NULL, 1,
-						   &rn->local_label);
-					bgp_set_valid_label(&rn->local_label);
+						   &dest->local_label);
+					bgp_set_valid_label(&dest->local_label);
 				} else
 					bgp_register_for_label(rn, new_select);
 			}
-		} else if (CHECK_FLAG(rn->flags,
+		} else if (CHECK_FLAG(dest->flags,
 				      BGP_NODE_REGISTERED_FOR_LABEL)) {
 			bgp_unregister_for_label(rn);
 		}
-	} else if (CHECK_FLAG(rn->flags, BGP_NODE_REGISTERED_FOR_LABEL)) {
+	} else if (CHECK_FLAG(dest->flags, BGP_NODE_REGISTERED_FOR_LABEL)) {
 		bgp_unregister_for_label(rn);
 	}
 
@@ -2268,7 +2274,7 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_node *rn,
 	 * clear, see exactly what needs to be done.
 	 */
 	if (old_select && old_select == new_select
-	    && !CHECK_FLAG(rn->flags, BGP_NODE_USER_CLEAR)
+	    && !CHECK_FLAG(dest->flags, BGP_NODE_USER_CLEAR)
 	    && !CHECK_FLAG(old_select->flags, BGP_INFO_ATTR_CHANGED)
 	    && !bgp->addpath_tx_used[afi][safi]) {
 		if (bgp_zebra_has_route_changed(rn, old_select)) {
@@ -2294,7 +2300,7 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_node *rn,
 		/* If there is a change of interest to peers, reannounce the
 		 * route. */
 		if (CHECK_FLAG(old_select->flags, BGP_INFO_ATTR_CHANGED)
-		    || CHECK_FLAG(rn->flags, BGP_NODE_LABEL_CHANGED)) {
+		    || CHECK_FLAG(dest->flags, BGP_NODE_LABEL_CHANGED)) {
 			group_announce_route(bgp, afi, safi, rn, new_select);
 
 			/* unicast routes must also be annouced to
@@ -2305,16 +2311,16 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_node *rn,
 						     new_select);
 
 			UNSET_FLAG(old_select->flags, BGP_INFO_ATTR_CHANGED);
-			UNSET_FLAG(rn->flags, BGP_NODE_LABEL_CHANGED);
+			UNSET_FLAG(dest->flags, BGP_NODE_LABEL_CHANGED);
 		}
 
-		UNSET_FLAG(rn->flags, BGP_NODE_PROCESS_SCHEDULED);
+		UNSET_FLAG(dest->flags, BGP_NODE_PROCESS_SCHEDULED);
 		return;
 	}
 
 	/* If the user did "clear ip bgp prefix x.x.x.x" this flag will be set
 	 */
-	UNSET_FLAG(rn->flags, BGP_NODE_USER_CLEAR);
+	UNSET_FLAG(dest->flags, BGP_NODE_USER_CLEAR);
 
 	/* bestpath has changed; bump version */
 	if (old_select || new_select) {
@@ -2428,7 +2434,7 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_node *rn,
 	if (old_select && CHECK_FLAG(old_select->flags, BGP_INFO_REMOVED))
 		bgp_info_reap(rn, old_select);
 
-	UNSET_FLAG(rn->flags, BGP_NODE_PROCESS_SCHEDULED);
+	UNSET_FLAG(dest->flags, BGP_NODE_PROCESS_SCHEDULED);
 	return;
 }
 
@@ -2437,7 +2443,7 @@ static wq_item_status bgp_process_wq(struct work_queue *wq, void *data)
 	struct bgp_process_queue *pqnode = data;
 	struct bgp *bgp = pqnode->bgp;
 	struct bgp_table *table;
-	struct bgp_node *rn;
+	struct bgp_dest *dest;
 
 	/* eoiu marker */
 	if (CHECK_FLAG(pqnode->flags, BGP_PROCESS_QUEUE_EOIU_MARKER)) {
@@ -2448,14 +2454,14 @@ static wq_item_status bgp_process_wq(struct work_queue *wq, void *data)
 	}
 
 	while (!STAILQ_EMPTY(&pqnode->pqueue)) {
-		rn = STAILQ_FIRST(&pqnode->pqueue);
+		dest = STAILQ_FIRST(&pqnode->pqueue);
 		STAILQ_REMOVE_HEAD(&pqnode->pqueue, pq);
-		STAILQ_NEXT(rn, pq) = NULL; /* complete unlink */
-		table = bgp_node_table(rn);
+		STAILQ_NEXT(dest, pq) = NULL; /* complete unlink */
+		table = bgp_node_table(dest->bn);
 		/* note, new RNs may be added as part of processing */
-		bgp_process_main_one(bgp, rn, table->afi, table->safi);
+		bgp_process_main_one(bgp, dest->bn, table->afi, table->safi);
 
-		bgp_unlock_node(rn);
+		bgp_unlock_node(dest->bn);
 		bgp_table_unlock(table);
 	}
 
@@ -2505,9 +2511,11 @@ void bgp_process(struct bgp *bgp, struct bgp_node *rn, afi_t afi, safi_t safi)
 	struct work_queue *wq = bm->process_main_queue;
 	struct bgp_process_queue *pqnode;
 	int pqnode_reuse = 0;
+	struct bgp_dest *dest;
 
 	/* already scheduled for processing? */
-	if (CHECK_FLAG(rn->flags, BGP_NODE_PROCESS_SCHEDULED))
+	dest = bgp_dest_from_node(rn);
+	if (CHECK_FLAG(dest->flags, BGP_NODE_PROCESS_SCHEDULED))
 		return;
 
 	if (wq == NULL)
@@ -2531,12 +2539,12 @@ void bgp_process(struct bgp *bgp, struct bgp_node *rn, afi_t afi, safi_t safi)
 	/* all unlocked in bgp_process_wq */
 	bgp_table_lock(bgp_node_table(rn));
 
-	SET_FLAG(rn->flags, BGP_NODE_PROCESS_SCHEDULED);
+	SET_FLAG(dest->flags, BGP_NODE_PROCESS_SCHEDULED);
 	bgp_lock_node(rn);
 
 	/* can't be enqueued twice */
-	assert(STAILQ_NEXT(rn, pq) == NULL);
-	STAILQ_INSERT_TAIL(&pqnode->pqueue, rn, pq);
+	assert(STAILQ_NEXT(dest, pq) == NULL);
+	STAILQ_INSERT_TAIL(&pqnode->pqueue, dest, pq);
 	pqnode->queued++;
 
 	if (!pqnode_reuse)
@@ -3704,8 +3712,10 @@ static void bgp_soft_reconfig_table(struct peer *peer, afi_t afi, safi_t safi,
 	if (!table)
 		table = peer->bgp->rib[afi][safi];
 
-	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn))
-		for (ain = rn->adj_in; ain; ain = ain->next) {
+	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
+		struct bgp_dest *dest = bgp_dest_from_node(rn);
+
+		for (ain = dest->adj_in; ain; ain = ain->next) {
 			if (ain->peer != peer)
 				continue;
 
@@ -3728,6 +3738,7 @@ static void bgp_soft_reconfig_table(struct peer *peer, afi_t afi, safi_t safi,
 				return;
 			}
 		}
+	}
 }
 
 void bgp_soft_reconfig_in(struct peer *peer, afi_t afi, safi_t safi)
@@ -3869,6 +3880,7 @@ static void bgp_clear_route_table(struct peer *peer, afi_t afi, safi_t safi,
 		struct bgp_info *ri, *next;
 		struct bgp_adj_in *ain;
 		struct bgp_adj_in *ain_next;
+		struct bgp_dest *dest;
 
 		/* XXX:TODO: This is suboptimal, every non-empty route_node is
 		 * queued for every clearing peer, regardless of whether it is
@@ -3905,7 +3917,8 @@ static void bgp_clear_route_table(struct peer *peer, afi_t afi, safi_t safi,
 		 * a peer
 		 * if that peer is using AddPath.
 		 */
-		ain = rn->adj_in;
+		dest = bgp_dest_from_node(rn);
+		ain = dest->adj_in;
 		while (ain) {
 			ain_next = ain->next;
 
@@ -4011,7 +4024,9 @@ void bgp_clear_adj_in(struct peer *peer, afi_t afi, safi_t safi)
 	 * if that peer is using AddPath.
 	 */
 	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
-		ain = rn->adj_in;
+		struct bgp_dest *dest = bgp_dest_from_node(rn);
+
+		ain = dest->adj_in;
 
 		while (ain) {
 			ain_next = ain->next;
@@ -7360,13 +7375,18 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct prefix *p,
 
 			parent_ri = (struct bgp_info *)binfo->extra->parent;
 			rn = parent_ri->net;
-			if (rn && rn->prn) {
-				prn = rn->prn;
-				vty_out(vty, "  Imported from %s:%s\n",
-					prefix_rd2str(
-						(struct prefix_rd *)&prn->p,
-						buf1, sizeof(buf1)),
-					buf2);
+			if (rn) {
+				struct bgp_dest *dest = bgp_dest_from_node(rn);
+
+				if (dest) {
+					prn = dest->prn;
+					vty_out(vty, "  Imported from %s:%s\n",
+						prefix_rd2str(
+							(struct prefix_rd *)&prn
+								->p,
+							buf1, sizeof(buf1)),
+						buf2);
+				}
 			}
 		}
 	}
@@ -8613,12 +8633,14 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 	int has_valid_label = 0;
 	mpls_label_t label = 0;
 	json_object *json_adv_to = NULL;
+	struct bgp_dest *dest;
 
 	p = &rn->p;
-	has_valid_label = bgp_is_valid_label(&rn->local_label);
+	dest = bgp_dest_from_node(rn);
+	has_valid_label = bgp_is_valid_label(&dest->local_label);
 
 	if (has_valid_label)
-		label = label_pton(&rn->local_label);
+		label = label_pton(&dest->local_label);
 
 	if (json) {
 		if (has_valid_label)
@@ -9867,8 +9889,10 @@ static int bgp_peer_count_walker(struct thread *t)
 	for (rn = bgp_table_top(pc->table); rn; rn = bgp_route_next(rn)) {
 		struct bgp_adj_in *ain;
 		struct bgp_info *ri;
+		struct bgp_dest *dest;
 
-		for (ain = rn->adj_in; ain; ain = ain->next)
+		dest = bgp_dest_from_node(rn);
+		for (ain = dest->adj_in; ain; ain = ain->next)
 			if (ain->peer == peer)
 				pc->count[PCOUNT_ADJ_IN]++;
 
@@ -10221,9 +10245,11 @@ static void show_adj_route(struct vty *vty, struct peer *peer, afi_t afi,
 	}
 
 	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
+		struct bgp_dest *dest = bgp_dest_from_node(rn);
+
 		if (type == bgp_show_adj_route_received
 		    || type == bgp_show_adj_route_filtered) {
-			for (ain = rn->adj_in; ain; ain = ain->next) {
+			for (ain = dest->adj_in; ain; ain = ain->next) {
 				if (ain->peer != peer || !ain->attr)
 					continue;
 
@@ -10300,7 +10326,7 @@ static void show_adj_route(struct vty *vty, struct peer *peer, afi_t afi,
 				output_count++;
 			}
 		} else if (type == bgp_show_adj_route_advertised) {
-			for (adj = rn->adj_out; adj; adj = adj->next)
+			for (adj = dest->adj_out; adj; adj = adj->next)
 				SUBGRP_FOREACH_PEER (adj->subgroup, paf) {
 					if (paf->peer != peer || !adj->attr)
 						continue;

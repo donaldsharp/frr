@@ -1033,6 +1033,7 @@ static int evpn_es_route_select_install(struct bgp *bgp,
 	struct bgp_info *old_select; /* old best */
 	struct bgp_info *new_select; /* new best */
 	struct bgp_info_pair old_and_new;
+	struct bgp_dest *dest = bgp_dest_from_node(rn);
 
 	/* Compute the best path. */
 	bgp_best_selection(bgp, rn, &bgp->maxpaths[afi][safi],
@@ -1047,7 +1048,7 @@ static int evpn_es_route_select_install(struct bgp *bgp,
 	if (old_select && old_select == new_select
 	    && old_select->type == ZEBRA_ROUTE_BGP
 	    && old_select->sub_type == BGP_ROUTE_IMPORTED
-	    && !CHECK_FLAG(rn->flags, BGP_NODE_USER_CLEAR)
+	    && !CHECK_FLAG(dest->flags, BGP_NODE_USER_CLEAR)
 	    && !CHECK_FLAG(old_select->flags, BGP_INFO_ATTR_CHANGED)
 	    && !bgp->addpath_tx_used[afi][safi]) {
 		if (bgp_zebra_has_route_changed(rn, old_select)) {
@@ -1061,7 +1062,7 @@ static int evpn_es_route_select_install(struct bgp *bgp,
 	}
 
 	/* If the user did a "clear" this flag will be set */
-	UNSET_FLAG(rn->flags, BGP_NODE_USER_CLEAR);
+	UNSET_FLAG(dest->flags, BGP_NODE_USER_CLEAR);
 
 	/*
 	 * bestpath has changed; update relevant fields and install or uninstall
@@ -1115,6 +1116,7 @@ static int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	safi_t safi = SAFI_EVPN;
 	int ret = 0;
 	uint8_t flags = 0;
+	struct bgp_dest *dest = bgp_dest_from_node(rn);
 
 	/* Compute the best path. */
 	bgp_best_selection(bgp, rn, &bgp->maxpaths[afi][safi], &old_and_new,
@@ -1130,7 +1132,7 @@ static int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	if (old_select && old_select == new_select
 	    && old_select->type == ZEBRA_ROUTE_BGP
 	    && old_select->sub_type == BGP_ROUTE_IMPORTED
-	    && !CHECK_FLAG(rn->flags, BGP_NODE_USER_CLEAR)
+	    && !CHECK_FLAG(dest->flags, BGP_NODE_USER_CLEAR)
 	    && !CHECK_FLAG(old_select->flags, BGP_INFO_ATTR_CHANGED)
 	    && !bgp->addpath_tx_used[afi][safi]) {
 		if (bgp_zebra_has_route_changed(rn, old_select)) {
@@ -1153,7 +1155,7 @@ static int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	}
 
 	/* If the user did a "clear" this flag will be set */
-	UNSET_FLAG(rn->flags, BGP_NODE_USER_CLEAR);
+	UNSET_FLAG(dest->flags, BGP_NODE_USER_CLEAR);
 
 	/* bestpath has changed; update relevant fields and install or uninstall
 	 * into the zebra RIB.

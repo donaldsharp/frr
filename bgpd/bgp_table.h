@@ -40,6 +40,26 @@ struct bgp_table {
 	uint64_t version;
 };
 
+struct bgp_dest {
+	struct bgp_node *bn;
+	struct bgp_adj_out *adj_out;
+
+	struct bgp_adj_in *adj_in;
+
+	struct bgp_node *prn;
+
+	STAILQ_ENTRY(bgp_dest) pq;
+
+	mpls_label_t local_label;
+
+	uint64_t version;
+	uint8_t flags;
+#define BGP_NODE_PROCESS_SCHEDULED	(1 << 0)
+#define BGP_NODE_USER_CLEAR             (1 << 1)
+#define BGP_NODE_LABEL_CHANGED          (1 << 2)
+#define BGP_NODE_REGISTERED_FOR_LABEL   (1 << 3)
+};
+
 struct bgp_node {
 	/*
 	 * CAUTION
@@ -51,22 +71,7 @@ struct bgp_node {
 	 */
 	ROUTE_NODE_FIELDS
 
-	struct bgp_adj_out *adj_out;
-
-	struct bgp_adj_in *adj_in;
-
-	struct bgp_node *prn;
-
-	STAILQ_ENTRY(bgp_node) pq;
-
-	mpls_label_t local_label;
-
-	uint64_t version;
-	uint8_t flags;
-#define BGP_NODE_PROCESS_SCHEDULED	(1 << 0)
-#define BGP_NODE_USER_CLEAR             (1 << 1)
-#define BGP_NODE_LABEL_CHANGED          (1 << 2)
-#define BGP_NODE_REGISTERED_FOR_LABEL   (1 << 3)
+	struct bgp_dest dest;
 };
 
 /*
@@ -407,6 +412,11 @@ static inline bool bgp_has_info_data(struct bgp_node *node)
 static inline void **bgp_get_info_pptr(struct bgp_node *node)
 {
 	return &node->info;
+}
+
+static inline struct bgp_dest *bgp_dest_from_node(struct bgp_node *node)
+{
+	return &node->dest;
 }
 
 #endif /* _QUAGGA_BGP_TABLE_H */
