@@ -4117,8 +4117,9 @@ void bgp_cleanup_routes(struct bgp *bgp)
 				table = bgp_table_from_node(rn);
 				if (table) {
 					bgp_cleanup_table(bgp, table, safi);
-					bgp_table_finish((struct bgp_table **)&(
-						rn->info));
+					bgp_table_finish(
+						(struct bgp_table **)
+							bgp_get_info_pptr(rn));
 					bgp_table_set_node_info(rn, NULL);
 					bgp_unlock_node(rn);
 				}
@@ -4129,8 +4130,9 @@ void bgp_cleanup_routes(struct bgp *bgp)
 				table = bgp_table_from_node(rn);
 				if (table) {
 					bgp_cleanup_table(bgp, table, safi);
-					bgp_table_finish((struct bgp_table **)&(
-						rn->info));
+					bgp_table_finish(
+						(struct bgp_table **)
+							bgp_get_info_pptr(rn));
 					bgp_table_set_node_info(rn, NULL);
 					bgp_unlock_node(rn);
 				}
@@ -4142,7 +4144,8 @@ void bgp_cleanup_routes(struct bgp *bgp)
 		table = bgp_table_from_node(rn);
 		if (table) {
 			bgp_cleanup_table(bgp, table, SAFI_EVPN);
-			bgp_table_finish((struct bgp_table **)&(rn->info));
+			bgp_table_finish(
+				(struct bgp_table **)bgp_get_info_pptr(rn));
 			bgp_table_set_node_info(rn, NULL);
 			bgp_unlock_node(rn);
 		}

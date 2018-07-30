@@ -404,4 +404,9 @@ static inline bool bgp_has_info_data(struct bgp_node *node)
 	return !!node->info;
 }
 
+static inline void **bgp_get_info_pptr(struct bgp_node *node)
+{
+	return &node->info;
+}
+
 #endif /* _QUAGGA_BGP_TABLE_H */
