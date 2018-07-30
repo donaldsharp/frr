@@ -2052,8 +2052,11 @@ static int delete_global_type2_routes(struct bgp *bgp, struct bgpevpn *vpn)
 	safi = SAFI_EVPN;
 
 	rdrn = bgp_node_lookup(bgp->rib[afi][safi], (struct prefix *)&vpn->prd);
-	if (rdrn && rdrn->info) {
-		table = (struct bgp_table *)rdrn->info;
+	if (!rdrn)
+		return 0;
+
+	table = bgp_table_from_node(rdrn);
+	if (table) {
 		for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
 			struct prefix_evpn *evp = (struct prefix_evpn *)&rn->p;
 
@@ -2820,7 +2823,7 @@ static int install_uninstall_routes_for_es(struct bgp *bgp,
 	 */
 	for (rd_rn = bgp_table_top(bgp->rib[afi][safi]); rd_rn;
 	     rd_rn = bgp_route_next(rd_rn)) {
-		table = (struct bgp_table *)(rd_rn->info);
+		table = bgp_table_from_node(rd_rn);
 		if (!table)
 			continue;
 
@@ -2892,7 +2895,7 @@ static int install_uninstall_routes_for_vrf(struct bgp *bgp_vrf, int install)
 	 */
 	for (rd_rn = bgp_table_top(bgp_def->rib[afi][safi]); rd_rn;
 	     rd_rn = bgp_route_next(rd_rn)) {
-		table = (struct bgp_table *)(rd_rn->info);
+		table = bgp_table_from_node(rd_rn);
 		if (!table)
 			continue;
 
@@ -2975,7 +2978,7 @@ static int install_uninstall_routes_for_vni(struct bgp *bgp,
 	/* EVPN routes are a 2-level table. */
 	for (rd_rn = bgp_table_top(bgp->rib[afi][safi]); rd_rn;
 	     rd_rn = bgp_route_next(rd_rn)) {
-		table = (struct bgp_table *)(rd_rn->info);
+		table = bgp_table_from_node(rd_rn);
 		if (!table)
 			continue;
 
@@ -5104,7 +5107,7 @@ int bgp_filter_evpn_routes_upon_martian_nh_change(struct bgp *bgp)
 	/* EVPN routes are a 2-level table. */
 	for (rd_rn = bgp_table_top(bgp->rib[afi][safi]); rd_rn;
 	     rd_rn = bgp_route_next(rd_rn)) {
-		table = (struct bgp_table *)(rd_rn->info);
+		table = bgp_table_from_node(rd_rn);
 		if (!table)
 			continue;
 

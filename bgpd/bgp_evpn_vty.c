@@ -1041,7 +1041,8 @@ static int bgp_show_ethernet_vpn(struct vty *vty, struct prefix_rd *prd,
 		if (prd && memcmp(rn->p.u.val, prd->val, 8) != 0)
 			continue;
 
-		if ((table = rn->info) == NULL)
+		table = bgp_table_from_node(rn);
+		if (table == NULL)
 			continue;
 
 		rd_header = 1;
@@ -2283,7 +2284,7 @@ static void evpn_show_route_rd(struct vty *vty, struct bgp *bgp,
 	if (!rd_rn)
 		return;
 
-	table = (struct bgp_table *)rd_rn->info;
+	table = bgp_table_from_node(rd_rn);
 	if (table == NULL)
 		return;
 
@@ -2407,7 +2408,7 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 		int add_rd_to_json = 0;
 		uint64_t tbl_ver;
 
-		table = (struct bgp_table *)rd_rn->info;
+		table = bgp_table_from_node(rd_rn);
 		if (table == NULL)
 			continue;
 

@@ -387,4 +387,16 @@ static inline bool bgp_has_info_data(struct bgp_node *node)
 {
 	return !!node->info;
 }
+
+static inline struct bgp_table *bgp_table_from_node(struct bgp_node *node)
+{
+	return node->info;
+}
+
+static inline void bgp_table_set_node_info(struct bgp_node *node,
+					   struct bgp_table *table)
+{
+	node->info = table;
+}
+
 #endif /* _QUAGGA_BGP_TABLE_H */
