@@ -1085,7 +1085,7 @@ int netlink_talk(int (*filter)(struct nlmsghdr *, ns_id_t, int startup),
 	/* thread pointer */
 	static struct thread *expiry;
 	/* context */
-	static bool ctx_initialized;
+	static bool ctx_initialized = false;
 	static struct nltrsctx ctx;
 
 	THREAD_OFF(expiry);
@@ -1109,32 +1109,29 @@ int netlink_talk(int (*filter)(struct nlmsghdr *, ns_id_t, int startup),
 		ctx.startup = startup;
 
 		ctx_initialized = true;
+		assert(n);
 
-		if (n) {
-			n->nlmsg_seq = ++nl->seq;
-			n->nlmsg_pid = nl->snl.nl_pid;
-			memcpy(mnl_nlmsg_batch_current(&nl_batch), n,
-			       n->nlmsg_len);
-			cached++;
+		n->nlmsg_seq = ++nl->seq;
+		n->nlmsg_pid = nl->snl.nl_pid;
+		memcpy(mnl_nlmsg_batch_current(&nl_batch), n, n->nlmsg_len);
+		cached++;
 
-			if (IS_ZEBRA_DEBUG_KERNEL) {
-				zlog_debug(
-					"%s %s type %s(%u), len=%d seq=%u flags 0x%x",
-					__func__, nl->name,
-					nl_msg_type_to_str(n->nlmsg_type),
-					n->nlmsg_type, n->nlmsg_len,
-					n->nlmsg_seq, n->nlmsg_flags);
-				zlog_debug("%s: cache depth = %d", __func__,
-					   cached);
-			}
-			if (mnl_nlmsg_batch_next(&nl_batch)) {
-				thread_add_timer_msec(zebrad.master,
-						      netlink_batch_expire,
-						      NULL,
-						      NETLINK_DELAY_WRITE_TIME,
-						      &expiry);
-				return ret;
-			}
+		if (IS_ZEBRA_DEBUG_KERNEL) {
+			zlog_debug("%s %s type %s(%u), len=%d seq=%u flags 0x%x",
+				   __func__, nl->name,
+				   nl_msg_type_to_str(n->nlmsg_type),
+				   n->nlmsg_type, n->nlmsg_len,
+				   n->nlmsg_seq, n->nlmsg_flags);
+			zlog_debug("%s: cache depth = %d", __func__,
+				   cached);
+		}
+		if (mnl_nlmsg_batch_next(&nl_batch)) {
+			thread_add_timer_msec(zebrad.master,
+					      netlink_batch_expire,
+					      NULL,
+					      NETLINK_DELAY_WRITE_TIME,
+					      &expiry);
+			return ret;
 		}
 	}
 
