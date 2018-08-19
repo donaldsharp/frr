@@ -1039,6 +1039,7 @@ static void *mnl_nlmsg_batch_current(struct mnl_nlmsg_batch *b)
 	return b->cur;
 }
 
+#define NETLINK_DELAY_WRITE_TIME 10
 /*
  * netlink_talk() - This function attempts to batch messages to netlink.
  * Messages are cached for sequential netlink_talk calls while:
@@ -1129,7 +1130,9 @@ int netlink_talk(int (*filter)(struct nlmsghdr *, ns_id_t, int startup),
 			if (mnl_nlmsg_batch_next(&nl_batch)) {
 				thread_add_timer_msec(zebrad.master,
 						      netlink_batch_expire,
-						      NULL, 2000, &expiry);
+						      NULL,
+						      NETLINK_DELAY_WRITE_TIME,
+						      &expiry);
 				return ret;
 			}
 		}
@@ -1175,7 +1178,7 @@ int netlink_talk(int (*filter)(struct nlmsghdr *, ns_id_t, int startup),
 	if (mnl_nlmsg_batch_reset(&nl_batch)) {
 		cached = 1;
 		thread_add_timer_msec(zebrad.master, netlink_batch_expire, NULL,
-				      2000, &expiry);
+				      NETLINK_DELAY_WRITE_TIME, &expiry);
 	} else {
 		cached = 0;
 		ctx_initialized = false;
