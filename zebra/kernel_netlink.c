@@ -1092,7 +1092,6 @@ int netlink_talk(int (*filter)(struct nlmsghdr *, ns_id_t, int startup),
 
 	/* Only create the batch once */
 	if (!batch_init) {
-		zlog_debug("Creating batch");
 		memset(&nl_batch, 0, sizeof(nl_batch));
 		mnl_nlmsg_batch_start(&nl_batch, buf, NL_PKT_TXBUF_SIZE);
 		batch_init = true;
@@ -1164,12 +1163,9 @@ int netlink_talk(int (*filter)(struct nlmsghdr *, ns_id_t, int startup),
 		flog_err_sys(LIB_ERR_SOCKET, "netlink_talk sendmsg() error: %s",
 			     safe_strerror(save_errno));
 		return -1;
-	} else {
-		zlog_debug("wrote [%d] messages (%u bytes) to netlink", cached,
-			   status);
+	} else
 		ret = netlink_parse_info(filter, ctx.nls, ctx.zns, 0,
 					 ctx.startup);
-	}
 
 	/* flush cache */
 	if (mnl_nlmsg_batch_reset(&nl_batch)) {
