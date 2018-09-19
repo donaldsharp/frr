@@ -191,6 +191,84 @@ DEFPY (remove_routes,
 	return CMD_SUCCESS;
 }
 
+#define FTHREAD_COUNT 8
+#define FTHREAD_TIMER_COUNT 6
+#define FTHREAD_READ  7
+
+int thread_exec_func(struct thread *t);
+int thread_read_func(struct thread *t);
+
+struct thread_master *master;
+struct thread *thrv[FTHREAD_COUNT];
+int thnum[FTHREAD_COUNT];
+int sp[2];
+
+int thread_exec_func(struct thread *t)
+{
+	struct timeval tv = {
+		.tv_sec = 0,
+		.tv_usec = 10000,
+	};
+	int *thnump = THREAD_ARG(t);
+	int it;
+
+	THREAD_OFF(thrv[*thnump]);
+	thread_add_timer_tv(master, thread_exec_func, thnump, &tv, &thrv[*thnump]);
+
+	for (it = 0; it < FTHREAD_TIMER_COUNT; it++) {
+		THREAD_OFF(thrv[it]);
+		thread_add_timer_tv(master, thread_exec_func, &thnum[it], &tv, &thrv[it]);
+	}
+
+	write(sp[1], thnump, sizeof(*thnump));
+
+	THREAD_OFF(thrv[FTHREAD_READ]);
+	thread_add_read(master, thread_read_func, thnump, sp[0], &thrv[FTHREAD_READ]);
+
+	return 0;
+}
+
+int thread_read_func(struct thread *t)
+{
+	int *thnump = THREAD_ARG(t);
+	int v = 0;
+
+	THREAD_OFF(thrv[*thnump]);
+	thread_add_read(master, thread_read_func, thnump, sp[0], &thrv[FTHREAD_READ]);
+
+	read(sp[0], &v, sizeof(v));
+	fprintf(stderr, "%d", v);
+
+	return 0;
+}
+
+DEFPY (thread_stuff,
+       thread_stuff_cmd,
+       "sharp threadit",
+       "Sharp Routing Protocol\n"
+       "THREADINATOR\n")
+{
+	struct timeval tv = {
+		.tv_sec = 0,
+		.tv_usec = 100000,
+	};
+	int it;
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sp) == -1)
+		zlog_err( "socketpair");
+
+	for (it = 0; it < 6; it++) {
+		thnum[it] = it;
+		thread_add_timer_tv(master, thread_exec_func, &thnum[it], &tv, &thrv[it]);
+	}
+
+	it = FTHREAD_READ;
+	thnum[it] = it;
+	thread_add_read(master, thread_read_func, &thnum[it], sp[0], &thrv[it]);
+
+	return CMD_SUCCESS;
+}
+
 DEFUN_NOSH (show_debugging_sharpd,
 	    show_debugging_sharpd_cmd,
 	    "show debugging [sharp]",
@@ -210,6 +288,7 @@ void sharp_vty_init(void)
 	install_element(ENABLE_NODE, &vrf_label_cmd);
 	install_element(ENABLE_NODE, &watch_nexthop_v6_cmd);
 	install_element(ENABLE_NODE, &watch_nexthop_v4_cmd);
+	install_element(ENABLE_NODE, &thread_stuff_cmd);
 
 	install_element(VIEW_NODE, &show_debugging_sharpd_cmd);
 
