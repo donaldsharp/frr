@@ -55,6 +55,7 @@
 #include "zebra/zebra_vxlan.h"
 #include "zebra/zapi_msg.h"
 #include "zebra/zebra_dplane.h"
+#include "zebra/zebra_nhgs.h"
 
 /*
  * Event, list, and mutex for delivery of dataplane results
@@ -191,7 +192,11 @@ int zebra_check_addr(const struct prefix *p)
 /* Add nexthop to the end of a rib node's nexthop list */
 void route_entry_nexthop_add(struct route_entry *re, struct nexthop *nexthop)
 {
+#if defined DEV_BUILD
+	nexthop_group_add_sorted(&re->ng, nexthop);
+#else
 	nexthop_add(&re->ng.nexthop, nexthop);
+#endif
 	re->nexthop_num++;
 }
 
@@ -2715,6 +2720,9 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 
 	assert(!src_p || !src_p->prefixlen || afi == AFI_IP6);
 
+#if defined DEV_BUILD
+	zebra_nhg_find(afi, re);
+#endif
 	/* Lookup table.  */
 	table = zebra_vrf_table_with_table_id(afi, safi, re->vrf_id, re->table);
 	if (!table) {

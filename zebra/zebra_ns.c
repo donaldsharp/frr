@@ -39,6 +39,9 @@
 #include "zebra_pbr.h"
 #include "rib.h"
 #include "table_manager.h"
+#if defined DEV_BUILD
+#include "zebra_nhgs.h"
+#endif
 
 extern struct zebra_privs_t zserv_privs;
 

@@ -137,6 +137,14 @@ struct zebra_vrf {
 	 */
 	enum vxlan_flood_control vxlan_flood_ctrl;
 
+#if defined DEV_BUILD
+	/*
+	 * The hash of nexthop groups associated with
+	 * this namespace
+	 */
+	struct hash *nhgs;
+#endif
+
 	/* Route Installs */
 	uint64_t installs;
 	uint64_t removals;

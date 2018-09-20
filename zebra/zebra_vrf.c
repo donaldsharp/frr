@@ -41,6 +41,7 @@
 #include "zebra/zebra_vxlan.h"
 #include "zebra/zebra_netns_notify.h"
 #include "zebra/zebra_routemap.h"
+#include "zebra/zebra_nhgs.h"
 
 extern struct zebra_t zebrad;
 
@@ -96,6 +97,13 @@ static int zebra_vrf_new(struct vrf *vrf)
 	vrf->info = zvrf;
 	zvrf->vrf = vrf;
 	router_id_init(zvrf);
+
+#if defined DEV_BUILD
+	zvrf->nhgs =
+		hash_create_size(8, zebra_nhgs_hash_key,
+				 zebra_nhgs_hash_equal,
+				 "Nexthop Groups");
+#endif
 	return 0;
 }
 
