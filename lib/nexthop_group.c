@@ -75,6 +75,34 @@ struct nexthop_group *nexthop_group_new(void)
 	return XCALLOC(MTYPE_NEXTHOP_GROUP, sizeof(struct nexthop_group));
 }
 
+void nexthop_group_copy(struct nexthop_group *to, struct nexthop_group *from)
+{
+	struct nexthop *nh1;
+
+	assert(!to->nexthop);
+
+	for (ALL_NEXTHOPS((*from), nh1)) {
+		struct nexthop *new = nexthop_new();
+
+		new->vrf_id = nh1->vrf_id;
+		new->ifindex = nh1->ifindex;
+		new->type = nh1->type;
+		new->flags = nh1->flags;
+		memcpy(&new->gate, &nh1->gate, sizeof(nh1->gate));
+		memcpy(&new->src, &nh1->src, sizeof(nh1->src));
+		memcpy(&new->rmap_src, &nh1->rmap_src,
+		       sizeof(nh1->rmap_src));
+
+		if (nh1->nh_label)
+			nexthop_add_labels(new, nh1->nh_label_type,
+					   nh1->nh_label->num_labels,
+					   &nh1->nh_label->label[0]);
+
+
+		nexthop_group_add_sorted(to, new);
+	}
+}
+
 void nexthop_group_delete(struct nexthop_group **nhg)
 {
 	XFREE(MTYPE_NEXTHOP_GROUP, *nhg);
@@ -92,6 +120,28 @@ void nexthop_add(struct nexthop **target, struct nexthop *nexthop)
 	else
 		*target = nexthop;
 	nexthop->prev = last;
+}
+
+void nexthop_group_add_sorted(struct nexthop_group *nhg,
+			      struct nexthop *nexthop)
+{
+	struct nexthop **position, *prev;
+
+	prev = NULL;
+	position = &nhg->nexthop;
+	while (*position && nexthop_cmp(*position, nexthop) < 0) {
+		prev = *position;
+		*position = (*position)->next;
+	}
+
+	nexthop->next = *position;
+	nexthop->prev = prev;
+	if (prev)
+		prev->next = nexthop;
+	if (*position)
+		(*position)->prev = nexthop;
+	else
+		nhg->nexthop = nexthop;
 }
 
 /* Delete nexthop from a nexthop list.  */
