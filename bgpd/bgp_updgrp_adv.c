@@ -55,7 +55,7 @@
  * PRIVATE FUNCTIONS
  ********************/
 
-static inline struct bgp_adj_out *adj_lookup(struct bgp_node *rn,
+static inline struct bgp_adj_out *adj_lookup(struct route_node *rn,
 					     struct update_subgroup *subgrp,
 					     uint32_t addpath_tx_id)
 {
@@ -221,7 +221,7 @@ static void subgrp_show_adjq_vty(struct update_subgroup *subgrp,
 	struct bgp_table *table;
 	struct bgp_adj_out *adj;
 	unsigned long output_count;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	int header1 = 1;
 	struct bgp *bgp;
 	int header2 = 1;
@@ -234,7 +234,7 @@ static void subgrp_show_adjq_vty(struct update_subgroup *subgrp,
 
 	output_count = 0;
 
-	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
+	for (rn = bgp_table_top(table); rn; rn = route_next(rn)) {
 		struct bgp_dest *dest = bgp_dest_from_node(rn);
 
 		for (adj = dest->adj_out; adj; adj = adj->next)
@@ -381,7 +381,7 @@ static int update_group_announce_rrc_walkcb(struct update_group *updgrp,
  * primarily its association with the subgroup and the prefix.
  */
 struct bgp_adj_out *bgp_adj_out_alloc(struct update_subgroup *subgrp,
-				      struct bgp_node *rn,
+				      struct route_node *rn,
 				      uint32_t addpath_tx_id)
 {
 	struct bgp_adj_out *adj;
@@ -392,7 +392,7 @@ struct bgp_adj_out *bgp_adj_out_alloc(struct update_subgroup *subgrp,
 		struct bgp_dest *dest = bgp_dest_from_node(rn);
 
 		BGP_ADJ_OUT_ADD(dest, adj);
-		bgp_lock_node(rn);
+		route_lock_node(rn);
 		adj->rn = rn;
 	}
 
@@ -441,7 +441,7 @@ bgp_advertise_clean_subgroup(struct update_subgroup *subgrp,
 	return next;
 }
 
-void bgp_adj_out_set_subgroup(struct bgp_node *rn,
+void bgp_adj_out_set_subgroup(struct route_node *rn,
 			      struct update_subgroup *subgrp, struct attr *attr,
 			      struct bgp_info *binfo)
 {
@@ -500,7 +500,7 @@ void bgp_adj_out_set_subgroup(struct bgp_node *rn,
  * the "neighbor x.x.x.x default-originate" default and need to clear
  * bgp_adj_out for the 0.0.0.0/0 route in the BGP table.
  */
-void bgp_adj_out_unset_subgroup(struct bgp_node *rn,
+void bgp_adj_out_unset_subgroup(struct route_node *rn,
 				struct update_subgroup *subgrp, char withdraw,
 				uint32_t addpath_tx_id)
 {
@@ -542,14 +542,14 @@ void bgp_adj_out_unset_subgroup(struct bgp_node *rn,
 			/* Free allocated information.  */
 			adj_free(adj);
 
-			bgp_unlock_node(rn);
+			route_unlock_node(rn);
 		}
 	}
 
 	subgrp->version = max(subgrp->version, dest->version);
 }
 
-void bgp_adj_out_remove_subgroup(struct bgp_node *rn, struct bgp_adj_out *adj,
+void bgp_adj_out_remove_subgroup(struct route_node *rn, struct bgp_adj_out *adj,
 				 struct update_subgroup *subgrp)
 {
 	struct bgp_dest *dest = bgp_dest_from_node(rn);
@@ -573,9 +573,9 @@ void subgroup_clear_table(struct update_subgroup *subgrp)
 	struct bgp_adj_out *aout, *taout;
 
 	SUBGRP_FOREACH_ADJ_SAFE (subgrp, aout, taout) {
-		struct bgp_node *rn = aout->rn;
+		struct route_node *rn = aout->rn;
 		bgp_adj_out_remove_subgroup(rn, aout, subgrp);
-		bgp_unlock_node(rn);
+		route_unlock_node(rn);
 	}
 }
 
@@ -585,7 +585,7 @@ void subgroup_clear_table(struct update_subgroup *subgrp)
 void subgroup_announce_table(struct update_subgroup *subgrp,
 			     struct bgp_table *table)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_info *ri;
 	struct attr attr;
 	struct peer *peer;
@@ -609,7 +609,7 @@ void subgroup_announce_table(struct update_subgroup *subgrp,
 			  PEER_FLAG_DEFAULT_ORIGINATE))
 		subgroup_default_originate(subgrp, 0);
 
-	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn))
+	for (rn = bgp_table_top(table); rn; rn = route_next(rn))
 		for (ri = bgp_info_from_node(rn); ri; ri = ri->next)
 
 			if (CHECK_FLAG(ri->flags, BGP_INFO_SELECTED)
@@ -648,7 +648,7 @@ void subgroup_announce_table(struct update_subgroup *subgrp,
  */
 void subgroup_announce_route(struct update_subgroup *subgrp)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_table *table;
 	struct peer *onlypeer;
 
@@ -672,7 +672,7 @@ void subgroup_announce_route(struct update_subgroup *subgrp)
 		subgroup_announce_table(subgrp, NULL);
 	else
 		for (rn = bgp_table_top(update_subgroup_rib(subgrp)); rn;
-		     rn = bgp_route_next(rn))
+		     rn = route_next(rn))
 			if ((table = (rn->info)) != NULL)
 				subgroup_announce_table(subgrp, table);
 }
@@ -684,7 +684,7 @@ void subgroup_default_originate(struct update_subgroup *subgrp, int withdraw)
 	struct bgp_info *info, init_info, tmp_info;
 	struct prefix p;
 	struct peer *from;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_info *ri;
 	struct peer *peer;
 	int ret = RMAP_DENYMATCH;
@@ -729,7 +729,7 @@ void subgroup_default_originate(struct update_subgroup *subgrp, int withdraw)
 	if (peer->default_rmap[afi][safi].name) {
 		SET_FLAG(bgp->peer_self->rmap_type, PEER_RMAP_TYPE_DEFAULT);
 		for (rn = bgp_table_top(bgp->rib[afi][safi]); rn;
-		     rn = bgp_route_next(rn)) {
+		     rn = route_next(rn)) {
 			for (ri = rn->info; ri; ri = ri->next) {
 				tmp_info.peer = ri->peer;
 				tmp_info.attr = ri->attr;
@@ -848,7 +848,7 @@ void subgroup_announce_all(struct update_subgroup *subgrp)
  * input route.
  */
 void group_announce_route(struct bgp *bgp, afi_t afi, safi_t safi,
-			  struct bgp_node *rn, struct bgp_info *ri)
+			  struct route_node *rn, struct bgp_info *ri)
 {
 	struct updwalk_context ctx;
 	ctx.ri = ri;

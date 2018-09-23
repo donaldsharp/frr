@@ -132,7 +132,7 @@ static void route_match_free(void *rule);
 static route_map_result_t route_match(void *rule, const struct prefix *prefix,
 				      route_map_object_t type, void *object);
 static void *route_match_compile(const char *arg);
-static void revalidate_bgp_node(struct bgp_node *bgp_node, afi_t afi,
+static void revalidate_bgp_node(struct route_node *bgp_node, afi_t afi,
 				safi_t safi);
 static void revalidate_all_routes(void);
 
@@ -394,7 +394,7 @@ static int bgpd_sync_callback(struct thread *thread)
 					rec.max_len, matches);
 
 
-				struct bgp_node *bgp_node;
+				struct route_node *bgp_node;
 				struct listnode *bgp_listnode;
 
 				for (ALL_LIST_ELEMENTS_RO(matches, bgp_listnode,
@@ -411,7 +411,7 @@ static int bgpd_sync_callback(struct thread *thread)
 	return 0;
 }
 
-static void revalidate_bgp_node(struct bgp_node *bgp_node, afi_t afi,
+static void revalidate_bgp_node(struct route_node *bgp_node, afi_t afi,
 				safi_t safi)
 {
 	struct bgp_adj_in *ain;

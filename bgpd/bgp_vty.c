@@ -7055,8 +7055,8 @@ static int bgp_clear_prefix(struct vty *vty, const char *view_name,
 {
 	int ret;
 	struct prefix match;
-	struct bgp_node *rn;
-	struct bgp_node *rm;
+	struct route_node *rn;
+	struct route_node *rm;
 	struct bgp *bgp;
 	struct bgp_table *table;
 	struct bgp_table *rib;
@@ -7088,7 +7088,7 @@ static int bgp_clear_prefix(struct vty *vty, const char *view_name,
 	rib = bgp->rib[afi][safi];
 
 	if (safi == SAFI_MPLS_VPN) {
-		for (rn = bgp_table_top(rib); rn; rn = bgp_route_next(rn)) {
+		for (rn = bgp_table_top(rib); rn; rn = route_next(rn)) {
 			if (prd && memcmp(rn->p.u.val, prd->val, 8) != 0)
 				continue;
 
@@ -7104,7 +7104,7 @@ static int bgp_clear_prefix(struct vty *vty, const char *view_name,
 							 BGP_NODE_USER_CLEAR);
 						bgp_process(bgp, rm, afi, safi);
 					}
-					bgp_unlock_node(rm);
+					route_unlock_node(rm);
 				}
 			}
 		}
@@ -7116,7 +7116,7 @@ static int bgp_clear_prefix(struct vty *vty, const char *view_name,
 				SET_FLAG(dest->flags, BGP_NODE_USER_CLEAR);
 				bgp_process(bgp, rn, afi, safi);
 			}
-			bgp_unlock_node(rn);
+			route_unlock_node(rn);
 		}
 	}
 
@@ -7534,7 +7534,7 @@ DEFUN (show_bgp_memory,
 	count = mtype_stats_alloc(MTYPE_BGP_NODE);
 	vty_out(vty, "%ld RIB nodes, using %s of memory\n", count,
 		mtype_memstr(memstrbuf, sizeof(memstrbuf),
-			     count * sizeof(struct bgp_node)));
+			     count * sizeof(struct route_node)));
 
 	count = mtype_stats_alloc(MTYPE_BGP_ROUTE);
 	vty_out(vty, "%ld BGP routes, using %s of memory\n", count,
@@ -7881,7 +7881,7 @@ static int bgp_show_summary(struct vty *vty, struct bgp *bgp, int afi, int safi,
 				json_object_int_add(json, "ribCount", ents);
 				json_object_int_add(
 					json, "ribMemory",
-					ents * sizeof(struct bgp_node));
+					ents * sizeof(struct route_node));
 
 				ents = listcount(bgp->peer);
 				json_object_int_add(json, "peerCount", ents);
@@ -7920,7 +7920,7 @@ static int bgp_show_summary(struct vty *vty, struct bgp *bgp, int afi, int safi,
 					mtype_memstr(memstrbuf,
 						     sizeof(memstrbuf),
 						     ents * sizeof(struct
-								   bgp_node)));
+								   route_node)));
 
 				/* Peer related usage */
 				ents = listcount(bgp->peer);

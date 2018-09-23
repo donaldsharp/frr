@@ -299,7 +299,7 @@ static void bgp_dump_routes_index_table(struct bgp *bgp)
 }
 
 
-static struct bgp_info *bgp_dump_route_node_record(int afi, struct bgp_node *rn,
+static struct bgp_info *bgp_dump_route_node_record(int afi, struct route_node *rn,
 						   struct bgp_info *info,
 						   unsigned int seq)
 {
@@ -388,7 +388,7 @@ static unsigned int bgp_dump_routes_func(int afi, int first_run,
 					 unsigned int seq)
 {
 	struct bgp_info *info;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp *bgp;
 	struct bgp_table *table;
 
@@ -409,7 +409,7 @@ static unsigned int bgp_dump_routes_func(int afi, int first_run,
 	/* Walk down each BGP route. */
 	table = bgp->rib[afi][SAFI_UNICAST];
 
-	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
+	for (rn = bgp_table_top(table); rn; rn = route_next(rn)) {
 		info = bgp_info_from_node(rn);
 		while (info) {
 			info = bgp_dump_route_node_record(afi, rn, info, seq);

@@ -145,7 +145,7 @@ void bgp_advertise_unintern(struct hash *hash, struct bgp_advertise_attr *baa)
 	}
 }
 
-int bgp_adj_out_lookup(struct peer *peer, struct bgp_node *rn,
+int bgp_adj_out_lookup(struct peer *peer, struct route_node *rn,
 		       uint32_t addpath_tx_id)
 {
 	struct bgp_adj_out *adj;
@@ -180,7 +180,7 @@ int bgp_adj_out_lookup(struct peer *peer, struct bgp_node *rn,
 }
 
 
-void bgp_adj_in_set(struct bgp_node *rn, struct peer *peer, struct attr *attr,
+void bgp_adj_in_set(struct route_node *rn, struct peer *peer, struct attr *attr,
 		    uint32_t addpath_id)
 {
 	struct bgp_adj_in *adj;
@@ -201,10 +201,10 @@ void bgp_adj_in_set(struct bgp_node *rn, struct peer *peer, struct attr *attr,
 	adj->attr = bgp_attr_intern(attr);
 	adj->addpath_rx_id = addpath_id;
 	BGP_ADJ_IN_ADD(dest, adj);
-	bgp_lock_node(rn);
+	route_lock_node(rn);
 }
 
-void bgp_adj_in_remove(struct bgp_node *rn, struct bgp_adj_in *bai)
+void bgp_adj_in_remove(struct route_node *rn, struct bgp_adj_in *bai)
 {
 	struct bgp_dest *dest = bgp_dest_from_node(rn);
 
@@ -214,7 +214,7 @@ void bgp_adj_in_remove(struct bgp_node *rn, struct bgp_adj_in *bai)
 	XFREE(MTYPE_BGP_ADJ_IN, bai);
 }
 
-int bgp_adj_in_unset(struct bgp_node *rn, struct peer *peer,
+int bgp_adj_in_unset(struct route_node *rn, struct peer *peer,
 		     uint32_t addpath_id)
 {
 	struct bgp_adj_in *adj;
@@ -232,7 +232,7 @@ int bgp_adj_in_unset(struct bgp_node *rn, struct peer *peer,
 
 		if (adj->peer == peer && adj->addpath_rx_id == addpath_id) {
 			bgp_adj_in_remove(rn, adj);
-			bgp_unlock_node(rn);
+			route_unlock_node(rn);
 		}
 
 		adj = adj_next;

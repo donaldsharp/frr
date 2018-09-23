@@ -77,15 +77,15 @@ void bnc_free(struct bgp_nexthop_cache *bnc)
 /* Reset and free all BGP nexthop cache. */
 static void bgp_nexthop_cache_reset(struct bgp_table *table)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_nexthop_cache *bnc;
 
-	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
+	for (rn = bgp_table_top(table); rn; rn = route_next(rn)) {
 		bnc = bgp_nexthop_get_node_info(rn);
 		if (bnc != NULL) {
 			bnc_free(bnc);
 			bgp_nexthop_set_node_info(rn, NULL);
-			bgp_unlock_node(rn);
+			route_unlock_node(rn);
 		}
 	}
 }
@@ -262,7 +262,7 @@ void bgp_connected_add(struct bgp *bgp, struct connected *ifc)
 {
 	struct prefix p;
 	struct prefix *addr;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_connected_ref *bc;
 	struct listnode *node, *nnode;
 	struct peer *peer;
@@ -329,7 +329,7 @@ void bgp_connected_delete(struct bgp *bgp, struct connected *ifc)
 {
 	struct prefix p;
 	struct prefix *addr;
-	struct bgp_node *rn = NULL;
+	struct route_node *rn = NULL;
 	struct bgp_connected_ref *bc;
 
 	addr = ifc->address;
@@ -363,24 +363,23 @@ void bgp_connected_delete(struct bgp *bgp, struct connected *ifc)
 		XFREE(MTYPE_BGP_CONN, bc);
 		bgp_connected_set_node_info(rn, NULL);
 	}
-	bgp_unlock_node(rn);
-	bgp_unlock_node(rn);
+	route_unlock_node(rn);
+	route_unlock_node(rn);
 }
 
 static void bgp_connected_cleanup(struct route_table *table,
 				  struct route_node *rn)
 {
 	struct bgp_connected_ref *bc;
-	struct bgp_node *bn = bgp_node_from_rnode(rn);
 
-	bc = bgp_connected_get_node_info(bn);
+	bc = bgp_connected_get_node_info(rn);
 	if (!bc)
 		return;
 
 	bc->refcnt--;
 	if (bc->refcnt == 0) {
 		XFREE(MTYPE_BGP_CONN, bc);
-		bgp_connected_set_node_info(bn, NULL);
+		bgp_connected_set_node_info(rn, NULL);
 	}
 }
 
@@ -405,8 +404,8 @@ int bgp_nexthop_self(struct bgp *bgp, struct in_addr nh_addr)
 
 int bgp_multiaccess_check_v4(struct in_addr nexthop, struct peer *peer)
 {
-	struct bgp_node *rn1;
-	struct bgp_node *rn2;
+	struct route_node *rn1;
+	struct route_node *rn2;
 	struct prefix p;
 	int ret;
 
@@ -424,14 +423,14 @@ int bgp_multiaccess_check_v4(struct in_addr nexthop, struct peer *peer)
 
 	rn2 = bgp_node_match(peer->bgp->connected_table[AFI_IP], &p);
 	if (!rn2) {
-		bgp_unlock_node(rn1);
+		route_unlock_node(rn1);
 		return 0;
 	}
 
 	ret = (rn1 == rn2) ? 1 : 0;
 
-	bgp_unlock_node(rn1);
-	bgp_unlock_node(rn2);
+	route_unlock_node(rn1);
+	route_unlock_node(rn2);
 
 	return (ret);
 }
@@ -439,7 +438,7 @@ int bgp_multiaccess_check_v4(struct in_addr nexthop, struct peer *peer)
 int bgp_subgrp_multiaccess_check_v4(struct in_addr nexthop,
 				    struct update_subgroup *subgrp)
 {
-	struct bgp_node *rn1, *rn2;
+	struct route_node *rn1, *rn2;
 	struct peer_af *paf;
 	struct prefix p, np;
 	struct bgp *bgp;
@@ -461,16 +460,16 @@ int bgp_subgrp_multiaccess_check_v4(struct in_addr nexthop,
 
 		rn2 = bgp_node_match(bgp->connected_table[AFI_IP], &p);
 		if (rn1 == rn2) {
-			bgp_unlock_node(rn1);
-			bgp_unlock_node(rn2);
+			route_unlock_node(rn1);
+			route_unlock_node(rn2);
 			return 1;
 		}
 
 		if (rn2)
-			bgp_unlock_node(rn2);
+			route_unlock_node(rn2);
 	}
 
-	bgp_unlock_node(rn1);
+	route_unlock_node(rn1);
 	return 0;
 }
 
@@ -519,7 +518,7 @@ static void bgp_show_nexthops_detail(struct vty *vty, struct bgp *bgp,
 
 static void bgp_show_nexthops(struct vty *vty, struct bgp *bgp, int detail)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_nexthop_cache *bnc;
 	char buf[PREFIX2STR_BUFFER];
 	time_t tbuf;
@@ -531,7 +530,7 @@ static void bgp_show_nexthops(struct vty *vty, struct bgp *bgp, int detail)
 			continue;
 
 		for (rn = bgp_table_top(bgp->nexthop_cache_table[afi]); rn;
-		     rn = bgp_route_next(rn)) {
+		     rn = route_next(rn)) {
 			bnc = bgp_nexthop_get_node_info(rn);
 			if (!bnc)
 				continue;

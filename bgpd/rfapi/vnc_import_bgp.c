@@ -520,7 +520,7 @@ static void vnc_import_bgp_add_route_mode_resolve_nve_one_rd(
 	uint32_t *med,		    /* NULL = no med */
 	struct prefix *ubi_nexthop) /* unicast nexthop */
 {
-	struct bgp_node *bn;
+	struct route_node *bn;
 	struct bgp_info *bi;
 
 	if (!table_rd)
@@ -550,7 +550,7 @@ static void vnc_import_bgp_add_route_mode_resolve_nve_one_rd(
 			prd, prefix, local_pref, med, ecom);
 	}
 
-	bgp_unlock_node(bn);
+	route_unlock_node(bn);
 }
 
 static void vnc_import_bgp_add_route_mode_resolve_nve(
@@ -566,7 +566,7 @@ static void vnc_import_bgp_add_route_mode_resolve_nve(
 	uint32_t *med = NULL;
 
 	struct prefix_bag *pb;
-	struct bgp_node *bnp; /* prd table node */
+	struct route_node *bnp; /* prd table node */
 
 	/*debugging */
 	if (VNC_DEBUG(VERBOSE)) {
@@ -669,7 +669,7 @@ static void vnc_import_bgp_add_route_mode_resolve_nve(
 	 */
 
 	for (bnp = bgp_table_top(bgp->rib[afi][SAFI_MPLS_VPN]); bnp;
-	     bnp = bgp_route_next(bnp)) {
+	     bnp = route_next(bnp)) {
 
 		struct bgp_table *table;
 
@@ -1277,7 +1277,7 @@ static void vnc_import_bgp_del_route_mode_resolve_nve_one_rd(
 	afi_t afi, struct bgp *bgp, struct prefix *prefix, /* unicast prefix */
 	struct prefix *ubi_nexthop) /* unicast bi's nexthop */
 {
-	struct bgp_node *bn;
+	struct route_node *bn;
 	struct bgp_info *bi;
 
 	if (!table_rd)
@@ -1308,7 +1308,7 @@ static void vnc_import_bgp_del_route_mode_resolve_nve_one_rd(
 			prefix);      /* unicast route prefix */
 	}
 
-	bgp_unlock_node(bn);
+	route_unlock_node(bn);
 }
 
 static void vnc_import_bgp_del_route_mode_resolve_nve(struct bgp *bgp,
@@ -1325,7 +1325,7 @@ static void vnc_import_bgp_del_route_mode_resolve_nve(struct bgp *bgp,
 	void *cursor;
 	struct skiplist *sl = bgp->rfapi->resolve_nve_nexthop;
 	int rc;
-	struct bgp_node *bnp; /* prd table node */
+	struct route_node *bnp; /* prd table node */
 
 	if (!sl) {
 		vnc_zlog_debug_verbose("%s: no RHN entries, skipping",
@@ -1367,7 +1367,7 @@ static void vnc_import_bgp_del_route_mode_resolve_nve(struct bgp *bgp,
 	 */
 
 	for (bnp = bgp_table_top(bgp->rib[afi][SAFI_MPLS_VPN]); bnp;
-	     bnp = bgp_route_next(bnp)) {
+	     bnp = route_next(bnp)) {
 
 		struct bgp_table *table;
 
@@ -2753,7 +2753,7 @@ void vnc_import_bgp_redist_enable(struct bgp *bgp, afi_t afi)
 	/* iterate over bgp unicast v4 and v6 routes, call
 	 * vnc_import_bgp_add_route */
 
-	struct bgp_node *rn;
+	struct route_node *rn;
 
 	vnc_zlog_debug_verbose("%s: entry, afi=%d", __func__, afi);
 
@@ -2766,7 +2766,7 @@ void vnc_import_bgp_redist_enable(struct bgp *bgp, afi_t afi)
 	bgp->rfapi_cfg->redist[afi][ZEBRA_ROUTE_BGP_DIRECT] = 1;
 
 	for (rn = bgp_table_top(bgp->rib[afi][SAFI_UNICAST]); rn;
-	     rn = bgp_route_next(rn)) {
+	     rn = route_next(rn)) {
 
 		struct bgp_info *bi;
 
@@ -2786,7 +2786,7 @@ void vnc_import_bgp_redist_enable(struct bgp *bgp, afi_t afi)
 void vnc_import_bgp_exterior_redist_enable(struct bgp *bgp, afi_t afi)
 {
 	struct bgp *bgp_exterior;
-	struct bgp_node *rn;
+	struct route_node *rn;
 
 	bgp_exterior = bgp->rfapi_cfg->redist_bgp_exterior_view;
 
@@ -2806,7 +2806,7 @@ void vnc_import_bgp_exterior_redist_enable(struct bgp *bgp, afi_t afi)
 	}
 
 	for (rn = bgp_table_top(bgp_exterior->rib[afi][SAFI_UNICAST]); rn;
-	     rn = bgp_route_next(rn)) {
+	     rn = route_next(rn)) {
 
 		struct bgp_info *bi;
 
@@ -2831,7 +2831,7 @@ void vnc_import_bgp_exterior_redist_enable_it(
 	struct bgp *bgp, afi_t afi, struct rfapi_import_table *it_only)
 {
 	struct bgp *bgp_exterior;
-	struct bgp_node *rn;
+	struct route_node *rn;
 
 	vnc_zlog_debug_verbose("%s: entry", __func__);
 
@@ -2851,7 +2851,7 @@ void vnc_import_bgp_exterior_redist_enable_it(
 	}
 
 	for (rn = bgp_table_top(bgp_exterior->rib[afi][SAFI_UNICAST]); rn;
-	     rn = bgp_route_next(rn)) {
+	     rn = route_next(rn)) {
 
 		struct bgp_info *bi;
 
@@ -2873,8 +2873,8 @@ void vnc_import_bgp_redist_disable(struct bgp *bgp, afi_t afi)
 	 * iterate over vpn routes, find routes of type ZEBRA_ROUTE_BGP_DIRECT,
 	 * delete (call timer expire immediately)
 	 */
-	struct bgp_node *rn1;
-	struct bgp_node *rn2;
+	struct route_node *rn1;
+	struct route_node *rn2;
 
 	vnc_zlog_debug_verbose("%s: entry", __func__);
 
@@ -2890,13 +2890,13 @@ void vnc_import_bgp_redist_disable(struct bgp *bgp, afi_t afi)
 	 * Be careful when changing the things we iterate over
 	 */
 	for (rn1 = bgp_table_top(bgp->rib[afi][SAFI_MPLS_VPN]); rn1;
-	     rn1 = bgp_route_next(rn1)) {
+	     rn1 = route_next(rn1)) {
 
 		if (!bgp_has_info_data(rn1))
 			continue;
 
 		for (rn2 = bgp_table_top(rn1->info); rn2;
-		     rn2 = bgp_route_next(rn2)) {
+		     rn2 = route_next(rn2)) {
 
 			struct bgp_info *bi;
 			struct bgp_info *nextbi;
@@ -2977,9 +2977,9 @@ void vnc_import_bgp_exterior_redist_disable(struct bgp *bgp, afi_t afi)
 
 
 	{
-		struct bgp_node *rn;
+		struct route_node *rn;
 		for (rn = bgp_table_top(bgp_exterior->rib[afi][SAFI_UNICAST]);
-		     rn; rn = bgp_route_next(rn)) {
+		     rn; rn = route_next(rn)) {
 
 			struct bgp_info *bi;
 

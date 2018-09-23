@@ -80,7 +80,7 @@ static inline int is_route_parent_evpn(struct bgp_info *ri)
 {
 	struct bgp_info *parent_ri;
 	struct bgp_table *table;
-	struct bgp_node *rn;
+	struct route_node *rn;
 
 	/* If not imported (or doesn't have a parent), bail. */
 	if (ri->sub_type != BGP_ROUTE_IMPORTED ||

@@ -159,7 +159,7 @@ struct bgp_info {
 	LIST_ENTRY(bgp_info) nh_thread;
 
 	/* Back pointer to the prefix node */
-	struct bgp_node *net;
+	struct route_node *net;
 
 	/* Back pointer to the nexthop structure */
 	struct bgp_nexthop_cache *nexthop;
@@ -320,9 +320,10 @@ struct bgp_static {
 
 enum bgp_path_type { BGP_PATH_ALL, BGP_PATH_BESTPATH, BGP_PATH_MULTIPATH };
 
-static inline void bgp_bump_version(struct bgp_node *node)
+static inline void bgp_bump_version(struct route_node *node)
 {
-	node->dest.version = bgp_table_next_version(bgp_node_table(node));
+	struct bgp_dest *dest = bgp_dest_from_node(node);
+	dest->version = bgp_table_next_version(bgp_node_table(node));
 }
 
 static inline int bgp_fibupd_safi(safi_t safi)
@@ -335,7 +336,7 @@ static inline int bgp_fibupd_safi(safi_t safi)
 }
 
 /* Prototypes. */
-extern void bgp_rib_remove(struct bgp_node *rn, struct bgp_info *ri,
+extern void bgp_rib_remove(struct route_node *rn, struct bgp_info *ri,
 			   struct peer *peer, afi_t afi, safi_t safi);
 extern void bgp_process_queue_init(void);
 extern void bgp_route_init(void);
@@ -351,17 +352,17 @@ extern void bgp_clear_route_all(struct peer *);
 extern void bgp_clear_adj_in(struct peer *, afi_t, safi_t);
 extern void bgp_clear_stale_route(struct peer *, afi_t, safi_t);
 
-extern struct bgp_node *bgp_afi_node_get(struct bgp_table *table, afi_t afi,
+extern struct route_node *bgp_afi_node_get(struct bgp_table *table, afi_t afi,
 					 safi_t safi, struct prefix *p,
 					 struct prefix_rd *prd);
 extern struct bgp_info *bgp_info_lock(struct bgp_info *);
 extern struct bgp_info *bgp_info_unlock(struct bgp_info *);
-extern void bgp_info_add(struct bgp_node *rn, struct bgp_info *ri);
-extern void bgp_info_reap(struct bgp_node *rn, struct bgp_info *ri);
-extern void bgp_info_delete(struct bgp_node *rn, struct bgp_info *ri);
+extern void bgp_info_add(struct route_node *rn, struct bgp_info *ri);
+extern void bgp_info_reap(struct route_node *rn, struct bgp_info *ri);
+extern void bgp_info_delete(struct route_node *rn, struct bgp_info *ri);
 extern struct bgp_info_extra *bgp_info_extra_get(struct bgp_info *);
-extern void bgp_info_set_flag(struct bgp_node *, struct bgp_info *, uint32_t);
-extern void bgp_info_unset_flag(struct bgp_node *, struct bgp_info *, uint32_t);
+extern void bgp_info_set_flag(struct route_node *, struct bgp_info *, uint32_t);
+extern void bgp_info_unset_flag(struct route_node *, struct bgp_info *, uint32_t);
 extern void bgp_info_path_with_addpath_rx_str(struct bgp_info *ri, char *buf);
 
 extern int bgp_nlri_parse_ip(struct peer *, struct attr *, struct bgp_nlri *);
@@ -403,7 +404,7 @@ extern int bgp_withdraw(struct peer *, struct prefix *, uint32_t, struct attr *,
 			mpls_label_t *, uint32_t, struct bgp_route_evpn *);
 
 /* for bgp_nexthop and bgp_damp */
-extern void bgp_process(struct bgp *, struct bgp_node *, afi_t, safi_t);
+extern void bgp_process(struct bgp *, struct route_node *, afi_t, safi_t);
 
 /*
  * Add an end-of-initial-update marker to the process queue. This is just a
@@ -429,7 +430,7 @@ extern safi_t bgp_node_safi(struct vty *);
 
 extern struct bgp_info *info_make(int type, int sub_type,
 				  unsigned short instance, struct peer *peer,
-				  struct attr *attr, struct bgp_node *rn);
+				  struct attr *attr, struct route_node *rn);
 
 extern void route_vty_out(struct vty *, struct prefix *, struct bgp_info *, int,
 			  safi_t, json_object *);
@@ -444,10 +445,10 @@ extern void route_vty_out_overlay(struct vty *vty, struct prefix *p,
 
 extern int subgroup_process_announce_selected(struct update_subgroup *subgrp,
 					      struct bgp_info *selected,
-					      struct bgp_node *rn,
+					      struct route_node *rn,
 					      uint32_t addpath_tx_id);
 
-extern int subgroup_announce_check(struct bgp_node *rn, struct bgp_info *ri,
+extern int subgroup_announce_check(struct route_node *rn, struct bgp_info *ri,
 				   struct update_subgroup *subgrp,
 				   struct prefix *p, struct attr *attr);
 
@@ -455,27 +456,27 @@ extern void bgp_peer_clear_node_queue_drain_immediate(struct peer *peer);
 extern void bgp_process_queues_drain_immediate(void);
 
 /* for encap/vpn */
-extern struct bgp_node *bgp_afi_node_lookup(struct bgp_table *table, afi_t afi,
+extern struct route_node *bgp_afi_node_lookup(struct bgp_table *table, afi_t afi,
 					    safi_t safi, struct prefix *p,
 					    struct prefix_rd *prd);
 extern struct bgp_info *bgp_info_new(void);
-extern void bgp_info_restore(struct bgp_node *, struct bgp_info *);
+extern void bgp_info_restore(struct route_node *, struct bgp_info *);
 
 extern int bgp_info_cmp_compatible(struct bgp *, struct bgp_info *,
 				   struct bgp_info *, char *pfx_buf, afi_t afi,
 				   safi_t safi);
 extern void bgp_attr_add_gshut_community(struct attr *attr);
 
-extern void bgp_best_selection(struct bgp *bgp, struct bgp_node *rn,
+extern void bgp_best_selection(struct bgp *bgp, struct route_node *rn,
 			       struct bgp_maxpaths_cfg *mpath_cfg,
 			       struct bgp_info_pair *result, afi_t afi,
 			       safi_t safi);
-extern void bgp_zebra_clear_route_change_flags(struct bgp_node *rn);
-extern int bgp_zebra_has_route_changed(struct bgp_node *rn,
+extern void bgp_zebra_clear_route_change_flags(struct route_node *rn);
+extern int bgp_zebra_has_route_changed(struct route_node *rn,
 				       struct bgp_info *selected);
 
 extern void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
-					struct bgp_node *rn,
+					struct route_node *rn,
 					struct prefix_rd *prd, afi_t afi,
 					safi_t safi, json_object *json);
 extern void route_vty_out_detail(struct vty *vty, struct bgp *bgp,

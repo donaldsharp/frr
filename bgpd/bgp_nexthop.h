@@ -61,7 +61,7 @@ struct bgp_nexthop_cache {
 #define BGP_NEXTHOP_METRIC_CHANGED    (1 << 1)
 #define BGP_NEXTHOP_CONNECTED_CHANGED (1 << 2)
 
-	struct bgp_node *node;
+	struct route_node *node;
 	void *nht_info; /* In BGP, peer session */
 	LIST_HEAD(path_list, bgp_info) paths;
 	unsigned int path_count;

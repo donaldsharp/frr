@@ -686,7 +686,7 @@ struct bpacket *subgroup_update_packet(struct update_subgroup *subgrp)
 	struct stream *packet;
 	struct bgp_adj_out *adj;
 	struct bgp_advertise *adv;
-	struct bgp_node *rn = NULL;
+	struct route_node *rn = NULL;
 	struct bgp_info *binfo = NULL;
 	bgp_size_t total_attr_len = 0;
 	unsigned long attrlen_pos = 0;
@@ -936,7 +936,7 @@ struct bpacket *subgroup_withdraw_packet(struct update_subgroup *subgrp)
 	struct bgp_adj_out *adj;
 	struct bgp_advertise *adv;
 	struct peer *peer;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	bgp_size_t unfeasible_len;
 	bgp_size_t total_attr_len;
 	size_t mp_start = 0;
@@ -1045,7 +1045,7 @@ struct bpacket *subgroup_withdraw_packet(struct update_subgroup *subgrp)
 		subgrp->scount--;
 
 		bgp_adj_out_remove_subgroup(rn, adj, subgrp);
-		bgp_unlock_node(rn);
+		route_unlock_node(rn);
 	}
 
 	if (!stream_empty(s)) {

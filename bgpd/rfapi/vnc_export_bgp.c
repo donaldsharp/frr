@@ -179,7 +179,7 @@ void vnc_direct_bgp_add_route_ce(struct bgp *bgp, struct agg_node *rn,
 	struct peer *peer = bi->peer;
 	struct prefix *prefix = &rn->p;
 	afi_t afi = family2afi(prefix->family);
-	struct bgp_node *urn;
+	struct route_node *urn;
 	struct bgp_info *ubi;
 	struct attr hattr;
 	struct attr *iattr;
@@ -461,7 +461,7 @@ static void vnc_direct_bgp_vpn_enable_ce(struct bgp *bgp, afi_t afi)
 
 static void vnc_direct_bgp_vpn_disable_ce(struct bgp *bgp, afi_t afi)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 
 	vnc_zlog_debug_verbose("%s: entry, afi=%d", __func__, afi);
 
@@ -478,7 +478,7 @@ static void vnc_direct_bgp_vpn_disable_ce(struct bgp *bgp, afi_t afi)
 	 * originated from us
 	 */
 	for (rn = bgp_table_top(bgp->rib[afi][SAFI_UNICAST]); rn;
-	     rn = bgp_route_next(rn)) {
+	     rn = route_next(rn)) {
 
 		struct bgp_info *ri;
 		struct bgp_info *next;
@@ -1804,7 +1804,7 @@ void vnc_direct_bgp_rh_del_route(struct bgp *bgp, afi_t afi,
 void vnc_direct_bgp_rh_vpn_enable(struct bgp *bgp, afi_t afi)
 {
 	struct prefix_rd prd;
-	struct bgp_node *prn;
+	struct route_node *prn;
 	struct rfapi_cfg *hc;
 
 	vnc_zlog_debug_verbose("%s: entry, afi=%d", __func__, afi);
@@ -1835,10 +1835,10 @@ void vnc_direct_bgp_rh_vpn_enable(struct bgp *bgp, afi_t afi)
 
 	/* Loop over all the RDs */
 	for (prn = bgp_table_top(bgp->rib[afi][SAFI_MPLS_VPN]); prn;
-	     prn = bgp_route_next(prn)) {
+	     prn = route_next(prn)) {
 
 		struct bgp_table *table;
-		struct bgp_node *rn;
+		struct route_node *rn;
 		struct bgp_info *ri;
 
 		memset(&prd, 0, sizeof(prd));
@@ -1852,7 +1852,7 @@ void vnc_direct_bgp_rh_vpn_enable(struct bgp *bgp, afi_t afi)
 		if (!table)
 			continue;
 
-		for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
+		for (rn = bgp_table_top(table); rn; rn = route_next(rn)) {
 
 			/*
 			 * skip prefix list check if no routes here
@@ -1982,7 +1982,7 @@ void vnc_direct_bgp_rh_vpn_enable(struct bgp *bgp, afi_t afi)
 
 void vnc_direct_bgp_rh_vpn_disable(struct bgp *bgp, afi_t afi)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 
 	vnc_zlog_debug_verbose("%s: entry, afi=%d", __func__, afi);
 
@@ -1999,7 +1999,7 @@ void vnc_direct_bgp_rh_vpn_disable(struct bgp *bgp, afi_t afi)
 	 * originated from us
 	 */
 	for (rn = bgp_table_top(bgp->rib[afi][SAFI_UNICAST]); rn;
-	     rn = bgp_route_next(rn)) {
+	     rn = route_next(rn)) {
 
 		struct bgp_info *ri;
 		struct bgp_info *next;

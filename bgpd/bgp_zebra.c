@@ -1182,7 +1182,7 @@ static int update_ipv6nh_for_route_install(int nh_othervrf,
 	return 1;
 }
 
-void bgp_zebra_announce(struct bgp_node *rn, struct prefix *p,
+void bgp_zebra_announce(struct route_node *rn, struct prefix *p,
 			struct bgp_info *info, struct bgp *bgp, afi_t afi,
 			safi_t safi)
 {
@@ -1464,7 +1464,7 @@ void bgp_zebra_announce(struct bgp_node *rn, struct prefix *p,
 /* Announce all routes of a table to zebra */
 void bgp_zebra_announce_table(struct bgp *bgp, afi_t afi, safi_t safi)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_table *table;
 	struct bgp_info *ri;
 
@@ -1478,7 +1478,7 @@ void bgp_zebra_announce_table(struct bgp *bgp, afi_t afi, safi_t safi)
 	if (!table)
 		return;
 
-	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn))
+	for (rn = bgp_table_top(table); rn; rn = route_next(rn))
 		for (ri = bgp_info_from_node(rn); ri; ri = ri->next)
 			if (CHECK_FLAG(ri->flags, BGP_INFO_SELECTED) &&
 
@@ -1679,7 +1679,7 @@ int bgp_redistribute_rmap_set(struct bgp_redist *red, const char *name)
 int bgp_redistribute_metric_set(struct bgp *bgp, struct bgp_redist *red,
 				afi_t afi, int type, uint32_t metric)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_info *ri;
 
 	if (red->redist_metric_flag && red->redist_metric == metric)
@@ -1689,7 +1689,7 @@ int bgp_redistribute_metric_set(struct bgp *bgp, struct bgp_redist *red,
 	red->redist_metric = metric;
 
 	for (rn = bgp_table_top(bgp->rib[afi][SAFI_UNICAST]); rn;
-	     rn = bgp_route_next(rn)) {
+	     rn = route_next(rn)) {
 		for (ri = bgp_info_from_node(rn); ri; ri = ri->next) {
 			if (ri->sub_type == BGP_ROUTE_REDISTRIBUTE
 			    && ri->type == type

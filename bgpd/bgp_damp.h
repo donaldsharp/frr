@@ -47,7 +47,7 @@ struct bgp_damp_info {
 	struct bgp_info *binfo;
 
 	/* Back reference to bgp_node. */
-	struct bgp_node *rn;
+	struct route_node *rn;
 
 	/* Current index in the reuse_list. */
 	int index;
@@ -130,9 +130,10 @@ struct bgp_damp_config {
 extern int bgp_damp_enable(struct bgp *, afi_t, safi_t, time_t, unsigned int,
 			   unsigned int, time_t);
 extern int bgp_damp_disable(struct bgp *, afi_t, safi_t);
-extern int bgp_damp_withdraw(struct bgp_info *, struct bgp_node *, afi_t,
-			     safi_t, int);
-extern int bgp_damp_update(struct bgp_info *, struct bgp_node *, afi_t, safi_t);
+extern int bgp_damp_withdraw(struct bgp_info *bi, struct route_node *rn,
+			     afi_t afi, safi_t safi, int attr_change);
+extern int bgp_damp_update(struct bgp_info *bi, struct route_node *rn,
+			   afi_t afi, safi_t safi);
 extern int bgp_damp_scan(struct bgp_info *, afi_t, safi_t);
 extern void bgp_damp_info_free(struct bgp_damp_info *, int);
 extern void bgp_damp_info_clean(void);

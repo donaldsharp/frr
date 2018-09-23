@@ -369,7 +369,7 @@ int bgp_show_table_flowspec(struct vty *vty, struct bgp *bgp, afi_t afi,
 			    unsigned long *output_cum, unsigned long *total_cum)
 {
 	struct bgp_info *ri;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	unsigned long total_count = 0;
 	json_object *json_paths = NULL;
 	int display = NLRI_STRING_FORMAT_LARGE;
@@ -377,7 +377,7 @@ int bgp_show_table_flowspec(struct vty *vty, struct bgp *bgp, afi_t afi,
 	if (type != bgp_show_type_detail)
 		return CMD_SUCCESS;
 
-	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
+	for (rn = bgp_table_top(table); rn; rn = route_next(rn)) {
 		ri = bgp_info_from_node(rn);
 		if (ri == NULL)
 			continue;
@@ -533,11 +533,11 @@ extern int bgp_flowspec_display_match_per_ip(afi_t afi, struct bgp_table *rib,
 					     bool use_json,
 					     json_object *json_paths)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct prefix *prefix;
 	int display = 0;
 
-	for (rn = bgp_table_top(rib); rn; rn = bgp_route_next(rn)) {
+	for (rn = bgp_table_top(rib); rn; rn = route_next(rn)) {
 		prefix = &rn->p;
 
 		if (prefix->family != AF_FLOWSPEC)

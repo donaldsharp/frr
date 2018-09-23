@@ -53,7 +53,7 @@ struct bgp_advertise {
 	struct bgp_advertise *prev;
 
 	/* Prefix information.  */
-	struct bgp_node *rn;
+	struct route_node *rn;
 
 	/* Reference pointer.  */
 	struct bgp_adj_out *adj;
@@ -78,7 +78,7 @@ struct bgp_adj_out {
 	TAILQ_ENTRY(bgp_adj_out) subgrp_adj_train;
 
 	/* Prefix information.  */
-	struct bgp_node *rn;
+	struct route_node *rn;
 
 	uint32_t addpath_tx_id;
 
@@ -168,11 +168,13 @@ struct bgp_synchronize {
 		 : (F)->next)
 
 /* Prototypes.  */
-extern int bgp_adj_out_lookup(struct peer *, struct bgp_node *, uint32_t);
-extern void bgp_adj_in_set(struct bgp_node *, struct peer *, struct attr *,
-			   uint32_t);
-extern int bgp_adj_in_unset(struct bgp_node *, struct peer *, uint32_t);
-extern void bgp_adj_in_remove(struct bgp_node *, struct bgp_adj_in *);
+extern int bgp_adj_out_lookup(struct peer *p, struct route_node *rn,
+			      uint32_t addpath_tx_id);
+extern void bgp_adj_in_set(struct route_node *rn, struct peer *p,
+			   struct attr *attr, uint32_t addpath_id);
+extern int bgp_adj_in_unset(struct route_node *rn, struct peer *p,
+			    uint32_t addpath_id);
+extern void bgp_adj_in_remove(struct route_node *rn, struct bgp_adj_in *bai);
 
 extern void bgp_sync_init(struct peer *);
 extern void bgp_sync_delete(struct peer *);

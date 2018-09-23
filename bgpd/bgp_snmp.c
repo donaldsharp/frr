@@ -682,7 +682,7 @@ static struct bgp_info *bgp4PathAttrLookup(struct variable *v, oid name[],
 	int offsetlen;
 	struct bgp_info *binfo;
 	struct bgp_info *min;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	union sockunion su;
 	unsigned int len;
 	struct in_addr paddr;
@@ -804,7 +804,7 @@ static struct bgp_info *bgp4PathAttrLookup(struct variable *v, oid name[],
 			}
 
 			paddr.s_addr = 0;
-		} while ((rn = bgp_route_next(rn)) != NULL);
+		} while ((rn = route_next(rn)) != NULL);
 	}
 	return NULL;
 }

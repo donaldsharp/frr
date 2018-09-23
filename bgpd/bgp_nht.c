@@ -98,7 +98,7 @@ static void bgp_unlink_nexthop_check(struct bgp_nexthop_cache *bnc)
 		unregister_zebra_rnh(bnc,
 				     CHECK_FLAG(bnc->flags, BGP_STATIC_ROUTE));
 		bgp_nexthop_set_node_info(bnc->node, NULL);
-		bgp_unlock_node(bnc->node);
+		route_unlock_node(bnc->node);
 		bnc->node = NULL;
 		bnc_free(bnc);
 	}
@@ -119,7 +119,7 @@ void bgp_unlink_nexthop(struct bgp_info *path)
 void bgp_unlink_nexthop_by_peer(struct peer *peer)
 {
 	struct prefix p;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_nexthop_cache *bnc;
 	afi_t afi = family2afi(peer->su.sa.sa_family);
 
@@ -146,7 +146,7 @@ int bgp_find_or_add_nexthop(struct bgp *bgp_route, struct bgp *bgp_nexthop,
 			    afi_t afi, struct bgp_info *ri,
 			    struct peer *peer, int connected)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_nexthop_cache *bnc;
 	struct prefix p;
 	int is_bgp_static_route = 0;
@@ -196,7 +196,7 @@ int bgp_find_or_add_nexthop(struct bgp *bgp_route, struct bgp *bgp_nexthop,
 		bgp_nexthop_set_node_info(rn, bnc);
 		bnc->node = rn;
 		bnc->bgp = bgp_nexthop;
-		bgp_lock_node(rn);
+		route_lock_node(rn);
 		if (BGP_DEBUG(nht, NHT)) {
 			char buf[PREFIX2STR_BUFFER];
 
@@ -205,7 +205,7 @@ int bgp_find_or_add_nexthop(struct bgp *bgp_route, struct bgp *bgp_nexthop,
 		}
 	}
 
-	bgp_unlock_node(rn);
+	route_unlock_node(rn);
 	if (is_bgp_static_route) {
 		SET_FLAG(bnc->flags, BGP_STATIC_ROUTE);
 
@@ -280,7 +280,7 @@ int bgp_find_or_add_nexthop(struct bgp *bgp_route, struct bgp *bgp_nexthop,
 
 void bgp_delete_connected_nexthop(afi_t afi, struct peer *peer)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_nexthop_cache *bnc;
 	struct prefix p;
 
@@ -308,10 +308,10 @@ void bgp_delete_connected_nexthop(afi_t afi, struct peer *peer)
 		if (BGP_DEBUG(nht, NHT))
 			zlog_debug("Cannot find connected NHT node for peer %s on route_node as expected",
 				   peer->host);
-		bgp_unlock_node(rn);
+		route_unlock_node(rn);
 		return;
 	}
-	bgp_unlock_node(rn);
+	route_unlock_node(rn);
 
 	if (bnc->nht_info != peer) {
 		if (BGP_DEBUG(nht, NHT))
@@ -329,14 +329,14 @@ void bgp_delete_connected_nexthop(afi_t afi, struct peer *peer)
 				   bnc, peer->host);
 		unregister_zebra_rnh(bnc, 0);
 		bgp_nexthop_set_node_info(bnc->node, NULL);
-		bgp_unlock_node(bnc->node);
+		route_unlock_node(bnc->node);
 		bnc_free(bnc);
 	}
 }
 
 void bgp_parse_nexthop_update(int command, vrf_id_t vrf_id)
 {
-	struct bgp_node *rn = NULL;
+	struct route_node *rn = NULL;
 	struct bgp_nexthop_cache *bnc;
 	struct nexthop *nexthop;
 	struct nexthop *oldnh;
@@ -390,11 +390,11 @@ void bgp_parse_nexthop_update(int command, vrf_id_t vrf_id)
 			zlog_debug("parse nexthop update(%s): bnc node info not found",
 				   buf);
 		}
-		bgp_unlock_node(rn);
+		route_unlock_node(rn);
 		return;
 	}
 
-	bgp_unlock_node(rn);
+	route_unlock_node(rn);
 	bnc->last_update = bgp_clock();
 	bnc->change_flags = 0;
 
@@ -492,7 +492,7 @@ void bgp_parse_nexthop_update(int command, vrf_id_t vrf_id)
 void bgp_cleanup_nexthops(struct bgp *bgp)
 {
 	afi_t afi;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_nexthop_cache *bnc;
 
 	for (afi = AFI_IP; afi < AFI_MAX; afi++) {
@@ -500,7 +500,7 @@ void bgp_cleanup_nexthops(struct bgp *bgp)
 			continue;
 
 		for (rn = bgp_table_top(bgp->nexthop_cache_table[afi]); rn;
-		     rn = bgp_route_next(rn)) {
+		     rn = route_next(rn)) {
 			bnc = bgp_nexthop_get_node_info(rn);
 			if (!bnc)
 				continue;
@@ -667,7 +667,7 @@ static void unregister_zebra_rnh(struct bgp_nexthop_cache *bnc,
  */
 static void evaluate_paths(struct bgp_nexthop_cache *bnc)
 {
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp_info *path;
 	int afi;
 	struct peer *peer = (struct peer *)bnc->nht_info;

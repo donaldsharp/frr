@@ -3003,7 +3003,7 @@ static void bgp_route_map_process_update(struct bgp *bgp, const char *rmap_name,
 	afi_t afi;
 	safi_t safi;
 	struct peer *peer;
-	struct bgp_node *bn;
+	struct route_node *bn;
 	struct bgp_static *bgp_static;
 	struct listnode *node, *nnode;
 	struct route_map *map;
@@ -3053,7 +3053,7 @@ static void bgp_route_map_process_update(struct bgp *bgp, const char *rmap_name,
 
 		/* For network route-map updates. */
 		for (bn = bgp_table_top(bgp->route[afi][safi]); bn;
-		     bn = bgp_route_next(bn))
+		     bn = route_next(bn))
 			if ((bgp_static = bn->info) != NULL) {
 				if (bgp_static->rmap.name
 				    && (strcmp(rmap_name, bgp_static->rmap.name)

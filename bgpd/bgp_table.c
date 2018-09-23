@@ -64,11 +64,10 @@ void bgp_table_finish(struct bgp_table **rt)
 static struct route_node *bgp_node_create(route_table_delegate_t *delegate,
 					  struct route_table *table)
 {
-	struct bgp_node *node;
-	node = XCALLOC(MTYPE_BGP_NODE, sizeof(struct bgp_node));
+	struct route_node *node;
+	node = XCALLOC(MTYPE_BGP_NODE, sizeof(struct route_node));
 
-	node->dest.bn = node;
-	return bgp_node_to_rnode(node);
+	return node;
 }
 
 /*
@@ -77,9 +76,9 @@ static struct route_node *bgp_node_create(route_table_delegate_t *delegate,
 static void bgp_node_destroy(route_table_delegate_t *delegate,
 			     struct route_table *table, struct route_node *node)
 {
-	struct bgp_node *bgp_node;
-	bgp_node = bgp_node_from_rnode(node);
-	XFREE(MTYPE_BGP_NODE, bgp_node);
+	if (node->info)
+		XFREE(MTYPE_TMP, node->info);
+	XFREE(MTYPE_BGP_NODE, node);
 }
 
 /*
@@ -117,25 +116,24 @@ struct bgp_table *bgp_table_init(struct bgp *bgp, afi_t afi, safi_t safi)
 	return rt;
 }
 
-static struct bgp_node *
-bgp_route_next_until_maxlen(struct bgp_node *node, const struct bgp_node *limit,
+static struct route_node *
+bgp_route_next_until_maxlen(struct route_node *node, const struct route_node *limit,
 			    const uint8_t maxlen)
 {
 	if (node->l_left && node->p.prefixlen < maxlen
 	    && node->l_left->p.prefixlen <= maxlen) {
-		return bgp_node_from_rnode(node->l_left);
+		return node->l_left;
 	}
 	if (node->l_right && node->p.prefixlen < maxlen
 	    && node->l_right->p.prefixlen <= maxlen) {
-		return bgp_node_from_rnode(node->l_right);
+		return node->l_right;
 	}
 
 	while (node->parent && node != limit) {
-		if (bgp_node_from_rnode(node->parent->l_left) == node
-		    && node->parent->l_right) {
-			return bgp_node_from_rnode(node->parent->l_right);
+		if (node->parent->l_left == node && node->parent->l_right) {
+			return node->parent->l_right;
 		}
-		node = bgp_node_from_rnode(node->parent);
+		node = node->parent;
 	}
 	return NULL;
 }
@@ -143,8 +141,8 @@ bgp_route_next_until_maxlen(struct bgp_node *node, const struct bgp_node *limit,
 void bgp_table_range_lookup(const struct bgp_table *table, struct prefix *p,
 			    uint8_t maxlen, struct list *matches)
 {
-	struct bgp_node *node = bgp_node_from_rnode(table->route_table->top);
-	struct bgp_node *matched = NULL;
+	struct route_node *node = table->route_table->top;
+	struct route_node *matched = NULL;
 
 	while (node && node->p.prefixlen <= p->prefixlen
 	       && prefix_match(&node->p, p)) {
@@ -152,8 +150,7 @@ void bgp_table_range_lookup(const struct bgp_table *table, struct prefix *p,
 			matched = node;
 			break;
 		}
-		node = bgp_node_from_rnode(node->link[prefix_bit(
-			&p->u.prefix, node->p.prefixlen)]);
+		node = node->link[prefix_bit(&p->u.prefix, node->p.prefixlen)];
 	}
 
 	if (node == NULL)
@@ -162,17 +159,17 @@ void bgp_table_range_lookup(const struct bgp_table *table, struct prefix *p,
 	if ((matched == NULL && node->p.prefixlen > maxlen) || !node->parent)
 		return;
 	else if (matched == NULL)
-		matched = node = bgp_node_from_rnode(node->parent);
+		matched = node = node->parent;
 
 	if (matched->info) {
-		bgp_lock_node(matched);
+		route_lock_node(matched);
 		listnode_add(matches, matched);
 	}
 
 	while ((node = bgp_route_next_until_maxlen(node, matched, maxlen))) {
 		if (prefix_match(p, &node->p)) {
 			if (node->info) {
-				bgp_lock_node(node);
+				route_lock_node(node);
 				listnode_add(matches, node);
 			}
 		}

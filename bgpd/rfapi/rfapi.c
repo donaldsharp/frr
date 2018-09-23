@@ -360,7 +360,7 @@ void del_vnc_route(struct rfapi_descriptor *rfd,
 		   struct rfapi_nexthop *lnh, int kill)
 {
 	afi_t afi; /* of the VN address */
-	struct bgp_node *bn;
+	struct route_node *bn;
 	struct bgp_info *bi;
 	char buf[PREFIX_STRLEN];
 	char buf2[RD_ADDRSTRLEN];
@@ -465,7 +465,7 @@ void del_vnc_route(struct rfapi_descriptor *rfd,
 			__func__, safi, buf);
 
 		if (safi == SAFI_MPLS_VPN) {
-			struct bgp_node *prn = NULL;
+			struct route_node *prn = NULL;
 			struct bgp_table *table = NULL;
 
 			prn = bgp_node_get(bgp->rib[afi][safi],
@@ -475,7 +475,7 @@ void del_vnc_route(struct rfapi_descriptor *rfd,
 			if (table)
 				vnc_import_bgp_del_vnc_host_route_mode_resolve_nve(
 					bgp, prd, table, p, bi);
-			bgp_unlock_node(prn);
+			route_unlock_node(prn);
 		}
 
 		/*
@@ -495,7 +495,7 @@ void del_vnc_route(struct rfapi_descriptor *rfd,
 			__func__, safi, buf);
 	}
 done:
-	bgp_unlock_node(bn);
+	route_unlock_node(bn);
 }
 
 struct rfapi_nexthop *rfapi_nexthop_new(struct rfapi_nexthop *copyme)
@@ -576,7 +576,7 @@ void add_vnc_route(struct rfapi_descriptor *rfd, /* cookie, VPN UN addr, peer */
 	afi_t afi; /* of the VN address */
 	struct bgp_info *new;
 	struct bgp_info *bi;
-	struct bgp_node *bn;
+	struct route_node *bn;
 
 	struct attr attr = {0};
 	struct attr *new_attr;
@@ -1000,7 +1000,7 @@ void add_vnc_route(struct rfapi_descriptor *rfd, /* cookie, VPN UN addr, peer */
 		if (attrhash_cmp(bi->attr, new_attr)
 		    && !CHECK_FLAG(bi->flags, BGP_INFO_REMOVED)) {
 			bgp_attr_unintern(&new_attr);
-			bgp_unlock_node(bn);
+			route_unlock_node(bn);
 
 			vnc_zlog_debug_any(
 				"%s: Found route (safi=%d) at prefix %s, no change",
@@ -1012,7 +1012,7 @@ void add_vnc_route(struct rfapi_descriptor *rfd, /* cookie, VPN UN addr, peer */
 			bgp_info_set_flag(bn, bi, BGP_INFO_ATTR_CHANGED);
 
 			if (safi == SAFI_MPLS_VPN) {
-				struct bgp_node *prn = NULL;
+				struct route_node *prn = NULL;
 				struct bgp_table *table = NULL;
 
 				prn = bgp_node_get(bgp->rib[afi][safi],
@@ -1021,7 +1021,7 @@ void add_vnc_route(struct rfapi_descriptor *rfd, /* cookie, VPN UN addr, peer */
 				if (table)
 					vnc_import_bgp_del_vnc_host_route_mode_resolve_nve(
 						bgp, prd, table, p, bi);
-				bgp_unlock_node(prn);
+				route_unlock_node(prn);
 			}
 
 			/* Rewrite BGP route information. */
@@ -1035,7 +1035,7 @@ void add_vnc_route(struct rfapi_descriptor *rfd, /* cookie, VPN UN addr, peer */
 
 
 			if (safi == SAFI_MPLS_VPN) {
-				struct bgp_node *prn = NULL;
+				struct route_node *prn = NULL;
 				struct bgp_table *table = NULL;
 
 				prn = bgp_node_get(bgp->rib[afi][safi],
@@ -1044,13 +1044,13 @@ void add_vnc_route(struct rfapi_descriptor *rfd, /* cookie, VPN UN addr, peer */
 				if (table)
 					vnc_import_bgp_add_vnc_host_route_mode_resolve_nve(
 						bgp, prd, table, p, bi);
-				bgp_unlock_node(prn);
+				route_unlock_node(prn);
 			}
 
 			/* Process change. */
 			bgp_aggregate_increment(bgp, p, bi, afi, safi);
 			bgp_process(bgp, bn, afi, safi);
-			bgp_unlock_node(bn);
+			route_unlock_node(bn);
 
 			vnc_zlog_debug_any(
 				"%s: Found route (safi=%d) at prefix %s, changed attr",
@@ -1085,7 +1085,7 @@ void add_vnc_route(struct rfapi_descriptor *rfd, /* cookie, VPN UN addr, peer */
 	bgp_info_add(bn, new);
 
 	if (safi == SAFI_MPLS_VPN) {
-		struct bgp_node *prn = NULL;
+		struct route_node *prn = NULL;
 		struct bgp_table *table = NULL;
 		struct bgp_dest *dest;
 
@@ -1094,13 +1094,13 @@ void add_vnc_route(struct rfapi_descriptor *rfd, /* cookie, VPN UN addr, peer */
 		if (table)
 			vnc_import_bgp_add_vnc_host_route_mode_resolve_nve(
 				bgp, prd, table, p, new);
-		bgp_unlock_node(prn);
+		route_unlock_node(prn);
 
 		dest = bgp_dest_from_node(bn);
 		encode_label(label_val, &dest->local_label);
 	}
 
-	bgp_unlock_node(bn);
+	route_unlock_node(bn);
 	bgp_process(bgp, bn, afi, safi);
 
 	vnc_zlog_debug_any(
@@ -3684,8 +3684,8 @@ void rfapi_init(void)
 #ifdef DEBUG_RFAPI
 static void rfapi_print_exported(struct bgp *bgp)
 {
-	struct bgp_node *rdn;
-	struct bgp_node *rn;
+	struct route_node *rdn;
+	struct route_node *rn;
 	struct bgp_info *bi;
 	struct bgp_table *table;
 

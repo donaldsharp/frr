@@ -172,7 +172,7 @@ static int bgp_reuse_timer(struct thread *t)
 }
 
 /* A route becomes unreachable (RFC2439 Section 4.8.2).  */
-int bgp_damp_withdraw(struct bgp_info *binfo, struct bgp_node *rn, afi_t afi,
+int bgp_damp_withdraw(struct bgp_info *binfo, struct route_node *rn, afi_t afi,
 		      safi_t safi, int attr_change)
 {
 	time_t t_now;
@@ -252,7 +252,7 @@ int bgp_damp_withdraw(struct bgp_info *binfo, struct bgp_node *rn, afi_t afi,
 	return BGP_DAMP_USED;
 }
 
-int bgp_damp_update(struct bgp_info *binfo, struct bgp_node *rn, afi_t afi,
+int bgp_damp_update(struct bgp_info *binfo, struct route_node *rn, afi_t afi,
 		    safi_t safi)
 {
 	time_t t_now;

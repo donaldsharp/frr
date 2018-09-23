@@ -45,7 +45,7 @@ extern struct zclient *zclient;
 int bgp_parse_fec_update(void)
 {
 	struct stream *s;
-	struct bgp_node *rn;
+	struct route_node *rn;
 	struct bgp *bgp;
 	struct bgp_dest *dest;
 	struct bgp_table *table;
@@ -91,12 +91,12 @@ int bgp_parse_fec_update(void)
 		bgp_set_valid_label(&dest->local_label);
 	}
 	SET_FLAG(dest->flags, BGP_NODE_LABEL_CHANGED);
-	bgp_unlock_node(rn);
+	route_unlock_node(rn);
 	bgp_process(bgp, rn, afi, safi);
 	return 1;
 }
 
-mpls_label_t bgp_adv_label(struct bgp_node *rn, struct bgp_info *ri,
+mpls_label_t bgp_adv_label(struct route_node *rn, struct bgp_info *ri,
 			   struct peer *to, afi_t afi, safi_t safi)
 {
 	struct peer *from;
@@ -124,7 +124,7 @@ mpls_label_t bgp_adv_label(struct bgp_node *rn, struct bgp_info *ri,
 	return dest->local_label;
 }
 
-void bgp_reg_dereg_for_label(struct bgp_node *rn, struct bgp_info *ri, int reg)
+void bgp_reg_dereg_for_label(struct route_node *rn, struct bgp_info *ri, int reg)
 {
 	struct stream *s;
 	struct prefix *p;

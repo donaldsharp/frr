@@ -288,8 +288,8 @@ static void vnc_redistribute_withdraw(struct bgp *bgp, afi_t afi, uint8_t type)
 {
 	struct prefix_rd prd;
 	struct bgp_table *table;
-	struct bgp_node *prn;
-	struct bgp_node *rn;
+	struct route_node *prn;
+	struct route_node *rn;
 
 	vnc_zlog_debug_verbose("%s: entry", __func__);
 
@@ -305,7 +305,7 @@ static void vnc_redistribute_withdraw(struct bgp *bgp, afi_t afi, uint8_t type)
 	 * Loop over all the RDs
 	 */
 	for (prn = bgp_table_top(bgp->rib[afi][SAFI_MPLS_VPN]); prn;
-	     prn = bgp_route_next(prn)) {
+	     prn = route_next(prn)) {
 		memset(&prd, 0, sizeof(prd));
 		prd.family = AF_UNSPEC;
 		prd.prefixlen = 64;
@@ -314,7 +314,7 @@ static void vnc_redistribute_withdraw(struct bgp *bgp, afi_t afi, uint8_t type)
 		/* This is the per-RD table of prefixes */
 		table = prn->info;
 
-		for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn)) {
+		for (rn = bgp_table_top(table); rn; rn = route_next(rn)) {
 
 			struct bgp_info *ri;
 

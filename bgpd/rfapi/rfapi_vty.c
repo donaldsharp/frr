@@ -1534,7 +1534,7 @@ void rfapiPrintAdvertisedInfo(struct vty *vty, struct rfapi_descriptor *rfd,
 			      safi_t safi, struct prefix *p)
 {
 	afi_t afi; /* of the VN address */
-	struct bgp_node *bn;
+	struct route_node *bn;
 	struct bgp_info *bi;
 	uint8_t type = ZEBRA_ROUTE_BGP;
 	struct bgp *bgp;

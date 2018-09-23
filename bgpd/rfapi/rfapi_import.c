@@ -4220,8 +4220,8 @@ static void rfapiBgpTableFilteredImport(struct bgp *bgp,
 					struct rfapi_import_table *it,
 					afi_t afi, safi_t safi)
 {
-	struct bgp_node *rn1;
-	struct bgp_node *rn2;
+	struct route_node *rn1;
+	struct route_node *rn2;
 
 	/* Only these SAFIs have 2-level RIBS */
 	assert(safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP);
@@ -4232,13 +4232,13 @@ static void rfapiBgpTableFilteredImport(struct bgp *bgp,
 	 * if they have matching route targets
 	 */
 	for (rn1 = bgp_table_top(bgp->rib[afi][safi]); rn1;
-	     rn1 = bgp_route_next(rn1)) {
+	     rn1 = route_next(rn1)) {
 
 		if (!bgp_has_info_data(rn1))
 			continue;
 
 		for (rn2 = bgp_table_top(rn1->info); rn2;
-		     rn2 = bgp_route_next(rn2)) {
+		     rn2 = route_next(rn2)) {
 
 			struct bgp_info *bi;
 
