@@ -1411,7 +1411,7 @@ static void zebra_nht_rm_update(const char *rmap)
 						afi_ip = 1;
 
 						zebra_evaluate_rnh(
-							zvrf->vrf->vrf_id, AF_INET, 1,
+							zvrf, AF_INET, 1,
 							RNH_NEXTHOP_TYPE, NULL);
 					}
 				}
@@ -1437,7 +1437,7 @@ static void zebra_nht_rm_update(const char *rmap)
 						afi_ipv6 = 1;
 
 						zebra_evaluate_rnh(
-							zvrf->vrf->vrf_id, AF_INET, 1,
+							zvrf, AF_INET, 1,
 							RNH_NEXTHOP_TYPE, NULL);
 					}
 				}
