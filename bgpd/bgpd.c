@@ -85,6 +85,7 @@
 #include "bgpd/bgp_flowspec.h"
 #include "bgpd/bgp_labelpool.h"
 #include "bgpd/bgp_pbr.h"
+#include "bgpd/bgp_mac.h"
 
 DEFINE_MTYPE_STATIC(BGPD, PEER_TX_SHUTDOWN_MSG, "Peer shutdown message (TX)");
 DEFINE_QOBJ_TYPE(bgp_master)
@@ -7709,6 +7710,7 @@ void bgp_master_init(struct thread_master *master)
 
 	bgp_process_queue_init();
 
+	bgp_mac_init();
 	/* init the rd id space.
 	   assign 0th index in the bitfield,
 	   so that we start with id 1

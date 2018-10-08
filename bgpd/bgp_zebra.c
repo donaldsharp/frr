@@ -58,6 +58,7 @@
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_labelpool.h"
 #include "bgpd/bgp_pbr.h"
+#include "bgpd/bgp_mac.h"
 
 /* All information about zebra. */
 struct zclient *zclient = NULL;
@@ -213,11 +214,14 @@ static int bgp_interface_add(int command, struct zclient *zclient,
 	if (BGP_DEBUG(zebra, ZEBRA) && ifp)
 		zlog_debug("Rx Intf add VRF %u IF %s", vrf_id, ifp->name);
 
+	bgp_mac_add_mac_entry(ifp);
+
 	bgp = bgp_lookup_by_vrf_id(vrf_id);
 	if (!bgp)
 		return 0;
 
 	bgp_update_interface_nbrs(bgp, ifp, ifp);
+
 	return 0;
 }
 
@@ -237,6 +241,8 @@ static int bgp_interface_delete(int command, struct zclient *zclient,
 
 	if (BGP_DEBUG(zebra, ZEBRA))
 		zlog_debug("Rx Intf del VRF %u IF %s", vrf_id, ifp->name);
+
+	bgp_mac_del_mac_entry(ifp);
 
 	if (bgp)
 		bgp_update_interface_nbrs(bgp, ifp, NULL);
@@ -262,6 +268,8 @@ static int bgp_interface_up(int command, struct zclient *zclient,
 
 	if (!ifp)
 		return 0;
+
+	bgp_mac_add_mac_entry(ifp);
 
 	if (BGP_DEBUG(zebra, ZEBRA))
 		zlog_debug("Rx Intf up VRF %u IF %s", vrf_id, ifp->name);
@@ -298,6 +306,8 @@ static int bgp_interface_down(int command, struct zclient *zclient,
 
 	if (BGP_DEBUG(zebra, ZEBRA))
 		zlog_debug("Rx Intf down VRF %u IF %s", vrf_id, ifp->name);
+
+	bgp_mac_del_mac_entry(ifp);
 
 	if (!bgp)
 		return 0;

@@ -65,6 +65,7 @@
 #include "bgpd/bgp_nht.h"
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_label.h"
+#include "bgpd/bgp_mac.h"
 
 #if ENABLE_BGP_VNC
 #include "bgpd/rfapi/rfapi_backend.h"
@@ -3018,6 +3019,12 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 	    && bgp_update_martian_nexthop(bgp, afi, safi, &new_attr)) {
 		reason = "martian or self next-hop;";
 		bgp_attr_flush(&new_attr);
+		goto filtered;
+	}
+
+	if (bgp_mac_entry_exists(p)) {
+		zlog_debug("Filtering a prefix");
+		reason = "self mac;";
 		goto filtered;
 	}
 
