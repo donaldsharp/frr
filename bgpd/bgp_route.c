@@ -2905,7 +2905,6 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 	struct bgp_info *ri;
 	struct bgp_info *new;
 	struct bgp_info_extra *extra;
-	const char *reason;
 	char pfx_buf[BGP_PRD_PATH_STRLEN];
 	int connected = 0;
 	int do_loop_check = 1;
@@ -2914,6 +2913,7 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 	int vnc_implicit_withdraw = 0;
 #endif
 	int same_attr = 0;
+	bool filtered = false;
 
 	memset(&new_attr, 0, sizeof(struct attr));
 	new_attr.label_index = BGP_INVALID_LABEL_INDEX;
@@ -2951,8 +2951,10 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 
 		if (aspath_loop_check(attr->aspath, peer->change_local_as)
 		    > aspath_loop_count) {
-			reason = "as-path contains our own AS;";
-			goto filtered;
+			filtered = true;
+			bgp_update_log_filtered(afi, safi, prd, peer, p,
+						label, num_labels, addpath_id,
+						"as-path contains our own AS;");
 		}
 	}
 
@@ -2971,28 +2973,36 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 		    || (CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION)
 			&& aspath_loop_check(attr->aspath, bgp->confed_id)
 				   > peer->allowas_in[afi][safi])) {
-			reason = "as-path contains our own AS;";
-			goto filtered;
+			filtered = true;
+			bgp_update_log_filtered(afi, safi, prd, peer, p,
+						label, num_labels, addpath_id,
+						"as-path contains our own AS;");
 		}
 	}
 
 	/* Route reflector originator ID check.  */
 	if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID)
 	    && IPV4_ADDR_SAME(&bgp->router_id, &attr->originator_id)) {
-		reason = "originator is us;";
-		goto filtered;
+		filtered = true;
+		bgp_update_log_filtered(afi, safi, prd, peer, p,
+					label, num_labels, addpath_id,
+					"originator is us;");
 	}
 
 	/* Route reflector cluster ID check.  */
 	if (bgp_cluster_filter(peer, attr)) {
-		reason = "reflected from the same cluster;";
-		goto filtered;
+		filtered = true;
+		bgp_update_log_filtered(afi, safi, prd, peer, p,
+					label, num_labels, addpath_id,
+					"reflected from the same cluster;");
 	}
 
 	/* Apply incoming filter.  */
 	if (bgp_input_filter(peer, p, attr, afi, safi) == FILTER_DENY) {
-		reason = "filter;";
-		goto filtered;
+		filtered = true;
+		bgp_update_log_filtered(afi, safi, prd, peer, p,
+					label, num_labels, addpath_id,
+					"filter;");
 	}
 
 	bgp_attr_dup(&new_attr, attr);
@@ -3005,9 +3015,11 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 	 * the attr (which takes over the memory references) */
 	if (bgp_input_modifier(peer, p, &new_attr, afi, safi, NULL)
 	    == RMAP_DENY) {
-		reason = "route-map;";
-		bgp_attr_flush(&new_attr);
-		goto filtered;
+		filtered = true;
+		bgp_update_log_filtered(afi, safi, prd, peer, p,
+					label, num_labels, addpath_id,
+					"route-map;");
+		//	bgp_attr_flush(&new_attr);
 	}
 
 	if (peer->sort == BGP_PEER_EBGP) {
@@ -3030,9 +3042,11 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 	/* next hop check.  */
 	if (!CHECK_FLAG(peer->flags, PEER_FLAG_IS_RFAPI_HD)
 	    && bgp_update_martian_nexthop(bgp, afi, safi, &new_attr)) {
-		reason = "martian or self next-hop;";
-		bgp_attr_flush(&new_attr);
-		goto filtered;
+		filtered = true;
+		bgp_update_log_filtered(afi, safi, prd, peer, p,
+					label, num_labels, addpath_id,
+					"martian or self next-hop;");
+		//bgp_attr_flush(&new_attr);
 	}
 
 	attr_new = bgp_attr_intern(&new_attr);
@@ -3384,6 +3398,9 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 	/* Make new BGP info. */
 	new = info_make(type, sub_type, 0, peer, attr_new, rn);
 
+	if (filtered)
+		SET_FLAG(new->flags, BGP_INFO_FILTERED);
+
 	/* Update MPLS label */
 	if (has_valid_label) {
 		extra = bgp_info_extra_get(new);
@@ -3487,49 +3504,6 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 	if (SAFI_ENCAP == safi) {
 		rfapiProcessUpdate(peer, NULL, p, prd, attr, afi, safi, type,
 				   sub_type, NULL);
-	}
-#endif
-
-	return 0;
-
-/* This BGP update is filtered.  Log the reason then update BGP
-   entry.  */
-filtered:
-	bgp_update_log_filtered(afi, safi, prd, peer, p, label, num_labels,
-				addpath_id, reason);
-
-	if (ri) {
-		/* If this is an EVPN route, un-import it as it is now filtered.
-		 */
-		if (safi == SAFI_EVPN)
-			bgp_evpn_unimport_route(bgp, afi, safi, p, ri);
-
-		if (SAFI_UNICAST == safi
-		    && (bgp->inst_type == BGP_INSTANCE_TYPE_VRF
-			|| bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)) {
-
-			vpn_leak_from_vrf_withdraw(bgp_get_default(), bgp, ri);
-		}
-		if ((SAFI_MPLS_VPN == safi)
-		    && (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)) {
-
-			vpn_leak_to_vrf_withdraw(bgp, ri);
-		}
-
-		bgp_rib_remove(rn, ri, peer, afi, safi);
-	}
-
-	bgp_unlock_node(rn);
-
-#if ENABLE_BGP_VNC
-	/*
-	 * Filtered update is treated as an implicit withdrawal (see
-	 * bgp_rib_remove()
-	 * a few lines above)
-	 */
-	if ((SAFI_MPLS_VPN == safi) || (SAFI_ENCAP == safi)) {
-		rfapiProcessWithdraw(peer, NULL, p, prd, NULL, afi, safi, type,
-				     0);
 	}
 #endif
 
@@ -6411,7 +6385,9 @@ static void route_vty_short_status_out(struct vty *vty, struct bgp_info *binfo,
 		vty_out(vty, " ");
 
 	/* Selected */
-	if (CHECK_FLAG(binfo->flags, BGP_INFO_HISTORY))
+	if (CHECK_FLAG(binfo->flags, BGP_INFO_FILTERED))
+		vty_out(vty, "f");
+	else if (CHECK_FLAG(binfo->flags, BGP_INFO_HISTORY))
 		vty_out(vty, "h");
 	else if (CHECK_FLAG(binfo->flags, BGP_INFO_DAMPED))
 		vty_out(vty, "d");
@@ -7791,6 +7767,13 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct prefix *p,
 					attr->tag);
 		}
 
+		if (CHECK_FLAG(binfo->flags, BGP_INFO_FILTERED)) {
+			if (json_paths)
+				json_object_boolean_false_add(json_path,
+							      "filtered");
+			else
+				vty_out(vty, ", filtered");
+		}
 		if (!CHECK_FLAG(binfo->flags, BGP_INFO_VALID)) {
 			if (json_paths)
 				json_object_boolean_false_add(json_path,
