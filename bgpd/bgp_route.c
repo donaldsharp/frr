@@ -2866,6 +2866,30 @@ static int bgp_update_martian_nexthop(struct bgp *bgp, afi_t afi, safi_t safi,
 	return ret;
 }
 
+static void bgp_update_log_filtered(afi_t afi, safi_t safi,
+				    struct prefix_rd *prd, struct peer *peer,
+				    struct prefix *p, mpls_label_t *label,
+				    uint32_t num_labels, uint32_t addpath_id,
+				    const char *reason)
+{
+	char pfx_buf[BGP_PRD_PATH_STRLEN];
+
+	if (bgp_debug_update(peer, p, NULL, 1)) {
+		if (!peer->rcvd_attr_printed) {
+			zlog_debug("%s rcvd UPDATE w/ attr: %s", peer->host,
+				   peer->rcvd_attr_str);
+			peer->rcvd_attr_printed = 1;
+		}
+
+		bgp_debug_rdpfxpath2str(afi, safi, prd, p, label, num_labels,
+					addpath_id ? 1 : 0, addpath_id, pfx_buf,
+					sizeof(pfx_buf));
+		zlog_debug("%s rcvd UPDATE about %s -- DENIED due to: %s",
+			   peer->host, pfx_buf, reason);
+	}
+
+}
+
 int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 	       struct attr *attr, afi_t afi, safi_t safi, int type,
 	       int sub_type, struct prefix_rd *prd, mpls_label_t *label,
@@ -3471,19 +3495,8 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 /* This BGP update is filtered.  Log the reason then update BGP
    entry.  */
 filtered:
-	if (bgp_debug_update(peer, p, NULL, 1)) {
-		if (!peer->rcvd_attr_printed) {
-			zlog_debug("%s rcvd UPDATE w/ attr: %s", peer->host,
-				   peer->rcvd_attr_str);
-			peer->rcvd_attr_printed = 1;
-		}
-
-		bgp_debug_rdpfxpath2str(afi, safi, prd, p, label, num_labels,
-					addpath_id ? 1 : 0, addpath_id, pfx_buf,
-					sizeof(pfx_buf));
-		zlog_debug("%s rcvd UPDATE about %s -- DENIED due to: %s",
-			   peer->host, pfx_buf, reason);
-	}
+	bgp_update_log_filtered(afi, safi, prd, peer, p, label, num_labels,
+				addpath_id, reason);
 
 	if (ri) {
 		/* If this is an EVPN route, un-import it as it is now filtered.
