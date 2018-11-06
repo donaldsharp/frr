@@ -1012,10 +1012,16 @@ int pim_ifchannel_local_membership_add(struct interface *ifp,
 
 	/* PIM enabled on interface? */
 	pim_ifp = ifp->info;
-	if (!pim_ifp)
+	if (!pim_ifp) {
+		zlog_debug("Unexpected we should have a pim interface for %s",
+			   ifp->name);
 		return 0;
-	if (!PIM_IF_TEST_PIM(pim_ifp->options))
+	}
+	if (!PIM_IF_TEST_PIM(pim_ifp->options)) {
+		zlog_debug("We do not believe pim is configured on this interface %s",
+			   ifp->name);
 		return 0;
+	}
 
 	pim = pim_ifp->pim;
 
@@ -1033,6 +1039,7 @@ int pim_ifchannel_local_membership_add(struct interface *ifp,
 
 	ch = pim_ifchannel_add(ifp, sg, 0, PIM_UPSTREAM_FLAG_MASK_SRC_IGMP);
 	if (!ch) {
+		zlog_debug("Ifchannel failed to add malloc failure?");
 		return 0;
 	}
 
