@@ -57,9 +57,6 @@ DEFINE_MTYPE_STATIC(ZEBRA, SNHLFE_IFNAME, "MPLS static nexthop ifname")
 
 int mpls_enabled;
 
-/* Default rtm_table for all clients */
-extern struct zebra_t zebrad;
-
 /* static function declarations */
 
 static void fec_evaluate(struct zebra_vrf *zvrf);
@@ -127,7 +124,6 @@ static zebra_snhlfe_t *snhlfe_add(zebra_slsp_t *slsp,
 static int snhlfe_del(zebra_snhlfe_t *snhlfe);
 static int snhlfe_del_all(zebra_slsp_t *slsp);
 static char *snhlfe2str(zebra_snhlfe_t *snhlfe, char *buf, int size);
-static int mpls_processq_init(struct zebra_t *zebra);
 
 
 /* Static functions */
@@ -1695,7 +1691,7 @@ static char *snhlfe2str(zebra_snhlfe_t *snhlfe, char *buf, int size)
 /*
  * Initialize work queue for processing changed LSPs.
  */
-static int mpls_processq_init(struct zebra_t *zebra)
+static int mpls_processq_init(void)
 {
 	zrouter.lsp_process_q = work_queue_new(zrouter.master, "LSP processing");
 	if (!zrouter.lsp_process_q) {
@@ -2979,7 +2975,7 @@ void zebra_mpls_init(void)
 		return;
 	}
 
-	if (!mpls_processq_init(&zebrad))
+	if (!mpls_processq_init())
 		mpls_enabled = 1;
 
 	hook_register(zserv_client_close, zebra_mpls_cleanup_fecs_for_client);
