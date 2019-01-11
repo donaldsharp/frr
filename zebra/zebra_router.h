@@ -78,6 +78,9 @@ struct zebra_router {
 
 	/* Meta Queue Information */
 	struct meta_queue *mq;
+
+	/* LSP work queue */
+	struct work_queue *lsp_process_q;
 };
 
 extern struct zebra_router zrouter;
