@@ -198,6 +198,7 @@ void zebra_router_terminate(void)
 void zebra_router_init(void)
 {
 	zrouter.rtm_table_default = 0;
+	zrouter.packets_to_process = ZEBRA_ZAPI_PACKETS_TO_PROCESS;
 
 	zebra_vxlan_init();
 	zebra_mlag_init();
