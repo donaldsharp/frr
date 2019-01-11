@@ -194,6 +194,8 @@ void zebra_router_terminate(void)
 
 void zebra_router_init(void)
 {
+	zrouter.rtm_table_default = 0;
+
 	zebra_vxlan_init();
 	zebra_mlag_init();
 

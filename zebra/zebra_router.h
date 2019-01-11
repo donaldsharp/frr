@@ -67,6 +67,9 @@ struct zebra_router {
 #if defined(HAVE_RTADV)
 	struct rtadv rtadv;
 #endif /* HAVE_RTADV */
+
+	/* The default table used for this router */
+	uint32_t rtm_table_default;
 };
 
 extern struct zebra_router zrouter;
