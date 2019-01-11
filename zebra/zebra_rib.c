@@ -2284,7 +2284,8 @@ static void rib_queue_init(struct zebra_t *zebra)
 	assert(zebra);
 
 	if (!(zebra->ribq =
-		      work_queue_new(zebra->master, "route_node processing"))) {
+		      work_queue_new(zrouter.master,
+				     "route_node processing"))) {
 		flog_err(EC_ZEBRA_WQ_NONEXISTENT,
 			 "%s: could not initialise work queue!", __func__);
 		return;
@@ -3248,7 +3249,7 @@ static int rib_dplane_results(struct dplane_ctx_q *ctxlist)
 	pthread_mutex_unlock(&dplane_mutex);
 
 	/* Ensure event is signalled to zebra main pthread */
-	thread_add_event(zebrad.master, rib_process_dplane_results, NULL, 0,
+	thread_add_event(zrouter.master, rib_process_dplane_results, NULL, 0,
 			 &t_dplane);
 
 	return 0;
