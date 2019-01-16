@@ -582,6 +582,7 @@ fi
 if test "${enable_cumulus}" = "yes" ; then
   AC_DEFINE([HAVE_CUMULUS], [1], [Compile Special Cumulus Code in])
 fi
+AM_CONDITIONAL([CUMULUS], [test "${enable_cumulus}" = "yes"])
 
 AC_SUBST([DFLT_NAME])
 AC_DEFINE_UNQUOTED([DFLT_NAME], ["$DFLT_NAME"], [Name of the configuration default set])
