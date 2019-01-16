@@ -29,8 +29,8 @@
 #include "network.h"
 
 #include "zebra/debug.h"
-#include "zebra/zebra_mlag.h"
 #include "zebra/zebra_router.h"
+#include "zebra/zebra_mlag.h"
 
 #include <sys/un.h>
 
@@ -98,6 +98,8 @@ static void zebra_mlag_parse(char *buf)
 		curr = locator + 1;
 		locator = strstr(curr, "\n");
 	}
+
+	zebra_mlag_new_information(&minfo);
 }
 
 static int zebra_mlag_read(struct thread *thread)

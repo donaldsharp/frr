@@ -28,4 +28,15 @@ void zebra_mlag_init(void);
 void zebra_mlag_terminate(void);
 
 enum mlag_role zebra_mlag_get_role(void);
+
+/*
+ * Given new data from a lower level of clag, parse and
+ * set appropriate data structures in zebra and then
+ * pass up this data to interested parties.
+ *
+ * The minfo data structure passed in is assumed to
+ * be owned by the lower level and as such we must
+ * make copies of data.
+ */
+void zebra_mlag_new_information(struct zebra_mlag_info *minfo);
 #endif

@@ -23,15 +23,57 @@
 
 #include "command.h"
 #include "hook.h"
+#include "vrf.h"
 
-#include "zebra/zebra_mlag.h"
 #include "zebra/zebra_router.h"
+#include "zebra/zebra_mlag.h"
 #include "zebra/zapi_msg.h"
 #include "zebra/debug.h"
 
 #ifndef VTYSH_EXTRACT_PL
 #include "zebra/zebra_mlag_clippy.c"
 #endif
+
+void zebra_mlag_new_information(struct zebra_mlag_info *minfo)
+{
+	struct interface *ifp;
+	bool changed = false;
+	ifindex_t pifindex;
+
+	if (!minfo) {
+		if (IS_ZEBRA_DEBUG_MLAG)
+			zlog_debug("Received NULL mlag information returning");
+		return;
+	}
+
+	if (zrouter.mlag_info.role != minfo->role)
+		changed = true;
+	zrouter.mlag_info.role = minfo->role;
+
+	if (zrouter.mlag_info.peerlink)
+		XFREE(MTYPE_TMP, zrouter.mlag_info.peerlink);
+	zrouter.mlag_info.peerlink = XSTRDUP(MTYPE_TMP, minfo->peerlink);
+	ifp = if_lookup_by_name(zrouter.mlag_info.peerlink, VRF_UNKNOWN);
+	if (!ifp) {
+		if (IS_ZEBRA_DEBUG_MLAG)
+			zlog_debug("Passed in interface: %s, could not be found for validation\n",
+				   zrouter.mlag_info.peerlink);
+		pifindex = 0;
+	} else
+		pifindex = ifp->ifindex;
+
+	if (pifindex != zrouter.mlag_info.peerlink_ifindex)
+		changed = true;
+	zrouter.mlag_info.peerlink_ifindex = pifindex;
+
+	if (memcmp(&zrouter.mlag_info.mac,
+		   &minfo->mac, sizeof(minfo->mac)) != 0)
+		changed = true;
+	zrouter.mlag_info.mac = minfo->mac;
+
+	if (changed)
+		zsend_capabilities_all_clients();
+}
 
 enum mlag_role zebra_mlag_get_role(void)
 {
