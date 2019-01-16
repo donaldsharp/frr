@@ -1907,7 +1907,6 @@ static void rib_process_after(struct zebra_dplane_ctx *ctx)
 			zlog_debug("%u:%s Stale dplane result for re %p",
 				   dplane_ctx_get_vrf(ctx), dest_str, re);
 		}
-		re = NULL;
 	}
 
 	if (old_re &&
@@ -1916,18 +1915,6 @@ static void rib_process_after(struct zebra_dplane_ctx *ctx)
 			zlog_debug("%u:%s Stale dplane result for old_re %p",
 				   dplane_ctx_get_vrf(ctx), dest_str, old_re);
 		}
-		old_re = NULL;
-	}
-
-	/*
-	 * Here's sort of a tough one: the route update result is stale.
-	 * Is it better to use the context block info to generate
-	 * redist and owner notification, or is it better to wait
-	 * for the up-to-date result to arrive?
-	 */
-	if (re == NULL) {
-		/* TODO -- for now, only expose up-to-date results */
-		goto done;
 	}
 
 	switch (op) {
