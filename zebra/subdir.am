@@ -33,6 +33,10 @@ if FPM
 module_LTLIBRARIES += zebra/zebra_fpm.la
 endif
 
+if CUMULUS
+module_LTLIBRARIES += zebra/zebra_mlag_cumulus.la
+endif
+
 man8 += $(MANBUILD)/zebra.8
 ## endif ZEBRA
 endif
@@ -165,6 +169,9 @@ zebra_zebra_snmp_la_SOURCES = zebra/zebra_snmp.c
 zebra_zebra_snmp_la_CFLAGS = $(WERROR) $(SNMP_CFLAGS) -std=gnu99
 zebra_zebra_snmp_la_LDFLAGS = -avoid-version -module -shared -export-dynamic
 zebra_zebra_snmp_la_LIBADD = lib/libfrrsnmp.la
+
+zebra_zebra_mlag_cumulus_la_SOURCES = zebra/zebra_mlag_cumulus.c
+zebra_zebra_mlag_cumulus_la_LDFLAGS = -avoid-version -module -shared -export-dynamic
 
 zebra_zebra_fpm_la_LDFLAGS = -avoid-version -module -shared -export-dynamic
 zebra_zebra_fpm_la_LIBADD =
