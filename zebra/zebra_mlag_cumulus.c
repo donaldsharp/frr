@@ -30,6 +30,7 @@
 
 #include "zebra/debug.h"
 #include "zebra/zebra_mlag.h"
+#include "zebra/zebra_router.h"
 
 #include <sys/un.h>
 
@@ -38,11 +39,77 @@ static int mlag_socket;
 
 static int zebra_mlag_connect(struct thread *thread);
 
+static void zebra_mlag_parse(char *buf)
+{
+	struct zebra_mlag_info minfo;
+	char *curr = buf;
+	char *equal;
+	char *locator;
+
+	memset(&minfo, 0, sizeof(minfo));
+	/*
+	 * What is going on here?
+	 * We receive a string of key = value pairs from
+	 * clag.  The separator between the key = value's
+	 * is a '\n'.  The end of the buffer received is
+	 * just the '\n' character no NULL byte.  So we
+	 * need to be careful here:
+	 * "add peer-link = bond99\nadd clag-state = down\nadd system-mac = 00:00:00:aa:bb:01\nadd clag-role = primary\n"
+	 * So let's use strstr to cut the buffer up then we
+	 * can search on the 9th character in each string
+	 * for uniqueness.
+	 */
+	locator = strstr(curr, "\n");
+	while (locator) {
+		locator[0] = '\0';
+		if (IS_ZEBRA_DEBUG_MLAG)
+			zlog_debug("Found: %s", curr);
+
+		equal = strstr(curr, "=");
+		switch(curr[9]) {
+		case 'l':
+			minfo.peerlink = &equal[2];
+			break;
+		case 's':
+			break;
+		case 'm':
+			break;
+		case 'r':
+			switch(equal[2]) {
+			case 'p':
+				minfo.role = MLAG_ROLE_PRIMARY;
+				break;
+			case 's':
+				minfo.role = MLAG_ROLE_SECONDARY;
+				break;
+			default:
+				if (IS_ZEBRA_DEBUG_MLAG)
+					zlog_debug("Parse error of role: %s",
+						   &equal[2]);
+				break;
+			}
+			break;
+		default:
+			if (IS_ZEBRA_DEBUG_MLAG)
+				zlog_debug("Parse error of mlag data %s",
+					   curr);
+			break;
+		}
+		curr = locator + 1;
+		locator = strstr(curr, "\n");
+	}
+}
+
 static int zebra_mlag_read(struct thread *thread)
 {
 	char buf[512];
 	int count;
 
+	/*
+	 * The read currently ends with a `\n` so let's make sure
+	 * we don't read beyond the end of the world here
+	 */
+	memset(buf, 0, sizeof(buf));
 	count = read(mlag_socket, &buf, 511);
 	if (count == -1) {
 		if (IS_ZEBRA_DEBUG_MLAG)
@@ -60,6 +127,8 @@ static int zebra_mlag_read(struct thread *thread)
 		zlog_debug("Received MLAG Data from socket: %d", mlag_socket);
 		zlog_hexdump(buf, 512);
 	}
+
+	zebra_mlag_parse(buf);
 
 	thread_add_read(zmlag_master, zebra_mlag_read,
 			NULL, mlag_socket, NULL);
