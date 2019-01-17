@@ -188,8 +188,8 @@ const struct nexthop_group *dplane_ctx_get_ng(
 const struct nexthop_group *dplane_ctx_get_old_ng(
 	const struct zebra_dplane_ctx *ctx);
 
-const struct zebra_dplane_info *dplane_ctx_get_ns(
-	const struct zebra_dplane_ctx *ctx);
+struct zebra_dplane_info *dplane_ctx_get_ns(
+	struct zebra_dplane_ctx *ctx);
 
 /* Indicates zebra shutdown/exit is in progress. Some operations may be
  * simplified or skipped during shutdown processing.

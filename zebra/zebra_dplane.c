@@ -607,8 +607,8 @@ const struct nexthop_group *dplane_ctx_get_old_ng(
 	return &(ctx->zd_old_ng);
 }
 
-const struct zebra_dplane_info *dplane_ctx_get_ns(
-	const struct zebra_dplane_ctx *ctx)
+struct zebra_dplane_info *dplane_ctx_get_ns(
+	struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 
