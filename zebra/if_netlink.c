@@ -959,7 +959,7 @@ int netlink_interface_addr(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 		return -1;
 	}
 
-	if (IS_ZEBRA_DEBUG_KERNEL) /* remove this line to see initial ifcfg */
+	//	if (IS_ZEBRA_DEBUG_KERNEL) /* remove this line to see initial ifcfg */
 	{
 		char buf[BUFSIZ];
 		zlog_debug("netlink_interface_addr %s %s flags 0x%x:",
