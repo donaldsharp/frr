@@ -32,6 +32,22 @@
 #include "zebra/rt.h"
 #include "zebra/debug.h"
 
+void zebra_ipmr_signal_df(struct zserv *client,
+			  struct prefix_sg *sg, bool df)
+{
+	struct stream *s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+
+	stream_reset(s);
+
+	stream_put_in_addr(s, &sg->src);
+	stream_put_in_addr(s, &sg->grp);
+
+	stream_putc(s, df);
+
+	stream_putw_at(s, 0, stream_get_endp(s));
+	zserv_send_message(client, s);
+}
+
 void zebra_ipmr_route_stats(ZAPI_HANDLER_ARGS)
 {
 	struct mcast_route_data mroute;

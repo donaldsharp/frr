@@ -2303,7 +2303,6 @@ int tm_release_table_chunk(struct zclient *zclient, uint32_t start,
 	return zclient_send_message(zclient);
 }
 
-
 int zebra_send_pw(struct zclient *zclient, int command, struct zapi_pw *pw)
 {
 	struct stream *s;
@@ -2382,6 +2381,27 @@ static void zclient_capability_decode(int command, struct zclient *zclient,
 
 	if (zclient->zebra_capabilities)
 		(*zclient->zebra_capabilities)(&cap);
+
+stream_failure:
+	return;
+}
+
+static void zclient_mroute_signal_df_decode(int command,
+					    struct zclient *zclient,
+					    zebra_size_t length,
+					    vrf_id_t vrf_id)
+{
+	struct stream *s = zclient->ibuf;
+	struct prefix_sg sg;
+	bool df;
+
+	memset(&sg, 0, sizeof(sg));
+	STREAM_GET(&sg.src, s, 4);
+	STREAM_GET(&sg.grp, s, 4);
+	STREAM_GETC(s, df);
+
+	if (zclient->mroute_signal_df)
+		(*zclient->mroute_signal_df)(&sg, df);
 
 stream_failure:
 	return;
@@ -2677,6 +2697,10 @@ static int zclient_read(struct thread *thread)
 			(*zclient->iptable_notify_owner)(command,
 						 zclient, length,
 						 vrf_id);
+	case ZEBRA_MROUTE_SIGNAL_DF:
+		zclient_mroute_signal_df_decode(command, zclient, length,
+						vrf_id);
+		break;
 	default:
 		break;
 	}
