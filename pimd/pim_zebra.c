@@ -748,6 +748,10 @@ static void pim_zebra_capabilities(struct zclient_capabilities *cap)
 	router->role = cap->role;
 }
 
+static void pim_zebra_parse_signal_df(struct prefix_sg *sg, bool df)
+{
+}
+
 void pim_zebra_init(void)
 {
 	/* Socket for receiving updates from Zebra daemon */
@@ -763,6 +767,7 @@ void pim_zebra_init(void)
 	zclient->interface_address_add = pim_zebra_if_address_add;
 	zclient->interface_address_delete = pim_zebra_if_address_del;
 	zclient->nexthop_update = pim_parse_nexthop_update;
+	zclient->mroute_signal_df = pim_zebra_parse_signal_df;
 
 	zclient_init(zclient, ZEBRA_ROUTE_PIM, 0, &pimd_privs);
 	if (PIM_DEBUG_PIM_TRACE) {

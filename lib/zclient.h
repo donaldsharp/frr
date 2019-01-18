@@ -163,6 +163,7 @@ typedef enum {
 	ZEBRA_IPTABLE_DELETE,
 	ZEBRA_IPTABLE_NOTIFY_OWNER,
 	ZEBRA_VXLAN_FLOOD_CONTROL,
+	ZEBRA_MROUTE_SIGNAL_DF,
 } zebra_message_types_t;
 
 struct redist_proto {
@@ -274,6 +275,7 @@ struct zclient {
 				    struct zclient *zclient,
 				    uint16_t length,
 				    vrf_id_t vrf_id);
+	int (*mroute_signal_df)(struct prefix_sg *sg, bool df);
 };
 
 /* Zebra API message flag. */
