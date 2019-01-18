@@ -32,4 +32,6 @@ struct mcast_route_data {
 
 void zebra_ipmr_route_stats(ZAPI_HANDLER_ARGS);
 
+void zebra_ipmr_signal_df(struct zserv *client,
+			  struct prefix_sg *sg, bool df);
 #endif
