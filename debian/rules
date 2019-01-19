@@ -21,20 +21,36 @@ else
   CONF_RPKI=--disable-rpki
 endif
 
-ifeq ($(filter pkg.frr.lua,$(DEB_BUILD_PROFILES)),)
-  CONF_LUA=--disable-scripting
+ifeq ($(filter pkg.frr.nosystemd,$(DEB_BUILD_PROFILES)),)
+  DH_WITH_SYSTEMD=systemd,
+  CONF_SYSTEMD=--enable-systemd=yes
 else
-  CONF_LUA=--enable-scripting
+  DH_WITH_SYSTEMD=
+  CONF_SYSTEMD=--enable-systemd=no
 endif
+
+ifneq (,$(filter sanitizer,$(DEB_BUILD_OPTIONS)))
+  CONF_ASAN=--enable-address-sanitizer
+else
+  CONF_ASAN=--disable-address-sanitizer
+endif
+
+ifneq (,$(filter devbuild,$(DEB_BUILD_OPTIONS)))
+  CONF_DEVBUILD=--enable-dev-build
+else
+  CONF_DEVBUILD=--disable-dev-build
+endif
+
 
 export PYTHON=python3
 
 %:
-	dh $@
+	dh $@ --with=$(DH_WITH_SYSTEMD)autoreconf --parallel
 
 override_dh_auto_configure:
 	$(shell dpkg-buildflags --export=sh); \
 	dh_auto_configure -- \
+		--enable-exampledir=/usr/share/doc/frr/examples/ \
 		--localstatedir=/var/run/frr \
 		--sbindir=/usr/lib/frr \
 		--sysconfdir=/etc/frr \
@@ -44,8 +60,9 @@ override_dh_auto_configure:
 		LIBTOOLFLAGS="-rpath /usr/lib/$(DEB_HOST_MULTIARCH)/frr" \
 		--disable-dependency-tracking \
 		\
+		$(CONF_DEVBUILD) \
+		$(CONF_SYSTEMD) \
 		$(CONF_RPKI) \
-		$(CONF_LUA) \
 		--with-libpam \
 		--enable-doc \
 		--enable-doc-html \
@@ -62,6 +79,7 @@ override_dh_auto_configure:
 		--enable-configfile-mask=0640 \
 		--enable-logfile-mask=0640 \
 		\
+		$(CONF_ASAN) \
 		--enable-protobuf \
 		--enable-cumulus=yes \
 		--enable-csmgr=yes \
@@ -70,9 +88,7 @@ override_dh_auto_configure:
 		--enable-sharpd=yes \
 		--enable-grpc=yes \
 		--enable-bgp-lttng=yes \
-		# end
-
-
+		--enable-zebra-lttng=yes \
 		# end
 
 override_dh_auto_install:
@@ -82,8 +98,9 @@ override_dh_auto_install:
 	sed -e '1c #!/usr/bin/python3' -i debian/tmp/usr/lib/frr/generate_support_bundle.py
 
 # let dh_systemd_* and dh_installinit do their thing automatically
+ifeq ($(filter pkg.frr.nosystemd,$(DEB_BUILD_PROFILES)),)
 	cp tools/frr.service debian/frr.service
-	cp tools/frr@.service debian/frr@.service
+endif
 	cp tools/frrinit.sh debian/frr.init
 	-rm -f debian/tmp/usr/lib/frr/frr
 
@@ -91,6 +108,8 @@ override_dh_auto_install:
 	mkdir -p debian/tmp/etc
 	cp -r tools/etc/* debian/tmp/etc/
 	-rm debian/tmp/etc/frr/daemons.conf
+
+	sed -e 's#^!log file #!log file /var/log/frr/#' -i debian/tmp/usr/share/doc/frr/examples/*sample*
 
 # drop dev-only files
 	find debian/tmp -name '*.la' -o -name '*.a' -o -name 'lib*.so' | xargs rm -f
@@ -124,4 +143,4 @@ override_dh_auto_clean:
 	if test -f Makefile; then make redistclean; fi
 	-rm -f debian/frr.init
 	-rm -f debian/frr.service
-	-rm -f debian/frr@.service
+
