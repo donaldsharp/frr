@@ -1047,8 +1047,10 @@ static void show_nexthop_group_cmd_helper(struct vty *vty,
 			nhe->flags & NEXTHOP_GROUP_VALID,
 			nhe->flags & NEXTHOP_GROUP_INSTALLED);
 
-		for (ALL_NEXTHOPS(nhe->nhg, nhop))
+		for (ALL_NEXTHOPS(nhe->nhg, nhop)) {
+			vty_out(vty, "  ");
 			nexthop_group_write_nexthop(vty, nhop);
+		}
 	}
 }
 
