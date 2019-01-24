@@ -104,6 +104,10 @@ struct zebra_router {
 
 	/* Mlag information for the router */
 	struct zebra_mlag_info mlag_info;
+	/*
+	 * The hash of nexthop groups associated with this router
+	 */
+	struct hash *nhgs;
 };
 
 extern struct zebra_router zrouter;
