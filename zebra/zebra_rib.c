@@ -192,7 +192,7 @@ int zebra_check_addr(const struct prefix *p)
 /* Add nexthop to the end of a rib node's nexthop list */
 void route_entry_nexthop_add(struct route_entry *re, struct nexthop *nexthop)
 {
-	nexthop_add(&re->ng.nexthop, nexthop);
+	nexthop_group_add_sorted(&re->ng, nexthop);
 	re->nexthop_num++;
 }
 
