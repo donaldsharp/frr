@@ -113,6 +113,10 @@ struct zebra_router {
 	 * The EVPN instance, if any
 	 */
 	struct zebra_vrf *evpn_vrf;
+	/*
+	 * The hash of nexthop groups associated with this router
+	 */
+	struct hash *nhgs;
 };
 
 extern struct zebra_router zrouter;
