@@ -25,7 +25,25 @@
 #include "nexthop_group.h"
 #include "jhash.h"
 
+#include "zebra_router.h"
 #include "zebra_nhg.h"
+
+static void *zebra_nhg_alloc(void *arg)
+{
+	struct nhg_hash_entry *nhe;
+	struct nhg_hash_entry *copy = arg;
+
+	nhe = XMALLOC(MTYPE_TMP, sizeof(struct nhg_hash_entry));
+
+	nhe->vrf_id = copy->vrf_id;
+	nhe->afi = copy->afi;
+	nhe->refcnt = 0;
+	nhe->dplane_ref = zebra_router_get_next_sequence();
+	nhe->nhg.nexthop = NULL;
+
+	nexthop_group_copy(&nhe->nhg, &copy->nhg);
+	return nhe;
+}
 
 static uint32_t zebra_nhg_hash_key_nexthop_group(struct nexthop_group *nhg)
 {
@@ -105,6 +123,40 @@ bool zebra_nhg_hash_equal(const void *arg1, const void *arg2)
 	}
 
 	return true;
+}
+
+void zebra_nhg_find(afi_t afi, struct nexthop_group *nhg,
+		    struct route_entry *re)
+{
+	struct nhg_hash_entry lookup, *nhe;
+
+	memset(&lookup, 0, sizeof(lookup));
+	lookup.vrf_id = re->vrf_id;
+	lookup.afi = afi;
+	lookup.nhg = *nhg;
+
+	nhe = hash_get(zrouter.nhgs, &lookup, zebra_nhg_alloc);
+	nhe->refcnt++;
+
+	//re->ng = nhe->nhg;
+
+	return;
+}
+
+void zebra_nhg_release(afi_t afi, struct route_entry *re)
+{
+	struct nhg_hash_entry lookup, *nhe;
+
+	lookup.vrf_id = re->vrf_id;
+	lookup.afi = afi;
+	lookup.nhg = re->ng;
+
+	nhe = hash_lookup(zrouter.nhgs, &lookup);
+	nhe->refcnt--;
+
+	if (nhe->refcnt == 0)
+		hash_release(zrouter.nhgs, nhe);
+	// re->ng = NULL;
 }
 
 static void zebra_nhg_new(const char *name)
