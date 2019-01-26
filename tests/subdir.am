@@ -54,6 +54,7 @@ check_PROGRAMS = \
 	tests/lib/test_heavy \
 	tests/lib/test_idalloc \
 	tests/lib/test_memory \
+	tests/lib/test_nexthop_group \
 	tests/lib/test_nexthop_iter \
 	tests/lib/test_privs \
 	tests/lib/test_ringbuf \
@@ -220,6 +221,10 @@ tests_lib_test_memory_CFLAGS = $(TESTS_CFLAGS)
 tests_lib_test_memory_CPPFLAGS = $(TESTS_CPPFLAGS)
 tests_lib_test_memory_LDADD = $(ALL_TESTS_LDADD)
 tests_lib_test_memory_SOURCES = tests/lib/test_memory.c
+tests_lib_test_nexthop_group_CFLAGS = $(TESTS_CFLAGS)
+tests_lib_test_nexthop_group_CPPFLAGS = $(TESTS_CPPFLAGS)
+tests_lib_test_nexthop_group_LDADD = $(ALL_TESTS_LDADD)
+tests_lib_test_nexthop_group_SOURCES = tests/lib/test_nexthop_group.c
 tests_lib_test_nexthop_iter_CFLAGS = $(TESTS_CFLAGS)
 tests_lib_test_nexthop_iter_CPPFLAGS = $(TESTS_CPPFLAGS)
 tests_lib_test_nexthop_iter_LDADD = $(ALL_TESTS_LDADD)
@@ -301,6 +306,7 @@ EXTRA_DIST += \
 	tests/lib/northbound/test_oper_data.in \
 	tests/lib/northbound/test_oper_data.py \
 	tests/lib/northbound/test_oper_data.refout \
+	tests/lib/test_nexthop_group.py \
 	tests/lib/test_nexthop_iter.py \
 	tests/lib/test_ringbuf.py \
 	tests/lib/test_srcdest_table.py \
