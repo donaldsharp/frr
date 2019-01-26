@@ -29,6 +29,7 @@
 /lib/test_heavy_wq
 /lib/test_idalloc
 /lib/test_memory
+/lib/test_nexthop_group
 /lib/test_nexthop_iter
 /lib/test_privs
 /lib/test_ringbuf
