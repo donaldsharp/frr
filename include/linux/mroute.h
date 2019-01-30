@@ -40,7 +40,7 @@
 #endif
 
 #ifndef MAXVIFS
-#define MAXVIFS 32
+#define MAXVIFS 256
 #endif
 /* MRT_FLUSH optional flags */
 #define MRT_FLUSH_MFC	1	/* Flush multicast entries */
