@@ -48,6 +48,8 @@
 #define MRT_FLUSH_VIFS	4	/* Flush multicast vifs */
 #define MRT_FLUSH_VIFS_STATIC	8	/* Flush static multicast vifs */
 
+#define MAXVIFS		256
+
 typedef unsigned long vifbitmap_t;	/* User mode code depends on this lot */
 typedef unsigned short vifi_t;
 #define ALL_VIFS	((vifi_t)(-1))
