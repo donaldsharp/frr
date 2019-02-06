@@ -2167,37 +2167,12 @@ static unsigned int process_subq(struct list *subq, uint8_t qindex)
 	return 1;
 }
 
-#if 0
 /*
  * Perform next-hop tracking processing after RIB updates.
  */
 static void do_nht_processing(void)
 {
-	struct vrf *vrf;
 	struct zebra_vrf *zvrf;
-
-	/* Evaluate nexthops for those VRFs which underwent route processing.
-	 * This
-	 * should limit the evaluation to the necessary VRFs in most common
-	 * situations.
-	 */
-	RB_FOREACH (vrf, vrf_id_head, &vrfs_by_id) {
-		zvrf = vrf->info;
-		if (zvrf == NULL || !(zvrf->flags & ZEBRA_VRF_RIB_SCHEDULED))
-			continue;
-
-		if (IS_ZEBRA_DEBUG_RIB_DETAILED || IS_ZEBRA_DEBUG_NHT)
-			zlog_debug("NHT processing check for zvrf %s",
-				   zvrf_name(zvrf));
-
-		zvrf->flags &= ~ZEBRA_VRF_RIB_SCHEDULED;
-		zebra_evaluate_rnh(zvrf, AFI_IP, 0, RNH_NEXTHOP_TYPE, NULL);
-		zebra_evaluate_rnh(zvrf, AFI_IP, 0, RNH_IMPORT_CHECK_TYPE,
-				   NULL);
-		zebra_evaluate_rnh(zvrf, AFI_IP6, 0, RNH_NEXTHOP_TYPE, NULL);
-		zebra_evaluate_rnh(zvrf, AFI_IP6, 0, RNH_IMPORT_CHECK_TYPE,
-				   NULL);
-	}
 
 	/* Schedule LSPs for processing, if needed. */
 	zvrf = vrf_info_lookup(VRF_DEFAULT);
@@ -2210,7 +2185,6 @@ static void do_nht_processing(void)
 		mpls_unmark_lsps_for_processing(zvrf);
 	}
 }
-#endif
 
 /* Dispatch the meta queue by picking, processing and unlocking the next RN from
  * a non-empty sub-queue with lowest priority. wq is equal to zebra->ribq and
@@ -3383,7 +3357,7 @@ static int rib_process_dplane_results(struct thread *thread)
 	} while (1);
 
 	/* Check for nexthop tracking processing after finishing with results */
-	//do_nht_processing();
+	do_nht_processing();
 
 	return 0;
 }
