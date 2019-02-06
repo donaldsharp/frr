@@ -1220,6 +1220,53 @@ static int rib_can_delete_dest(rib_dest_t *dest)
 	return 1;
 }
 
+void zebra_rib_evaluate_rn_nexthops(struct route_node *rn)
+{
+	rib_dest_t *dest = rib_dest_from_rnode(rn);
+	struct zebra_vrf *zvrf = rib_dest_vrf(dest);
+	struct listnode *node, *nnode;
+	struct rnh *rnh;
+
+	if (!dest)
+		return;
+
+	/*
+	 * We are storing the rnh's associated with
+	 * the tracked nexthop as a list of the rn's.
+	 * Unresolved rnh's are placed at the top
+	 * of the tree list.( 0.0.0.0/0 for v4 and 0::0/0 for v6 )
+	 * As such for each rn we need to walk up the tree
+	 * and see if any rnh's need to see if they
+	 * would match a more specific route
+	 */
+	while (rn) {
+		/*
+		 * If we have any rnh's stored in the nht list
+		 * then we know that this route node was used for
+		 * nht resolution and as such we need to call the
+		 * nexthop tracking evaluation code
+		 */
+		for (ALL_LIST_ELEMENTS(dest->nht, node, nnode, rnh)) {
+			struct prefix *p = &rnh->node->p;
+
+			if (IS_ZEBRA_DEBUG_NHT) {
+				char buf1[PREFIX_STRLEN];
+				char buf2[PREFIX_STRLEN];
+
+				zlog_debug("%u:%s has Nexthop(%s) depending on it, evaluating",
+					   zvrf->vrf->vrf_id,
+					   prefix2str(&rn->p, buf1,
+						      sizeof(buf1)),
+					   prefix2str(p, buf2, sizeof(buf2)));
+			}
+			zebra_evaluate_rnh(zvrf, family2afi(p->family), 0,
+					   rnh->type, p);
+		}
+
+		rn = rn->parent;
+	}
+}
+
 /*
  * rib_gc_dest
  *
@@ -1246,7 +1293,10 @@ int rib_gc_dest(struct route_node *rn)
 		rnode_debug(rn, zvrf_id(zvrf), "removing dest from table");
 	}
 
+	zebra_rib_evaluate_rn_nexthops(rn);
+
 	dest->rnode = NULL;
+	list_delete(&dest->nht);
 	XFREE(MTYPE_RIB_DEST, dest);
 	rn->info = NULL;
 
@@ -2060,6 +2110,8 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 	}
 done:
 
+	zebra_rib_evaluate_rn_nexthops(rn);
+
 	/* Return context to dataplane module */
 	dplane_ctx_fini(&ctx);
 }
@@ -2344,6 +2396,7 @@ rib_dest_t *zebra_rib_create_dest(struct route_node *rn)
 	rib_dest_t *dest;
 
 	dest = XCALLOC(MTYPE_RIB_DEST, sizeof(rib_dest_t));
+	dest->nht = list_new();
 	route_lock_node(rn); /* rn route table reference */
 	rn->info = dest;
 	dest->rnode = rn;
