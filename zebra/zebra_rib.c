@@ -1222,7 +1222,7 @@ static int rib_can_delete_dest(rib_dest_t *dest)
 
 void zebra_rib_evaluate_rn_nexthops(struct route_node *rn)
 {
-	rib_dest_t *dest;
+	rib_dest_t *dest = rib_dest_from_rnode(rn);
 	struct zebra_vrf *zvrf = rib_dest_vrf(dest);
 	struct listnode *node, *nnode;
 	struct rnh *rnh;
@@ -1237,7 +1237,12 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn)
 	 * would match a more specific route
 	 */
 	while (rn) {
-		dest = rib_dest_from_rnode(rn);
+		if (!dest) {
+			rn = rn->parent;
+			if (rn)
+				dest = rib_dest_from_rnode(rn);
+			continue;
+		}
 		/*
 		 * If we have any rnh's stored in the nht list
 		 * then we know that this route node was used for
@@ -1262,6 +1267,8 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn)
 		}
 
 		rn = rn->parent;
+		if (rn)
+			dest = rib_dest_from_rnode(rn);
 	}
 }
 
@@ -2159,6 +2166,7 @@ static unsigned int process_subq(struct list *subq, uint8_t qindex)
 	return 1;
 }
 
+#if 0
 /*
  * Perform next-hop tracking processing after RIB updates.
  */
@@ -2201,6 +2209,7 @@ static void do_nht_processing(void)
 		mpls_unmark_lsps_for_processing(zvrf);
 	}
 }
+#endif
 
 /* Dispatch the meta queue by picking, processing and unlocking the next RN from
  * a non-empty sub-queue with lowest priority. wq is equal to zebra->ribq and
@@ -3373,7 +3382,7 @@ static int rib_process_dplane_results(struct thread *thread)
 	} while (1);
 
 	/* Check for nexthop tracking processing after finishing with results */
-	do_nht_processing();
+	//do_nht_processing();
 
 	return 0;
 }
