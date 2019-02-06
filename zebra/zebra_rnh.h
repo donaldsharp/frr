@@ -42,6 +42,8 @@ struct rnh {
 
 	rnh_type_t type;
 
+	uint32_t seqno;
+
 	struct route_entry *state;
 	struct prefix resolved_route;
 	struct list *client_list;
