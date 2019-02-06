@@ -1223,7 +1223,6 @@ static int rib_can_delete_dest(rib_dest_t *dest)
 void zebra_rib_evaluate_rn_nexthops(struct route_node *rn)
 {
 	rib_dest_t *dest = rib_dest_from_rnode(rn);
-	struct zebra_vrf *zvrf = rib_dest_vrf(dest);
 	struct listnode *node, *nnode;
 	struct rnh *rnh;
 
@@ -1250,6 +1249,8 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn)
 		 * nexthop tracking evaluation code
 		 */
 		for (ALL_LIST_ELEMENTS(dest->nht, node, nnode, rnh)) {
+			struct zebra_vrf *zvrf =
+				zebra_vrf_lookup_by_id(rnh->vrf_id);
 			struct prefix *p = &rnh->node->p;
 
 			if (IS_ZEBRA_DEBUG_NHT) {
@@ -2113,9 +2114,9 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 	default:
 		break;
 	}
-done:
 
 	zebra_rib_evaluate_rn_nexthops(rn);
+done:
 
 	/* Return context to dataplane module */
 	dplane_ctx_fini(&ctx);
