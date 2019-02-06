@@ -1222,13 +1222,10 @@ static int rib_can_delete_dest(rib_dest_t *dest)
 
 void zebra_rib_evaluate_rn_nexthops(struct route_node *rn)
 {
-	rib_dest_t *dest = rib_dest_from_rnode(rn);
+	rib_dest_t *dest;
 	struct zebra_vrf *zvrf = rib_dest_vrf(dest);
 	struct listnode *node, *nnode;
 	struct rnh *rnh;
-
-	if (!dest)
-		return;
 
 	/*
 	 * We are storing the rnh's associated with
@@ -1240,6 +1237,7 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn)
 	 * would match a more specific route
 	 */
 	while (rn) {
+		dest = rib_dest_from_rnode(rn);
 		/*
 		 * If we have any rnh's stored in the nht list
 		 * then we know that this route node was used for

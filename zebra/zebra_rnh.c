@@ -94,6 +94,24 @@ char *rnh_str(struct rnh *rnh, char *buf, int size)
 	return buf;
 }
 
+static void zebra_rnh_store_in_routing_table(struct rnh *rnh)
+{
+	struct zebra_vrf *zvrf = zebra_vrf_lookup_by_id(rnh->vrf_id);
+	struct route_table *table = zvrf->table[rnh->afi][SAFI_UNICAST];
+	struct route_node *rn;
+	rib_dest_t *dest;
+
+	rn = route_node_match(table, &rnh->resolved_route);
+	if (!rn) {
+		zlog_debug("Unexpected");
+		return;
+	}
+
+	dest = rib_dest_from_rnode(rn);
+	listnode_add(dest->nht, rnh);
+	route_unlock_node(rn);
+}
+
 struct rnh *zebra_add_rnh(struct prefix *p, vrf_id_t vrfid, rnh_type_t type,
 			  bool *exists)
 {
@@ -142,6 +160,8 @@ struct rnh *zebra_add_rnh(struct prefix *p, vrf_id_t vrfid, rnh_type_t type,
 		rn->info = rnh;
 		rnh->node = rn;
 		*exists = false;
+
+		zebra_rnh_store_in_routing_table(rnh);
 	} else
 		*exists = true;
 
