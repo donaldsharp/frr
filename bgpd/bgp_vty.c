@@ -719,21 +719,31 @@ static int bgp_clear_vty(struct vty *vty, const char *name, afi_t afi,
 }
 
 /* clear soft inbound */
-static void bgp_clear_star_soft_in(struct vty *vty, const char *name)
+static void bgp_clear_star_soft_in(struct vty *vty, struct bgp *bgp)
 {
-	bgp_clear_vty(vty, name, AFI_IP, SAFI_UNICAST, clear_all,
+	bgp_clear_vty(vty, bgp->name, AFI_IP, SAFI_UNICAST, clear_all,
 		      BGP_CLEAR_SOFT_IN, NULL);
-	bgp_clear_vty(vty, name, AFI_IP6, SAFI_UNICAST, clear_all,
+	bgp_clear_vty(vty, bgp->name, AFI_IP6, SAFI_UNICAST, clear_all,
 		      BGP_CLEAR_SOFT_IN, NULL);
+
+	if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT) {
+		bgp_clear_vty(vty, bgp->name, AFI_L2VPN, SAFI_EVPN, clear_all,
+				BGP_CLEAR_SOFT_IN, NULL);
+	}
 }
 
 /* clear soft outbound */
-static void bgp_clear_star_soft_out(struct vty *vty, const char *name)
+static void bgp_clear_star_soft_out(struct vty *vty, struct bgp *bgp)
 {
-	bgp_clear_vty(vty, name, AFI_IP, SAFI_UNICAST, clear_all,
+	bgp_clear_vty(vty, bgp->name, AFI_IP, SAFI_UNICAST, clear_all,
 		      BGP_CLEAR_SOFT_OUT, NULL);
-	bgp_clear_vty(vty, name, AFI_IP6, SAFI_UNICAST, clear_all,
+	bgp_clear_vty(vty, bgp->name, AFI_IP6, SAFI_UNICAST, clear_all,
 		      BGP_CLEAR_SOFT_OUT, NULL);
+
+	if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT) {
+		bgp_clear_vty(vty, bgp->name, AFI_L2VPN, SAFI_EVPN, clear_all,
+				BGP_CLEAR_SOFT_OUT, NULL);
+	}
 }
 
 
@@ -1109,7 +1119,7 @@ DEFUN (bgp_cluster_id,
 	}
 
 	bgp_cluster_id_set(bgp, &cluster);
-	bgp_clear_star_soft_out(vty, bgp->name);
+	bgp_clear_star_soft_out(vty, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -1125,7 +1135,7 @@ DEFUN (no_bgp_cluster_id,
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 	bgp_cluster_id_unset(bgp);
-	bgp_clear_star_soft_out(vty, bgp->name);
+	bgp_clear_star_soft_out(vty, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -1746,7 +1756,7 @@ DEFUN (bgp_client_to_client_reflection,
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 	bgp_flag_unset(bgp, BGP_FLAG_NO_CLIENT_TO_CLIENT);
-	bgp_clear_star_soft_out(vty, bgp->name);
+	bgp_clear_star_soft_out(vty, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -1761,7 +1771,7 @@ DEFUN (no_bgp_client_to_client_reflection,
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 	bgp_flag_set(bgp, BGP_FLAG_NO_CLIENT_TO_CLIENT);
-	bgp_clear_star_soft_out(vty, bgp->name);
+	bgp_clear_star_soft_out(vty, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -2003,8 +2013,8 @@ DEFUN (bgp_graceful_shutdown,
 		bgp_flag_set(bgp, BGP_FLAG_GRACEFUL_SHUTDOWN);
 		bgp_static_redo_import_check(bgp);
 		bgp_redistribute_redo(bgp);
-		bgp_clear_star_soft_out(vty, bgp->name);
-		bgp_clear_star_soft_in(vty, bgp->name);
+		bgp_clear_star_soft_out(vty, bgp);
+		bgp_clear_star_soft_in(vty, bgp);
 	}
 
 	return CMD_SUCCESS;
@@ -2023,8 +2033,8 @@ DEFUN (no_bgp_graceful_shutdown,
 		bgp_flag_unset(bgp, BGP_FLAG_GRACEFUL_SHUTDOWN);
 		bgp_static_redo_import_check(bgp);
 		bgp_redistribute_redo(bgp);
-		bgp_clear_star_soft_out(vty, bgp->name);
-		bgp_clear_star_soft_in(vty, bgp->name);
+		bgp_clear_star_soft_out(vty, bgp);
+		bgp_clear_star_soft_in(vty, bgp);
 	}
 
 	return CMD_SUCCESS;
@@ -2063,7 +2073,7 @@ DEFUN (bgp_enforce_first_as,
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 	bgp_flag_set(bgp, BGP_FLAG_ENFORCE_FIRST_AS);
-	bgp_clear_star_soft_in(vty, bgp->name);
+	bgp_clear_star_soft_in(vty, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -2077,7 +2087,7 @@ DEFUN (no_bgp_enforce_first_as,
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 	bgp_flag_unset(bgp, BGP_FLAG_ENFORCE_FIRST_AS);
-	bgp_clear_star_soft_in(vty, bgp->name);
+	bgp_clear_star_soft_in(vty, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -2406,7 +2416,7 @@ DEFUN (bgp_default_local_preference,
 	local_pref = strtoul(argv[idx_number]->arg, NULL, 10);
 
 	bgp_default_local_preference_set(bgp, local_pref);
-	bgp_clear_star_soft_in(vty, bgp->name);
+	bgp_clear_star_soft_in(vty, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -2422,7 +2432,7 @@ DEFUN (no_bgp_default_local_preference,
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 	bgp_default_local_preference_unset(bgp);
-	bgp_clear_star_soft_in(vty, bgp->name);
+	bgp_clear_star_soft_in(vty, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -2474,7 +2484,7 @@ DEFUN (bgp_rr_allow_outbound_policy,
 	if (!bgp_flag_check(bgp, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY)) {
 		bgp_flag_set(bgp, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY);
 		update_group_announce_rrclients(bgp);
-		bgp_clear_star_soft_out(vty, bgp->name);
+		bgp_clear_star_soft_out(vty, bgp);
 	}
 
 	return CMD_SUCCESS;
@@ -2493,7 +2503,7 @@ DEFUN (no_bgp_rr_allow_outbound_policy,
 	if (bgp_flag_check(bgp, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY)) {
 		bgp_flag_unset(bgp, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY);
 		update_group_announce_rrclients(bgp);
-		bgp_clear_star_soft_out(vty, bgp->name);
+		bgp_clear_star_soft_out(vty, bgp);
 	}
 
 	return CMD_SUCCESS;
@@ -2719,7 +2729,7 @@ DEFUN (bgp_disable_connected_route_check,
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 	bgp_flag_set(bgp, BGP_FLAG_DISABLE_NH_CONNECTED_CHK);
-	bgp_clear_star_soft_in(vty, bgp->name);
+	bgp_clear_star_soft_in(vty, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -2733,7 +2743,7 @@ DEFUN (no_bgp_disable_connected_route_check,
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 	bgp_flag_unset(bgp, BGP_FLAG_DISABLE_NH_CONNECTED_CHK);
-	bgp_clear_star_soft_in(vty, bgp->name);
+	bgp_clear_star_soft_in(vty, bgp);
 
 	return CMD_SUCCESS;
 }
