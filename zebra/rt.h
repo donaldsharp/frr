@@ -31,6 +31,9 @@
 #include "zebra/zebra_mpls.h"
 #include "zebra/zebra_dplane.h"
 
+#define RSYSTEM_ROUTE(type)                                                    \
+	((type) == ZEBRA_ROUTE_KERNEL || (type) == ZEBRA_ROUTE_CONNECT)
+
 /*
  * Update or delete a route, LSP, or pseudowire from the kernel,
  * using info from a dataplane context.
