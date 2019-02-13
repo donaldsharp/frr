@@ -117,6 +117,8 @@ struct zebra_router {
 	 * The hash of nexthop groups associated with this router
 	 */
 	struct hash *nhgs;
+
+	uint32_t multipath_num;
 };
 
 extern struct zebra_router zrouter;
