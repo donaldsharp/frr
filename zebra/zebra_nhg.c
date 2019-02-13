@@ -142,6 +142,12 @@ void zebra_nhg_find(afi_t afi, struct nexthop_group *nhg,
 	lookup.nhg = *nhg;
 
 	nhe = hash_get(zrouter.nhgs, &lookup, zebra_nhg_alloc);
+
+	nhe->refcnt++;
+	/*
+	 * Have we just created this monster?
+	 */
+	if (nhe->refcnt == 1)
 	nhe->refcnt++;
 
 	//re->ng = nhe->nhg;
