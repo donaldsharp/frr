@@ -369,7 +369,7 @@ static int zebra_rnh_apply_nht_rmap(afi_t afi, struct zebra_vrf *zvrf,
 	int ret;
 
 	if (prn && re) {
-		for (nexthop = re->ng.nexthop; nexthop;
+		for (nexthop = re->ng->nexthop; nexthop;
 		     nexthop = nexthop->next) {
 			ret = zebra_nht_route_map_check(
 				afi, proto, &prn->p, zvrf, re, nexthop);
@@ -686,7 +686,7 @@ zebra_rnh_resolve_nexthop_entry(struct zebra_vrf *zvrf, afi_t afi,
 			/* Just being SELECTED isn't quite enough - must
 			 * have an installed nexthop to be useful.
 			 */
-			for (ALL_NEXTHOPS(re->ng, nexthop)) {
+			for (ALL_NEXTHOPS_PTR(re->ng, nexthop)) {
 				if (rnh_nexthop_valid(re, nexthop))
 					break;
 			}
@@ -705,7 +705,7 @@ zebra_rnh_resolve_nexthop_entry(struct zebra_vrf *zvrf, afi_t afi,
 					break;
 				if (re->type == ZEBRA_ROUTE_NHRP) {
 
-					for (nexthop = re->ng.nexthop; nexthop;
+					for (nexthop = re->ng->nexthop; nexthop;
 					     nexthop = nexthop->next)
 						if (nexthop->type
 						    == NEXTHOP_TYPE_IFINDEX)
@@ -958,7 +958,8 @@ static void free_state(vrf_id_t vrf_id, struct route_entry *re,
 	}
 
 	/* free RE and nexthops */
-	nexthops_free(re->ng.nexthop);
+	nexthops_free(re->ng->nexthop);
+	nexthop_group_delete(&re->ng);
 	XFREE(MTYPE_RE, re);
 }
 
@@ -981,8 +982,9 @@ static void copy_state(struct rnh *rnh, struct route_entry *re,
 	state->metric = re->metric;
 	state->vrf_id = re->vrf_id;
 	state->status = re->status;
+	state->ng = nexthop_group_new();
 
-	route_entry_copy_nexthops(state, re->ng.nexthop);
+	route_entry_copy_nexthops(state, re->ng->nexthop);
 	rnh->state = state;
 }
 
@@ -1055,7 +1057,7 @@ static int send_client(struct rnh *rnh, struct zserv *client, rnh_type_t type,
 		num = 0;
 		nump = stream_get_endp(s);
 		stream_putc(s, 0);
-		for (ALL_NEXTHOPS(re->ng, nh))
+		for (ALL_NEXTHOPS_PTR(re->ng, nh))
 			if (rnh_nexthop_valid(re, nh)) {
 				stream_putl(s, nh->vrf_id);
 				stream_putc(s, nh->type);
@@ -1155,7 +1157,7 @@ static void print_rnh(struct route_node *rn, struct vty *vty)
 	if (rnh->state) {
 		vty_out(vty, " resolved via %s\n",
 			zebra_route_string(rnh->state->type));
-		for (nexthop = rnh->state->ng.nexthop; nexthop;
+		for (nexthop = rnh->state->ng->nexthop; nexthop;
 		     nexthop = nexthop->next)
 			print_nh(nexthop, vty);
 	} else

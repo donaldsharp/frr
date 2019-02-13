@@ -580,7 +580,7 @@ int zebra_add_import_table_entry(struct route_node *rn, struct route_entry *re,
 	afi = family2afi(rn->p.family);
 	if (rmap_name)
 		ret = zebra_import_table_route_map_check(
-			afi, re->type, re->instance, &rn->p, re->ng.nexthop,
+			afi, re->type, re->instance, &rn->p, re->ng->nexthop,
 			re->vrf_id, re->tag, rmap_name);
 
 	if (ret != RMAP_MATCH) {
@@ -616,7 +616,8 @@ int zebra_add_import_table_entry(struct route_node *rn, struct route_entry *re,
 	newre->nexthop_num = 0;
 	newre->uptime = time(NULL);
 	newre->instance = re->table;
-	route_entry_copy_nexthops(newre, re->ng.nexthop);
+	newre->ng = nexthop_group_new();
+	route_entry_copy_nexthops(newre, re->ng->nexthop);
 
 	rib_add_multipath(afi, SAFI_UNICAST, &p, NULL, newre);
 
@@ -632,7 +633,7 @@ int zebra_del_import_table_entry(struct route_node *rn, struct route_entry *re)
 	prefix_copy(&p, &rn->p);
 
 	rib_delete(afi, SAFI_UNICAST, re->vrf_id, ZEBRA_ROUTE_TABLE, re->table,
-		   re->flags, &p, NULL, re->ng.nexthop,
+		   re->flags, &p, NULL, re->ng->nexthop,
 		   zrouter.rtm_table_default, re->metric, re->distance, false);
 
 	return 0;

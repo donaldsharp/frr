@@ -948,7 +948,7 @@ static int dplane_ctx_route_init(struct zebra_dplane_ctx *ctx,
 	dplane_ctx_ns_init(ctx, zns, (op == DPLANE_OP_ROUTE_UPDATE));
 
 	/* Copy nexthops; recursive info is included too */
-	copy_nexthops(&(ctx->u.rinfo.zd_ng.nexthop), re->ng.nexthop, NULL);
+	copy_nexthops(&(ctx->u.rinfo.zd_ng.nexthop), re->ng->nexthop, NULL);
 
 	/* TODO -- maybe use array of nexthops to avoid allocs? */
 

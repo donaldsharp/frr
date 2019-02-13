@@ -44,7 +44,7 @@ struct route_entry {
 	struct route_entry *prev;
 
 	/* Nexthop structure */
-	struct nexthop_group ng;
+	struct nexthop_group *ng;
 
 	/* Tag */
 	route_tag_t tag;
