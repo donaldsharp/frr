@@ -249,7 +249,7 @@ static void vty_show_ip_route_detail(struct vty *vty, struct route_node *rn,
 				tm->tm_hour);
 		vty_out(vty, " ago\n");
 
-		for (ALL_NEXTHOPS(re->ng, nexthop)) {
+		for (ALL_NEXTHOPS_PTR(re->ng, nexthop)) {
 			char addrstr[32];
 
 			vty_out(vty, "  %c%s",
@@ -446,7 +446,7 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 
 		json_object_string_add(json_route, "uptime", buf);
 
-		for (ALL_NEXTHOPS(re->ng, nexthop)) {
+		for (ALL_NEXTHOPS_PTR(re->ng, nexthop)) {
 			json_nexthop = json_object_new_object();
 
 			json_object_int_add(json_nexthop, "flags",
@@ -616,8 +616,8 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 	}
 
 	/* Nexthop information. */
-	for (ALL_NEXTHOPS(re->ng, nexthop)) {
-		if (nexthop == re->ng.nexthop) {
+	for (ALL_NEXTHOPS_PTR(re->ng, nexthop)) {
+		if (nexthop == re->ng->nexthop) {
 			/* Prefix information. */
 			len = vty_out(vty, "%c", zebra_route_char(re->type));
 			if (re->instance)
@@ -1495,7 +1495,7 @@ static void vty_show_ip_route_summary_prefix(struct vty *vty,
 				fib_cnt[ZEBRA_ROUTE_TOTAL]++;
 				fib_cnt[re->type]++;
 			}
-			for (nexthop = re->ng.nexthop; (!cnt && nexthop);
+			for (nexthop = re->ng->nexthop; (!cnt && nexthop);
 			     nexthop = nexthop->next) {
 				cnt++;
 				rib_cnt[ZEBRA_ROUTE_TOTAL]++;
