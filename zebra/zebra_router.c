@@ -31,7 +31,9 @@
 #include "zebra_mlag.h"
 #include "zebra_nhg.h"
 
-struct zebra_router zrouter;
+struct zebra_router zrouter = {
+	.multipath_num = MULTIPATH_NUM,
+};
 
 static inline int
 zebra_router_table_entry_compare(const struct zebra_router_table *e1,

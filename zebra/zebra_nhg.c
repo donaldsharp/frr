@@ -644,7 +644,7 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re,
 		 */
 		new_active = nexthop_active_check(rn, re, nexthop, set);
 		if (new_active &&
-		    re->nexthop_active_num >= multipath_num) {
+		    re->nexthop_active_num >= zrouter.multipath_num) {
 			UNSET_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE);
 			new_active = 0;
 		}
