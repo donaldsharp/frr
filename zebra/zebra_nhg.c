@@ -48,6 +48,9 @@ static void *zebra_nhg_alloc(void *arg)
 	nhe->nhg.nexthop = NULL;
 
 	nexthop_group_copy(&nhe->nhg, &copy->nhg);
+
+	nhe->refcnt = 1;
+
 	return nhe;
 }
 
@@ -141,14 +144,11 @@ void zebra_nhg_find(afi_t afi, struct nexthop_group *nhg,
 	lookup.afi = afi;
 	lookup.nhg = *nhg;
 
-	nhe = hash_get(zrouter.nhgs, &lookup, zebra_nhg_alloc);
-
-	nhe->refcnt++;
-	/*
-	 * Have we just created this monster?
-	 */
-	if (nhe->refcnt == 1)
-	nhe->refcnt++;
+	nhe = hash_lookup(zrouter.nhgs, &lookup);
+	if (!nhe)
+		nhe = hash_get(zrouter.nhgs, &lookup, zebra_nhg_alloc);
+	else
+		nhe->refcnt++;
 
 	//re->ng = nhe->nhg;
 
