@@ -97,7 +97,6 @@ struct route_entry {
 #define ROUTE_ENTRY_FAILED           0x40
 
 	/* Nexthop information. */
-	uint8_t nexthop_num;
 	uint8_t nexthop_active_num;
 
 	/* Sequence value incremented for each dataplane operation */
