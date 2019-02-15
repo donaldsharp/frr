@@ -613,7 +613,6 @@ int zebra_add_import_table_entry(struct route_node *rn, struct route_entry *re,
 	newre->metric = re->metric;
 	newre->mtu = re->mtu;
 	newre->table = zrouter.rtm_table_default;
-	newre->nexthop_num = 0;
 	newre->uptime = time(NULL);
 	newre->instance = re->table;
 	newre->ng = nexthop_group_new();

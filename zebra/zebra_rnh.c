@@ -1027,7 +1027,8 @@ static int compare_state(struct route_entry *r1, struct route_entry *r2)
 	if (r1->metric != r2->metric)
 		return 1;
 
-	if (r1->nexthop_num != r2->nexthop_num)
+	if (nexthop_group_nexthop_num(r1->ng)
+	    != nexthop_group_nexthop_num(r2->ng))
 		return 1;
 
 	if (CHECK_FLAG(r1->status, ROUTE_ENTRY_NEXTHOPS_CHANGED)
