@@ -608,11 +608,11 @@ static unsigned nexthop_active_check(struct route_node *rn,
 	return CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE);
 }
 
-/* Iterate over all nexthops of the given RIB entry and refresh their
- * ACTIVE flag. re->nexthop_active_num is updated accordingly. If any
- * nexthop is found to toggle the ACTIVE flag, the whole re structure
- * is flagged with ROUTE_ENTRY_CHANGED. The 4th 'set' argument is
- * transparently passed to nexthop_active_check().
+/*
+ * Iterate over all nexthops of the given RIB entry and refresh their
+ * ACTIVE flag.  If any nexthop is found to toggle the ACTIVE flag,
+ * the whole re structure is flagged with ROUTE_ENTRY_CHANGED.
+ * The 4th 'set' argument is transparently passed to nexthop_active_check().
  *
  * Return value is the new number of active nexthops.
  */
@@ -624,10 +624,10 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re,
 	union g_addr prev_src;
 	unsigned int prev_active, new_active, old_num_nh;
 	ifindex_t prev_index;
+	uint8_t curr_active = 0;
 
-	old_num_nh = re->nexthop_active_num;
+	old_num_nh = nexthop_group_active_nexthop_num(re->ng);
 
-	re->nexthop_active_num = 0;
 	UNSET_FLAG(re->status, ROUTE_ENTRY_CHANGED);
 
 	for (nexthop = re->ng->nexthop; nexthop; nexthop = nexthop->next) {
@@ -643,13 +643,16 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re,
 		 * decision point.
 		 */
 		new_active = nexthop_active_check(rn, re, nexthop, set);
-		if (new_active &&
-		    re->nexthop_active_num >= zrouter.multipath_num) {
+		if (new_active
+		    && nexthop_group_active_nexthop_num(re->ng)
+			       >= zrouter.multipath_num) {
 			UNSET_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE);
 			new_active = 0;
 		}
+
 		if (new_active)
-			re->nexthop_active_num++;
+			curr_active++;
+
 		/* Don't allow src setting on IPv6 addr for now */
 		if (prev_active != new_active || prev_index != nexthop->ifindex
 		    || ((nexthop->type >= NEXTHOP_TYPE_IFINDEX
@@ -665,14 +668,14 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re,
 		}
 	}
 
-	if (old_num_nh != re->nexthop_active_num)
+	if (old_num_nh != curr_active)
 		SET_FLAG(re->status, ROUTE_ENTRY_CHANGED);
 
 	if (CHECK_FLAG(re->status, ROUTE_ENTRY_CHANGED)) {
 		SET_FLAG(re->status, ROUTE_ENTRY_NEXTHOPS_CHANGED);
 	}
 
-	return re->nexthop_active_num;
+	return curr_active;
 }
 
 static void zebra_nhg_new(const char *name)
