@@ -84,7 +84,6 @@ struct rnh {
 struct route_entry {
 	/* Link list. */
 	struct route_entry *next;
-	struct route_entry *prev;
 
 	/* Nexthop structure */
 	struct nexthop_group *ng;
