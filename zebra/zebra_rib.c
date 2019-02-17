@@ -1948,9 +1948,6 @@ static void rib_link(struct route_node *rn, struct route_entry *re, int process)
 	}
 
 	head = dest->routes;
-	if (head) {
-		head->prev = re;
-	}
 	re->next = head;
 	dest->routes = re;
 
@@ -1994,6 +1991,7 @@ void rib_unlink(struct route_node *rn, struct route_entry *re)
 {
 	rib_dest_t *dest;
 	rib_table_info_t *info;
+	struct route_entry *prev, *curr;
 
 	assert(rn && re);
 
@@ -2003,14 +2001,22 @@ void rib_unlink(struct route_node *rn, struct route_entry *re)
 
 	dest = rib_dest_from_rnode(rn);
 
-	if (re->next)
-		re->next->prev = re->prev;
+	prev = NULL;
+	curr = dest->routes;
+	while (curr) {
+		if (curr == re)
+			break;
 
-	if (re->prev)
-		re->prev->next = re->next;
-	else {
-		dest->routes = re->next;
+		prev = curr;
+		curr = curr->next;
 	}
+
+	assert(curr);
+
+	if (prev)
+		prev->next = re->next;
+	else
+		dest->routes = re->next;
 
 	if (dest->selected_fib == re)
 		dest->selected_fib = NULL;
