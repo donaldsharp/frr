@@ -716,6 +716,12 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re,
 	return curr_active;
 }
 
+static wq_item_status zebra_nhg_process(struct work_queue *item,
+					void *data)
+{
+	return WQ_SUCCESS;
+}
+
 static void zebra_nhg_new(const char *name)
 {
 }
@@ -740,9 +746,21 @@ void zebra_nhg_init(void)
 			   zebra_nhg_add_nexthop,
 			   zebra_nhg_del_nexthop,
 			   zebra_nhg_delete);
+
+	zrouter.nhgq = work_queue_new(zrouter.master,
+				      "Nexthop Group Processing");
+
+	zrouter.nhgq->spec.workfunc = &zebra_nhg_process;
+	zrouter.nhgq->spec.errorfunc = NULL;
+	zrouter.nhgq->spec.completion_func = NULL;
+	zrouter.nhgq->spec.max_retries = 3;
+	zrouter.nhgq->spec.hold = ZEBRA_NHG_PROCESS_HOLD_TIME;
+	zrouter.nhgq->spec.retry = ZEBRA_NHG_PROCESS_RETRY_TIME;
 }
 
 void zebra_nhg_terminate(void)
 {
+
+	work_queue_free_and_null(&zrouter.nhgq);
 	nexthop_group_init(NULL, NULL, NULL, NULL);
 }
