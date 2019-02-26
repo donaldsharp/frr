@@ -88,6 +88,8 @@ struct route_entry {
 	/* Nexthop structure */
 	struct nexthop_group *ng;
 
+	struct nhg_hash_entry *nhe;
+
 	/* Tag */
 	route_tag_t tag;
 
