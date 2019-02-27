@@ -1049,6 +1049,8 @@ static void show_nexthop_group_cmd_helper(struct vty *vty,
 			nexthop_group_write_nexthop(vty, nhop);
 		}
 	}
+
+	list_delete(&list);
 }
 
 DEFPY (show_nexthop_group,
