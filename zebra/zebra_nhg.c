@@ -81,8 +81,7 @@ static void *zebra_nhg_alloc(void *arg)
 	struct nhg_hash_entry *nhe;
 	struct nhg_hash_entry *copy = arg;
 
-	nhe = XMALLOC(MTYPE_TMP, sizeof(struct nhg_hash_entry));
-	memset(nhe, 0, sizeof(struct nhg_hash_entry));
+	nhe = XCALLOC(MTYPE_TMP, sizeof(struct nhg_hash_entry));
 
 	pthread_mutex_lock(&lock); /* Lock, set the id counter from kernel */
 	if (copy->id) {
