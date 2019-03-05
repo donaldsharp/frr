@@ -1180,7 +1180,7 @@ done:
 }
 
 /**
- * dplane_ctx_nexthop_init() - Initialize a context black for a nexthop update
+ * dplane_ctx_nexthop_init() - Initialize a context block for a nexthop update
  *
  * @ctx:	Dataplane context to init
  * @op:		Operation being performed
