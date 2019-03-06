@@ -34,6 +34,7 @@
 #include "zebra_routemap.h"
 #include "zserv.h"
 #include "zebra_errors.h"
+#include "zebra_dplane.h"
 
 /**
  * zebra_nhg_lookup_id() - Lookup the nexthop group id in the id table
@@ -847,6 +848,29 @@ static void zebra_nhg_del_nexthop(const struct nexthop_group_cmd *nhgc,
 
 static void zebra_nhg_delete(const char *name)
 {
+}
+
+/**
+ * zebra_nhg_install_kernel() - Install Nexthop Group hash entry into kernel
+ *
+ * @nhe:	Nexthop Group hash entry to install
+ */
+void zebra_nhg_install_kernel(struct nhg_hash_entry *nhe)
+{
+	int ret = dplane_nexthop_add(nhe);
+	switch (ret) {
+	case ZEBRA_DPLANE_REQUEST_QUEUED:
+		SET_FLAG(nhe->flags, NEXTHOP_GROUP_QUEUED);
+		break;
+	case ZEBRA_DPLANE_REQUEST_FAILURE:
+		flog_err(EC_ZEBRA_DP_INSTALL_FAIL,
+			 "Failed to install Nexthop ID (%u) into the kernel",
+			 nhe->id);
+		break;
+	case ZEBRA_DPLANE_REQUEST_SUCCESS:
+		SET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
+		break;
+	}
 }
 
 void zebra_nhg_init(void)
