@@ -420,7 +420,7 @@ static void dplane_ctx_free(struct zebra_dplane_ctx **pctx)
 	case DPLANE_OP_NH_INSTALL:
 	case DPLANE_OP_NH_UPDATE:
 	case DPLANE_OP_NH_DELETE: {
-		zebra_nhg_free(&(*pctx)->u.rinfo.zd_nhe);
+		nexthops_free((*pctx)->u.rinfo.zd_nhe.nhg.nexthop);
 		break;
 	}
 
