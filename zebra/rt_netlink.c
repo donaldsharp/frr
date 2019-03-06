@@ -1398,6 +1398,13 @@ static void _netlink_route_debug(int cmd, const struct prefix *p,
 	}
 }
 
+static void _netlink_nexthop_debug(int cmd, uint32_t id)
+{
+	if (IS_ZEBRA_DEBUG_KERNEL)
+		zlog_debug("netlink_nexthop(): %s, id=%u",
+			   nl_msg_type_to_str(cmd), id);
+}
+
 static void _netlink_mpls_debug(int cmd, uint32_t label, const char *routedesc)
 {
 	if (IS_ZEBRA_DEBUG_KERNEL)
@@ -1816,8 +1823,6 @@ int kernel_get_ipmr_sg_stats(struct zebra_vrf *zvrf, void *in)
  */
 static int netlink_nexthop(int cmd, struct zebra_dplane_ctx *ctx)
 {
-	int ret = 0;
-
 	struct {
 		struct nlmsghdr n;
 		struct nhmsg nhm;
@@ -1899,10 +1904,7 @@ static int netlink_nexthop(int cmd, struct zebra_dplane_ctx *ctx)
 		return -1;
 	}
 
-
-	if (ret) {
-		zlog_debug("Something failed with inserting nhg into kernel");
-	}
+	_netlink_nexthop_debug(cmd, nhe->id);
 
 	return netlink_talk_info(netlink_talk_filter, &req.n,
 				 dplane_ctx_get_ns(ctx), 0);
