@@ -52,7 +52,7 @@ struct nhg_hash_entry {
  * Has the nexthop group been queued to be send to the FIB?
  * The NEXTHOP_GROUP_VALID flag should also be set by this point.
  */
-#define NEXTHOP_GROUP_QUEUED 0x3
+#define NEXTHOP_GROUP_QUEUED 0x4
 };
 
 void zebra_nhg_init(void);
