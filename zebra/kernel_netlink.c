@@ -448,36 +448,26 @@ static void netlink_install_filter(int sock, __u32 pid, __u32 dplane_pid)
 		/*
 		 * 2: Compare to dplane pid
 		 */
-		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, htonl(dplane_pid), 0, 6),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, htonl(dplane_pid), 0, 4),
 		/*
 		 * 3: Load the nlmsg_type into BPF register
 		 */
 		BPF_STMT(BPF_LD | BPF_ABS | BPF_H,
 			 offsetof(struct nlmsghdr, nlmsg_type)),
 		/*
-		 * 4: Compare to RTM_NEWNEXTHOP
+		 * 4: Compare to RTM_NEWADDR
 		 */
-		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, htons(RTM_NEWADDR), 4, 0),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, htons(RTM_NEWADDR), 2, 0),
 		/*
-		 * 5: Compare to RTM_DELNEXTHOP
+		 * 5: Compare to RTM_DELADDR
 		 */
-		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, htons(RTM_NEWADDR), 3, 0),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, htons(RTM_DELADDR), 1, 0),
 		/*
-		 * 5: Compare to RTM_NEWADDR
-		 */
-		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, htons(RTM_NEWNEXTHOP), 2,
-			 0),
-		/*
-		 * 6: Compare to RTM_DELADDR
-		 */
-		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, htons(RTM_DELNEXTHOP), 1,
-			 0),
-		/*
-		 * 7: This is the end state of we want to skip the
+		 * 6: This is the end state of we want to skip the
 		 *    message
 		 */
 		BPF_STMT(BPF_RET | BPF_K, 0),
-		/* 8: This is the end state of we want to keep
+		/* 7: This is the end state of we want to keep
 		 *     the message
 		 */
 		BPF_STMT(BPF_RET | BPF_K, 0xffff),
@@ -1103,8 +1093,7 @@ void kernel_init(struct zebra_ns *zns)
 		RTMGRP_IPV4_MROUTE             |
 		RTMGRP_NEIGH                   |
 		(1 << (RTNLGRP_IPV4_RULE - 1)) |
-		(1 << (RTNLGRP_IPV6_RULE - 1)) |
-		(1 << (RTNLGRP_NEXTHOP - 1));
+		(1 << (RTNLGRP_IPV6_RULE - 1));
 
 	snprintf(zns->netlink.name, sizeof(zns->netlink.name),
 		 "netlink-listen (NS %u)", zns->ns_id);
