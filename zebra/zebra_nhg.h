@@ -79,4 +79,7 @@ extern int nexthop_active_update(struct route_node *rn,
 				 struct route_entry *re, bool set);
 
 void zebra_nhg_install_kernel(struct nhg_hash_entry *nhe);
+void zebra_nhg_uninstall_kernel(struct nhg_hash_entry *nhe);
+
+void zebra_nhg_cleanup_tables(void);
 #endif
