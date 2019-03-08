@@ -5177,6 +5177,25 @@ static int pim_cmd_spt_switchover(struct pim_instance *pim,
 	return CMD_SUCCESS;
 }
 
+DEFPY (ip_pim_use_register_source,
+       ip_pim_use_register_source_cmd,
+       "[no]$no ip pim use-register-source A.B.C.D$addr",
+       NO_STR
+       IP_STR
+       PIM_STR
+       "Use the specified ip address as the register source\n"
+       "Address to use\n")
+{
+	PIM_DECLVAR_CONTEXT(vrf, pim);
+
+	if (no)
+		pim->use_rsource.s_addr = INADDR_ANY;
+	else
+		pim->use_rsource = addr;
+
+	return CMD_SUCCESS;
+}
+
 DEFUN (ip_pim_spt_switchover_infinity,
        ip_pim_spt_switchover_infinity_cmd,
        "ip pim spt-switchover infinity-and-beyond",
@@ -8743,6 +8762,8 @@ void pim_cmd_init(void)
 	install_element(VRF_NODE, &ip_pim_register_suppress_cmd);
 	install_element(CONFIG_NODE, &no_ip_pim_register_suppress_cmd);
 	install_element(VRF_NODE, &no_ip_pim_register_suppress_cmd);
+	install_element(CONFIG_NODE, &ip_pim_use_register_source_cmd);
+	install_element(VRF_NODE, &ip_pim_use_register_source_cmd);
 	install_element(CONFIG_NODE, &ip_pim_spt_switchover_infinity_cmd);
 	install_element(VRF_NODE, &ip_pim_spt_switchover_infinity_cmd);
 	install_element(CONFIG_NODE, &ip_pim_spt_switchover_infinity_plist_cmd);

@@ -318,6 +318,8 @@ static int pim_mroute_msg_wholepkt(int fd, struct interface *ifp,
 	 * If we've received a register suppress
 	 */
 	if (!up->t_rs_timer) {
+		struct in_addr s;
+
 		if (pim_is_grp_ssm(pim_ifp->pim, sg.grp)) {
 			if (PIM_DEBUG_PIM_REG)
 				zlog_debug(
@@ -325,9 +327,12 @@ static int pim_mroute_msg_wholepkt(int fd, struct interface *ifp,
 					pim_str_sg_dump(&sg));
 			return 0;
 		}
+
+		s = (pim_ifp->pim->use_rsource.s_addr) ?
+			pim_ifp->pim->use_rsource : pim_ifp->primary_address;
 		pim_register_send((uint8_t *)buf + sizeof(struct ip),
 				  ntohs(ip_hdr->ip_len) - sizeof(struct ip),
-				  pim_ifp->primary_address, rpg, 0, up);
+				  s, rpg, 0, up);
 	}
 	return 0;
 }

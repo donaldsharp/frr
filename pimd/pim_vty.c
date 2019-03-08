@@ -193,6 +193,11 @@ int pim_global_config_write_worker(struct pim_instance *pim, struct vty *vty)
 			pim->rp_keep_alive_time);
 		++writes;
 	}
+	if (pim->use_rsource.s_addr != INADDR_ANY) {
+		vty_out(vty, "%sip pim use-register-source %s\n", spaces,
+			inet_ntoa(pim->use_rsource));
+		++writes;
+	}
 	if (router->packet_process != PIM_DEFAULT_PACKET_PROCESS) {
 		vty_out(vty, "%sip pim packets %d\n", spaces,
 			router->packet_process);

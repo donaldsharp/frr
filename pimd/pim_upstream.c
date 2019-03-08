@@ -1322,6 +1322,7 @@ static int pim_upstream_register_stop_timer(struct thread *t)
 	struct ip ip_hdr;
 	up = THREAD_ARG(t);
 	pim = up->channel_oil->pim;
+	struct in_addr s;
 
 	if (PIM_DEBUG_TRACE) {
 		char state_str[PIM_REG_STATE_STR_LEN];
@@ -1376,8 +1377,10 @@ static int pim_upstream_register_stop_timer(struct thread *t)
 		ip_hdr.ip_dst = up->sg.grp;
 		ip_hdr.ip_len = htons(20);
 		// checksum is broken
+		s = pim->use_rsource.s_addr ?
+			pim->use_rsource : pim_ifp->primary_address;
 		pim_register_send((uint8_t *)&ip_hdr, sizeof(struct ip),
-				  pim_ifp->primary_address, rpg, 1, up);
+				  s, rpg, 1, up);
 		break;
 	default:
 		break;

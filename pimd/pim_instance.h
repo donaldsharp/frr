@@ -90,6 +90,8 @@ struct pim_instance {
 
 	struct interface *regiface;
 
+	struct in_addr use_rsource;
+
 	// List of static routes;
 	struct list *static_routes;
 
