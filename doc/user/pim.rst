@@ -128,6 +128,16 @@ Certain signals have special meanings to *pimd*.
    never do SM over. This command is vrf aware, to configure for a vrf, enter
    the vrf submode.
 
+.. index:: ip pim use-register-source A.B.C.D
+.. clicmd:: ip pim use-register-source A.B.C.D
+
+   Specify a ip address to use as a registration source for sending packets
+   to the RP.  This is meant to be used when some sort of ANYCAST address
+   is being used as the receiving interface of the multicast stream.  There
+   currently is no checks done on this address to ensure it exists on this
+   particular box.  The address choosen must be also assigned to this router
+   in question that the command is on.
+
 .. index:: ip multicast rpf-lookup-mode WORD
 .. clicmd:: ip multicast rpf-lookup-mode WORD
 
