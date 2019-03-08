@@ -45,7 +45,8 @@ struct route_entry {
 	/* Nexthop structure */
 	struct nexthop_group *ng;
 
-	struct nhg_hash_entry *nhe;
+	/* Nexthop group hash entry ID */
+	uint32_t nhe_id;
 
 	/* Tag */
 	route_tag_t tag;
