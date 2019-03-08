@@ -2855,6 +2855,12 @@ static int rib_process_dplane_results(struct thread *thread)
 				rib_process_result(ctx);
 				break;
 
+			case DPLANE_OP_NH_INSTALL:
+			case DPLANE_OP_NH_UPDATE:
+			case DPLANE_OP_NH_DELETE:
+				zebra_nhg_dplane_result(ctx);
+				break;
+
 			case DPLANE_OP_LSP_INSTALL:
 			case DPLANE_OP_LSP_UPDATE:
 			case DPLANE_OP_LSP_DELETE:
