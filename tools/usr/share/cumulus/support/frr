@@ -44,6 +44,11 @@ func_frr()
     exec_cmd bgp.ipv6_update_group vtysh -c "show bgp vrf all ipv6 uni update-group"
     exec_cmd $jexec bgp.ipv6_route vtysh -c "show bgp vrf all ipv6 uni $json"
 
+    exec_cmd $jexec bgp.ipv4_vpn_route_leak vtysh -c "show bgp vrf all ipv4 unicast route-leak $json"
+    exec_cmd $jexec bgp.ipv6_vpn_route_leak vtysh -c "show bgp vrf all ipv6 unicast route-leak $json"
+    exec_cmd bgp.ipv4_vpn_all vtysh -c "show bgp ipv4 vpn all"
+    exec_cmd bgp.ipv6_vpn_all vtysh -c "show bgp ipv6 vpn all"
+
     exec_cmd frr.show_running vtysh -c "show running-config"
 
     exec_cmd zebra.vrf vtysh -c "show vrf"
