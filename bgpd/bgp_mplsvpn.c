@@ -1353,6 +1353,97 @@ static void vpn_policy_routemap_update(struct bgp *bgp, const char *rmap_name)
 	}
 }
 
+/* This API is used during router-id change, reflect VPNs
+ * auto RD and RT values and readvertise routes to VPN table.
+ */
+void vpn_handle_router_id_update(struct bgp *bgp, bool withdraw)
+{
+	afi_t afi;
+	int debug;
+	char *vname;
+	const char *export_name;
+	char buf[RD_ADDRSTRLEN];
+	struct bgp *bgp_import;
+	struct listnode *node;
+	struct ecommunity *ecom;
+	vpn_policy_direction_t idir, edir;
+
+	if (bgp->inst_type != BGP_INSTANCE_TYPE_DEFAULT
+	    && bgp->inst_type != BGP_INSTANCE_TYPE_VRF)
+		return;
+
+	export_name = bgp->name ? bgp->name : VRF_DEFAULT_NAME;
+	debug = (BGP_DEBUG(vpn, VPN_LEAK_TO_VRF) |
+		     BGP_DEBUG(vpn, VPN_LEAK_FROM_VRF));
+
+	idir = BGP_VPN_POLICY_DIR_FROMVPN;
+	edir = BGP_VPN_POLICY_DIR_TOVPN;
+
+	for (afi = 0; afi < AFI_MAX; ++afi) {
+		if (!vpn_leak_to_vpn_active(bgp, afi, NULL))
+			continue;
+
+		if (withdraw) {
+			vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN,
+					   afi, bgp_get_default(), bgp);
+			if (debug)
+				zlog_debug("%s: %s after to_vpn vpn_leak_prechange",
+					   __func__, export_name);
+
+			/* Remove import RT from VRFs */
+			ecom = bgp->vpn_policy[afi].rtlist[edir];
+			for (ALL_LIST_ELEMENTS_RO(bgp->vpn_policy[afi].
+						  export_vrf, node, vname)) {
+				bgp_import = bgp_lookup_by_name(vname);
+				if (!bgp_import)
+					continue;
+
+				ecommunity_del_val(bgp_import->vpn_policy[afi].
+						   rtlist[idir],
+					(struct ecommunity_val *)ecom->val);
+
+			}
+		} else {
+			/* New router-id derive auto RD and RT and export
+			 * to VPN
+			 */
+			form_auto_rd(bgp->router_id, bgp->vrf_rd_id,
+				     &bgp->vrf_prd_auto);
+			bgp->vpn_policy[afi].tovpn_rd = bgp->vrf_prd_auto;
+			prefix_rd2str(&bgp->vpn_policy[afi].tovpn_rd, buf,
+				      sizeof(buf));
+			bgp->vpn_policy[afi].rtlist[edir] =
+				ecommunity_str2com(buf,
+						   ECOMMUNITY_ROUTE_TARGET, 0);
+
+			/* Update import_vrf rt_list */
+			ecom = bgp->vpn_policy[afi].rtlist[edir];
+			for (ALL_LIST_ELEMENTS_RO(bgp->vpn_policy[afi].
+						  export_vrf, node, vname)) {
+				bgp_import = bgp_lookup_by_name(vname);
+				if (!bgp_import)
+					continue;
+				if (bgp_import->vpn_policy[afi].rtlist[idir])
+					bgp_import->vpn_policy[afi].rtlist[idir]
+						= ecommunity_merge(
+						bgp_import->vpn_policy[afi]
+						.rtlist[idir], ecom);
+				else
+					bgp_import->vpn_policy[afi].rtlist[idir]
+						= ecommunity_dup(ecom);
+
+			}
+			/* Update routes to VPN */
+			vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN,
+					    afi, bgp_get_default(),
+					    bgp);
+			if (debug)
+				zlog_debug("%s: %s after to_vpn vpn_leak_postchange",
+					   __func__, export_name);
+		}
+	}
+}
+
 void vpn_policy_routemap_event(const char *rmap_name)
 {
 	int debug = BGP_DEBUG(vpn, VPN_LEAK_RMAP_EVENT);
@@ -1378,11 +1469,14 @@ void vrf_import_from_vrf(struct bgp *bgp, struct bgp *vrf_bgp,
 	char buf[1000];
 	struct ecommunity *ecom;
 	bool first_export = false;
+	int debug;
 
 	export_name = bgp->name ? bgp->name : VRF_DEFAULT_NAME;
 	idir = BGP_VPN_POLICY_DIR_FROMVPN;
 	edir = BGP_VPN_POLICY_DIR_TOVPN;
 
+	debug = (BGP_DEBUG(vpn, VPN_LEAK_TO_VRF) |
+		     BGP_DEBUG(vpn, VPN_LEAK_FROM_VRF));
 
 	/* Cross-ref both VRFs. Also, note if this is the first time
 	 * any VRF is importing from "import_vrf".
@@ -1423,6 +1517,23 @@ void vrf_import_from_vrf(struct bgp *bgp, struct bgp *vrf_bgp,
 		bgp->vpn_policy[afi].rtlist[idir] = ecommunity_dup(ecom);
 	SET_FLAG(bgp->af_flags[afi][safi], BGP_CONFIG_VRF_TO_VRF_IMPORT);
 
+	if (debug) {
+		const char *from_name;
+
+		from_name = vrf_bgp->name ? vrf_bgp->name :
+			VRF_DEFAULT_NAME;
+		zlog_debug("%s from %s to %s first_export %u import-rt %s export-rt %s",
+			   __func__, from_name, export_name, first_export,
+			   bgp->vpn_policy[afi].rtlist[idir] ?
+			   (ecommunity_ecom2str(bgp->vpn_policy[afi].
+						rtlist[idir],
+					ECOMMUNITY_FORMAT_ROUTE_MAP, 0)) : " ",
+			   bgp->vpn_policy[afi].rtlist[edir] ?
+			   (ecommunity_ecom2str(bgp->vpn_policy[afi].
+						rtlist[edir],
+					ECOMMUNITY_FORMAT_ROUTE_MAP, 0)) : " ");
+	}
+
 	/* Does "import_vrf" first need to export its routes or that
 	 * is already done and we just need to import those routes
 	 * from the global table?
@@ -1441,11 +1552,15 @@ void vrf_unimport_from_vrf(struct bgp *bgp, struct bgp *vrf_bgp,
 	char *vname;
 	struct ecommunity *ecom;
 	struct listnode *node;
+	int debug;
 
 	export_name = bgp->name ? bgp->name : VRF_DEFAULT_NAME;
 	tmp_name = vrf_bgp->name ? vrf_bgp->name : VRF_DEFAULT_NAME;
 	idir = BGP_VPN_POLICY_DIR_FROMVPN;
 	edir = BGP_VPN_POLICY_DIR_TOVPN;
+
+	debug = (BGP_DEBUG(vpn, VPN_LEAK_TO_VRF) |
+		     BGP_DEBUG(vpn, VPN_LEAK_FROM_VRF));
 
 	/* Were we importing from "import_vrf"? */
 	for (ALL_LIST_ELEMENTS_RO(bgp->vpn_policy[afi].import_vrf, node,
@@ -1455,6 +1570,9 @@ void vrf_unimport_from_vrf(struct bgp *bgp, struct bgp *vrf_bgp,
 	}
 	if (!vname)
 		return;
+
+	if (debug)
+		zlog_debug("%s from %s to %s", __func__, vname, export_name);
 
 	/* Remove "import_vrf" from our import list. */
 	listnode_delete(bgp->vpn_policy[afi].import_vrf, vname);

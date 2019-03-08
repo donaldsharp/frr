@@ -232,5 +232,6 @@ static inline bool is_ri_family_vpn(struct bgp_info *ri)
 extern void vpn_policy_routemap_event(const char *rmap_name);
 
 extern void vpn_leak_postchange_all(void);
+extern void vpn_handle_router_id_update(struct bgp *bgp, bool withdraw);
 
 #endif /* _QUAGGA_BGP_MPLSVPN_H */
