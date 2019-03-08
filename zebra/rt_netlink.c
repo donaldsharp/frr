@@ -2241,6 +2241,8 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 				return -1;
 			}
 		}
+		SET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
+
 	} else if (h->nlmsg_type == RTM_DELNEXTHOP) {
 		if (!nhe) {
 			flog_warn(
@@ -2249,6 +2251,8 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 				id);
 			return -1;
 		}
+
+		UNSET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
 
 		// TODO: Run some active check on all route_entry's?
 		if (nhe->refcnt) {
