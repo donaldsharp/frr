@@ -614,6 +614,7 @@ static int netlink_route_change_read_unicast(struct nlmsghdr *h, ns_id_t ns_id,
 			re->table = table;
 			re->uptime = time(NULL);
 			re->tag = tag;
+			re->nhe_id = nhe_id;
 			re->ng = nexthop_group_new();
 
 			for (;;) {
