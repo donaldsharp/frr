@@ -2055,17 +2055,18 @@ enum zebra_dplane_result kernel_route_update(struct zebra_dplane_ctx *ctx)
  *
  * @tb:		Netlink RTA data
  * @family:	Address family in the nhmsg
+ * @ifp:	Interface connected - this should be NULL, we fill it in
  * @ns_id:	Namspace id
  *
  * Return:	New nexthop
  */
 static struct nexthop netlink_nexthop_process_nh(struct rtattr **tb,
 						 unsigned char family,
+						 struct interface **ifp,
 						 ns_id_t ns_id)
 {
 	struct nexthop nh = {0};
 	void *gate = NULL;
-	struct interface *ifp = NULL;
 	int if_index;
 	size_t sz;
 
@@ -2097,9 +2098,9 @@ static struct nexthop netlink_nexthop_process_nh(struct rtattr **tb,
 
 	nh.ifindex = if_index;
 
-	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id), nh.ifindex);
+	*ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id), nh.ifindex);
 	if (ifp) {
-		nh.vrf_id = ifp->vrf_id;
+		nh.vrf_id = (*ifp)->vrf_id;
 	} else {
 		flog_warn(
 			EC_ZEBRA_UNKNOWN_INTERFACE,
@@ -2182,6 +2183,7 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	/* nexthop group id */
 	uint32_t id;
 	unsigned char family;
+	struct interface *ifp = NULL;
 	struct nhmsg *nhm = NULL;
 	/* struct for nexthop group abstraction  */
 	struct nexthop_group nhg = {0};
@@ -2249,7 +2251,8 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			 * This is a true new nexthop, so we need
 			 * to parse the gateway and device info
 			 */
-			nh = netlink_nexthop_process_nh(tb, family, ns_id);
+			nh = netlink_nexthop_process_nh(tb, family, &ifp,
+							ns_id);
 		}
 
 
@@ -2269,6 +2272,12 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			nhe = zebra_nhg_find(&nhg, nh.vrf_id, id);
 			if (nhe) {
 				nhe->is_kernel_nh = true;
+				if (ifp) {
+					/* Add the nhe to the interface's list
+					 * of connected nhe's
+					 */
+					nhe_connected_add(ifp, nhe);
+				}
 			} else {
 				return -1;
 			}
