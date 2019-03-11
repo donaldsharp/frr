@@ -2182,28 +2182,37 @@ static int netlink_macfdb_update(struct interface *ifp, vlanid_t vid,
 			    0);
 }
 
+#define NUD_VALID                                                              \
+	(NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE | NUD_PROBE | NUD_STALE     \
+	 | NUD_DELAY)
+
 /*
  * In the event the kernel deletes ipv4 link-local neighbor entries created for
  * 5549 support, re-install them.
  */
-static void netlink_handle_5549(struct ndmsg *ndm, struct zebra_if *zif,
+static bool netlink_handle_5549(uint16_t msgtype, struct ndmsg *ndm,
+				struct zebra_if *zif,
 				struct interface *ifp, struct ipaddr *ip)
 {
-	if (ndm->ndm_family != AF_INET)
-		return;
+	/* Only care if doing 5549 and notif is for special link-local IP */
+	if (ndm->ndm_family != AF_INET
+	    || !zif->v6_2_v4_ll_neigh_entry
+	    || ipv4_ll.s_addr != ip->ip._v4_addr.s_addr)
+		return false;
 
-	if (!zif->v6_2_v4_ll_neigh_entry)
-		return;
+	/* Upon a DEL for a permanent entry or state change to FAILED,
+	 * reinstall the entry. Note that the update function invoked
+	 * issues a delete first.
+	 */
+	if ((msgtype == RTM_DELNEIGH  && (ndm->ndm_state & NUD_PERMANENT))
+	    || (msgtype == RTM_NEWNEIGH && !(ndm->ndm_state & NUD_VALID))) {
+		if_nbr_ipv6ll_to_ipv4ll_neigh_update(
+			ifp, &zif->v6_2_v4_ll_addr6, true);
+		return true;
+	}
 
-	if (ipv4_ll.s_addr != ip->ip._v4_addr.s_addr)
-		return;
-
-	if_nbr_ipv6ll_to_ipv4ll_neigh_update(ifp, &zif->v6_2_v4_ll_addr6, true);
+	return false;
 }
-
-#define NUD_VALID                                                              \
-	(NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE | NUD_PROBE | NUD_STALE     \
-	 | NUD_DELAY)
 
 static int netlink_ipneigh_change(struct sockaddr_nl *snl, struct nlmsghdr *h,
 				  int len, ns_id_t ns_id)
@@ -2247,15 +2256,15 @@ static int netlink_ipneigh_change(struct sockaddr_nl *snl, struct nlmsghdr *h,
 	ip.ipa_type = (ndm->ndm_family == AF_INET) ? IPADDR_V4 : IPADDR_V6;
 	memcpy(&ip.ip.addr, RTA_DATA(tb[NDA_DST]), RTA_PAYLOAD(tb[NDA_DST]));
 
-	/* if kernel deletes our rfc5549 neighbor entry, re-install it */
-	if (h->nlmsg_type == RTM_DELNEIGH && (ndm->ndm_state & NUD_PERMANENT)) {
-		netlink_handle_5549(ndm, zif, ifp, &ip);
+	/* if this notification is related to the special neigh entry we've
+	 * added for rfc5549, handle it separately.
+	 */
+	if (netlink_handle_5549(h->nlmsg_type, ndm, zif, ifp, &ip))
 		return 0;
-	}
 
-	/* if kernel marks our rfc5549 neighbor entry invalid, re-install it */
-	if (h->nlmsg_type == RTM_NEWNEIGH && !(ndm->ndm_state & NUD_VALID))
-		netlink_handle_5549(ndm, zif, ifp, &ip);
+	/* Non rfc5549 scenario - ignore events for permanent entries. */
+	if (ndm->ndm_state & NUD_PERMANENT)
+		return 0;
 
 	/* The neighbor is present on an SVI. From this, we locate the
 	 * underlying
