@@ -247,10 +247,10 @@ void connected_up(struct interface *ifp, struct connected *ifc)
 	metric = (ifc->metric < (uint32_t)METRIC_MAX) ?
 				ifc->metric : ifp->metric;
 	rib_add(afi, SAFI_UNICAST, ifp->vrf_id, ZEBRA_ROUTE_CONNECT, 0, 0, &p,
-		NULL, &nh, RT_TABLE_MAIN, metric, 0, 0, 0);
+		NULL, &nh, 0, RT_TABLE_MAIN, metric, 0, 0, 0);
 
 	rib_add(afi, SAFI_MULTICAST, ifp->vrf_id, ZEBRA_ROUTE_CONNECT, 0, 0, &p,
-		NULL, &nh, RT_TABLE_MAIN, metric, 0, 0, 0);
+		NULL, &nh, 0, RT_TABLE_MAIN, metric, 0, 0, 0);
 
 	if (IS_ZEBRA_DEBUG_RIB_DETAILED) {
 		char buf[PREFIX_STRLEN];
