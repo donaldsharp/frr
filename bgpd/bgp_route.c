@@ -3009,7 +3009,7 @@ int bgp_update(struct peer *peer, struct prefix *p, u_int32_t addpath_id,
 		goto filtered;
 	}
 
-	if (bgp_mac_entry_exists(p) || attr->rmac_exist) {
+	if (bgp_mac_entry_exists(p) || bgp_mac_exist(&attr->rmac)) {
 		reason = "self mac;";
 		goto filtered;
 	}

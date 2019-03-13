@@ -205,9 +205,6 @@ struct attr {
 
 	/* EVPN local router-mac */
 	struct ethaddr rmac;
-
-	/* EVPN parsed router-mac check against local MACs */
-	bool rmac_exist;
 };
 
 /* rmap_change_flags definition */

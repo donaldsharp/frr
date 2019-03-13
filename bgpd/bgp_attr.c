@@ -1920,7 +1920,6 @@ bgp_attr_ext_communities(struct bgp_attr_parser_args *args)
 	/* Extract the Rmac, if any */
 	if (bgp_attr_rmac(attr, &attr->rmac)) {
 		if (bgp_mac_exist(&attr->rmac)) {
-			attr->rmac_exist = true;
 			if (bgp_debug_update(peer, NULL, NULL, 1)) {
 				char buf1[ETHER_ADDR_STRLEN];
 
