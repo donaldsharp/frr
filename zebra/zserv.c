@@ -1155,10 +1155,15 @@ static int zread_interface_set_protodown(struct zserv *client, u_short length,
 
 	/* set ifdown */
 	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(NS_DEFAULT), ifindex);
-	zlog_info("Setting interface %s (%u): protodown %s", ifp->name, ifindex,
-		  down ? "on" : "off");
-
-	zebra_if_set_protodown(ifp, down);
+	if (ifp) {
+		zlog_info("Setting interface %s (%u): protodown %s", ifp->name,
+			  ifindex, down ? "on" : "off");
+		zebra_if_set_protodown(ifp, down);
+	} else {
+		zlog_warn(
+			"Cannot set protodown %s for interface %u; does not exist",
+			down ? "on" : "off", ifindex);
+	}
 
 stream_failure:
 	return 0;
