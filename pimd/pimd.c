@@ -115,8 +115,6 @@ void pim_terminate()
 {
 	struct zclient *zclient;
 
-	pim_free();
-
 	/* reverse prefix_list_init */
 	prefix_list_add_hook(NULL);
 	prefix_list_delete_hook(NULL);
@@ -130,5 +128,6 @@ void pim_terminate()
 		zclient_free(zclient);
 	}
 
+	pim_free();
 	frr_fini();
 }
