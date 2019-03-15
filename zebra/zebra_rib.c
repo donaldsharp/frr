@@ -446,7 +446,15 @@ static int nexthop_active(afi_t afi, struct route_entry *re,
 	 */
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK)) {
 		ifp = if_lookup_by_index(nexthop->ifindex, nexthop->vrf_id);
-		if ((ifp && connected_is_unnumbered(ifp))
+		if (!ifp) {
+			if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+				zlog_debug(
+					"\t%s: Onlink and interface: %u[%u] does not exist",
+					__PRETTY_FUNCTION__, nexthop->ifindex,
+					nexthop->vrf_id);
+			return 0;
+		}
+		if (connected_is_unnumbered(ifp)
 		    || CHECK_FLAG(re->flags, ZEBRA_FLAG_ONLINK)) {
 			if (if_is_operative(ifp))
 				return 1;
