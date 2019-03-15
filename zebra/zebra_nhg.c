@@ -25,9 +25,10 @@
 #include "nexthop_group.h"
 #include "jhash.h"
 #include "routemap.h"
-
 #include "connected.h"
 #include "debug.h"
+
+#include "zebra_memory.h"
 #include "zebra_router.h"
 #include "zebra_nhg.h"
 #include "zebra_rnh.h"
@@ -35,6 +36,7 @@
 #include "zserv.h"
 #include "zebra_errors.h"
 
+DEFINE_MTYPE_STATIC(ZEBRA, NHG, "Nexthop Group Entry");
 /**
  * zebra_nhg_lookup_id() - Lookup the nexthop group id in the id table
  *
@@ -81,7 +83,7 @@ static void *zebra_nhg_alloc(void *arg)
 	struct nhg_hash_entry *nhe;
 	struct nhg_hash_entry *copy = arg;
 
-	nhe = XCALLOC(MTYPE_TMP, sizeof(struct nhg_hash_entry));
+	nhe = XCALLOC(MTYPE_NHG, sizeof(struct nhg_hash_entry));
 
 	pthread_mutex_lock(&lock); /* Lock, set the id counter from kernel */
 	if (copy->id) {
@@ -274,7 +276,8 @@ void zebra_nhg_free(void *arg)
 	nhe = (struct nhg_hash_entry *)arg;
 
 	nexthops_free(nhe->nhg.nexthop);
-	XFREE(MTYPE_TMP, nhe);
+
+	XFREE(MTYPE_NHG, nhe);
 }
 
 /**
