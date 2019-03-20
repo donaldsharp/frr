@@ -2230,8 +2230,8 @@ int vrrp_config_write_interface(struct vty *vty)
 		    && ++writes)
 			vty_out(vty,
 				" vrrp %" PRIu8
-				" advertisement-interval %" PRIu16 "\n",
-				vr->vrid, vr->advertisement_interval);
+				" advertisement-interval %d\n",
+				vr->vrid, vr->advertisement_interval * CS2MS);
 
 		if (vr->priority != vd.priority && ++writes)
 			vty_out(vty, " vrrp %" PRIu8 " priority %" PRIu8 "\n",
