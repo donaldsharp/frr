@@ -4564,7 +4564,8 @@ int bgp_evpn_local_l3vni_add(vni_t l3vni,
 		evpn_auto_rt_export_add_for_vrf(bgp_vrf);
 
 	/* auto derive RD */
-	bgp_evpn_derive_auto_rd_for_vrf(bgp_vrf);
+	if (!is_vrf_rd_configured(bgp_vrf))
+		bgp_evpn_derive_auto_rd_for_vrf(bgp_vrf);
 
 	/* link all corresponding l2vnis */
 	hash_iterate(bgp_def->vnihash,
