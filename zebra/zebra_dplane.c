@@ -92,7 +92,6 @@ struct dplane_route_info {
 	uint32_t zd_nexthop_mtu;
 
 	/* Nexthop hash entry */
-	// TODO: Adjust the others as needed
 	struct nhg_hash_entry zd_nhe;
 
 	/* Nexthops */
@@ -420,7 +419,7 @@ static void dplane_ctx_free(struct zebra_dplane_ctx **pctx)
 	case DPLANE_OP_NH_INSTALL:
 	case DPLANE_OP_NH_UPDATE:
 	case DPLANE_OP_NH_DELETE: {
-		nexthops_free((*pctx)->u.rinfo.zd_nhe.nhg.nexthop);
+		zebra_nhg_free_members(&(*pctx)->u.rinfo.zd_nhe);
 		break;
 	}
 
@@ -1193,7 +1192,6 @@ static int dplane_ctx_nexthop_init(struct zebra_dplane_ctx *ctx,
 				   struct nhg_hash_entry *nhe)
 {
 	struct zebra_ns *zns = NULL;
-	struct zebra_vrf *zvrf = NULL;
 
 	int ret = EINVAL;
 
@@ -1204,13 +1202,23 @@ static int dplane_ctx_nexthop_init(struct zebra_dplane_ctx *ctx,
 	ctx->zd_status = ZEBRA_DPLANE_REQUEST_SUCCESS;
 
 	/* Copy over nhe info */
-	ctx->u.rinfo.zd_nhe = *nhe;
-	ctx->u.rinfo.zd_nhe.nhg.nexthop = NULL;
-	nexthop_group_copy(&(ctx->u.rinfo.zd_nhe.nhg), &nhe->nhg);
+	ctx->u.rinfo.zd_nhe.id = nhe->id;
+	ctx->u.rinfo.zd_nhe.vrf_id = nhe->vrf_id;
+	ctx->u.rinfo.zd_nhe.afi = nhe->afi;
+	ctx->u.rinfo.zd_nhe.refcnt = nhe->refcnt;
+	ctx->u.rinfo.zd_nhe.is_kernel_nh = nhe->is_kernel_nh;
+	ctx->u.rinfo.zd_nhe.dplane_ref = nhe->dplane_ref;
+	ctx->u.rinfo.zd_nhe.ifp = nhe->ifp;
+
+	ctx->u.rinfo.zd_nhe.nhg = nexthop_group_new();
+	nexthop_group_copy(ctx->u.rinfo.zd_nhe.nhg, nhe->nhg);
+
+	if (nhe->nhg_depends)
+		ctx->u.rinfo.zd_nhe.nhg_depends = list_dup(nhe->nhg_depends);
+
 
 	/* Extract ns info - can't use pointers to 'core' structs */
-	zvrf = vrf_info_lookup(nhe->vrf_id);
-	zns = zvrf->zns;
+	zns = ((struct zebra_vrf *)vrf_info_lookup(nhe->vrf_id))->zns;
 
 	// TODO: Might not need to mark this as an update, since
 	// it probably won't require two messages
