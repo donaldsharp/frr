@@ -242,6 +242,10 @@ static void *zebra_nhg_alloc(void *arg)
 	zebra_nhg_insert_id(nhe);
 
 
+	/* Send it to the kernel */
+	if (!nhe->is_kernel_nh)
+		zebra_nhg_install_kernel(nhe);
+
 	return nhe;
 }
 
@@ -305,8 +309,6 @@ bool zebra_nhg_hash_equal(const void *arg1, const void *arg2)
 {
 	const struct nhg_hash_entry *nhe1 = arg1;
 	const struct nhg_hash_entry *nhe2 = arg2;
-	struct nexthop *nh1, *nh2;
-	uint32_t nh_count = 0;
 
 	if (nhe1->vrf_id != nhe2->vrf_id)
 		return false;
@@ -314,24 +316,8 @@ bool zebra_nhg_hash_equal(const void *arg1, const void *arg2)
 	if (nhe1->afi != nhe2->afi)
 		return false;
 
-	/*
-	 * Again we are not interested in looking at any recursively
-	 * resolved nexthops.  Top level only
-	 */
-	for (nh1 = nhe1->nhg->nexthop; nh1; nh1 = nh1->next) {
-		uint32_t inner_nh_count = 0;
-		for (nh2 = nhe2->nhg->nexthop; nh2; nh2 = nh2->next) {
-			if (inner_nh_count == nh_count) {
-				break;
-			}
-			inner_nh_count++;
-		}
-
-		if (!nexthop_same(nh1, nh2))
-			return false;
-
-		nh_count++;
-	}
+	if (!zebra_nhg_depends_equal(nhe1, nhe2))
+		return false;
 
 	return true;
 }
