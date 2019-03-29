@@ -138,7 +138,11 @@ typedef unsigned char u_int8_t;
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
+#ifdef GNU_LINUX
+#include <linux/tcp.h>
+#else
 #include <netinet/tcp.h>
+#endif
 
 #ifdef HAVE_NET_NETOPT_H
 #include <net/netopt.h>

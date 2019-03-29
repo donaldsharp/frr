@@ -62,7 +62,7 @@ struct bgp_listener {
  * If the password is NULL or zero-length, the option will be disabled.
  */
 static int bgp_md5_set_socket(int socket, union sockunion *su,
-			      const char *password)
+			      uint16_t prefixlen, const char *password)
 {
 	int ret = -1;
 	int en = ENOSYS;
@@ -79,21 +79,43 @@ static int bgp_md5_set_socket(int socket, union sockunion *su,
 		su2.sin.sin_port = 0;
 	else
 		su2.sin6.sin6_port = 0;
-	ret = sockopt_tcp_signature(socket, &su2, password);
+
+	/* For addresses, use the non-extended signature functionality */
+	if ((su2.sa.sa_family == AF_INET && prefixlen == IPV4_MAX_PREFIXLEN)
+	    || (su2.sa.sa_family == AF_INET6
+		&& prefixlen == IPV6_MAX_PREFIXLEN))
+		ret = sockopt_tcp_signature(socket, &su2, password);
+	else
+		ret = sockopt_tcp_signature_ext(socket, &su2, prefixlen,
+						password);
 	en = errno;
 #endif /* HAVE_TCP_MD5SIG */
 
-	if (ret < 0)
-		flog_warn(BGP_WARN_NO_TCP_MD5,
-			  "can't set TCP_MD5SIG option on socket %d: %s",
-			  socket, safe_strerror(en));
+	if (ret < 0) {
+		char sabuf[SU_ADDRSTRLEN];
+		sockunion2str(su, sabuf, sizeof(sabuf));
+
+		switch (ret) {
+		case -2:
+			flog_warn(
+				BGP_WARN_NO_TCP_MD5,
+				"Unable to set TCP MD5 option on socket for peer %s (sock=%d): This platform does not support MD5 auth for prefixes",
+				sabuf, socket);
+			break;
+		default:
+			flog_warn(
+				BGP_WARN_NO_TCP_MD5,
+				"Unable to set TCP MD5 option on socket for peer %s (sock=%d): %s",
+				sabuf, socket, safe_strerror(en));
+		}
+	}
 
 	return ret;
 }
 
 /* Helper for bgp_connect */
 static int bgp_md5_set_connect(int socket, union sockunion *su,
-			       const char *password)
+			       uint16_t prefixlen, const char *password)
 {
 	int ret = -1;
 
@@ -104,7 +126,7 @@ static int bgp_md5_set_connect(int socket, union sockunion *su,
 		return ret;
 	}
 
-	ret = bgp_md5_set_socket(socket, su, password);
+	ret = bgp_md5_set_socket(socket, su, prefixlen, password);
 
 	if (bgpd_privs.change(ZPRIVS_LOWER))
 		flog_err(LIB_ERR_PRIVILEGES, "%s: could not lower privs",
@@ -132,8 +154,12 @@ static int bgp_md5_set_password(struct peer *peer, const char *password)
 	 */
 	for (ALL_LIST_ELEMENTS_RO(bm->listen_sockets, node, listener))
 		if (listener->su.sa.sa_family == peer->su.sa.sa_family) {
+			uint16_t prefixlen = peer->su.sa.sa_family == AF_INET
+						     ? IPV4_MAX_PREFIXLEN
+						     : IPV6_MAX_PREFIXLEN;
+
 			ret = bgp_md5_set_socket(listener->fd, &peer->su,
-						 password);
+						 prefixlen, password);
 			break;
 		}
 
@@ -142,6 +168,38 @@ static int bgp_md5_set_password(struct peer *peer, const char *password)
 			  __func__);
 
 	return ret;
+}
+
+int bgp_md5_set_prefix(struct prefix *p, const char *password)
+{
+	int ret = 0;
+	union sockunion su;
+	struct listnode *node;
+	struct bgp_listener *listener;
+
+	/* Set or unset the password on the listen socket(s). */
+	if (bgpd_privs.change(ZPRIVS_RAISE)) {
+		flog_err(LIB_ERR_PRIVILEGES, "%s: could not raise privs",
+			 __func__);
+		return -1;
+	}
+	for (ALL_LIST_ELEMENTS_RO(bm->listen_sockets, node, listener))
+		if (listener->su.sa.sa_family == p->family) {
+			prefix2sockunion(p, &su);
+			ret = bgp_md5_set_socket(listener->fd, &su,
+						 p->prefixlen, password);
+			break;
+		}
+	if (bgpd_privs.change(ZPRIVS_LOWER))
+		flog_err(LIB_ERR_PRIVILEGES, "%s: could not lower privs",
+			 __func__);
+
+	return ret;
+}
+
+int bgp_md5_unset_prefix(struct prefix *p)
+{
+	return bgp_md5_set_prefix(p, NULL);
 }
 
 int bgp_md5_set(struct peer *peer)
@@ -597,8 +655,14 @@ int bgp_connect(struct peer *peer)
 			  __func__);
 #endif
 
-	if (peer->password)
-		bgp_md5_set_connect(peer->fd, &peer->su, peer->password);
+	if (peer->password) {
+		uint16_t prefixlen = peer->su.sa.sa_family == AF_INET
+					     ? IPV4_MAX_PREFIXLEN
+					     : IPV6_MAX_PREFIXLEN;
+
+		bgp_md5_set_connect(peer->fd, &peer->su, prefixlen,
+				    peer->password);
+	}
 
 	/* Update source bind. */
 	if (bgp_update_source(peer) < 0) {
