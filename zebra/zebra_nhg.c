@@ -141,6 +141,41 @@ zebra_nhg_depends_lookup_id(const struct nhg_hash_entry *nhe, const uint32_t id)
 }
 
 /**
+ * zebra_nhg_depends_equal() - Are the dependencies of these nhe's equal
+ *
+ * @nhe1:	Nexthop group hash entry
+ * @nhe2:	Nexthop group hash entry
+ *
+ * Return:	True if equal
+ *
+ * We don't care about ordering of the dependencies. If they contain
+ * the same nhe ID's, they are equivalent.
+ */
+static bool zebra_nhg_depends_equal(const struct nhg_hash_entry *nhe1,
+				    const struct nhg_hash_entry *nhe2)
+{
+	struct listnode *ln = NULL;
+	struct nhg_depend *n_dp = NULL;
+
+	if (!nhe1->nhg_depends && !nhe2->nhg_depends)
+		return true;
+
+	if ((nhe1->nhg_depends && !nhe2->nhg_depends)
+	    || (nhe2->nhg_depends && !nhe1->nhg_depends))
+		return false;
+
+	if (listcount(nhe1->nhg_depends) != listcount(nhe2->nhg_depends))
+		return false;
+
+	for (ALL_LIST_ELEMENTS_RO(nhe1->nhg_depends, ln, n_dp)) {
+		if (!zebra_nhg_depends_lookup_id(nhe2, n_dp->nhe->id))
+			return false;
+	}
+
+	return true;
+}
+
+/**
  * zebra_nhg_lookup_id() - Lookup the nexthop group id in the id table
  *
  * @id:		ID to look for
