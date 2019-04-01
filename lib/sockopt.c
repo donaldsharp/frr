@@ -586,34 +586,29 @@ int sockopt_tcp_rtt(int sock)
 #endif
 }
 
-int sockopt_tcp_signature(int sock, union sockunion *su, const char *password)
+int sockopt_tcp_signature_ext(int sock, union sockunion *su, uint16_t prefixlen,
+			      const char *password)
 {
-#if defined(HAVE_TCP_MD5_LINUX24) && defined(GNU_LINUX)
-/* Support for the old Linux 2.4 TCP-MD5 patch, taken from Hasso Tepper's
- * version of the Quagga patch (based on work by Rick Payne, and Bruce
- * Simpson)
- */
-#define TCP_MD5_AUTH 13
-#define TCP_MD5_AUTH_ADD 1
-#define TCP_MD5_AUTH_DEL 2
-	struct tcp_rfc2385_cmd {
-		u_int8_t command;  /* Command - Add/Delete */
-		u_int32_t address; /* IPV4 address associated */
-		u_int8_t keylen;   /* MD5 Key len (do NOT assume 0 terminated
-				      ascii) */
-		void *key;	 /* MD5 Key */
-	} cmd;
-	struct in_addr *addr = &su->sin.sin_addr;
+#ifndef HAVE_DECL_TCP_MD5SIG
+	/*
+	 * We have been asked to enable MD5 auth for an address, but our
+	 * platform doesn't support that
+	 */
+	return -2;
+#endif
 
-	cmd.command = (password != NULL ? TCP_MD5_AUTH_ADD : TCP_MD5_AUTH_DEL);
-	cmd.address = addr->s_addr;
-	cmd.keylen = (password != NULL ? strlen(password) : 0);
-	cmd.key = password;
+#ifndef TCP_MD5SIG_EXT
+	/*
+	 * We have been asked to enable MD5 auth for a prefix, but our platform
+	 * doesn't support that
+	 */
+	if (prefixlen > 0)
+		return -2;
+#endif
 
-	return setsockopt(sock, IPPROTO_TCP, TCP_MD5_AUTH, &cmd, sizeof cmd);
-
-#elif HAVE_DECL_TCP_MD5SIG
+#if HAVE_DECL_TCP_MD5SIG
 	int ret;
+
 #ifndef GNU_LINUX
 	/*
 	 * XXX Need to do PF_KEY operation here to add/remove an SA entry,
@@ -666,12 +661,30 @@ int sockopt_tcp_signature(int sock, union sockunion *su, const char *password)
 
 	memset(&md5sig, 0, sizeof(md5sig));
 	memcpy(&md5sig.tcpm_addr, su2, sizeof(*su2));
+
 	md5sig.tcpm_keylen = keylen;
 	if (keylen)
 		memcpy(md5sig.tcpm_key, password, keylen);
 	sockunion_free(susock);
+
+	/*
+	 * Handle support for MD5 signatures on prefixes, if available and
+	 * requested. Technically the #ifdef check below is not needed because
+	 * if prefixlen > 0 and we don't have support for this feature we would
+	 * have already returned by now, but leaving it there to be explicit.
+	 */
+	int optname = TCP_MD5SIG;
+#ifdef TCP_MD5SIG_EXT
+	if (prefixlen > 0) {
+		md5sig.tcpm_prefixlen = prefixlen;
+		md5sig.tcpm_flags = TCP_MD5SIG_FLAG_PREFIX;
+		optname = TCP_MD5SIG_EXT;
+	}
+#endif /* TCP_MD5SIG_EXT */
+
 #endif /* GNU_LINUX */
-	if ((ret = setsockopt(sock, IPPROTO_TCP, TCP_MD5SIG, &md5sig,
+
+	if ((ret = setsockopt(sock, IPPROTO_TCP, optname, &md5sig,
 			      sizeof md5sig))
 	    < 0) {
 		/* ENOENT is harmless.  It is returned when we clear a password
@@ -685,7 +698,10 @@ int sockopt_tcp_signature(int sock, union sockunion *su, const char *password)
 				  sock, safe_strerror(errno));
 	}
 	return ret;
-#else  /* HAVE_TCP_MD5SIG */
-	return -2;
-#endif /* !HAVE_TCP_MD5SIG */
+#endif /* HAVE_TCP_MD5SIG */
+}
+
+int sockopt_tcp_signature(int sock, union sockunion *su, const char *password)
+{
+	return sockopt_tcp_signature_ext(sock, su, 0, password);
 }
