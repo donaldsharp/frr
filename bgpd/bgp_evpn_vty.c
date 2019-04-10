@@ -2240,13 +2240,13 @@ static void evpn_show_route_rd(struct vty *vty, struct bgp *bgp,
  * If 'type' is non-zero, only routes matching that type are shown.
  */
 static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
-				 json_object *json)
+				 json_object *json, int detail)
 {
 	struct bgp_node *rd_rn;
 	struct bgp_table *table;
 	struct bgp_node *rn;
 	struct bgp_info *ri;
-	int header = 1;
+	int header = detail ? 0 : 1;
 	int rd_header;
 	afi_t afi;
 	safi_t safi;
@@ -2325,6 +2325,13 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 						    rn->p.prefixlen);
 			}
 
+			/* Prefix and num paths displayed once per prefix. */
+			if (detail)
+				route_vty_out_detail_header(
+					vty, bgp, rn,
+					(struct prefix_rd *)&rd_rn->p,
+					AFI_L2VPN, SAFI_EVPN, json_prefix);
+
 			/* For EVPN, the prefix is displayed for each path (to
 			 * fit in
 			 * with code that already exists).
@@ -2338,8 +2345,13 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 				if (json)
 					json_path = json_object_new_array();
 
-				route_vty_out(vty, &rn->p, ri, 0, SAFI_EVPN,
-					      json_path);
+				if (detail) {
+					route_vty_out_detail(
+						vty, bgp, &rn->p, ri, AFI_L2VPN,
+						SAFI_EVPN, json_path);
+				} else
+					route_vty_out(vty, &rn->p, ri, 0,
+						      SAFI_EVPN, json_path);
 
 				if (json)
 					json_object_array_add(json_paths,
@@ -3336,12 +3348,13 @@ DEFUN(show_bgp_l2vpn_evpn_summary,
  */
 DEFUN(show_bgp_l2vpn_evpn_route,
       show_bgp_l2vpn_evpn_route_cmd,
-      "show bgp l2vpn evpn route [type <macip|multicast|prefix>] [json]",
+      "show bgp l2vpn evpn route [detail] [type <macip|multicast|prefix>] [json]",
       SHOW_STR
       BGP_STR
       L2VPN_HELP_STR
       EVPN_HELP_STR
       "EVPN route information\n"
+      "Display Detailed Information\n"
       "Specify Route type\n"
       "MAC-IP (Type-2) route\n"
       "Multicast (Type-3) route\n"
@@ -3350,6 +3363,7 @@ DEFUN(show_bgp_l2vpn_evpn_route,
 {
 	struct bgp *bgp;
 	int type_idx = 0;
+	int detail = 0;
 	int type = 0;
 	bool uj = false;
 	json_object *json = NULL;
@@ -3376,7 +3390,10 @@ DEFUN(show_bgp_l2vpn_evpn_route,
 			return CMD_WARNING;
 	}
 
-	evpn_show_all_routes(vty, bgp, type, json);
+	if (argv_find(argv, argc, "detail", &detail))
+		detail = 1;
+
+	evpn_show_all_routes(vty, bgp, type, json, detail);
 
 	if (uj) {
 		vty_out(vty, "%s\n", json_object_to_json_string_ext(
@@ -3882,9 +3899,10 @@ ALIAS_HIDDEN(show_bgp_l2vpn_evpn_summary, show_bgp_evpn_summary_cmd,
 	     JSON_STR)
 
 ALIAS_HIDDEN(show_bgp_l2vpn_evpn_route, show_bgp_evpn_route_cmd,
-	     "show bgp evpn route [type <macip|multicast>]",
+	     "show bgp evpn route [detail] [type <macip|multicast>]",
 	     SHOW_STR BGP_STR EVPN_HELP_STR
 	     "EVPN route information\n"
+	     "Display Detailed Information\n"
 	     "Specify Route type\n"
 	     "MAC-IP (Type-2) route\n"
 	     "Multicast (Type-3) route\n")
