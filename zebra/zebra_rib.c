@@ -2242,7 +2242,7 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 		struct nexthop lookup = {0};
 		struct nhg_hash_entry *depend = NULL;
 
-		zebra_nhg_connected_head_init(&nhg_depends);
+		nhg_connected_head_init(&nhg_depends);
 
 		for (ALL_NEXTHOPS_PTR(re->ng, nh)) {
 			lookup = *nh;
@@ -2250,7 +2250,7 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 			lookup.next = NULL;
 			/* Use the route afi here, since a single nh */
 			depend = zebra_nhg_find_nexthop(&lookup, afi);
-			zebra_nhg_connected_head_add(&nhg_depends, depend);
+			nhg_connected_head_add(&nhg_depends, depend);
 		}
 
 		/* change the afi for group */
@@ -2273,7 +2273,7 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 			EC_ZEBRA_TABLE_LOOKUP_FAILED,
 			"Zebra failed to find or create a nexthop hash entry for id=%u in a route entry",
 			re->nhe_id);
-		zebra_nhg_connected_head_free(&nhg_depends);
+		nhg_connected_head_free(&nhg_depends);
 	}
 
 
