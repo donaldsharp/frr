@@ -99,13 +99,16 @@ void nhg_connected_head_del(struct nhg_connected_head *head,
 			    struct nhg_hash_entry *depend)
 {
 	struct nhg_connected lookup = {};
-	struct nhg_connected *removed = NULL;
+	struct nhg_connected *remove = NULL;
 
 	lookup.nhe = depend;
 
-	removed = RB_REMOVE(nhg_connected_head, head, &lookup);
+	/* Lookup to find the element, then remove it */
+	remove = RB_FIND(nhg_connected_head, head, &lookup);
+	remove = RB_REMOVE(nhg_connected_head, head, remove);
 
-	nhg_connected_free(removed);
+	if (remove)
+		nhg_connected_free(remove);
 }
 
 void nhg_connected_head_add(struct nhg_connected_head *head,
@@ -115,7 +118,8 @@ void nhg_connected_head_add(struct nhg_connected_head *head,
 
 	new = nhg_connected_new(depend);
 
-	RB_INSERT(nhg_connected_head, head, new);
+	if (new)
+		RB_INSERT(nhg_connected_head, head, new);
 }
 
 unsigned int zebra_nhg_depends_count(const struct nhg_hash_entry *nhe)
@@ -138,9 +142,6 @@ void zebra_nhg_depends_del(struct nhg_hash_entry *from,
 			   struct nhg_hash_entry *depend)
 {
 	nhg_connected_head_del(&from->nhg_depends, depend);
-
-	/* Delete from the dependent tree */
-	zebra_nhg_dependents_del(depend, from);
 }
 
 /**
@@ -163,6 +164,20 @@ void zebra_nhg_depends_add(struct nhg_hash_entry *to,
 void zebra_nhg_depends_init(struct nhg_hash_entry *nhe)
 {
 	nhg_connected_head_init(&nhe->nhg_depends);
+}
+
+/* Release this nhe from anything that it depends on */
+static void zebra_nhg_depends_release(struct nhg_hash_entry *nhe)
+{
+	if (!zebra_nhg_depends_is_empty(nhe)) {
+		struct nhg_connected *rb_node_dep = NULL;
+		struct nhg_connected *tmp = NULL;
+
+		RB_FOREACH_SAFE (rb_node_dep, nhg_connected_head,
+				 &nhe->nhg_depends, tmp) {
+			zebra_nhg_dependents_del(rb_node_dep->nhe, nhe);
+		}
+	}
 }
 
 unsigned int zebra_nhg_dependents_count(const struct nhg_hash_entry *nhe)
@@ -207,6 +222,20 @@ void zebra_nhg_dependents_add(struct nhg_hash_entry *to,
 void zebra_nhg_dependents_init(struct nhg_hash_entry *nhe)
 {
 	nhg_connected_head_init(&nhe->nhg_dependents);
+}
+
+/* Release this nhe from anything depending on it */
+static void zebra_nhg_dependents_release(struct nhg_hash_entry *nhe)
+{
+	if (!zebra_nhg_dependents_is_empty(nhe)) {
+		struct nhg_connected *rb_node_dep = NULL;
+		struct nhg_connected *tmp = NULL;
+
+		RB_FOREACH_SAFE (rb_node_dep, nhg_connected_head,
+				 &nhe->nhg_dependents, tmp) {
+			zebra_nhg_depends_del(rb_node_dep->nhe, nhe);
+		}
+	}
 }
 
 /**
@@ -520,12 +549,17 @@ void zebra_nhg_free(void *arg)
  */
 void zebra_nhg_release(struct nhg_hash_entry *nhe)
 {
-	if (!nhe->refcnt) {
-		zlog_debug("Releasing nexthop group with ID (%u)", nhe->id);
-		hash_release(zrouter.nhgs, nhe);
-		hash_release(zrouter.nhgs_id, nhe);
-		zebra_nhg_free(nhe);
-	}
+	zlog_debug("Releasing nexthop group with ID (%u)", nhe->id);
+
+	/* Remove it from any lists it may be on */
+	zebra_nhg_depends_release(nhe);
+	zebra_nhg_dependents_release(nhe);
+	if (nhe->ifp)
+		if_nhg_dependents_del(nhe->ifp, nhe);
+
+	hash_release(zrouter.nhgs, nhe);
+	hash_release(zrouter.nhgs_id, nhe);
+	zebra_nhg_free(nhe);
 }
 
 /**
@@ -551,7 +585,7 @@ void zebra_nhg_decrement_ref(struct nhg_hash_entry *nhe)
 
 	if (!nhe->is_kernel_nh && nhe->refcnt <= 0) {
 		zebra_nhg_uninstall_kernel(nhe);
-		// zebra_nhg_release(nhe);
+		zebra_nhg_release(nhe);
 	}
 }
 
@@ -1241,14 +1275,13 @@ void zebra_nhg_dplane_result(struct zebra_dplane_ctx *ctx)
 		case DPLANE_OP_NONE:
 			break;
 		}
-		dplane_ctx_fini(&ctx);
-
-	} else {
+	} else
 		flog_err(
 			EC_ZEBRA_NHG_SYNC,
 			"%s operation preformed on Nexthop ID (%u) in the kernel, that we no longer have in our table",
 			dplane_op2str(op), id);
-	}
+
+	dplane_ctx_fini(&ctx);
 }
 
 void zebra_nhg_init(void)
