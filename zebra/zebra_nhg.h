@@ -30,7 +30,7 @@
  * It is designed to mimic the netlink nexthop_grp
  * struct in include/linux/nexthop.h
  */
-struct depend_info {
+struct nh_grp {
 	uint32_t id;
 	uint8_t weight;
 };
@@ -56,6 +56,8 @@ struct nhg_hash_entry {
 	uint32_t dplane_ref;
 
 	uint32_t flags;
+
+	pthread_mutex_t mutex;
 
 	/* Dependency tree for other entries.
 	 * For instance a group with two
@@ -85,6 +87,9 @@ struct nhg_hash_entry {
  */
 #define NEXTHOP_GROUP_QUEUED 0x4
 };
+
+#define ZEBRA_NHG_LOCK(nhe) pthread_mutex_lock(&((nhe)->mutex))
+#define ZEBRA_NHG_UNLOCK(nhe) pthread_mutex_unlock(&((nhe)->mutex))
 
 /* Abstraction for connected trees */
 struct nhg_connected {
@@ -143,20 +148,24 @@ extern uint32_t zebra_nhg_id_key(void *arg);
 extern bool zebra_nhg_hash_equal(const void *arg1, const void *arg2);
 extern bool zebra_nhg_hash_id_equal(const void *arg1, const void *arg2);
 
+/* Find via kernel nh creation */
 extern struct nhg_hash_entry *
-zebra_nhg_find(struct nexthop_group *nhg, vrf_id_t vrf_id, afi_t afi,
-	       uint32_t id, struct nhg_connected_head *nhg_depends,
-	       bool is_kernel_nh);
+zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh, struct nh_grp *grp,
+		      uint8_t count, vrf_id_t vrf_id, afi_t afi);
 
-extern struct nhg_hash_entry *zebra_nhg_find_nexthop(struct nexthop *nh,
-						     afi_t afi);
+/* Find via route creation */
+extern struct nhg_hash_entry *zebra_nhg_rib_find(uint32_t id,
+						 struct nexthop_group *nhg,
+						 vrf_id_t rt_vrf_id,
+						 afi_t rt_afi);
 
 
 void zebra_nhg_free_members(struct nhg_hash_entry *nhe);
 void zebra_nhg_free(void *arg);
-void zebra_nhg_release(struct nhg_hash_entry *nhe);
 void zebra_nhg_decrement_ref(struct nhg_hash_entry *nhe);
 void zebra_nhg_increment_ref(struct nhg_hash_entry *nhe);
+
+extern bool zebra_nhg_id_is_valid(uint32_t id);
 void zebra_nhg_set_invalid(struct nhg_hash_entry *nhe);
 void zebra_nhg_set_if(struct nhg_hash_entry *nhe, struct interface *ifp);
 

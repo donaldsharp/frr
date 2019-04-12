@@ -597,6 +597,16 @@ void rib_uninstall_kernel(struct route_node *rn, struct route_entry *re)
 	rib_table_info_t *info = srcdest_rnode_table_info(rn);
 	struct zebra_vrf *zvrf = vrf_info_lookup(re->vrf_id);
 
+	// TODO: Might need to move this?
+	// It checks if the nhe is even valid
+	// before trying to uninstall it. If the
+	// nexthop is invalid/uninstalled, then
+	// this route is not in the kernel anymore
+	// most likely.
+	if (!zebra_nhg_id_is_valid(re->nhe_id))
+		return;
+
+
 	if (info->safi != SAFI_UNICAST) {
 		UNSET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
 		for (ALL_NEXTHOPS_PTR(re->ng, nexthop))
@@ -2213,11 +2223,6 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 	struct route_node *rn;
 	struct route_entry *same = NULL;
 	struct nhg_hash_entry *nhe = NULL;
-	struct nhg_connected_head nhg_depends = {0};
-	/* Default to route afi */
-	afi_t nhg_afi = afi;
-	/* Default to route vrf id */
-	vrf_id_t nhg_vrf_id = re->vrf_id;
 	int ret = 0;
 
 	if (!re)
@@ -2238,31 +2243,8 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 	if (src_p)
 		apply_mask_ipv6(src_p);
 
-	/* If its a group, create a dependency list */
-	if (re->ng && re->ng->nexthop->next) {
-		struct nexthop *nh = NULL;
-		struct nexthop lookup = {0};
-		struct nhg_hash_entry *depend = NULL;
-
-		nhg_connected_head_init(&nhg_depends);
-
-		for (ALL_NEXTHOPS_PTR(re->ng, nh)) {
-			lookup = *nh;
-			/* Clear it, since its a group */
-			lookup.next = NULL;
-			/* Use the route afi here, since a single nh */
-			depend = zebra_nhg_find_nexthop(&lookup, afi);
-			nhg_connected_head_add(&nhg_depends, depend);
-		}
-
-		/* change the afi for group */
-		nhg_afi = AFI_UNSPEC;
-		nhg_vrf_id = 0;
-	}
-
 	// TODO: Add proto type here
-	nhe = zebra_nhg_find(re->ng, nhg_vrf_id, nhg_afi, re->nhe_id,
-			     &nhg_depends, false);
+	nhe = zebra_nhg_rib_find(re->nhe_id, re->ng, re->vrf_id, afi);
 
 	if (nhe) {
 		/* It should point to the nhe nexthop group now */
@@ -2271,13 +2253,11 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 		re->ng = nhe->nhg;
 		re->nhe_id = nhe->id;
 		zebra_nhg_increment_ref(nhe);
-	} else {
+	} else
 		flog_err(
 			EC_ZEBRA_TABLE_LOOKUP_FAILED,
 			"Zebra failed to find or create a nexthop hash entry for id=%u in a route entry",
 			re->nhe_id);
-		nhg_connected_head_free(&nhg_depends);
-	}
 
 
 	/* Set default distance by route type. */
