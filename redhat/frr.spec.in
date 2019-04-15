@@ -453,7 +453,7 @@ zebra_spec_add_service ldpd     2612/tcp "LDPd vty"
 zebra_spec_add_service eigrpd   2613/tcp "EIGRPd vty"
 %endif
 %if %{with_vrrpd}
-zebra_spec_add_service vrrpd    2617/tcp "VRRPd vty"
+zebra_spec_add_service vrrpd    2619/tcp "VRRPd vty"
 %endif
 
 %if "%{initsystem}" == "systemd"

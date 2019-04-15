@@ -101,7 +101,7 @@ struct quagga_signal_t vrrp_signals[] = {
 	},
 };
 
-#define VRRP_VTY_PORT 2617
+#define VRRP_VTY_PORT 2619
 
 FRR_DAEMON_INFO(vrrpd, VRRP, .vty_port = VRRP_VTY_PORT,
 		.proghelp = "Virtual Router Redundancy Protocol",
