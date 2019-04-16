@@ -379,7 +379,8 @@ end
                                 "service ",
                                 "table ",
                                 "username ",
-                                "zebra ")
+                                "zebra ",
+                                "vrrp autoconfigure")
 
         for line in self.lines:
 
