@@ -2326,35 +2326,9 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 		// Gotta figure that one out.
 
 
-		nhe = zebra_nhg_kernel_find(id, &nh, grp, grp_count, vrf_id,
-					    afi);
-
-		if (!nhe) {
-			flog_err(
-				EC_ZEBRA_TABLE_LOOKUP_FAILED,
-				"Zebra failed to find or create a nexthop hash entry for ID (%u) from the kernel",
-				id);
+		if (zebra_nhg_kernel_find(id, &nh, grp, grp_count, vrf_id, afi))
 			return -1;
-		}
 
-		if (id != nhe->id) {
-			/* Duplicate but with different ID from
-			 * the kernel */
-
-			/* The kernel allows duplicate nexthops
-			 * as long as they have different IDs.
-			 * We are ignoring those to prevent
-			 * syncing problems with the kernel
-			 * changes.
-			 */
-			flog_warn(
-				EC_ZEBRA_DUPLICATE_NHG_MESSAGE,
-				"Nexthop Group from kernel with ID (%d) is a duplicate, ignoring",
-				id);
-		} else {
-			SET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
-			SET_FLAG(nhe->flags, NEXTHOP_GROUP_VALID);
-		}
 
 	} else if (h->nlmsg_type == RTM_DELNEXTHOP) {
 		// TODO: Add new function in nhgc to handle del

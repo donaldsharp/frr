@@ -57,8 +57,6 @@ struct nhg_hash_entry {
 
 	uint32_t flags;
 
-	pthread_mutex_t mutex;
-
 	/* Dependency tree for other entries.
 	 * For instance a group with two
 	 * nexthops will have two dependencies
@@ -87,9 +85,6 @@ struct nhg_hash_entry {
  */
 #define NEXTHOP_GROUP_QUEUED 0x4
 };
-
-#define ZEBRA_NHG_LOCK(nhe) pthread_mutex_lock(&((nhe)->mutex))
-#define ZEBRA_NHG_UNLOCK(nhe) pthread_mutex_unlock(&((nhe)->mutex))
 
 /* Abstraction for connected trees */
 struct nhg_connected {
@@ -149,9 +144,9 @@ extern bool zebra_nhg_hash_equal(const void *arg1, const void *arg2);
 extern bool zebra_nhg_hash_id_equal(const void *arg1, const void *arg2);
 
 /* Find via kernel nh creation */
-extern struct nhg_hash_entry *
-zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh, struct nh_grp *grp,
-		      uint8_t count, vrf_id_t vrf_id, afi_t afi);
+extern int zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh,
+				 struct nh_grp *grp, uint8_t count,
+				 vrf_id_t vrf_id, afi_t afi);
 
 /* Find via route creation */
 extern struct nhg_hash_entry *zebra_nhg_rib_find(uint32_t id,
