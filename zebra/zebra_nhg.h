@@ -143,6 +143,9 @@ extern uint32_t zebra_nhg_id_key(void *arg);
 extern bool zebra_nhg_hash_equal(const void *arg1, const void *arg2);
 extern bool zebra_nhg_hash_id_equal(const void *arg1, const void *arg2);
 
+/* Wait thread for the nhe to proces */
+extern int zebra_nhg_rib_wait(afi_t afi, safi_t safi, struct prefix p,
+			      struct prefix_ipv6 src_p, struct route_entry *re);
 /* Find via kernel nh creation */
 extern int zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh,
 				 struct nh_grp *grp, uint8_t count,

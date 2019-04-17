@@ -2222,7 +2222,6 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 	struct route_table *table;
 	struct route_node *rn;
 	struct route_entry *same = NULL;
-	struct nhg_hash_entry *nhe = NULL;
 	int ret = 0;
 
 	if (!re)
@@ -2243,23 +2242,6 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 	apply_mask(p);
 	if (src_p)
 		apply_mask_ipv6(src_p);
-
-	// TODO: Add proto type here
-	nhe = zebra_nhg_rib_find(re->nhe_id, re->ng, re->vrf_id, afi);
-
-	if (nhe) {
-		/* It should point to the nhe nexthop group now */
-		if (re->ng)
-			nexthop_group_free_delete(&re->ng);
-		re->ng = nhe->nhg;
-		re->nhe_id = nhe->id;
-		zebra_nhg_increment_ref(nhe);
-	} else
-		flog_err(
-			EC_ZEBRA_TABLE_LOOKUP_FAILED,
-			"Zebra failed to find or create a nexthop hash entry for id=%u in a route entry",
-			re->nhe_id);
-
 
 	/* Set default distance by route type. */
 	if (re->distance == 0) {
@@ -2305,6 +2287,27 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 			break;
 	}
 
+	if (same)
+		ret = -1;
+	else
+		ret = 1;
+
+	/*
+	 * If it has an nhe_id, it needs to wait for it
+	 * to be processed before we install this route
+	 */
+	if (re->nhe_id) {
+		struct nhg_hash_entry *nhe = NULL;
+
+		nhe = zebra_nhg_lookup_id(re->nhe_id);
+
+		if (!nhe) {
+			zebra_nhg_rib_wait(afi, safi, *p, *src_p, re);
+			return ret;
+		}
+	}
+
+
 	/* If this route is kernel/connected route, notify the dataplane. */
 	if (RIB_SYSTEM_ROUTE(re)) {
 		/* Notify dataplane */
@@ -2323,13 +2326,10 @@ int rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 
 	SET_FLAG(re->status, ROUTE_ENTRY_CHANGED);
 	rib_addnode(rn, re, 1);
-	ret = 1;
 
 	/* Free implicit route.*/
-	if (same) {
+	if (same)
 		rib_delnode(rn, same);
-		ret = -1;
-	}
 
 	route_unlock_node(rn);
 	return ret;
