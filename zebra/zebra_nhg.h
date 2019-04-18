@@ -94,6 +94,47 @@ struct nhg_connected {
 
 RB_PROTOTYPE(nhg_connected_head, nhg_connected, nhg_entry, nhg_connected_cmp);
 
+
+enum nhg_ctx_op_e {
+	NHG_CTX_OP_NONE = 0,
+	NHG_CTX_OP_NEW,
+	NHG_CTX_OP_DEL,
+};
+
+enum nhg_ctx_result {
+	NHG_CTX_NONE = 0,
+	NHG_CTX_QUEUED,
+	NHG_CTX_SUCCESS,
+	NHG_CTX_FAILURE,
+};
+
+/*
+ * Context needed to queue nhg updates on the
+ * work queue.
+ */
+struct nhg_ctx {
+
+	/* Unique ID */
+	uint32_t id;
+
+	vrf_id_t vrf_id;
+	afi_t afi;
+	bool is_kernel_nh;
+
+	/* If its a group array, how many? */
+	uint8_t count;
+
+	/* Its either a single nexthop or an array of ID's */
+	union {
+		struct nexthop nh;
+		struct nh_grp grp[MULTIPATH_NUM];
+	} u;
+
+	enum nhg_ctx_op_e op;
+	enum nhg_ctx_result status;
+};
+
+
 void zebra_nhg_init(void);
 void zebra_nhg_terminate(void);
 
@@ -143,9 +184,13 @@ extern uint32_t zebra_nhg_id_key(void *arg);
 extern bool zebra_nhg_hash_equal(const void *arg1, const void *arg2);
 extern bool zebra_nhg_hash_id_equal(const void *arg1, const void *arg2);
 
-/* Wait thread for the nhe to proces */
-extern int zebra_nhg_rib_wait(afi_t afi, safi_t safi, struct prefix p,
-			      struct prefix_ipv6 src_p, struct route_entry *re);
+/*
+ * Process a context off of a queue.
+ * Specifically this should be from
+ * the rib meta queue.
+ */
+extern int nhg_ctx_process(struct nhg_ctx *ctx);
+
 /* Find via kernel nh creation */
 extern int zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh,
 				 struct nh_grp *grp, uint8_t count,

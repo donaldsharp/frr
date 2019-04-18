@@ -47,92 +47,6 @@ static int nhg_connected_cmp(const struct nhg_connected *dep1,
 
 RB_GENERATE(nhg_connected_head, nhg_connected, nhg_entry, nhg_connected_cmp);
 
-enum nhg_ctx_op_e {
-	NHG_CTX_OP_NONE = 0,
-	NHG_CTX_OP_NEW,
-	NHG_CTX_OP_DEL,
-	NHG_CTX_OP_RIB_WAIT,
-};
-
-enum nhg_ctx_result {
-	NHG_CTX_NONE = 0,
-	NHG_CTX_QUEUED,
-	NHG_CTX_SUCCESS,
-	NHG_CTX_FAILURE,
-};
-
-/*
- * This is used to queue a rib waiting for a nhg
- * to be processed
- */
-struct rib_info {
-	afi_t afi;
-	safi_t safi;
-	struct prefix p;
-	struct prefix_ipv6 src_p;
-	struct route_entry *re;
-};
-
-/*
- * Context needed to queue nhg updates on the
- * work queue.
- */
-struct nhg_ctx {
-
-	/* Unique ID */
-	uint32_t id;
-
-	vrf_id_t vrf_id;
-	afi_t afi;
-	bool is_kernel_nh;
-
-	/* If its a group array, how many? */
-	uint8_t count;
-
-	/* Its either a single nexthop or an array of ID's */
-	union {
-		struct nexthop nh;
-		struct nh_grp grp[MULTIPATH_NUM];
-		struct rib_info rib_info;
-	} u;
-
-	enum nhg_ctx_op_e op;
-	enum nhg_ctx_result status;
-};
-
-static struct nhg_ctx *nhg_ctx_new()
-{
-	struct nhg_ctx *new = NULL;
-
-	new = XCALLOC(MTYPE_NHG_CTX, sizeof(struct nhg_ctx));
-
-	return new;
-}
-
-static void nhg_ctx_free(struct nhg_ctx *ctx)
-{
-	XFREE(MTYPE_NHG_CTX, ctx);
-}
-
-static void nhg_ctx_set_status(struct nhg_ctx *ctx, enum nhg_ctx_result status)
-{
-	ctx->status = status;
-}
-
-static enum nhg_ctx_result nhg_ctx_get_status(const struct nhg_ctx *ctx)
-{
-	return ctx->status;
-}
-
-static void nhg_ctx_set_op(struct nhg_ctx *ctx, enum nhg_ctx_op_e op)
-{
-	ctx->op = op;
-}
-
-static enum nhg_ctx_op_e nhg_ctx_get_op(const struct nhg_ctx *ctx)
-{
-	return ctx->op;
-}
 
 void nhg_connected_free(struct nhg_connected *dep)
 {
@@ -481,24 +395,40 @@ static int nhg_connected_cmp(const struct nhg_connected *con1,
 	return (con1->nhe->id - con2->nhe->id);
 }
 
-static int zebra_nhgq_add(struct nhg_ctx *ctx)
+static void zebra_nhg_process_grp(struct nexthop_group *nhg,
+				  struct nhg_connected_head *depends,
+				  struct nh_grp *grp, uint8_t count)
 {
-	/* If its queued or already processed do nothing */
-	if (nhg_ctx_get_status(ctx))
-		return 0;
+	nhg_connected_head_init(depends);
 
-	if (!zrouter.nhgq) {
-		flog_err(EC_ZEBRA_WQ_NONEXISTENT,
-			 "%s: work_queue does not exist!", __func__);
-		return -1;
+	for (int i = 0; i < count; i++) {
+		struct nhg_hash_entry *depend = NULL;
+		/* We do not care about nexthop_grp.weight at
+		 * this time. But we should figure out
+		 * how to adapt this to our code in
+		 * the future.
+		 */
+		depend = zebra_nhg_lookup_id(grp[i].id);
+		if (depend) {
+			nhg_connected_head_add(depends, depend);
+			/*
+			 * If this is a nexthop with its own group
+			 * dependencies, add them as well. Not sure its
+			 * even possible to have a group within a group
+			 * in the kernel.
+			 */
+
+			copy_nexthops(&nhg->nexthop, depend->nhg->nexthop,
+				      NULL);
+		} else {
+			flog_err(
+				EC_ZEBRA_NHG_SYNC,
+				"Received Nexthop Group from the kernel with a dependent Nexthop ID (%u) which we do not have in our table",
+				grp[i].id);
+		}
 	}
-
-	nhg_ctx_set_status(ctx, NHG_CTX_QUEUED);
-
-	work_queue_add(zrouter.nhgq, ctx);
-
-	return 0;
 }
+
 
 static struct nhg_hash_entry *
 zebra_nhg_find(uint32_t id, struct nexthop_group *nhg,
@@ -558,38 +488,136 @@ static struct nhg_hash_entry *zebra_nhg_find_nexthop(uint32_t id,
 	return zebra_nhg_find(id, &nhg, NULL, nh->vrf_id, afi, is_kernel_nh);
 }
 
-static void zebra_nhg_process_grp(struct nexthop_group *nhg,
-				  struct nhg_connected_head *depends,
-				  struct nh_grp *grp, uint8_t count)
+static struct nhg_ctx *nhg_ctx_new()
 {
-	nhg_connected_head_init(depends);
+	struct nhg_ctx *new = NULL;
 
-	for (int i = 0; i < count; i++) {
-		struct nhg_hash_entry *depend = NULL;
-		/* We do not care about nexthop_grp.weight at
-		 * this time. But we should figure out
-		 * how to adapt this to our code in
-		 * the future.
-		 */
-		depend = zebra_nhg_lookup_id(grp[i].id);
-		if (depend) {
-			nhg_connected_head_add(depends, depend);
-			/*
-			 * If this is a nexthop with its own group
-			 * dependencies, add them as well. Not sure its
-			 * even possible to have a group within a group
-			 * in the kernel.
+	new = XCALLOC(MTYPE_NHG_CTX, sizeof(struct nhg_ctx));
+
+	return new;
+}
+
+static void nhg_ctx_free(struct nhg_ctx *ctx)
+{
+	XFREE(MTYPE_NHG_CTX, ctx);
+}
+
+static void nhg_ctx_set_status(struct nhg_ctx *ctx, enum nhg_ctx_result status)
+{
+	ctx->status = status;
+}
+
+static enum nhg_ctx_result nhg_ctx_get_status(const struct nhg_ctx *ctx)
+{
+	return ctx->status;
+}
+
+static void nhg_ctx_set_op(struct nhg_ctx *ctx, enum nhg_ctx_op_e op)
+{
+	ctx->op = op;
+}
+
+static enum nhg_ctx_op_e nhg_ctx_get_op(const struct nhg_ctx *ctx)
+{
+	return ctx->op;
+}
+
+static int nhg_ctx_process_new(struct nhg_ctx *ctx)
+{
+	struct nexthop_group *nhg = NULL;
+	struct nhg_connected_head nhg_depends = {};
+	struct nhg_hash_entry *nhe = NULL;
+
+	if (ctx->count) {
+		nhg = nexthop_group_new();
+		zebra_nhg_process_grp(nhg, &nhg_depends, ctx->u.grp,
+				      ctx->count);
+		nhe = zebra_nhg_find(ctx->id, nhg, &nhg_depends, ctx->vrf_id,
+				     ctx->afi, true);
+		/* These got copied over in zebra_nhg_alloc() */
+		nexthop_group_free_delete(&nhg);
+	} else
+		nhe = zebra_nhg_find_nexthop(ctx->id, &ctx->u.nh, ctx->afi,
+					     ctx->is_kernel_nh);
+
+	if (nhe) {
+		if (ctx->id != nhe->id)
+			/* Duplicate but with different ID from
+			 * the kernel */
+
+			/* The kernel allows duplicate nexthops
+			 * as long as they have different IDs.
+			 * We are ignoring those to prevent
+			 * syncing problems with the kernel
+			 * changes.
 			 */
-
-			copy_nexthops(&nhg->nexthop, depend->nhg->nexthop,
-				      NULL);
-		} else {
-			flog_err(
-				EC_ZEBRA_NHG_SYNC,
-				"Received Nexthop Group from the kernel with a dependent Nexthop ID (%u) which we do not have in our table",
-				grp[i].id);
+			flog_warn(
+				EC_ZEBRA_DUPLICATE_NHG_MESSAGE,
+				"Nexthop Group with ID (%d) is a duplicate, ignoring",
+				ctx->id);
+		else {
+			/* It actually created a new nhe */
+			if (nhe->is_kernel_nh) {
+				SET_FLAG(nhe->flags, NEXTHOP_GROUP_VALID);
+				SET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
+			}
 		}
+	} else {
+		flog_err(
+			EC_ZEBRA_TABLE_LOOKUP_FAILED,
+			"Zebra failed to find or create a nexthop hash entry for ID (%u)",
+			ctx->id);
+		return -1;
 	}
+
+	return 0;
+}
+
+static void nhg_ctx_process_finish(struct nhg_ctx *ctx)
+{
+	/*
+	 * Just freeing for now, maybe do something more in the future
+	 * based on flag.
+	 */
+
+	if (ctx)
+		nhg_ctx_free(ctx);
+}
+
+int nhg_ctx_process(struct nhg_ctx *ctx)
+{
+	int ret = 0;
+
+	switch (nhg_ctx_get_op(ctx)) {
+	case NHG_CTX_OP_NEW:
+		ret = nhg_ctx_process_new(ctx);
+		break;
+	case NHG_CTX_OP_DEL:
+	case NHG_CTX_OP_NONE:
+		break;
+	}
+
+	nhg_ctx_set_status(ctx, (ret ? NHG_CTX_FAILURE : NHG_CTX_SUCCESS));
+
+	nhg_ctx_process_finish(ctx);
+
+	return ret;
+}
+
+static int queue_add(struct nhg_ctx *ctx)
+{
+	/* If its queued or already processed do nothing */
+	if (nhg_ctx_get_status(ctx))
+		return 0;
+
+	if (rib_queue_nhg_add(ctx)) {
+		nhg_ctx_set_status(ctx, NHG_CTX_FAILURE);
+		return -1;
+	}
+
+	nhg_ctx_set_status(ctx, NHG_CTX_QUEUED);
+
+	return 0;
 }
 
 /* Kernel-side, you either get a single new nexthop or a array of ID's */
@@ -619,30 +647,10 @@ int zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh, struct nh_grp *grp,
 
 	nhg_ctx_set_op(ctx, NHG_CTX_OP_NEW);
 
-	if (zebra_nhgq_add(ctx))
+	if (queue_add(ctx)) {
+		nhg_ctx_process_finish(ctx);
 		return -1;
-
-	return 0;
-}
-
-/* Rib-side, wait thread for nhe to be processed */
-int zebra_nhg_rib_wait(afi_t afi, safi_t safi, struct prefix p,
-		       struct prefix_ipv6 src_p, struct route_entry *re)
-{
-	struct nhg_ctx *ctx = NULL;
-
-	ctx = nhg_ctx_new();
-
-	ctx->u.rib_info.afi = afi;
-	ctx->u.rib_info.safi = safi;
-	ctx->u.rib_info.p = p;
-	ctx->u.rib_info.src_p = src_p;
-	ctx->u.rib_info.re = re;
-
-	nhg_ctx_set_op(ctx, NHG_CTX_OP_RIB_WAIT);
-
-	if (zebra_nhgq_add(ctx))
-		return -1;
+	}
 
 	return 0;
 }
@@ -673,7 +681,7 @@ struct nhg_hash_entry *zebra_nhg_rib_find(uint32_t id,
 			/* Use the route afi here, since a single nh */
 			depend = zebra_nhg_find_nexthop(0, &lookup, rt_afi,
 							false);
-			nhg_connected_head_add(&nhe->nhg_depends, depend);
+			nhg_connected_head_add(&nhg_depends, depend);
 		}
 
 		/* change the afi/vrf_id since its a group */
@@ -1275,16 +1283,15 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re)
 				re->ng = nhe->nhg;
 			}
 
-			if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_VALID))
-				return 0;
+			if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_VALID)) {
+				return 1;
+			}
 		} else
 			flog_err(
 				EC_ZEBRA_TABLE_LOOKUP_FAILED,
 				"Zebra failed to find the nexthop hash entry for id=%u in a route entry",
 				re->nhe_id);
 	}
-
-	zlog_debug("Active checking NHE ID=%u", re->nhe_id);
 
 	UNSET_FLAG(re->status, ROUTE_ENTRY_CHANGED);
 
@@ -1330,175 +1337,38 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re)
 	// TODO: Update this when we have this function
 	// figured out a little better.
 	//
-	if (CHECK_FLAG(re->status, ROUTE_ENTRY_NEXTHOPS_CHANGED)) {
-		struct nhg_hash_entry *new_nhe = NULL;
+	struct nhg_hash_entry *new_nhe = NULL;
 
-		rt_afi = family2afi(rn->p.family);
-		// TODO: Add proto type here
+	rt_afi = family2afi(rn->p.family);
+	// TODO: Add proto type here
 
-		// TODO: Maybe make this a UPDATE message?
-		// Right now we are just creating a new one
-		// and deleting the old.
-		new_nhe = zebra_nhg_rib_find(0, re->ng, re->vrf_id, rt_afi);
+	// TODO: Maybe make this a UPDATE message?
+	// Right now we are just creating a new one
+	// and deleting the old.
+	new_nhe = zebra_nhg_rib_find(0, re->ng, re->vrf_id, rt_afi);
 
-		if (new_nhe && (re->nhe_id != new_nhe->id)) {
-			struct nhg_hash_entry *old_nhe =
-				zebra_nhg_lookup_id(re->nhe_id);
+	if (new_nhe && (re->nhe_id != new_nhe->id)) {
+		struct nhg_hash_entry *old_nhe =
+			zebra_nhg_lookup_id(re->nhe_id);
 
-			/* It should point to the nhe nexthop group now */
-			if (re->ng)
-				nexthop_group_free_delete(&re->ng);
-			re->ng = new_nhe->nhg;
-			re->nhe_id = new_nhe->id;
+		/* It should point to the nhe nexthop group now */
+		if (re->ng)
+			nexthop_group_free_delete(&re->ng);
+		re->ng = new_nhe->nhg;
+		re->nhe_id = new_nhe->id;
 
-			zebra_nhg_increment_ref(new_nhe);
-			if (old_nhe)
-				zebra_nhg_decrement_ref(old_nhe);
+		zebra_nhg_increment_ref(new_nhe);
+		if (old_nhe)
+			zebra_nhg_decrement_ref(old_nhe);
 
-			if (curr_active) {
-				SET_FLAG(new_nhe->flags, NEXTHOP_GROUP_VALID);
-				if (!new_nhe->is_kernel_nh)
-					zebra_nhg_install_kernel(new_nhe);
-			}
+		if (curr_active) {
+			SET_FLAG(new_nhe->flags, NEXTHOP_GROUP_VALID);
+			if (!new_nhe->is_kernel_nh)
+				zebra_nhg_install_kernel(new_nhe);
 		}
 	}
 
 	return curr_active;
-}
-
-static int nhg_ctx_process_new(struct nhg_ctx *ctx)
-{
-	struct nexthop_group *nhg = NULL;
-	struct nhg_connected_head nhg_depends = {};
-	struct nhg_hash_entry *nhe = NULL;
-
-	zlog_debug("Processing NHE ID=%u", ctx->id);
-
-	if (ctx->count) {
-		nhg = nexthop_group_new();
-		zebra_nhg_process_grp(nhg, &nhg_depends, ctx->u.grp,
-				      ctx->count);
-		nhe = zebra_nhg_find(ctx->id, nhg, &nhg_depends, ctx->vrf_id,
-				     ctx->afi, true);
-		/* These got copied over in zebra_nhg_alloc() */
-		nexthop_group_free_delete(&nhg);
-	} else
-		nhe = zebra_nhg_find_nexthop(ctx->id, &ctx->u.nh, ctx->afi,
-					     ctx->is_kernel_nh);
-
-	if (nhe) {
-		if (ctx->id != nhe->id)
-			/* Duplicate but with different ID from
-			 * the kernel */
-
-			/* The kernel allows duplicate nexthops
-			 * as long as they have different IDs.
-			 * We are ignoring those to prevent
-			 * syncing problems with the kernel
-			 * changes.
-			 */
-			flog_warn(
-				EC_ZEBRA_DUPLICATE_NHG_MESSAGE,
-				"Nexthop Group with ID (%d) is a duplicate, ignoring",
-				ctx->id);
-		else {
-			/* It actually created a new nhe */
-			if (nhe->is_kernel_nh) {
-				SET_FLAG(nhe->flags, NEXTHOP_GROUP_VALID);
-				SET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
-			}
-		}
-	} else {
-		flog_err(
-			EC_ZEBRA_TABLE_LOOKUP_FAILED,
-			"Zebra failed to find or create a nexthop hash entry for ID (%u)",
-			ctx->id);
-		return -1;
-	}
-
-	return 0;
-}
-
-static int nhg_ctx_process_rib_wait(struct nhg_ctx *ctx)
-{
-	struct nhg_hash_entry *nhe = NULL;
-
-	afi_t afi = ctx->u.rib_info.afi;
-	safi_t safi = ctx->u.rib_info.safi;
-	struct prefix p = ctx->u.rib_info.p;
-	struct prefix_ipv6 src_p = ctx->u.rib_info.src_p;
-	struct route_entry *re = ctx->u.rib_info.re;
-
-	nhe = zebra_nhg_lookup_id(re->nhe_id);
-
-	if (!nhe)
-		return -1;
-
-	rib_add_multipath(afi, safi, &p, &src_p, re);
-
-	return 0;
-}
-
-static wq_item_status zebra_nhgq_process(struct work_queue *wq, void *data)
-{
-	struct nhg_ctx *ctx = NULL;
-
-	ctx = (struct nhg_ctx *)data;
-
-	if (!ctx)
-		return WQ_SUCCESS;
-
-	switch (nhg_ctx_get_op(ctx)) {
-	case NHG_CTX_OP_NEW:
-		nhg_ctx_process_new(ctx);
-		break;
-	case NHG_CTX_OP_DEL:
-	case NHG_CTX_OP_RIB_WAIT:
-		if (nhg_ctx_process_rib_wait(ctx))
-			return WQ_RETRY_LATER;
-		break;
-	case NHG_CTX_OP_NONE:
-		break;
-	}
-
-	nhg_ctx_set_status(ctx, NHG_CTX_SUCCESS);
-
-	return WQ_SUCCESS;
-}
-
-static void zebra_nhgq_process_finish(struct work_queue *wq, void *data)
-{
-	struct nhg_ctx *ctx = NULL;
-
-	ctx = (struct nhg_ctx *)data;
-
-	if (ctx)
-		nhg_ctx_free(ctx);
-}
-
-static void zebra_nhgq_process_err(struct work_queue *wq,
-				   struct work_queue_item *item)
-{
-	struct nhg_ctx *ctx = NULL;
-
-	zlog_debug("Ran %u times", item->ran);
-
-	ctx = (struct nhg_ctx *)item->data;
-
-	if (!ctx)
-		return;
-
-	switch (nhg_ctx_get_op(ctx)) {
-	case NHG_CTX_OP_RIB_WAIT:
-		if (ctx->u.rib_info.re->ng)
-			nexthop_group_free_delete(&ctx->u.rib_info.re->ng);
-		XFREE(MTYPE_RE, ctx->u.rib_info.re);
-		break;
-	case NHG_CTX_OP_NEW:
-	case NHG_CTX_OP_DEL:
-	case NHG_CTX_OP_NONE:
-		break;
-	}
 }
 
 static void zebra_nhg_new(const char *name)
@@ -1680,22 +1550,9 @@ void zebra_nhg_init(void)
 			   zebra_nhg_add_nexthop,
 			   zebra_nhg_del_nexthop,
 			   zebra_nhg_delete);
-
-	zrouter.nhgq = work_queue_new(zrouter.master,
-				      "Nexthop Group Processing");
-
-	zrouter.nhgq->spec.workfunc = &zebra_nhgq_process;
-	zrouter.nhgq->spec.del_item_data = &zebra_nhgq_process_finish;
-	zrouter.nhgq->spec.errorfunc = &zebra_nhgq_process_err;
-	zrouter.nhgq->spec.completion_func = NULL;
-	zrouter.nhgq->spec.max_retries = 3;
-	zrouter.nhgq->spec.hold = ZEBRA_NHG_PROCESS_HOLD_TIME;
-	zrouter.nhgq->spec.retry = ZEBRA_NHG_PROCESS_RETRY_TIME;
 }
 
 void zebra_nhg_terminate(void)
 {
-
-	work_queue_free_and_null(&zrouter.nhgq);
 	nexthop_group_init(NULL, NULL, NULL, NULL);
 }
