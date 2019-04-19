@@ -2088,6 +2088,12 @@ Dumping Messages and Routing Tables
 
    Note: the interval variable can also be set using hours and minutes: 04h20m00.
 
+.. index:: show bgp listeners
+.. clicmd:: show bgp listeners
+
+This is a debug command for bgp that allows you to dump listen sockets
+and the bgp vrf/instance/view that they are associated with.  This
+command is purely for debugging internal bgp state.
 
 .. _bgp-other-commands:
 
