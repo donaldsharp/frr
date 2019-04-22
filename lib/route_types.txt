@@ -81,6 +81,7 @@ ZEBRA_ROUTE_BGP_DIRECT_EXT, bgp-direct-to-nve-groups, NULL, 'e', 0, 0, 0, "BGP2V
 ZEBRA_ROUTE_BABEL,      babel,     babeld, 'A', 1, 1, 1,     "Babel"
 ZEBRA_ROUTE_SHARP,      sharp,     sharpd, 'D', 1, 1, 1,     "SHARP"
 ZEBRA_ROUTE_PBR,        pbr,       pbrd,   'F', 1, 1, 0,     "PBR"
+ZEBRA_ROUTE_VRRP,       vrrp,      vrrpd,  '-', 0, 0, 0,     "VRRP"
 ZEBRA_ROUTE_ALL,        wildcard,  none,   '-', 0, 0, 0,     "-"
 
 
