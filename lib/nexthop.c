@@ -418,5 +418,9 @@ uint32_t nexthop_hash(const struct nexthop *nexthop)
 	case NEXTHOP_TYPE_IPV6:
 		break;
 	}
+
+	uint8_t active = CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+	key = jhash_1word((uint32_t)active, key);
+
 	return key;
 }

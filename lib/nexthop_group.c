@@ -110,7 +110,7 @@ bool nexthop_group_equal(const struct nexthop_group *nhg1,
 	if (nexthop_group_nexthop_num(nhg1) != nexthop_group_nexthop_num(nhg2))
 		return false;
 
-	for (ALL_NEXTHOPS_PTR(nhg1, nh)) {
+	for (nh = nhg1->nexthop; nh; nh = nh->next) {
 		if (!nexthop_exists(nhg2, nh))
 			return false;
 	}
@@ -125,30 +125,10 @@ struct nexthop_group *nexthop_group_new(void)
 
 void nexthop_group_copy(struct nexthop_group *to, struct nexthop_group *from)
 {
-	struct nexthop *nh1;
-
 	assert(!to->nexthop);
 
-	for (ALL_NEXTHOPS((*from), nh1)) {
-		struct nexthop *new = nexthop_new();
-
-		new->vrf_id = nh1->vrf_id;
-		new->ifindex = nh1->ifindex;
-		new->type = nh1->type;
-		new->flags = nh1->flags;
-		memcpy(&new->gate, &nh1->gate, sizeof(nh1->gate));
-		memcpy(&new->src, &nh1->src, sizeof(nh1->src));
-		memcpy(&new->rmap_src, &nh1->rmap_src,
-		       sizeof(nh1->rmap_src));
-
-		if (nh1->nh_label)
-			nexthop_add_labels(new, nh1->nh_label_type,
-					   nh1->nh_label->num_labels,
-					   &nh1->nh_label->label[0]);
-
-
-		nexthop_group_add_sorted(to, new);
-	}
+	/* Copy everything, including recursive info */
+	copy_nexthops(&to->nexthop, from->nexthop, NULL);
 }
 
 void nexthop_group_delete(struct nexthop_group **nhg)

@@ -207,7 +207,7 @@ DECLARE_LIST(rnh_list, struct rnh, rnh_list_item);
 
 #define RIB_ROUTE_QUEUED(x)	(1 << (x))
 // If MQ_SIZE is modified this value needs to be updated.
-#define RIB_ROUTE_ANY_QUEUED    0x1F
+#define RIB_ROUTE_ANY_QUEUED 0x3F
 
 /*
  * The maximum qindex that can be used.
