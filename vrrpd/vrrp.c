@@ -2286,6 +2286,8 @@ int vrrp_config_write_interface(struct vty *vty)
 		vty_endframe(vty, "!\n");
 	}
 
+	list_delete_and_null(&vrs);
+
 	return writes;
 }
 
