@@ -92,8 +92,8 @@ static const struct {
 		[ZEBRA_ROUTE_BGP_DIRECT_EXT] = {ZEBRA_ROUTE_BGP_DIRECT_EXT, 20},
 		[ZEBRA_ROUTE_BABEL] = {ZEBRA_ROUTE_BABEL, 100},
 		[ZEBRA_ROUTE_SHARP] = {ZEBRA_ROUTE_SHARP, 150},
-
-	/* no entry/default: 150 */
+		[ZEBRA_ROUTE_VRRP] = {ZEBRA_ROUTE_VRRP, 255},
+		/* no entry/default: 150 */
 };
 
 /* RPF lookup behaviour */
