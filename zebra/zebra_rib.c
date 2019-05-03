@@ -3063,7 +3063,7 @@ static void check_route_info(void)
 /* Routing information base initialize. */
 void rib_init(void)
 {
-	check_route_info();
+	//check_route_info();
 
 	rib_queue_init();
 
