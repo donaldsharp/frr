@@ -3153,10 +3153,11 @@ DEFUN(show_ip_pim_mlag_up_vrf_all, show_ip_pim_mlag_up_vrf_all_cmd,
 	return CMD_SUCCESS;
 }
 
-DEFUN(show_ip_pim_mlag_local_membership, show_ip_pim_mlag_local_membership_cmd,
-      "show ip pim [vrf NAME] mlag [interface IFNAME] [A.B.C.D [A.B.C.D]] [json]",
+DEFUN(show_ip_pim_mlag_mroute, show_ip_pim_mlag_mroute_cmd,
+      "show ip pim [vrf NAME] mlag mroute [interface IFNAME] [A.B.C.D [A.B.C.D]] [json]",
       SHOW_STR IP_STR PIM_STR VRF_CMD_HELP_STR
-      "MLAG interface local-membership\n"
+      "MLAG\n"
+      "mroute\n"
       "Specify the Interface\nThe Interface name\n"
       "Unicast or Multicast address\n"
       "Multicast address\n" JSON_STR)
@@ -3203,11 +3204,11 @@ DEFUN(show_ip_pim_mlag_local_membership, show_ip_pim_mlag_local_membership_cmd,
 	return CMD_SUCCESS;
 }
 
-DEFUN(show_ip_pim_mlag_local_membership_vrf_all,
-      show_ip_pim_mlag_local_membership_vrf_all_cmd,
-      "show ip pim vrf all mlag [json]",
+DEFUN(show_ip_pim_mlag_mroute_vrf_all,
+      show_ip_pim_mlag_mroute_vrf_all_cmd,
+      "show ip pim vrf all mlag mroute [json]",
       SHOW_STR IP_STR PIM_STR VRF_CMD_HELP_STR
-      "MLAG interface local-membership\n" JSON_STR)
+      "MLAG interface local-membership\n" "mroute\n" JSON_STR)
 {
 	struct vrf *vrf;
 	bool uj = use_json(argc, argv);
@@ -8002,13 +8003,13 @@ void pim_cmd_init(void)
 	install_element(VIEW_NODE, &show_ip_pim_join_cmd);
 	install_element(VIEW_NODE, &show_ip_pim_join_vrf_all_cmd);
 	install_element(VIEW_NODE, &show_ip_pim_jp_agg_cmd);
-	install_element(VIEW_NODE, &show_ip_pim_local_membership_cmd);
+	install_element(VIEW_NODE, &show_ip_pim_mlag_mroute_cmd;
 	install_element(VIEW_NODE, &show_ip_pim_mlag_summary_cmd);
 	install_element(VIEW_NODE, &show_ip_pim_mlag_up_cmd);
 	install_element(VIEW_NODE, &show_ip_pim_mlag_up_vrf_all_cmd);
 	install_element(VIEW_NODE, &show_ip_pim_mlag_local_membership_cmd);
 	install_element(VIEW_NODE,
-			&show_ip_pim_mlag_local_membership_vrf_all_cmd);
+			&show_ip_pim_mlag_mroute_vrf_all_cmd);
 	install_element(VIEW_NODE, &show_ip_pim_neighbor_cmd);
 	install_element(VIEW_NODE, &show_ip_pim_neighbor_vrf_all_cmd);
 	install_element(VIEW_NODE, &show_ip_pim_rpf_cmd);
