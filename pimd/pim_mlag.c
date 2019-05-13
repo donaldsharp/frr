@@ -31,6 +31,7 @@
 extern struct zclient *zclient;
 
 #define PIM_MLAG_METADATA_LEN 4
+static char pimMlagEmptyIf[INTERFACE_NAMSIZ];
 
 /*********************ACtual Data processing *****************************/
 /* TBD: There can be duplicate updates to FIB***/
@@ -445,9 +446,8 @@ static void pim_mlag_up_local_add_send(struct pim_instance *pim,
 	/* XXX - am_i_DR field should be removed */
 	stream_putc(s, false);
 	stream_putc(s, !(PIM_UPSTREAM_FLAG_TEST_MLAG_NON_DF(up->flags)));
-	stream_putl(s, vrf->vrf_id);
-	/* XXX - this field is a No-op for VXLAN*/
-	stream_put(s, NULL, INTERFACE_NAMSIZ);
+	/* XXX - temp. this field should be removed. */
+	stream_put(s, pimMlagEmptyIf, INTERFACE_NAMSIZ);
 
 	stream_fifo_push_safe(router->mlag_fifo, s);
 	pim_mlag_signal_zpthread();
@@ -479,8 +479,8 @@ static void pim_mlag_up_local_del_send(struct pim_instance *pim,
 	/* XXX - who is adding */
 	stream_putl(s, MLAG_OWNER_VXLAN);
 	stream_putl(s, vrf->vrf_id);
-	/* XXX - this field is a No-op for VXLAN */
-	stream_put(s, NULL, INTERFACE_NAMSIZ);
+	/* XXX - temp. this field should be removed. */
+	stream_put(s, pimMlagEmptyIf, INTERFACE_NAMSIZ);
 
 	/* XXX - is this the the most optimal way to do things */
 	stream_fifo_push_safe(router->mlag_fifo, s);
@@ -785,7 +785,11 @@ static void pim_mlag_process_mroute_del(struct mlag_mroute_del msg)
 
 	++router->mlag_stats.msg.mroute_del_rx;
 
-	pim_mlag_up_peer_del(&msg);
+	if (!msg.intf_name[0] ||
+		!strcmp(msg.intf_name, PIM_VXLAN_TERM_DEV_NAME)) {
+		pim_mlag_up_peer_del(&msg);
+		return;
+	}
 }
 
 int pim_zebra_mlag_handle_msg(int cmd, struct zclient *zclient,
@@ -1089,6 +1093,8 @@ void pim_mlag_terminate(void)
 
 void pim_mlag_init(void)
 {
+	memset(pimMlagEmptyIf, 0, sizeof(pimMlagEmptyIf));
+	strcpy(pimMlagEmptyIf, PIM_VXLAN_TERM_DEV_NAME);
 	pim_mlag_param_reset();
 	router->pim_mlag_intf_cnt = 0;
 	router->connected_to_mlag = false;
