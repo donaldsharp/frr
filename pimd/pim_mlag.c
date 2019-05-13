@@ -31,6 +31,7 @@
 extern struct zclient *zclient;
 
 #define PIM_MLAG_METADATA_LEN 4
+static char pimMlagEmptyIf[INTERFACE_NAMSIZ];
 
 /*********************ACtual Data processing *****************************/
 /* TBD: There can be duplicate updates to FIB***/
@@ -445,9 +446,8 @@ static void pim_mlag_up_local_add_send(struct pim_instance *pim,
 	/* XXX - am_i_DR field should be removed */
 	stream_putc(s, false);
 	stream_putc(s, !(PIM_UPSTREAM_FLAG_TEST_MLAG_NON_DF(up->flags)));
-	stream_putl(s, vrf->vrf_id);
-	/* XXX - this field is a No-op for VXLAN*/
-	stream_put(s, NULL, INTERFACE_NAMSIZ);
+	/* XXX - temp. this field should be removed. */
+	stream_put(s, pimMlagEmptyIf, INTERFACE_NAMSIZ);
 
 	stream_fifo_push_safe(router->mlag_fifo, s);
 	pim_mlag_signal_zpthread();
@@ -479,8 +479,8 @@ static void pim_mlag_up_local_del_send(struct pim_instance *pim,
 	/* XXX - who is adding */
 	stream_putl(s, MLAG_OWNER_VXLAN);
 	stream_putl(s, vrf->vrf_id);
-	/* XXX - this field is a No-op for VXLAN */
-	stream_put(s, NULL, INTERFACE_NAMSIZ);
+	/* XXX - temp. this field should be removed. */
+	stream_put(s, pimMlagEmptyIf, INTERFACE_NAMSIZ);
 
 	/* XXX - is this the the most optimal way to do things */
 	stream_fifo_push_safe(router->mlag_fifo, s);
@@ -758,7 +758,81 @@ static void pim_mlag_process_mroute_add(struct mlag_mroute_add msg)
 
 	++router->mlag_stats.msg.mroute_add_rx;
 
-	pim_mlag_up_peer_add(&msg);
+	if (!msg.intf_name[0]) {
+		pim_mlag_up_remote_add(&msg);
+		return;
+	}
+
+	vrf = vrf_lookup_by_name(msg.vrf_name);
+	if (vrf)
+		ifp = if_lookup_by_name(msg.intf_name, vrf->vrf_id);
+
+	if (!vrf || !ifp || !ifp->info) {
+		if (PIM_DEBUG_MLAG)
+			zlog_debug(
+				"%s: Invalid params...vrf:%p, ifp,%p, "
+				"pim_ifp:%p",
+				__FUNCTION__, vrf, ifp, ifp->info);
+		return;
+	}
+
+	memset(&sg, 0, sizeof(struct prefix_sg));
+	sg.src.s_addr = ntohl(msg.source_ip);
+	sg.grp.s_addr = ntohl(msg.group_ip);
+
+	ch = pim_ifchannel_find(ifp, &sg);
+	if (ch) {
+		if (PIM_DEBUG_MLAG)
+			zlog_debug("%s: Updating ifchannel-%s peer mlag params",
+				   __FUNCTION__, ch->sg_str);
+		ch->mlag_peer_cost_to_rp = msg.cost_to_rp;
+		ch->mlag_peer_is_dr = msg.am_i_dr;
+		ch->mlag_peer_is_dual_active = msg.am_i_dual_active;
+		pim_mlag_calculate_df_for_ifchannel(ch);
+	} else {
+		if (PIM_DEBUG_MLAG)
+			zlog_debug("%s: failed to find if-channel...",
+				   __FUNCTION__);
+	}
+=======
+	if (!msg.intf_name[0] ||
+		!strcmp(msg.intf_name, PIM_VXLAN_TERM_DEV_NAME)) {
+		pim_mlag_up_remote_add(&msg);
+		return;
+	}
+
+	vrf = vrf_lookup_by_name(msg.vrf_name);
+	if (vrf)
+		ifp = if_lookup_by_name(msg.intf_name, vrf->vrf_id);
+
+	if (!vrf || !ifp || !ifp->info) {
+		if (PIM_DEBUG_MLAG)
+			zlog_debug(
+				"%s: Invalid params...vrf:%p, ifp,%p, "
+				"pim_ifp:%p",
+				__FUNCTION__, vrf, ifp, ifp->info);
+		return;
+	}
+
+	memset(&sg, 0, sizeof(struct prefix_sg));
+	sg.src.s_addr = ntohl(msg.source_ip);
+	sg.grp.s_addr = ntohl(msg.group_ip);
+
+	ch = pim_ifchannel_find(ifp, &sg);
+	if (ch) {
+		if (PIM_DEBUG_MLAG)
+			zlog_debug("%s: Updating ifchannel-%s peer mlag params",
+				   __FUNCTION__, ch->sg_str);
+		ch->mlag_peer_cost_to_rp = msg.cost_to_rp;
+		ch->mlag_peer_is_dr = msg.am_i_dr;
+		ch->mlag_peer_is_dual_active = msg.am_i_dual_active;
+		pim_mlag_calculate_df_for_ifchannel(ch);
+	} else {
+		if (PIM_DEBUG_MLAG)
+			zlog_debug("%s: failed to find if-channel...",
+				   __FUNCTION__);
+	}
+>>>>>>> 992c71618... [CUMULUS] pimd: temporarily use a special intf name for pim upstream syncing
 }
 
 static void pim_mlag_process_mroute_del(struct mlag_mroute_del msg)
@@ -785,7 +859,11 @@ static void pim_mlag_process_mroute_del(struct mlag_mroute_del msg)
 
 	++router->mlag_stats.msg.mroute_del_rx;
 
-	pim_mlag_up_peer_del(&msg);
+	if (!msg.intf_name[0] ||
+		!strcmp(msg.intf_name, PIM_VXLAN_TERM_DEV_NAME)) {
+		pim_mlag_up_remote_del(&msg);
+		return;
+	}
 }
 
 int pim_zebra_mlag_handle_msg(int cmd, struct zclient *zclient,
@@ -1089,6 +1167,8 @@ void pim_mlag_terminate(void)
 
 void pim_mlag_init(void)
 {
+	memset(pimMlagEmptyIf, 0, sizeof(pimMlagEmptyIf));
+	strcpy(pimMlagEmptyIf, PIM_VXLAN_TERM_DEV_NAME);
 	pim_mlag_param_reset();
 	router->pim_mlag_intf_cnt = 0;
 	router->connected_to_mlag = false;
