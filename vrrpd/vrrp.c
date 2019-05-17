@@ -708,6 +708,8 @@ static int vrrp_bind_to_primary_connected(struct vrrp_router *r)
 		break;
 	}
 
+	int ret = 0;
+
 	sockopt_reuseaddr(r->sock_tx);
 	if (bind(r->sock_tx, (const struct sockaddr *)&su, sizeof(su)) < 0) {
 		zlog_err(
@@ -718,7 +720,7 @@ static int vrrp_bind_to_primary_connected(struct vrrp_router *r)
 				  (const void *)&c->address->u.prefix, ipstr,
 				  sizeof(ipstr)),
 			safe_strerror(errno));
-		return -1;
+		ret = -1;
 	} else {
 		DEBUGD(&vrrp_dbg_sock,
 		       VRRP_LOGPFX VRRP_LOGPFX_VRID VRRP_LOGPFX_FAM
@@ -728,7 +730,7 @@ static int vrrp_bind_to_primary_connected(struct vrrp_router *r)
 				 ipstr, sizeof(ipstr)));
 	}
 
-	return 0;
+	return ret;
 }
 
 
@@ -2369,9 +2371,8 @@ void vrrp_fini(void)
 	struct listnode *ln;
 	struct vrrp_vrouter *vr;
 
-	for (ALL_LIST_ELEMENTS_RO(vrs, ln, vr)) {
+	for (ALL_LIST_ELEMENTS_RO(vrs, ln, vr))
 		vrrp_vrouter_destroy(vr);
-	}
 
 	list_delete_and_null(&vrs);
 
