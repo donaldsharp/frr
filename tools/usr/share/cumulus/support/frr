@@ -9,12 +9,16 @@
 
 module=${0##*/}
 funcs=(frr)
-nondef_funcs=(bgptable ospftable ospf6table)
+nondef_funcs=(ospftable ospf6table)
 json=
 jexec=
 
 func_frr()
 {
+    exec_cmd frr.show_ver vtysh -c "show version"
+    exec_cmd frr.show_debug vtysh -c "show debugging"
+    exec_cmd frr.show_log vtysh -c "show logging"
+
     exec_cmd $jexec ospf vtysh -c "show ip ospf vrf all $json"
     exec_cmd $jexec ospf.neighbor vtysh -c "show ip ospf vrf all neighbor $json"
     exec_cmd $jexec ospf.interface vtysh -c "show ip ospf vrf all interface $json"
@@ -39,6 +43,7 @@ func_frr()
     exec_cmd $jexec bgp.neighbors vtysh -c "show ip bgp vrf all neighbors $json"
     exec_cmd bgp.nexthop vtysh -c "show ip bgp vrf all nexthop"
     exec_cmd bgp.update_group vtysh -c "show ip bgp vrf all update-group"
+    exec_cmd bgp.route vtysh -c "show ip bgp vrf all"
 
     exec_cmd $jexec bgp.ipv6_summary vtysh -c "show bgp vrf all ipv6 uni summary $json"
     exec_cmd bgp.ipv6_update_group vtysh -c "show bgp vrf all ipv6 uni update-group"
@@ -58,7 +63,7 @@ func_frr()
     exec_cmd zebra.ipv6_nht vtysh -c "show ipv6 nht vrf all"
     exec_cmd zebra.route vtysh -c "show ip route vrf all"
     exec_cmd zebra.ipv6_route vtysh -c "show ipv6 route vrf all"
-    exec_cmd zebra.client vtysh -c "show zebra client summary"
+    exec_cmd zebra.client vtysh -c "show zebra client"
 
     exec_cmd $jexec pim.upstream vtysh -c "show ip pim vrf all upstream $json"
     exec_cmd $jexec pim.join vtysh -c "show ip pim vrf all join $json"
@@ -88,12 +93,20 @@ func_frr()
     exec_cmd $jexec bgp.evpn.vrfimportrt vtysh -c "show bgp l2vpn evpn vrf-import-rt $json"
     exec_cmd $jexec bgp.evpn.importrt vtysh -c "show bgp l2vpn evpn import-rt $json"
     exec_cmd bgp.evpn.update_group vtysh -c "show bgp l2vpn evpn update-groups"
+    exec_cmd bgp.mac_hash vtysh -c "show bgp mac hash"
 
     exec_cmd $jexec pbr.map vtysh -c "show pbr map"
     exec_cmd $jexec pbr.intf vtysh -c "show pbr interface"
     exec_cmd $jexec pbr.nhop.group vtysh -c "show pbr nexthop-groups"
 
     exec_cmd vrrp.summary vtysh -c "show vrrp"
+
+    exec_cmd frr.thread_cpu vtysh -c "show thread cpu"
+    exec_cmd frr.thread_poll vtysh -c "show thread poll"
+    exec_cmd frr.debug_hashtable vtysh -c "show debug hashtable"
+    exec_cmd frr.work_queues vtysh -c "show work-queues"
+    exec_cmd frr.memory vtysh -c "show memory"
+    exec_cmd frr.modules vtysh -c "show modules"
 
     [ $SUP_SECURE -eq 0 ] && {
         [ $SUP_VERBOSE -eq 1 ] &&
@@ -103,11 +116,6 @@ func_frr()
                 cp -a ${f}/.history_frr ${f##*/}.vtysh.history
         done
      }
-}
-
-func_bgptable()
-{
-    exec_cmd $jexec bgp.route vtysh -c "show ip bgp vrf all $json"
 }
 
 func_ospftable()
