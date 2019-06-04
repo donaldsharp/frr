@@ -1939,6 +1939,8 @@ static void zebra_client_free(struct zserv *client)
 	/* Remove pseudowires associated with this client */
 	zebra_pw_client_close(client);
 
+	zebra_evpn_cfg_clean_up(client);
+
 	/* Close file descriptor. */
 	if (client->sock) {
 		unsigned long nroutes;
