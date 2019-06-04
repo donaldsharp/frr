@@ -410,6 +410,11 @@ static inline int evpn_default_originate_set(struct bgp *bgp, afi_t afi,
 	return 0;
 }
 
+static inline int is_l3vni_live(struct bgp *bgp_vrf)
+{
+	return (bgp_vrf->l3vni && bgp_vrf->l3vni_svi_ifindex);
+}
+
 extern void bgp_evpn_install_uninstall_default_route(struct bgp *bgp_vrf,
 						     afi_t afi, safi_t safi,
 						     bool add);
