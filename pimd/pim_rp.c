@@ -391,7 +391,7 @@ void pim_upstream_update(struct pim_instance *pim, struct pim_upstream *up)
 		int vif_index = pim_if_find_vifindex_by_ifindex(pim, ifindex);
 		/* Pass Current selected NH vif index to mroute download */
 		if (vif_index)
-			pim_scan_individual_oil(up->channel_oil, vif_index);
+			pim_scan_individual_oil(up->channel_oil, up, vif_index);
 		else {
 			if (PIM_DEBUG_PIM_NHT)
 				zlog_debug(

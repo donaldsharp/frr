@@ -259,7 +259,7 @@ static void pim_vxlan_orig_mr_up_iif_update(struct pim_vxlan_sg *vxlan_sg)
 			vxlan_sg->iif->ifindex);
 	if (vif_index > 0)
 		pim_scan_individual_oil(vxlan_sg->up->channel_oil,
-				vif_index);
+					vxlan_sg->up, vif_index);
 
 	if (PIM_DEBUG_VXLAN)
 		zlog_debug("vxlan SG %s orig mroute-up updated with iif %s vifi %d",

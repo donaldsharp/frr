@@ -580,7 +580,8 @@ static int pim_zebra_vxlan_sg_proc(ZAPI_CALLBACK_ARGS)
 	return 0;
 }
 
-void pim_scan_individual_oil(struct channel_oil *c_oil, int in_vif_index)
+void pim_scan_individual_oil(struct channel_oil *c_oil,
+			     struct pim_upstream *up, int in_vif_index)
 {
 	struct in_addr vif_source;
 	int input_iface_vif_index;
@@ -687,6 +688,13 @@ void pim_scan_individual_oil(struct channel_oil *c_oil, int in_vif_index)
 	old_vif_index = c_oil->oil.mfcc_parent;
 	c_oil->oil.mfcc_parent = input_iface_vif_index;
 
+	if (up && up->join_state != PIM_UPSTREAM_NOTJOINED) {
+		if (PIM_DEBUG_MROUTE)
+			zlog_debug("%s: %s Not joined so not installing",
+				   __PRETTY_FUNCTION__, up->sg_str);
+		return;
+	}
+
 	/* update kernel multicast forwarding cache (MFC) */
 	if (pim_mroute_add(c_oil, __PRETTY_FUNCTION__)) {
 		if (PIM_DEBUG_MROUTE) {
@@ -733,9 +741,9 @@ void pim_scan_oil(struct pim_instance *pim)
 			/* Pass Current selected NH vif index to mroute
 			 * download */
 			if (vif_index)
-				pim_scan_individual_oil(c_oil, vif_index);
+				pim_scan_individual_oil(c_oil, NULL, vif_index);
 		} else
-			pim_scan_individual_oil(c_oil, 0);
+			pim_scan_individual_oil(c_oil, NULL, 0);
 	}
 }
 
