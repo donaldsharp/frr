@@ -9,7 +9,7 @@
 
 module=${0##*/}
 funcs=(frr)
-nondef_funcs=(ospftable ospf6table)
+nondef_funcs=(ospftable ospf6table evpntable)
 json=
 jexec=
 
@@ -82,15 +82,17 @@ func_frr()
     exec_cmd $jexec pim.msdp.sa vtysh -c "show ip msdp vrf all sa detail $json"
     exec_cmd $jexec pim.msdp.mesh vtysh -c "show ip msdp vrf all mesh-group $json"
 
-    exec_cmd $jexec evpn.vni vtysh -c "show evpn vni $json"
-    exec_cmd $jexec evpn.mac.vni vtysh -c "show evpn mac vni all $json"
-    exec_cmd $jexec evpn.mac.vni vtysh -c "show evpn arp-cache vni all $json"
+    # NOTE - Don't enable json version of these cmds without scale testing.
+    # json version was removed because these cmds were leading to memory pileup on scale
+    exec_cmd $jexec evpn.vni.detail vtysh -c "show evpn vni detail $json"
+    exec_cmd evpn.mac.vni vtysh -c "show evpn mac vni all"
+    exec_cmd evpn.arp_cache.vni vtysh -c "show evpn arp-cache vni all"
     exec_cmd $jexec evpn.rmac.vni vtysh -c "show evpn rmac vni all $json"
     exec_cmd $jexec evpn.nexthop.vni vtysh -c "show evpn next-hops vni all $json"
     exec_cmd $jexec bgp.evpn.summary vtysh -c "show bgp l2vpn evpn summary $json"
     exec_cmd $jexec bgp.evpn.vni vtysh -c "show bgp l2vpn evpn vni $json"
-    exec_cmd $jexec bgp.evpn.route vtysh -c "show bgp l2vpn evpn route $json"
-    exec_cmd $jexec bgp.evpn.route.vni.all vtysh -c "show bgp l2vpn evpn route vni all $json"
+    exec_cmd bgp.evpn.route vtysh -c "show bgp l2vpn evpn route"
+    exec_cmd bgp.evpn.route.vni.all vtysh -c "show bgp l2vpn evpn route vni all"
     exec_cmd $jexec bgp.evpn.vrfimportrt vtysh -c "show bgp l2vpn evpn vrf-import-rt $json"
     exec_cmd $jexec bgp.evpn.importrt vtysh -c "show bgp l2vpn evpn import-rt $json"
     exec_cmd bgp.evpn.update_group vtysh -c "show bgp l2vpn evpn update-groups"
@@ -130,6 +132,14 @@ func_ospf6table()
     exec_cmd ospf6.route_detail vtysh -c "show ipv6 ospf6 route detail"
     exec_cmd ospf6.neigbor_detail vtysh -c "show ipv6 ospf6 neighbor detail"
     exec_cmd ospf6.borderrouters_detail  vtysh -c "show ipv6 ospf6 border-routers detail"
+}
+
+func_evpntable()
+{
+    # NOTE - Don't enable json version of these cmds without scale testing.
+    # json version was removed because these cmds were leading to memory pileup on scale
+    exec_cmd bgp.evpn.route.detail vtysh -c "show bgp l2vpn evpn route detail"
+    exec_cmd bgp.evpn.route.vni.all.detail vtysh -c "show bgp l2vpn evpn route vni all detail"
 }
 
 # main
