@@ -1837,6 +1837,53 @@ static int netlink_macfdb_change(struct sockaddr_nl *snl, struct nlmsghdr *h,
 	if (!is_evpn_enabled())
 		return 0;
 
+	/* Parse attributes and extract fields of interest. Do basic
+	 * validation of the fields.
+	 */
+	memset(tb, 0, sizeof tb);
+	netlink_parse_rtattr(tb, NDA_MAX, NDA_RTA(ndm), len);
+
+	if (!tb[NDA_LLADDR]) {
+		zlog_debug("%s AF_BRIDGE IF %u - no LLADDR",
+			   nl_msg_type_to_str(h->nlmsg_type),
+			   ndm->ndm_ifindex);
+		return 0;
+	}
+
+	if (RTA_PAYLOAD(tb[NDA_LLADDR]) != ETH_ALEN) {
+		zlog_debug(
+			"%s AF_BRIDGE IF %u - LLADDR is not MAC, len %lu",
+			nl_msg_type_to_str(h->nlmsg_type), ndm->ndm_ifindex,
+			(unsigned long)RTA_PAYLOAD(tb[NDA_LLADDR]));
+		return 0;
+	}
+
+	memcpy(&mac, RTA_DATA(tb[NDA_LLADDR]), ETH_ALEN);
+
+	if ((NDA_VLAN <= NDA_MAX) && tb[NDA_VLAN]) {
+		vid_present = 1;
+		vid = *(u_int16_t *)RTA_DATA(tb[NDA_VLAN]);
+		sprintf(vid_buf, " VLAN %u", vid);
+	}
+
+	if (tb[NDA_DST]) {
+		/* TODO: Only IPv4 supported now. */
+		dst_present = 1;
+		vtep_ip.family = AF_INET;
+		vtep_ip.prefixlen = IPV4_MAX_BITLEN;
+		memcpy(&(vtep_ip.u.prefix4.s_addr), RTA_DATA(tb[NDA_DST]),
+		       IPV4_MAX_BYTELEN);
+		sprintf(dst_buf, " dst %s", inet_ntoa(vtep_ip.u.prefix4));
+	}
+
+	if (IS_ZEBRA_DEBUG_KERNEL)
+		zlog_debug("Rx %s AF_BRIDGE IF %u%s st 0x%x fl 0x%x MAC %s%s",
+			   nl_msg_type_to_str(h->nlmsg_type),
+			   ndm->ndm_ifindex, vid_present ? vid_buf : "",
+			   ndm->ndm_state, ndm->ndm_flags,
+			   prefix_mac2str(&mac, buf, sizeof(buf)),
+			   dst_present ? dst_buf : "");
+
 	/* The interface should exist. */
 	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id),
 					ndm->ndm_ifindex);
@@ -1860,56 +1907,7 @@ static int netlink_macfdb_change(struct sockaddr_nl *snl, struct nlmsghdr *h,
 		return 0;
 	}
 
-	/* Parse attributes and extract fields of interest. */
-	memset(tb, 0, sizeof tb);
-	netlink_parse_rtattr(tb, NDA_MAX, NDA_RTA(ndm), len);
-
-	if (!tb[NDA_LLADDR]) {
-		zlog_debug("%s family %s IF %s(%u) brIF %u - no LLADDR",
-			   nl_msg_type_to_str(h->nlmsg_type),
-			   nl_family_to_str(ndm->ndm_family), ifp->name,
-			   ndm->ndm_ifindex, zif->brslave_info.bridge_ifindex);
-		return 0;
-	}
-
-	if (RTA_PAYLOAD(tb[NDA_LLADDR]) != ETH_ALEN) {
-		zlog_debug(
-			"%s family %s IF %s(%u) brIF %u - LLADDR is not MAC, len %lu",
-			nl_msg_type_to_str(h->nlmsg_type),
-			nl_family_to_str(ndm->ndm_family), ifp->name,
-			ndm->ndm_ifindex, zif->brslave_info.bridge_ifindex,
-			(unsigned long)RTA_PAYLOAD(tb[NDA_LLADDR]));
-		return 0;
-	}
-
-	memcpy(&mac, RTA_DATA(tb[NDA_LLADDR]), ETH_ALEN);
-
-	if ((NDA_VLAN <= NDA_MAX) && tb[NDA_VLAN]) {
-		vid_present = 1;
-		vid = *(u_int16_t *)RTA_DATA(tb[NDA_VLAN]);
-		sprintf(vid_buf, " VLAN %u", vid);
-	}
-
-	if (tb[NDA_DST]) {
-		/* TODO: Only IPv4 supported now. */
-		dst_present = 1;
-		vtep_ip.family = AF_INET;
-		vtep_ip.prefixlen = IPV4_MAX_BITLEN;
-		memcpy(&(vtep_ip.u.prefix4.s_addr), RTA_DATA(tb[NDA_DST]),
-		       IPV4_MAX_BYTELEN);
-		sprintf(dst_buf, " dst %s", inet_ntoa(vtep_ip.u.prefix4));
-	}
-
 	sticky = !!(ndm->ndm_state & NUD_NOARP);
-
-	if (IS_ZEBRA_DEBUG_KERNEL)
-		zlog_debug("Rx %s family %s IF %s(%u)%s %sMAC %s%s",
-			   nl_msg_type_to_str(h->nlmsg_type),
-			   nl_family_to_str(ndm->ndm_family), ifp->name,
-			   ndm->ndm_ifindex, vid_present ? vid_buf : "",
-			   sticky ? "sticky " : "",
-			   prefix_mac2str(&mac, buf, sizeof(buf)),
-			   dst_present ? dst_buf : "");
 
 	if (filter_vlan && vid != filter_vlan)
 		return 0;
