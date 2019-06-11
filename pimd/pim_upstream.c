@@ -627,9 +627,11 @@ void pim_upstream_switch(struct pim_instance *pim, struct pim_upstream *up,
 			pim_jp_agg_single_upstream_send(&up->parent->rpf,
 							up->parent,
 							1 /* (W,G) Join */);
-		} else
-			pim_jp_agg_single_upstream_send(&up->rpf, up,
-							0 /* prune */);
+		}	
+		
+		pim_jp_agg_single_upstream_send(&up->rpf, up,
+						0 /* prune */);
+
 		join_timer_stop(up);
 	}
 }
