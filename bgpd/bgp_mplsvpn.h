@@ -77,9 +77,9 @@ extern void vpn_leak_to_vrf_withdraw(struct bgp *bgp_vpn,
 
 extern void vpn_leak_zebra_vrf_label_update(struct bgp *bgp, afi_t afi);
 extern void vpn_leak_zebra_vrf_label_withdraw(struct bgp *bgp, afi_t afi);
-extern void vrf_import_from_vrf(struct bgp *bgp, struct bgp *vrf_bgp,
+extern void vrf_import_from_vrf(struct bgp *to_bgp, struct bgp *from_bgp,
 				afi_t afi, safi_t safi);
-void vrf_unimport_from_vrf(struct bgp *bgp, struct bgp *vrf_bgp,
+void vrf_unimport_from_vrf(struct bgp *to_bgp, struct bgp *from_bgp,
 			   afi_t afi, safi_t safi);
 
 static inline int vpn_leak_to_vpn_active(struct bgp *bgp_vrf, afi_t afi,
@@ -234,5 +234,6 @@ extern void vpn_policy_routemap_event(const char *rmap_name);
 extern void vpn_leak_postchange_all(void);
 extern void vpn_handle_router_id_update(struct bgp *bgp, bool withdraw);
 extern int bgp_vpn_leak_unimport(struct bgp *from_bgp, struct vty *vty);
+extern void bgp_vpn_leak_export(struct bgp *from_bgp);
 
 #endif /* _QUAGGA_BGP_MPLSVPN_H */

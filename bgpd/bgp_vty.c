@@ -994,6 +994,9 @@ DEFUN_NOSH (router_bgp,
 		if (inst_type == BGP_INSTANCE_TYPE_DEFAULT)
 			vpn_leak_postchange_all();
 
+		if (inst_type == BGP_INSTANCE_TYPE_VRF)
+			bgp_vpn_leak_export(bgp);
+
 		/* Pending: handle when user tries to change a view to vrf n vv.
 		 */
 	}
