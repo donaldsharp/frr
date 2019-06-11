@@ -209,8 +209,9 @@ void pim_ifchannel_delete(struct pim_ifchannel *ch)
 	RB_REMOVE(pim_ifchannel_rb, &pim_ifp->ifchannel_rb, ch);
 
 	if (PIM_DEBUG_PIM_TRACE)
-		zlog_debug("%s: ifchannel entry %s is deleted ",
-			   __PRETTY_FUNCTION__, ch->sg_str);
+		zlog_debug("%s: ifchannel entry %s(%s) is deleted ",
+			   __PRETTY_FUNCTION__, ch->sg_str,
+			   ch->interface->name);
 
 	XFREE(MTYPE_PIM_IFCHANNEL, ch);
 }
