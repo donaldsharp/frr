@@ -572,21 +572,29 @@ struct route_map_rule_cmd route_match_ip_route_source_cmd = {
 /* `match ip address prefix-list PREFIX_LIST' */
 
 static route_map_result_t
-route_match_ip_address_prefix_list(void *rule, const struct prefix *prefix,
-				   route_map_object_t type, void *object)
+route_match_address_prefix_list(void *rule, afi_t afi,
+				const struct prefix *prefix,
+				route_map_object_t type, void *object)
 {
 	struct prefix_list *plist;
 
-	if (type == RMAP_BGP && prefix->family == AF_INET) {
-		plist = prefix_list_lookup(AFI_IP, (char *)rule);
-		if (plist == NULL)
-			return RMAP_NOMATCH;
+	if (type != RMAP_BGP)
+		return RMAP_NOMATCH;
 
-		return (prefix_list_apply(plist, prefix) == PREFIX_DENY
-				? RMAP_NOMATCH
-				: RMAP_MATCH);
-	}
-	return RMAP_NOMATCH;
+	plist = prefix_list_lookup(afi, (char *)rule);
+	if (plist == NULL)
+		return RMAP_NOMATCH;
+
+	return (prefix_list_apply(plist, prefix) == PREFIX_DENY ? RMAP_NOMATCH
+								: RMAP_MATCH);
+}
+
+static route_map_result_t
+route_match_ip_address_prefix_list(void *rule, const struct prefix *prefix,
+				   route_map_object_t type, void *object)
+{
+	return route_match_address_prefix_list(rule, AFI_IP, prefix, type,
+					       object);
 }
 
 static void *route_match_ip_address_prefix_list_compile(const char *arg)
@@ -2530,18 +2538,8 @@ static route_map_result_t
 route_match_ipv6_address_prefix_list(void *rule, const struct prefix *prefix,
 				     route_map_object_t type, void *object)
 {
-	struct prefix_list *plist;
-
-	if (type == RMAP_BGP && prefix->family == AF_INET6) {
-		plist = prefix_list_lookup(AFI_IP6, (char *)rule);
-		if (plist == NULL)
-			return RMAP_NOMATCH;
-
-		return (prefix_list_apply(plist, prefix) == PREFIX_DENY
-				? RMAP_NOMATCH
-				: RMAP_MATCH);
-	}
-	return RMAP_NOMATCH;
+	return route_match_address_prefix_list(rule, AFI_IP6, prefix, type,
+					       object);
 }
 
 static void *route_match_ipv6_address_prefix_list_compile(const char *arg)
