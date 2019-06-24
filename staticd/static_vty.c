@@ -523,7 +523,6 @@ DEFPY_YANG(ip_route_blackhole,
 	  |(1-255)$distance                                                   \
 	  |vrf NAME                                                           \
 	  |label WORD                                                         \
-          |table (1-4294967295)                                               \
           }]",
       NO_STR IP_STR
       "Establish static routes\n"
@@ -536,9 +535,7 @@ DEFPY_YANG(ip_route_blackhole,
       "Tag value\n"
       "Distance value for this route\n"
       VRF_CMD_HELP_STR
-      MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n")
+      MPLS_LABEL_HELPSTR)
 {
 	struct static_route_args args = {
 		.delete = !!no,
@@ -550,7 +547,7 @@ DEFPY_YANG(ip_route_blackhole,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.vrf = vrf,
 	};
 
@@ -566,7 +563,6 @@ DEFPY_YANG(ip_route_blackhole_vrf,
 	  tag (1-4294967295)                                                  \
 	  |(1-255)$distance                                                   \
 	  |label WORD                                                         \
-	  |table (1-4294967295)                                               \
           }]",
       NO_STR IP_STR
       "Establish static routes\n"
@@ -578,9 +574,7 @@ DEFPY_YANG(ip_route_blackhole_vrf,
       "Set tag for this route\n"
       "Tag value\n"
       "Distance value for this route\n"
-      MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n")
+      MPLS_LABEL_HELPSTR)
 {
 	struct static_route_args args = {
 		.delete = !!no,
@@ -592,7 +586,7 @@ DEFPY_YANG(ip_route_blackhole_vrf,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.xpath_vrf = true,
 	};
 
@@ -617,7 +611,6 @@ DEFPY_YANG(ip_route_address_interface,
 	  |(1-255)$distance                            \
 	  |vrf NAME                                    \
 	  |label WORD                                  \
-	  |table (1-4294967295)                        \
 	  |nexthop-vrf NAME                            \
 	  |onlink$onlink                               \
 	  |color (1-4294967295)                        \
@@ -636,8 +629,6 @@ DEFPY_YANG(ip_route_address_interface,
       "Distance value for this route\n"
       VRF_CMD_HELP_STR
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "Treat the nexthop as directly attached to the interface\n"
       "SR-TE color\n"
@@ -660,7 +651,7 @@ DEFPY_YANG(ip_route_address_interface,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.color = color_str,
 		.onlink = !!onlink,
 		.vrf = vrf,
@@ -684,7 +675,6 @@ DEFPY_YANG(ip_route_address_interface_vrf,
 	  tag (1-4294967295)                           \
 	  |(1-255)$distance                            \
 	  |label WORD                                  \
-	  |table (1-4294967295)                        \
 	  |nexthop-vrf NAME                            \
 	  |onlink$onlink                               \
 	  |color (1-4294967295)                        \
@@ -702,8 +692,6 @@ DEFPY_YANG(ip_route_address_interface_vrf,
       "Tag value\n"
       "Distance value for this route\n"
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "Treat the nexthop as directly attached to the interface\n"
       "SR-TE color\n"
@@ -726,7 +714,7 @@ DEFPY_YANG(ip_route_address_interface_vrf,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.color = color_str,
 		.onlink = !!onlink,
 		.xpath_vrf = true,
@@ -750,7 +738,6 @@ DEFPY_YANG(ip_route,
 	  |(1-255)$distance                            \
 	  |vrf NAME                                    \
 	  |label WORD                                  \
-	  |table (1-4294967295)                        \
 	  |nexthop-vrf NAME                            \
 	  |color (1-4294967295)                        \
 	  |bfd$bfd [{multi-hop$bfd_multi_hop|source A.B.C.D$bfd_source|profile BFDPROF$bfd_profile}] \
@@ -768,8 +755,6 @@ DEFPY_YANG(ip_route,
       "Distance value for this route\n"
       VRF_CMD_HELP_STR
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "SR-TE color\n"
       "The SR-TE color to configure\n"
@@ -791,7 +776,7 @@ DEFPY_YANG(ip_route,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.color = color_str,
 		.vrf = vrf,
 		.nexthop_vrf = nexthop_vrf,
@@ -813,7 +798,6 @@ DEFPY_YANG(ip_route_vrf,
 	  tag (1-4294967295)                           \
 	  |(1-255)$distance                            \
 	  |label WORD                                  \
-	  |table (1-4294967295)                        \
 	  |nexthop-vrf NAME                            \
 	  |color (1-4294967295)                        \
 	  |bfd$bfd [{multi-hop$bfd_multi_hop|source A.B.C.D$bfd_source|profile BFDPROF$bfd_profile}] \
@@ -830,8 +814,6 @@ DEFPY_YANG(ip_route_vrf,
       "Tag value\n"
       "Distance value for this route\n"
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "SR-TE color\n"
       "The SR-TE color to configure\n"
@@ -853,7 +835,7 @@ DEFPY_YANG(ip_route_vrf,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.color = color_str,
 		.xpath_vrf = true,
 		.nexthop_vrf = nexthop_vrf,
@@ -875,7 +857,6 @@ DEFPY_YANG(ipv6_route_blackhole,
             |(1-255)$distance                              \
             |vrf NAME                                      \
             |label WORD                                    \
-            |table (1-4294967295)                          \
           }]",
       NO_STR
       IPV6_STR
@@ -889,9 +870,7 @@ DEFPY_YANG(ipv6_route_blackhole,
       "Tag value\n"
       "Distance value for this prefix\n"
       VRF_CMD_HELP_STR
-      MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n")
+      MPLS_LABEL_HELPSTR)
 {
 	struct static_route_args args = {
 		.delete = !!no,
@@ -903,7 +882,7 @@ DEFPY_YANG(ipv6_route_blackhole,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.vrf = vrf,
 	};
 
@@ -918,7 +897,6 @@ DEFPY_YANG(ipv6_route_blackhole_vrf,
             tag (1-4294967295)                             \
             |(1-255)$distance                              \
             |label WORD                                    \
-            |table (1-4294967295)                          \
           }]",
       NO_STR
       IPV6_STR
@@ -931,9 +909,7 @@ DEFPY_YANG(ipv6_route_blackhole_vrf,
       "Set tag for this route\n"
       "Tag value\n"
       "Distance value for this prefix\n"
-      MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n")
+      MPLS_LABEL_HELPSTR)
 {
 	struct static_route_args args = {
 		.delete = !!no,
@@ -945,7 +921,7 @@ DEFPY_YANG(ipv6_route_blackhole_vrf,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.xpath_vrf = true,
 	};
 
@@ -968,7 +944,6 @@ DEFPY_YANG(ipv6_route_address_interface, ipv6_route_address_interface_cmd,
             |(1-255)$distance                              \
             |vrf NAME                                      \
             |label WORD                                    \
-	    |table (1-4294967295)                          \
             |nexthop-vrf NAME                              \
 	    |onlink$onlink                                 \
 	    |color (1-4294967295)                          \
@@ -986,8 +961,7 @@ DEFPY_YANG(ipv6_route_address_interface, ipv6_route_address_interface_cmd,
 	   "Set tag for this route\n"
 	   "Tag value\n"
 	   "Distance value for this prefix\n" VRF_CMD_HELP_STR MPLS_LABEL_HELPSTR
-	   "Table to configure\n"
-	   "The table number to configure\n" VRF_CMD_HELP_STR
+	   VRF_CMD_HELP_STR
 	   "Treat the nexthop as directly attached to the interface\n"
 	   "SR-TE color\n"
 	   "The SR-TE color to configure\n" BFD_INTEGRATION_STR
@@ -1007,7 +981,7 @@ DEFPY_YANG(ipv6_route_address_interface, ipv6_route_address_interface_cmd,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.color = color_str,
 		.onlink = !!onlink,
 		.vrf = vrf,
@@ -1031,7 +1005,6 @@ DEFPY_YANG(ipv6_route_address_interface_vrf,
             tag (1-4294967295)                             \
             |(1-255)$distance                              \
             |label WORD                                    \
-	    |table (1-4294967295)                          \
             |nexthop-vrf NAME                              \
 	    |onlink$onlink                                 \
 	    |color (1-4294967295)                          \
@@ -1049,8 +1022,7 @@ DEFPY_YANG(ipv6_route_address_interface_vrf,
 	   "Set tag for this route\n"
 	   "Tag value\n"
 	   "Distance value for this prefix\n" MPLS_LABEL_HELPSTR
-	   "Table to configure\n"
-	   "The table number to configure\n" VRF_CMD_HELP_STR
+	   VRF_CMD_HELP_STR
 	   "Treat the nexthop as directly attached to the interface\n"
 	   "SR-TE color\n"
 	   "The SR-TE color to configure\n" BFD_INTEGRATION_STR
@@ -1070,7 +1042,7 @@ DEFPY_YANG(ipv6_route_address_interface_vrf,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.color = color_str,
 		.onlink = !!onlink,
 		.xpath_vrf = true,
@@ -1093,7 +1065,6 @@ DEFPY_YANG(ipv6_route, ipv6_route_cmd,
             |(1-255)$distance                              \
             |vrf NAME                                      \
             |label WORD                                    \
-	    |table (1-4294967295)                          \
             |nexthop-vrf NAME                              \
             |color (1-4294967295)                          \
 	    |bfd$bfd [{multi-hop$bfd_multi_hop|source X:X::X:X$bfd_source|profile BFDPROF$bfd_profile}] \
@@ -1110,8 +1081,7 @@ DEFPY_YANG(ipv6_route, ipv6_route_cmd,
 	   "Set tag for this route\n"
 	   "Tag value\n"
 	   "Distance value for this prefix\n" VRF_CMD_HELP_STR MPLS_LABEL_HELPSTR
-	   "Table to configure\n"
-	   "The table number to configure\n" VRF_CMD_HELP_STR "SR-TE color\n"
+	   VRF_CMD_HELP_STR "SR-TE color\n"
 	   "The SR-TE color to configure\n" BFD_INTEGRATION_STR
 		   BFD_INTEGRATION_MULTI_HOP_STR BFD_INTEGRATION_SOURCE_STR
 			   BFD_INTEGRATION_SOURCEV4_STR BFD_PROFILE_STR
@@ -1129,7 +1099,7 @@ DEFPY_YANG(ipv6_route, ipv6_route_cmd,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.color = color_str,
 		.vrf = vrf,
 		.nexthop_vrf = nexthop_vrf,
@@ -1151,7 +1121,6 @@ DEFPY_YANG(ipv6_route_vrf, ipv6_route_vrf_cmd,
             tag (1-4294967295)                             \
             |(1-255)$distance                              \
             |label WORD                                    \
-	    |table (1-4294967295)                          \
             |nexthop-vrf NAME                              \
 	    |color (1-4294967295)                          \
 	    |bfd$bfd [{multi-hop$bfd_multi_hop|source X:X::X:X$bfd_source|profile BFDPROF$bfd_profile}] \
@@ -1168,8 +1137,7 @@ DEFPY_YANG(ipv6_route_vrf, ipv6_route_vrf_cmd,
 	   "Set tag for this route\n"
 	   "Tag value\n"
 	   "Distance value for this prefix\n" MPLS_LABEL_HELPSTR
-	   "Table to configure\n"
-	   "The table number to configure\n" VRF_CMD_HELP_STR "SR-TE color\n"
+	   VRF_CMD_HELP_STR "SR-TE color\n"
 	   "The SR-TE color to configure\n" BFD_INTEGRATION_STR
 		   BFD_INTEGRATION_MULTI_HOP_STR BFD_INTEGRATION_SOURCE_STR
 			   BFD_INTEGRATION_SOURCEV4_STR BFD_PROFILE_STR
@@ -1187,7 +1155,7 @@ DEFPY_YANG(ipv6_route_vrf, ipv6_route_vrf_cmd,
 		.tag = tag_str,
 		.distance = distance_str,
 		.label = label,
-		.table = table_str,
+		.table = NULL,
 		.color = color_str,
 		.xpath_vrf = true,
 		.nexthop_vrf = nexthop_vrf,
