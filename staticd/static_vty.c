@@ -383,7 +383,6 @@ DEFPY_YANG(ip_route_blackhole,
 	  |(1-255)$distance                                                   \
 	  |vrf NAME                                                           \
 	  |label WORD                                                         \
-          |table (1-4294967295)                                               \
           }]",
       NO_STR IP_STR
       "Establish static routes\n"
@@ -396,10 +395,10 @@ DEFPY_YANG(ip_route_blackhole,
       "Tag value\n"
       "Distance value for this route\n"
       VRF_CMD_HELP_STR
-      MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n")
+      MPLS_LABEL_HELPSTR)
 {
+	char *table_str = NULL;
+
 	return static_route(vty, AFI_IP, SAFI_UNICAST, no, prefix,
 			    mask_str, NULL, NULL, NULL, flag, tag_str,
 			    distance_str, vrf, label, table_str);
@@ -414,7 +413,6 @@ DEFPY_YANG(ip_route_blackhole_vrf,
 	  tag (1-4294967295)                                                  \
 	  |(1-255)$distance                                                   \
 	  |label WORD                                                         \
-	  |table (1-4294967295)                                               \
           }]",
       NO_STR IP_STR
       "Establish static routes\n"
@@ -426,12 +424,11 @@ DEFPY_YANG(ip_route_blackhole_vrf,
       "Set tag for this route\n"
       "Tag value\n"
       "Distance value for this route\n"
-      MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n")
+      MPLS_LABEL_HELPSTR)
 {
 	const struct lyd_node *vrf_dnode;
 	const char *vrfname;
+	const char *table_str = NULL;
 
 	vrf_dnode =
 		yang_dnode_get(vty->candidate_config->dnode, VTY_CURR_XPATH);
@@ -463,7 +460,6 @@ DEFPY_YANG(ip_route_address_interface,
 	  |(1-255)$distance                            \
 	  |vrf NAME                                    \
 	  |label WORD                                  \
-	  |table (1-4294967295)                        \
 	  |nexthop-vrf NAME                            \
 	  |onlink$onlink                               \
 	  |color (1-4294967295)                        \
@@ -481,8 +477,6 @@ DEFPY_YANG(ip_route_address_interface,
       "Distance value for this route\n"
       VRF_CMD_HELP_STR
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "Treat the nexthop as directly attached to the interface\n"
       "SR-TE color\n"
@@ -490,6 +484,7 @@ DEFPY_YANG(ip_route_address_interface,
 {
 	const char *nh_vrf;
 	const char *flag = NULL;
+	char *table_str = NULL;
 
 	if (ifname && !strncasecmp(ifname, "Null0", 5)) {
 		flag = "Null0";
@@ -519,7 +514,6 @@ DEFPY_YANG(ip_route_address_interface_vrf,
 	  tag (1-4294967295)                           \
 	  |(1-255)$distance                            \
 	  |label WORD                                  \
-	  |table (1-4294967295)                        \
 	  |nexthop-vrf NAME                            \
 	  |onlink$onlink                               \
 	  |color (1-4294967295)                        \
@@ -536,8 +530,6 @@ DEFPY_YANG(ip_route_address_interface_vrf,
       "Tag value\n"
       "Distance value for this route\n"
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "Treat the nexthop as directly attached to the interface\n"
       "SR-TE color\n"
@@ -547,6 +539,7 @@ DEFPY_YANG(ip_route_address_interface_vrf,
 	const char *flag = NULL;
 	const struct lyd_node *vrf_dnode;
 	const char *vrfname;
+	char *table_str = NULL;
 
 	vrf_dnode =
 		yang_dnode_get(vty->candidate_config->dnode, VTY_CURR_XPATH);
@@ -581,7 +574,6 @@ DEFPY_YANG(ip_route,
 	  |(1-255)$distance                            \
 	  |vrf NAME                                    \
 	  |label WORD                                  \
-	  |table (1-4294967295)                        \
 	  |nexthop-vrf NAME                            \
 	  |color (1-4294967295)                        \
           }]",
@@ -598,14 +590,13 @@ DEFPY_YANG(ip_route,
       "Distance value for this route\n"
       VRF_CMD_HELP_STR
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "SR-TE color\n"
       "The SR-TE color to configure\n")
 {
 	const char *nh_vrf;
 	const char *flag = NULL;
+	char *table_str = NULL;
 
 	if (ifname && !strncasecmp(ifname, "Null0", 5)) {
 		flag = "Null0";
@@ -635,7 +626,6 @@ DEFPY_YANG(ip_route_vrf,
 	  tag (1-4294967295)                           \
 	  |(1-255)$distance                            \
 	  |label WORD                                  \
-	  |table (1-4294967295)                        \
 	  |nexthop-vrf NAME                            \
 	  |color (1-4294967295)                        \
           }]",
@@ -651,8 +641,6 @@ DEFPY_YANG(ip_route_vrf,
       "Tag value\n"
       "Distance value for this route\n"
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "SR-TE color\n"
       "The SR-TE color to configure\n")
@@ -661,6 +649,7 @@ DEFPY_YANG(ip_route_vrf,
 	const char *flag = NULL;
 	const struct lyd_node *vrf_dnode;
 	const char *vrfname;
+	char *table_str = NULL;
 
 	vrf_dnode =
 		yang_dnode_get(vty->candidate_config->dnode, VTY_CURR_XPATH);
@@ -695,7 +684,6 @@ DEFPY_YANG(ipv6_route_blackhole,
             |(1-255)$distance                              \
             |vrf NAME                                      \
             |label WORD                                    \
-            |table (1-4294967295)                          \
           }]",
       NO_STR
       IPV6_STR
@@ -709,10 +697,10 @@ DEFPY_YANG(ipv6_route_blackhole,
       "Tag value\n"
       "Distance value for this prefix\n"
       VRF_CMD_HELP_STR
-      MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n")
+      MPLS_LABEL_HELPSTR)
 {
+	char *table_str = NULL;
+
 	return static_route(vty, AFI_IP6, SAFI_UNICAST, no, prefix_str,
 			    NULL, from_str, NULL, NULL, flag, tag_str,
 			    distance_str, vrf, label, table_str);
@@ -726,7 +714,6 @@ DEFPY_YANG(ipv6_route_blackhole_vrf,
             tag (1-4294967295)                             \
             |(1-255)$distance                              \
             |label WORD                                    \
-            |table (1-4294967295)                          \
           }]",
       NO_STR
       IPV6_STR
@@ -739,12 +726,11 @@ DEFPY_YANG(ipv6_route_blackhole_vrf,
       "Set tag for this route\n"
       "Tag value\n"
       "Distance value for this prefix\n"
-      MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n")
+      MPLS_LABEL_HELPSTR)
 {
 	const struct lyd_node *vrf_dnode;
 	const char *vrfname;
+	char *table_str = NULL;
 
 	vrf_dnode =
 		yang_dnode_get(vty->candidate_config->dnode, VTY_CURR_XPATH);
@@ -777,7 +763,6 @@ DEFPY_YANG(ipv6_route_address_interface,
             |(1-255)$distance                              \
             |vrf NAME                                      \
             |label WORD                                    \
-	    |table (1-4294967295)                          \
             |nexthop-vrf NAME                              \
 	    |onlink$onlink                                 \
 	    |color (1-4294967295)                          \
@@ -796,8 +781,6 @@ DEFPY_YANG(ipv6_route_address_interface,
       "Distance value for this prefix\n"
       VRF_CMD_HELP_STR
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "Treat the nexthop as directly attached to the interface\n"
       "SR-TE color\n"
@@ -805,6 +788,7 @@ DEFPY_YANG(ipv6_route_address_interface,
 {
 	const char *nh_vrf;
 	const char *flag = NULL;
+	char *table_str = NULL;
 
 	if (ifname && !strncasecmp(ifname, "Null0", 5)) {
 		flag = "Null0";
@@ -834,7 +818,6 @@ DEFPY_YANG(ipv6_route_address_interface_vrf,
             tag (1-4294967295)                             \
             |(1-255)$distance                              \
             |label WORD                                    \
-	    |table (1-4294967295)                          \
             |nexthop-vrf NAME                              \
 	    |onlink$onlink                                 \
 	    |color (1-4294967295)                          \
@@ -852,8 +835,6 @@ DEFPY_YANG(ipv6_route_address_interface_vrf,
       "Tag value\n"
       "Distance value for this prefix\n"
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "Treat the nexthop as directly attached to the interface\n"
       "SR-TE color\n"
@@ -863,6 +844,7 @@ DEFPY_YANG(ipv6_route_address_interface_vrf,
 	const char *flag = NULL;
 	const struct lyd_node *vrf_dnode;
 	const char *vrfname;
+	char *table_str = NULL;
 
 	vrf_dnode =
 		yang_dnode_get(vty->candidate_config->dnode, VTY_CURR_XPATH);
@@ -896,7 +878,6 @@ DEFPY_YANG(ipv6_route,
             |(1-255)$distance                              \
             |vrf NAME                                      \
             |label WORD                                    \
-	    |table (1-4294967295)                          \
             |nexthop-vrf NAME                              \
             |color (1-4294967295)                          \
           }]",
@@ -914,14 +895,13 @@ DEFPY_YANG(ipv6_route,
       "Distance value for this prefix\n"
       VRF_CMD_HELP_STR
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "SR-TE color\n"
       "The SR-TE color to configure\n")
 {
 	const char *nh_vrf;
 	const char *flag = NULL;
+	char *table_str = NULL;
 
 	if (!vrf)
 		vrf = VRF_DEFAULT_NAME;
@@ -949,7 +929,6 @@ DEFPY_YANG(ipv6_route_vrf,
             tag (1-4294967295)                             \
             |(1-255)$distance                              \
             |label WORD                                    \
-	    |table (1-4294967295)                          \
             |nexthop-vrf NAME                              \
 	    |color (1-4294967295)                          \
           }]",
@@ -966,8 +945,6 @@ DEFPY_YANG(ipv6_route_vrf,
       "Tag value\n"
       "Distance value for this prefix\n"
       MPLS_LABEL_HELPSTR
-      "Table to configure\n"
-      "The table number to configure\n"
       VRF_CMD_HELP_STR
       "SR-TE color\n"
       "The SR-TE color to configure\n")
@@ -976,6 +953,7 @@ DEFPY_YANG(ipv6_route_vrf,
 	const char *flag = NULL;
 	const struct lyd_node *vrf_dnode;
 	const char *vrfname;
+	char *table_str = NULL;
 
 	vrf_dnode =
 		yang_dnode_get(vty->candidate_config->dnode, VTY_CURR_XPATH);
