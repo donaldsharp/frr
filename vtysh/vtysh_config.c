@@ -33,6 +33,10 @@ DEFINE_MTYPE_STATIC(MVTYSH, VTYSH_CONFIG_LINE, "Vtysh configuration line")
 
 vector configvec;
 
+struct line {
+	char *line;
+};
+
 struct config {
 	/* Configuration node name. */
 	char *name;
@@ -49,13 +53,14 @@ struct config {
 
 struct config *config_top;
 
-static int line_cmp(char *c1, char *c2)
+static int line_cmp(struct line *l1, struct line *l2)
 {
-	return strcmp(c1, c2);
+	return strcmp(l1->line, l2->line);
 }
 
-static void line_del(char *line)
+static void line_del(struct line *line)
 {
+	XFREE(MTYPE_VTYSH_CONFIG_LINE, line->line);
 	XFREE(MTYPE_VTYSH_CONFIG_LINE, line);
 }
 
@@ -118,7 +123,10 @@ static struct config *config_get(int index, const char *line)
 
 static void config_add_line(struct config *config, const char *line)
 {
-	listnode_add(config->line, XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line));
+	struct line *l = XMALLOC(MTYPE_VTYSH_CONFIG_LINE, sizeof(struct line));
+
+	l->line = XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line);
+	listnode_add(config->line, l);
 }
 
 void config_add_top_node(const char *line)
@@ -129,13 +137,17 @@ void config_add_top_node(const char *line)
 static void config_add_line_uniq(struct config *config, const char *line)
 {
 	struct listnode *node, *nnode;
-	char *pnt;
+	struct line *l;
+	struct line *pnt;
 
 	for (ALL_LIST_ELEMENTS(config->line, node, nnode, pnt)) {
-		if (strcmp(pnt, line) == 0)
+		if (strcmp(pnt->line, line) == 0)
 			return;
 	}
-	listnode_add_sort(config->line, XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line));
+
+	l = XMALLOC(MTYPE_VTYSH_CONFIG_LINE, sizeof(struct line));
+	l->line = XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line);
+	listnode_add_sort(config->line, l);
 }
 
 /*
@@ -206,10 +218,10 @@ static void config_add_line_uniq(struct config *config, const char *line)
 static void config_add_line_uniq_end(struct config *config, const char *line)
 {
 	struct listnode *node;
-	char *pnt;
+	struct line *pnt;
 
 	for (ALL_LIST_ELEMENTS_RO(config->line, node, pnt)) {
-		if (strcmp(pnt, line) == 0)
+		if (strcmp(pnt->line, line) == 0)
 			break;
 	}
 
@@ -443,11 +455,11 @@ void vtysh_config_dump(void)
 	struct listnode *mnode, *mnnode;
 	struct config *config;
 	struct list *master;
-	char *line;
+	struct line *line;
 	unsigned int i;
 
 	for (ALL_LIST_ELEMENTS(config_top->line, node, nnode, line))
-		vty_out(vty, "%s\n", line);
+		vty_out(vty, "%s\n", line->line);
 
 	vty_out(vty, "!\n");
 
@@ -470,7 +482,7 @@ void vtysh_config_dump(void)
 
 				for (ALL_LIST_ELEMENTS(config->line, mnode,
 						       mnnode, line))
-					vty_out(vty, "%s\n", line);
+					vty_out(vty, "%s\n", line->line);
 				if (!NO_DELIMITER(i))
 					vty_out(vty, "!\n");
 			}
