@@ -23,6 +23,7 @@
 #include "command.h"
 #include "linklist.h"
 #include "memory.h"
+#include "typesafe.h"
 
 #include "vtysh/vtysh.h"
 #include "vtysh/vtysh_user.h"
@@ -33,7 +34,11 @@ DEFINE_MTYPE_STATIC(MVTYSH, VTYSH_CONFIG_LINE, "Vtysh configuration line")
 
 vector configvec;
 
+PREDECL_RBTREE_UNIQ(line_list);
+
 struct line {
+	struct line_list_item item;
+
 	char *line;
 };
 
@@ -42,7 +47,7 @@ struct config {
 	char *name;
 
 	/* Configuration string line. */
-	struct list *line;
+	struct line_list_head line;
 
 	/* Configuration can be nest. */
 	struct config *config;
@@ -53,10 +58,11 @@ struct config {
 
 struct config *config_top;
 
-static int line_cmp(struct line *l1, struct line *l2)
+static int line_cmp(const struct line *l1, const struct line *l2)
 {
 	return strcmp(l1->line, l2->line);
 }
+DECLARE_RBTREE_UNIQ(line_list, struct line, item, line_cmp);
 
 static void line_del(struct line *line)
 {
@@ -69,9 +75,7 @@ static struct config *config_new(void)
 	struct config *config;
 	config = XCALLOC(MTYPE_VTYSH_CONFIG, sizeof(struct config));
 
-	config->line = list_new();
-	config->line->del = (void (*)(void *))line_del;
-	config->line->cmp = (int (*)(void *, void *))line_cmp;
+	line_list_init(&config->line);
 
 	return config;
 }
@@ -83,7 +87,12 @@ static int config_cmp(struct config *c1, struct config *c2)
 
 static void config_del(struct config *config)
 {
-	list_delete(&config->line);
+	struct line *line;
+
+	while ((line = line_list_pop(&config->line)))
+		line_del(line);
+
+	line_list_fini(&config->line);
 	XFREE(MTYPE_VTYSH_CONFIG_LINE, config->name);
 	XFREE(MTYPE_VTYSH_CONFIG, config);
 }
@@ -126,7 +135,7 @@ static void config_add_line(struct config *config, const char *line)
 	struct line *l = XMALLOC(MTYPE_VTYSH_CONFIG_LINE, sizeof(struct line));
 
 	l->line = XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line);
-	listnode_add(config->line, l);
+	line_list_add(&config->line, l);
 }
 
 void config_add_top_node(const char *line)
@@ -140,7 +149,7 @@ static void config_add_line_uniq(struct config *config, const char *line)
 	struct line *l;
 	struct line *pnt;
 
-	for (ALL_LIST_ELEMENTS(config->line, node, nnode, pnt)) {
+	frr_each (line_list, config->line, pnt)) {
 		if (strcmp(pnt->line, line) == 0)
 			return;
 	}
