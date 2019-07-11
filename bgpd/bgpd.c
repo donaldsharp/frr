@@ -4075,6 +4075,8 @@ static int peer_flag_modify(struct peer *peer, u_int32_t flag, int set)
 		UNSET_FLAG(peer->flags, flag);
 
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
+		if (set && flag == PEER_FLAG_CAPABILITY_ENHE)
+			bgp_nht_register_enhe_capability_interfaces(peer);
 		if (action.type == peer_change_reset)
 			peer_flag_modify_action(peer, flag);
 
@@ -4083,9 +4085,6 @@ static int peer_flag_modify(struct peer *peer, u_int32_t flag, int set)
 
 	/* peer-group member updates. */
 	group = peer->group;
-
-	if (set && flag == PEER_FLAG_CAPABILITY_ENHE)
-		bgp_nht_register_enhe_capability_interfaces(peer);
 
 	for (ALL_LIST_ELEMENTS(group->peer, node, nnode, tmp_peer)) {
 
