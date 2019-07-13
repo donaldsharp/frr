@@ -36,6 +36,7 @@
 #include "memory.h"
 #include "linklist.h"
 #include "command.h"
+#include "vtysh/vtysh.h"
 #include "vtysh/vtysh_user.h"
 
 /*
@@ -50,7 +51,6 @@ int vtysh_auth(void);
 void vtysh_user_init(void);
 
 extern struct list *config_top;
-extern void config_add_line(struct list *config, const char *line);
 
 #ifdef USE_PAM
 static struct pam_conv conv = {PAM_CONV_FUNC, NULL};
@@ -116,7 +116,7 @@ void user_config_write(void)
 	for (ALL_LIST_ELEMENTS(userlist, node, nnode, user)) {
 		if (user->nopassword) {
 			sprintf(line, "username %s nopassword", user->name);
-			config_add_line(config_top, line);
+			config_add_top_node(line);
 		}
 	}
 }

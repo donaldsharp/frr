@@ -86,7 +86,7 @@ void vtysh_config_write(void);
 
 int vtysh_config_from_file(struct vty *, FILE *);
 
-void config_add_line(struct list *, const char *);
+void config_add_top_node(const char *line);
 
 int vtysh_mark_file(const char *filename);
 

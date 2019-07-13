@@ -47,7 +47,7 @@ struct config {
 	uint32_t index;
 };
 
-struct list *config_top;
+struct config *config_top;
 
 static int line_cmp(char *c1, char *c2)
 {
@@ -116,21 +116,26 @@ static struct config *config_get(int index, const char *line)
 	return config;
 }
 
-void config_add_line(struct list *config, const char *line)
+static void config_add_line(struct config *config, const char *line)
 {
-	listnode_add(config, XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line));
+	listnode_add(config->line, XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line));
 }
 
-static void config_add_line_uniq(struct list *config, const char *line)
+void config_add_top_node(const char *line)
+{
+	config_add_line(config_top, line);
+}
+
+static void config_add_line_uniq(struct config *config, const char *line)
 {
 	struct listnode *node, *nnode;
 	char *pnt;
 
-	for (ALL_LIST_ELEMENTS(config, node, nnode, pnt)) {
+	for (ALL_LIST_ELEMENTS(config->line, node, nnode, pnt)) {
 		if (strcmp(pnt, line) == 0)
 			return;
 	}
-	listnode_add_sort(config, XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line));
+	listnode_add_sort(config->line, XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line));
 }
 
 /*
@@ -198,12 +203,12 @@ static void config_add_line_uniq(struct list *config, const char *line)
  * line
  *    The line to add to the end of the config
  */
-static void config_add_line_uniq_end(struct list *config, const char *line)
+static void config_add_line_uniq_end(struct config *config, const char *line)
 {
 	struct listnode *node;
 	char *pnt;
 
-	for (ALL_LIST_ELEMENTS_RO(config, node, pnt)) {
+	for (ALL_LIST_ELEMENTS_RO(config->line, node, pnt)) {
 		if (strcmp(pnt, line) == 0)
 			break;
 	}
@@ -211,7 +216,7 @@ static void config_add_line_uniq_end(struct list *config, const char *line)
 	if (!node)
 		config_add_line(config, line);
 	else
-		listnode_move_to_tail(config, node);
+		listnode_move_to_tail(config->line, node);
 }
 
 void vtysh_config_parse_line(void *arg, const char *line)
@@ -240,38 +245,38 @@ void vtysh_config_parse_line(void *arg, const char *line)
 			if (strncmp(line, " link-params",
 				    strlen(" link-params"))
 			    == 0) {
-				config_add_line(config->line, line);
+				config_add_line(config, line);
 				config->index = LINK_PARAMS_NODE;
 			} else if (strncmp(line, " ip multicast boundary",
 					   strlen(" ip multicast boundary"))
 				   == 0) {
-				config_add_line_uniq_end(config->line, line);
+				config_add_line_uniq_end(config, line);
 			} else if (strncmp(line, " ip igmp query-interval",
 					   strlen(" ip igmp query-interval")) == 0) {
-				config_add_line_uniq_end(config->line, line);
+				config_add_line_uniq_end(config, line);
 			} else if (config->index == LINK_PARAMS_NODE
 				   && strncmp(line, "  exit-link-params",
 					      strlen("  exit"))
 					      == 0) {
-				config_add_line(config->line, line);
+				config_add_line(config, line);
 				config->index = INTERFACE_NODE;
 			} else if (config->index == VRF_NODE
 				   && strncmp(line, " exit-vrf",
 					      strlen(" exit-vrf"))
 					      == 0) {
-				config_add_line_uniq_end(config->line, line);
+				config_add_line_uniq_end(config, line);
 			} else if (!strncmp(line, " vrrp", strlen(" vrrp"))
 				   || !strncmp(line, " no vrrp",
 					       strlen(" no vrrp"))) {
-				config_add_line(config->line, line);
+				config_add_line(config, line);
 			} else if (config->index == RMAP_NODE
 				   || config->index == INTERFACE_NODE
 				   || config->index == LOGICALROUTER_NODE
 				   || config->index == VTY_NODE
 				   || config->index == VRF_NODE)
-				config_add_line_uniq(config->line, line);
+				config_add_line_uniq(config, line);
 			else
-				config_add_line(config->line, line);
+				config_add_line(config, line);
 		} else
 			config_add_line(config_top, line);
 		break;
@@ -441,7 +446,7 @@ void vtysh_config_dump(void)
 	char *line;
 	unsigned int i;
 
-	for (ALL_LIST_ELEMENTS(config_top, node, nnode, line))
+	for (ALL_LIST_ELEMENTS(config_top->line, node, nnode, line))
 		vty_out(vty, "%s\n", line);
 
 	vty_out(vty, "!\n");
@@ -478,7 +483,7 @@ void vtysh_config_dump(void)
 			list_delete(&master);
 			vector_slot(configvec, i) = NULL;
 		}
-	list_delete_all_node(config_top);
+	list_delete_all_node(config_top->line);
 }
 
 /* Read up configuration file from file_name. */
@@ -555,7 +560,6 @@ void vtysh_config_write(void)
 
 void vtysh_config_init(void)
 {
-	config_top = list_new();
-	config_top->del = (void (*)(void *))line_del;
+	config_top = config_new();
 	configvec = vector_init(1);
 }
