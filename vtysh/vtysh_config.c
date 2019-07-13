@@ -63,6 +63,11 @@ static struct config *config_new(void)
 {
 	struct config *config;
 	config = XCALLOC(MTYPE_VTYSH_CONFIG, sizeof(struct config));
+
+	config->line = list_new();
+	config->line->del = (void (*)(void *))line_del;
+	config->line->cmp = (int (*)(void *, void *))line_cmp;
+
 	return config;
 }
 
@@ -103,9 +108,7 @@ static struct config *config_get(int index, const char *line)
 
 	if (!config) {
 		config = config_new();
-		config->line = list_new();
-		config->line->del = (void (*)(void *))line_del;
-		config->line->cmp = (int (*)(void *, void *))line_cmp;
+
 		config->name = XSTRDUP(MTYPE_VTYSH_CONFIG_LINE, line);
 		config->index = index;
 		listnode_add(master, config);
