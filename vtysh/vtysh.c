@@ -713,12 +713,16 @@ int vtysh_mark_file(const char *filename)
 			return CMD_ERR_INCOMPLETE;
 		case CMD_SUCCESS:
 			fprintf(stdout, "%s", vty->buf);
+			if (strmatch(vty_buf_trimmed, "exit-vrf"))
+				fprintf(stdout, "end\n");
 			break;
 		case CMD_SUCCESS_DAEMON: {
 			u_int i;
 			int cmd_stat = CMD_SUCCESS;
 
 			fprintf(outputfile, "%s", vty->buf);
+			if (strmatch(vty_buf_trimmed, "exit-vrf"))
+				fprintf(outputfile, "end\n");
 			for (i = 0; i < array_size(vtysh_client); i++) {
 				if (cmd->daemon & vtysh_client[i].flag) {
 					cmd_stat = vtysh_client_execute(
