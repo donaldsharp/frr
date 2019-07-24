@@ -154,6 +154,7 @@ void ferr_ref_display(struct vty *vty, uint32_t code, bool json);
  */
 void ferr_ref_init(void);
 void ferr_ref_fini(void);
+void ferr_vty_init(void);
 
 /* get error details.
  *

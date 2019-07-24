@@ -624,6 +624,7 @@ struct thread_master *frr_init(void)
 	memory_init();
 
 	ferr_ref_init();
+	ferr_vty_init();
 	lib_error_init();
 
 	return master;

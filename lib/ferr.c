@@ -191,8 +191,6 @@ void ferr_ref_init(void)
 				   "Error Reference Texts");
 	}
 	pthread_mutex_unlock(&refs_mtx);
-
-	install_element(VIEW_NODE, &show_error_code_cmd);
 }
 
 void ferr_ref_fini(void)
@@ -205,6 +203,12 @@ void ferr_ref_fini(void)
 	}
 	pthread_mutex_unlock(&refs_mtx);
 }
+
+void ferr_vty_init(void)
+{
+	install_element(VIEW_NODE, &show_error_code_cmd);
+}
+
 
 const struct ferr *ferr_get_last(ferr_r errval)
 {
