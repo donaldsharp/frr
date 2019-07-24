@@ -124,6 +124,11 @@ func_frr()
 func_ospftable()
 {
     exec_cmd $jexec ospf.route vtysh -c "show ip ospf vrf all route $json"
+    exec_cmd $jexec ospf.neighbor_detail vtysh -c "show ip ospf vrf all neighbor detail $json"
+    exec_cmd ospf.database.network vtysh -c "show ip ospf vrf all database network"
+    exec_cmd ospf.database.external vtysh -c "show ip ospf vrf all database external"
+    exec_cmd ospf.database.max_age vtysh -c "show ip ospf vrf all database max-age"
+    exec_cmd ospf.interface.traffic vtysh -c "show ip ospf vrf all interface traffic"
 }
 
 func_ospf6table()
@@ -132,6 +137,8 @@ func_ospf6table()
     exec_cmd ospf6.route_detail vtysh -c "show ipv6 ospf6 route detail"
     exec_cmd ospf6.neigbor_detail vtysh -c "show ipv6 ospf6 neighbor detail"
     exec_cmd ospf6.borderrouters_detail  vtysh -c "show ipv6 ospf6 border-routers detail"
+    exec_cmd ospf6.linkstate_detail vtysh -c "show ipv6 ospf6 linkstate detail"
+    exec_cmd ospf6.interface.traffic vtysh -c "show ipv6 ospf6 vrf all interface traffic"
 }
 
 func_evpntable()
