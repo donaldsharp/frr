@@ -1287,7 +1287,7 @@ static void bgp_peer_remove_private_as(struct bgp *bgp, afi_t afi, safi_t safi,
 				    peer, afi, safi,
 				    PEER_FLAG_REMOVE_PRIVATE_AS_ALL_REPLACE))
 				attr->aspath = aspath_replace_private_asns(
-					attr->aspath, bgp->as);
+					attr->aspath, bgp->as, peer->as);
 
 			// The entire aspath consists of private ASNs so create
 			// an empty aspath
@@ -1298,7 +1298,7 @@ static void bgp_peer_remove_private_as(struct bgp *bgp, afi_t afi, safi_t safi,
 			// the private ASNs
 			else
 				attr->aspath = aspath_remove_private_asns(
-					attr->aspath);
+					attr->aspath, peer->as);
 		}
 
 		// 'all' was not specified so the entire aspath must be private
@@ -1309,7 +1309,7 @@ static void bgp_peer_remove_private_as(struct bgp *bgp, afi_t afi, safi_t safi,
 				    peer, afi, safi,
 				    PEER_FLAG_REMOVE_PRIVATE_AS_REPLACE))
 				attr->aspath = aspath_replace_private_asns(
-					attr->aspath, bgp->as);
+					attr->aspath, bgp->as, peer->as);
 			else
 				attr->aspath = aspath_empty_get();
 		}
