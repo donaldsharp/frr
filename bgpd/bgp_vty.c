@@ -8031,14 +8031,14 @@ static int bgp_show_summary(struct vty *vty, struct bgp *bgp, int afi, int safi,
 }
 
 static void bgp_show_summary_afi_safi(struct vty *vty, struct bgp *bgp, int afi,
-				      int safi, bool use_json,
-				      json_object *json)
+				      int safi, bool use_json)
 {
 	int is_first = 1;
 	int afi_wildcard = (afi == AFI_MAX);
 	int safi_wildcard = (safi == SAFI_MAX);
 	int is_wildcard = (afi_wildcard || safi_wildcard);
 	bool nbr_output = false;
+	json_object *json = NULL;
 
 	if (use_json && is_wildcard)
 		vty_out(vty, "{\n");
@@ -8050,6 +8050,10 @@ static void bgp_show_summary_afi_safi(struct vty *vty, struct bgp *bgp, int afi,
 		while (safi < SAFI_MAX) {
 			if (bgp_afi_safi_peer_exists(bgp, afi, safi)) {
 				nbr_output = true;
+
+				if (use_json)
+					json = json_object_new_object();
+
 				if (is_wildcard) {
 					/*
 					 * So limit output to those afi/safi
@@ -8058,8 +8062,6 @@ static void bgp_show_summary_afi_safi(struct vty *vty, struct bgp *bgp, int afi,
 					 * them
 					 */
 					if (use_json) {
-						json = json_object_new_object();
-
 						if (!is_first)
 							vty_out(vty, ",\n");
 						else
@@ -8101,7 +8103,6 @@ static void bgp_show_all_instances_summary_vty(struct vty *vty, afi_t afi,
 {
 	struct listnode *node, *nnode;
 	struct bgp *bgp;
-	json_object *json = NULL;
 	int is_first = 1;
 	bool nbr_output = false;
 
@@ -8111,8 +8112,6 @@ static void bgp_show_all_instances_summary_vty(struct vty *vty, afi_t afi,
 	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
 		nbr_output = true;
 		if (use_json) {
-			json = json_object_new_object();
-
 			if (!is_first)
 				vty_out(vty, ",\n");
 			else
@@ -8128,7 +8127,7 @@ static void bgp_show_all_instances_summary_vty(struct vty *vty, afi_t afi,
 					? VRF_DEFAULT_NAME
 					: bgp->name);
 		}
-		bgp_show_summary_afi_safi(vty, bgp, afi, safi, use_json, json);
+		bgp_show_summary_afi_safi(vty, bgp, afi, safi, use_json);
 	}
 
 	if (use_json)
@@ -8160,8 +8159,8 @@ int bgp_show_summary_vty(struct vty *vty, const char *name, afi_t afi,
 				return CMD_WARNING;
 			}
 
-			bgp_show_summary_afi_safi(vty, bgp, afi, safi, use_json,
-						  NULL);
+			bgp_show_summary_afi_safi(vty, bgp, afi, safi,
+						  use_json);
 			return CMD_SUCCESS;
 		}
 	}
@@ -8169,7 +8168,7 @@ int bgp_show_summary_vty(struct vty *vty, const char *name, afi_t afi,
 	bgp = bgp_get_default();
 
 	if (bgp)
-		bgp_show_summary_afi_safi(vty, bgp, afi, safi, use_json, NULL);
+		bgp_show_summary_afi_safi(vty, bgp, afi, safi, use_json);
 	else {
 		if (use_json)
 			vty_out(vty, "{}\n");
