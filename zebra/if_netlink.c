@@ -1279,6 +1279,12 @@ int netlink_link_change(struct sockaddr_nl *snl, struct nlmsghdr *h,
 							"Intf %s(%u) has come UP",
 							name, ifp->ifindex);
 					if_up(ifp);
+				} else {
+					if (IS_ZEBRA_DEBUG_KERNEL)
+						zlog_debug(
+							"Intf %s(%u) has gone DOW",
+							name, ifp->ifindex);
+					if_down(ifp);
 				}
 			}
 
