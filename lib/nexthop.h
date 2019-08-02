@@ -78,6 +78,7 @@ struct nexthop {
 #define NEXTHOP_FLAG_MATCHED    (1 << 4) /* Already matched vs a nexthop */
 #define NEXTHOP_FLAG_FILTERED   (1 << 5) /* rmap filtered, used by static only */
 #define NEXTHOP_FLAG_DUPLICATE  (1 << 6) /* nexthop duplicates another active one */
+#define NEXTHOP_FLAG_RNH_FILTERED   (1 << 7) /* rmap filtered, used by rnh */
 #define NEXTHOP_IS_ACTIVE(flags) \
 	(CHECK_FLAG(flags, NEXTHOP_FLAG_ACTIVE) \
 		&& !CHECK_FLAG(flags, NEXTHOP_FLAG_DUPLICATE))

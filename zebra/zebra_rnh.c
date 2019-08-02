@@ -343,6 +343,20 @@ void zebra_deregister_rnh_pseudowire(vrf_id_t vrf_id, struct zebra_pw *pw)
 		zebra_delete_rnh(rnh, RNH_NEXTHOP_TYPE);
 }
 
+/* Clear the NEXTHOP_FLAG_RNH_FILTERED flags on all nexthops
+ */
+static void zebra_rnh_clear_nexthop_rnh_filters(struct route_entry *re)
+{
+	struct nexthop *nexthop;
+
+	if (re) {
+		for (nexthop = re->ng.nexthop; nexthop;
+		     nexthop = nexthop->next) {
+			UNSET_FLAG(nexthop->flags, NEXTHOP_FLAG_RNH_FILTERED);
+		}
+	}
+}
+
 /* Apply the NHT route-map for a client to the route (and nexthops)
  * resolving a NH.
  */
@@ -355,20 +369,20 @@ static int zebra_rnh_apply_nht_rmap(int family, struct route_node *prn,
 	int ret;
 
 	rmap_family = (family == AF_INET) ? AFI_IP : AFI_IP6;
-
 	if (prn && re) {
 		for (nexthop = re->ng.nexthop; nexthop;
 		     nexthop = nexthop->next) {
 			ret = zebra_nht_route_map_check(rmap_family, proto,
 							&prn->p, re, nexthop);
-			if (ret != RMAP_DENYMATCH) {
-				SET_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+			if (ret != RMAP_DENYMATCH)
 				at_least_one++; /* at least one valid NH */
-			} else {
-				UNSET_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+			else {
+				SET_FLAG(nexthop->flags,
+						NEXTHOP_FLAG_RNH_FILTERED);
 			}
 		}
 	}
+
 	return (at_least_one);
 }
 
@@ -490,6 +504,7 @@ static void zebra_rnh_notify_protocol_clients(vrf_id_t vrfid, int family,
 			 * this
 			 * nexthop to see if it is filtered or not.
 			 */
+			zebra_rnh_clear_nexthop_rnh_filters(re);
 			num_resolving_nh = zebra_rnh_apply_nht_rmap(
 				family, prn, re, client->proto);
 			if (num_resolving_nh)
@@ -516,6 +531,9 @@ static void zebra_rnh_notify_protocol_clients(vrf_id_t vrfid, int family,
 
 		send_client(rnh, client, RNH_NEXTHOP_TYPE, vrfid);
 	}
+
+	if (re)
+		zebra_rnh_clear_nexthop_rnh_filters(re);
 }
 
 static void zebra_rnh_process_pbr_tables(int family,
@@ -695,6 +713,7 @@ static struct route_entry *zebra_rnh_resolve_nexthop_entry(vrf_id_t vrfid,
 	struct route_table *route_table;
 	struct route_node *rn;
 	struct route_entry *re;
+	struct nexthop *nexthop;
 
 	*prn = NULL;
 
@@ -725,6 +744,15 @@ static struct route_entry *zebra_rnh_resolve_nexthop_entry(vrf_id_t vrfid,
 			if (CHECK_FLAG(re->status, ROUTE_ENTRY_REMOVED))
 				continue;
 			if (!CHECK_FLAG(re->flags, ZEBRA_FLAG_SELECTED))
+				continue;
+
+			for (ALL_NEXTHOPS(re->ng, nexthop)) {
+				if (!CHECK_FLAG(nexthop->flags,
+						NEXTHOP_FLAG_RNH_FILTERED))
+					break;
+			}
+
+			if (nexthop == NULL)
 				continue;
 
 			if (CHECK_FLAG(rnh->flags, ZEBRA_NHT_CONNECTED)) {
@@ -1087,7 +1115,9 @@ static int send_client(struct rnh *rnh, struct zserv *client, rnh_type_t type,
 		stream_putc(s, 0);
 		for (ALL_NEXTHOPS(re->ng, nh))
 			if (CHECK_FLAG(nh->flags, NEXTHOP_FLAG_FIB)
-			    && CHECK_FLAG(nh->flags, NEXTHOP_FLAG_ACTIVE)) {
+			    && CHECK_FLAG(nh->flags, NEXTHOP_FLAG_ACTIVE)
+			    && !CHECK_FLAG(nh->flags,
+					   NEXTHOP_FLAG_RNH_FILTERED)) {
 				stream_putl(s, nh->vrf_id);
 				stream_putc(s, nh->type);
 				switch (nh->type) {
