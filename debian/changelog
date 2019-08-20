@@ -1,3 +1,9 @@
+frr (4.0+cl3u16) RELEASED; urgency=medium
+
+  * Fixes: Lots of stuff
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Thu, 20 Aug 2019 18:10:00 -0400
+
 frr (4.0+cl3u15) RELEASED; urgency=medium
 
   * Fixes: Lots of stuff
