@@ -70,7 +70,7 @@ class NetworkTopo(Topo):
         # Setup Switches
         switch = {}
         #
-        for i in range(0, 10):
+        for i in range(0, 11):
             switch[i] = self.addSwitch('sw%s' % i, cls=topotest.LegacySwitch)
             self.addLink(switch[i], router[1], intfName2='r1-eth%s' % i )
 
