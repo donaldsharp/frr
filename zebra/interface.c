@@ -751,6 +751,15 @@ void if_delete_update(struct interface *ifp)
 		memset(&zif->brslave_info, 0,
 		       sizeof(struct zebra_l2info_brslave));
 	}
+
+	if (zebrad.delete_interfaces &&
+	    strncmp(zebrad.partial_intf, ifp->name,
+		    strlen(zebrad.partial_intf)) == 0) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("%s interface matches interface deletion criteria, removing",
+				   ifp->name);
+		if_delete(ifp);
+	}
 }
 
 /* VRF change for an interface */

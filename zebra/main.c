@@ -57,6 +57,7 @@
 struct zebra_t zebrad = {
 	.rtm_table_default = 0,
 	.packets_to_process = ZEBRA_ZAPI_PACKETS_TO_PROCESS,
+	.delete_interfaces = false,
 };
 
 /* process id. */
