@@ -148,6 +148,9 @@ struct zebra_t {
 
 	#define ZEBRA_ZAPI_PACKETS_TO_PROCESS 10
 	u_int32_t packets_to_process;
+
+	bool delete_interfaces;
+	char partial_intf[IFNAMSIZ];
 };
 extern struct zebra_t zebrad;
 extern unsigned int multipath_num;

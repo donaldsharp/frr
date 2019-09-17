@@ -1796,6 +1796,30 @@ DEFUN (show_ipv6_nht_vrf_all,
 	return CMD_SUCCESS;
 }
 
+DEFPY (allow_ifp_deletion,
+       allow_ifp_deletion_cmd,
+       "[no] zebra interface allow-deletion IFNAME$ifname",
+       NO_STR
+       ZEBRA_STR
+       "Modify interface behavior\n"
+       "When a delete event from kernel immediately delete the interface\n"
+       "Partial match interface to deletet\n")
+{
+	if (no)
+		zebrad.delete_interfaces = false;
+	else {
+		zebrad.delete_interfaces = true;
+		strlcpy(zebrad.partial_intf, ifname,
+			sizeof(zebrad.partial_intf));
+	}
+
+	zlog_info("Interfaces containing %s upon kernel deletion will %sdeleted",
+		  zebrad.partial_intf,
+		  zebrad.delete_interfaces ? "be " : "not be");
+
+	return CMD_SUCCESS;
+}
+
 DEFUN (ip_nht_default_route,
        ip_nht_default_route_cmd,
        "ip nht resolve-via-default",
@@ -3684,6 +3708,10 @@ static int config_write_protocol(struct vty *vty)
 		vty_out(vty,
 			"zebra zapi-packets %u\n", zebrad.packets_to_process);
 
+	if (zebrad.delete_interfaces)
+		vty_out(vty, "zebra interface allow-deletion %s\n",
+			zebrad.partial_intf);
+
 	enum multicast_mode ipv4_multicast_mode = multicast_mode_ipv4_get();
 
 	if (ipv4_multicast_mode != MCAST_NO_CONFIG)
@@ -3973,6 +4001,7 @@ void zebra_vty_init(void)
 	install_element(CONFIG_NODE, &no_zebra_workqueue_timer_cmd);
 	install_element(CONFIG_NODE, &zebra_packet_process_cmd);
 	install_element(CONFIG_NODE, &no_zebra_packet_process_cmd);
+	install_element(CONFIG_NODE, &allow_ifp_deletion_cmd);
 
 	install_element(VIEW_NODE, &show_vrf_cmd);
 	install_element(VIEW_NODE, &show_vrf_vni_cmd);
