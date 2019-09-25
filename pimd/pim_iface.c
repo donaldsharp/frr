@@ -210,7 +210,7 @@ void pim_if_delete(struct interface *ifp)
 	while (!RB_EMPTY(pim_ifchannel_rb, &pim_ifp->ifchannel_rb)) {
 		ch = RB_ROOT(pim_ifchannel_rb, &pim_ifp->ifchannel_rb);
 
-		pim_ifchannel_delete(ch);
+		pim_ifchannel_delete(ch, false);
 	}
 
 	XFREE(MTYPE_PIM_INTERFACE, pim_ifp);

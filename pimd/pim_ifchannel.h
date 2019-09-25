@@ -114,7 +114,7 @@ RB_HEAD(pim_ifchannel_rb, pim_ifchannel);
 RB_PROTOTYPE(pim_ifchannel_rb, pim_ifchannel,
 	     pim_ifp_rb, pim_ifchannel_compare);
 
-void pim_ifchannel_delete(struct pim_ifchannel *ch);
+void pim_ifchannel_delete(struct pim_ifchannel *ch, bool from_updel);
 void pim_ifchannel_delete_all(struct interface *ifp);
 void pim_ifchannel_membership_clear(struct interface *ifp);
 void pim_ifchannel_delete_on_noinfo(struct interface *ifp);

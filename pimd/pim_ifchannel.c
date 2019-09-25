@@ -125,7 +125,7 @@ static void pim_ifchannel_find_new_children(struct pim_ifchannel *ch)
 	}
 }
 
-void pim_ifchannel_delete(struct pim_ifchannel *ch)
+void pim_ifchannel_delete(struct pim_ifchannel *ch, bool from_updel)
 {
 	struct pim_interface *pim_ifp;
 
@@ -176,7 +176,8 @@ void pim_ifchannel_delete(struct pim_ifchannel *ch)
 	   ifchannel list is empty before deleting upstream_del
 	   ref count will take care of it.
 	*/
-	pim_upstream_del(pim_ifp->pim, ch->upstream, __PRETTY_FUNCTION__);
+	if (!from_updel)
+		pim_upstream_del(pim_ifp->pim, ch->upstream, __PRETTY_FUNCTION__);
 	ch->upstream = NULL;
 
 	THREAD_OFF(ch->t_ifjoin_expiry_timer);
@@ -209,7 +210,7 @@ void pim_ifchannel_delete_all(struct interface *ifp)
 	while (!RB_EMPTY(pim_ifchannel_rb, &pim_ifp->ifchannel_rb)) {
 		ch = RB_ROOT(pim_ifchannel_rb, &pim_ifp->ifchannel_rb);
 
-		pim_ifchannel_delete(ch);
+		pim_ifchannel_delete(ch, false);
 	}
 }
 
@@ -218,7 +219,7 @@ static void delete_on_noinfo(struct pim_ifchannel *ch)
 	if (ch->local_ifmembership == PIM_IFMEMBERSHIP_NOINFO
 	    && ch->ifjoin_state == PIM_IFJOIN_NOINFO
 	    && ch->t_ifjoin_expiry_timer == NULL)
-		pim_ifchannel_delete(ch);
+		pim_ifchannel_delete(ch, false);
 }
 
 void pim_ifchannel_ifjoin_switch(const char *caller, struct pim_ifchannel *ch,

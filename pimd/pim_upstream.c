@@ -201,7 +201,7 @@ struct pim_upstream *pim_upstream_del(struct pim_instance *pim,
 	upstream_channel_oil_detach(up);
 
 	for (ALL_LIST_ELEMENTS(up->ifchannels, node, nnode, ch))
-		pim_ifchannel_delete(ch);
+		pim_ifchannel_delete(ch, true);
 	list_delete_and_null(&up->ifchannels);
 
 	pim_upstream_remove_children(pim, up);
