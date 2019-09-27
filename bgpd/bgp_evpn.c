@@ -4727,12 +4727,23 @@ void bgp_evpn_handle_router_id_update(struct bgp *bgp, int withdraw)
 				if (bgp_vrf->evpn_info->advertise_pip &&
 				    (bgp_vrf->evpn_info->pip_ip_static.s_addr
 				     == INADDR_ANY)) {
+					struct listnode *node = NULL;
+					struct bgpevpn *vpn = NULL;
+
 					bgp_vrf->evpn_info->pip_ip =
 						bgp->router_id;
 					/* advertise type-5 routes with
 					 * new nexthop
 					 */
 					update_advertise_vrf_routes(bgp_vrf);
+					/* Update (svi) type-2 routes */
+					for (ALL_LIST_ELEMENTS_RO(
+						bgp_vrf->l2vnis, node, vpn)) {
+						if (!bgp_evpn_is_svi_macip_enabled(vpn))
+							continue;
+						update_routes_for_vni(bgp, vpn);
+					}
+
 				}
 			}
 		}
