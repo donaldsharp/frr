@@ -72,7 +72,7 @@ static void zebra_ns_notify_create_context_from_entry_name(const char *name)
 	char *netnspath = ns_netns_pathname(NULL, name);
 	struct vrf *vrf;
 	int ret;
-	ns_id_t ns_id, ns_id_external;
+	ns_id_t ns_id, ns_id_external, ns_id_relative = NS_UNKNOWN;
 	struct ns *default_ns;
 
 	if (netnspath == NULL)
@@ -107,7 +107,9 @@ static void zebra_ns_notify_create_context_from_entry_name(const char *name)
 	}
 	frr_with_privs(&zserv_privs) {
 		ret = vrf_netns_handler_create(NULL, vrf, netnspath,
-					       ns_id_external, ns_id);
+					       ns_id_external,
+					       ns_id,
+					       ns_id_relative);
 	}
 	if (ret != CMD_SUCCESS) {
 		flog_warn(EC_ZEBRA_NS_VRF_CREATION_FAILED,
