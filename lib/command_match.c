@@ -717,8 +717,13 @@ static enum match_type match_ipv4(const char *str)
 		if (str - sp > 3)
 			return no_match;
 
-		strncpy(buf, sp, str - sp);
-		if (atoi(buf) > 255)
+		memcpy(buf, sp, str - sp);
+
+		int v = atoi(buf);
+
+		if (v > 255)
+			return no_match;
+		if (v > 0 && buf[0] == '0')
 			return no_match;
 
 		nums++;
@@ -768,8 +773,13 @@ static enum match_type match_ipv4_prefix(const char *str)
 		if (str - sp > 3)
 			return no_match;
 
-		strncpy(buf, sp, str - sp);
-		if (atoi(buf) > 255)
+		memcpy(buf, sp, str - sp);
+
+		int v = atoi(buf);
+
+		if (v > 255)
+			return no_match;
+		if (v > 0 && buf[0] == '0')
 			return no_match;
 
 		if (dots == 3) {
