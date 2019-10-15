@@ -3731,13 +3731,17 @@ static void bgp_soft_reconfig_table(struct peer *peer, afi_t afi, safi_t safi,
 
 	for (rn = bgp_table_top(table); rn; rn = bgp_route_next(rn))
 		for (ain = rn->adj_in; ain; ain = ain->next) {
-			if (ain->peer != peer)
-				continue;
-
-			struct bgp_info *ri = rn->info;
+			struct bgp_info *ri = NULL;
 			u_int32_t num_labels = 0;
 			mpls_label_t *label_pnt = NULL;
 			struct bgp_route_evpn evpn;
+
+			if (ain->peer != peer)
+				continue;
+
+			for (ri = rn->info; ri; ri = ri->next)
+				if (ri->peer == peer)
+					break;
 
 			if (ri && ri->extra)
 				num_labels = ri->extra->num_labels;
