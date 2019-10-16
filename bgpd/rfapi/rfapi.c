@@ -392,9 +392,8 @@ void del_vnc_route(struct rfapi_descriptor *rfd,
 			__func__, bpi, bpi->peer, bpi->type, bpi->sub_type,
 			(bpi->extra ? bpi->extra->vnc.export.rfapi_handle
 				    : NULL),
-			((bpi->attr
-			  && CHECK_FLAG(bpi->attr->flag,
-					ATTR_FLAG_BIT(BGP_ATTR_LOCAL_PREF)))
+			(CHECK_FLAG(bpi->attr->flag,
+				    ATTR_FLAG_BIT(BGP_ATTR_LOCAL_PREF)))
 				 ? bpi->attr->local_pref
 				 : 0));
 
