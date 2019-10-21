@@ -111,6 +111,8 @@ func_frr()
     exec_cmd frr.memory vtysh -c "show memory"
     exec_cmd frr.modules vtysh -c "show modules"
 
+    sed -i -e 's/authentication-key [^ ]*/ authentication-key SSSS/' -e '/password/s/ [^ ]*$/ SSSS/' -e '/message-digest/s/md5 [^ ]*/md5 SSSS/' -e '/authentication string/s/ [^ ]*$/ SSSS/' -e '/key-string/s/ [^ ]*$/ SSSS/' *.show_running
+
     [ $SUP_SECURE -eq 0 ] && {
         [ $SUP_VERBOSE -eq 1 ] &&
             date +"%F_%T.%N: ${FUNCNAME[0]}: copy.vtysh.history files to archive" 1>&2
