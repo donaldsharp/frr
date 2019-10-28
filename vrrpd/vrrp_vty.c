@@ -21,6 +21,7 @@
 
 #include "lib/command.h"
 #include "lib/if.h"
+#include "lib/vrf.h"
 #include "lib/ipaddr.h"
 #include "lib/json.h"
 #include "lib/prefix.h"
@@ -681,6 +682,43 @@ DEFPY(vrrp_vrid_show_summary,
 	return CMD_SUCCESS;
 }
 
+/* clang-format on */
+
+DEFPY(vrrp_show_interface,
+      vrrp_show_interface_cmd,
+      "show vrrp ifconfig",
+      SHOW_STR
+      VRRP_STR
+      "Show VRRP's view of base system interface relationships\n")
+{
+	struct vrf *vrf;
+	struct interface *ifp;
+
+	RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
+		FOR_ALL_INTERFACES (vrf, ifp) {
+			struct interface *parent = if_lookup_by_index(
+				ifp->link_ifindex, vrf->vrf_id);
+			vty_out(vty, "[%d] %s (", ifp->ifindex, ifp->name);
+
+			if (ifp->hw_addr_len != 0) {
+				int i;
+
+				for (i = 0; i < ifp->hw_addr_len; i++)
+					vty_out(vty, "%s%02x",
+						i == 0 ? "" : ":",
+						ifp->hw_addr[i]);
+			}
+
+
+			vty_out(vty, ") -> [%d] %s\n", ifp->link_ifindex,
+				parent ? parent->name : "(null)");
+		}
+	}
+
+	return CMD_SUCCESS;
+}
+/* clang-format off */
+
 
 DEFPY(debug_vrrp,
       debug_vrrp_cmd,
@@ -738,6 +776,7 @@ void vrrp_vty_init(void)
 	install_element(VIEW_NODE, &vrrp_vrid_show_summary_cmd);
 	install_element(VIEW_NODE, &show_debugging_vrrp_cmd);
 	install_element(VIEW_NODE, &debug_vrrp_cmd);
+	install_element(VIEW_NODE, &vrrp_show_interface_cmd);
 	install_element(CONFIG_NODE, &debug_vrrp_cmd);
 	install_element(CONFIG_NODE, &vrrp_autoconfigure_cmd);
 	install_element(CONFIG_NODE, &vrrp_default_cmd);
