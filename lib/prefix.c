@@ -905,9 +905,9 @@ struct prefix_ipv4 *prefix_ipv4_new(void)
 }
 
 /* Free prefix_ipv4 structure. */
-void prefix_ipv4_free(struct prefix_ipv4 *p)
+void prefix_ipv4_free(struct prefix_ipv4 **p)
 {
-	prefix_free((struct prefix *)p);
+	prefix_free((struct prefix **)p);
 }
 
 /* If given string is valid return 1 else return 0 */
@@ -1077,9 +1077,9 @@ struct prefix_ipv6 *prefix_ipv6_new(void)
 }
 
 /* Free prefix for IPv6. */
-void prefix_ipv6_free(struct prefix_ipv6 *p)
+void prefix_ipv6_free(struct prefix_ipv6 **p)
 {
-	prefix_free((struct prefix *)p);
+	prefix_free((struct prefix **)p);
 }
 
 /* If given string is valid return 1 else return 0 */
@@ -1485,9 +1485,10 @@ struct prefix *prefix_new(void)
 }
 
 /* Free prefix structure. */
-void prefix_free(struct prefix *p)
+void prefix_free(struct prefix **p)
 {
-	XFREE(MTYPE_PREFIX, p);
+	XFREE(MTYPE_PREFIX, *p);
+	*p = NULL;
 }
 
 /* Utility function to convert ipv4 prefixes to Classful prefixes */

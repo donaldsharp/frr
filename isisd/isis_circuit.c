@@ -337,7 +337,7 @@ void isis_circuit_del_addr(struct isis_circuit *circuit,
 
 		if (ip) {
 			listnode_delete(circuit->ip_addrs, ip);
-			prefix_ipv4_free(ip);
+			prefix_ipv4_free(&ip);
 			if (circuit->area)
 				lsp_regenerate_schedule(circuit->area,
 							circuit->is_type, 0);
@@ -357,7 +357,7 @@ void isis_circuit_del_addr(struct isis_circuit *circuit,
 			zlog_warn("End of addresses");
 		}
 
-		prefix_ipv4_free(ipv4);
+		prefix_ipv4_free(&ipv4);
 	}
 	if (connected->address->family == AF_INET6) {
 		ipv6 = prefix_ipv6_new();
@@ -373,7 +373,7 @@ void isis_circuit_del_addr(struct isis_circuit *circuit,
 			}
 			if (ip6) {
 				listnode_delete(circuit->ipv6_link, ip6);
-				prefix_ipv6_free(ip6);
+				prefix_ipv6_free(&ip6);
 				found = 1;
 			}
 		} else {
@@ -385,7 +385,7 @@ void isis_circuit_del_addr(struct isis_circuit *circuit,
 			}
 			if (ip6) {
 				listnode_delete(circuit->ipv6_non_link, ip6);
-				prefix_ipv6_free(ip6);
+				prefix_ipv6_free(&ip6);
 				found = 1;
 			}
 		}
@@ -416,7 +416,7 @@ void isis_circuit_del_addr(struct isis_circuit *circuit,
 			lsp_regenerate_schedule(circuit->area, circuit->is_type,
 						0);
 
-		prefix_ipv6_free(ipv6);
+		prefix_ipv6_free(&ipv6);
 	}
 	return;
 }
