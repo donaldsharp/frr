@@ -178,7 +178,7 @@ void if_destroy_via_zapi(struct interface *ifp)
 
 	if_set_index(ifp, IFINDEX_INTERNAL);
 	if (!ifp->configured)
-		if_delete(ifp);
+		if_delete(&ifp);
 }
 
 void if_up_via_zapi(struct interface *ifp)
@@ -276,27 +276,29 @@ void if_delete_retain(struct interface *ifp)
 }
 
 /* Delete and free interface structure. */
-void if_delete(struct interface *ifp)
+void if_delete(struct interface **ifp)
 {
+	struct interface *ptr = *ifp;
 	struct vrf *vrf;
 
-	vrf = vrf_lookup_by_id(ifp->vrf_id);
+	vrf = vrf_lookup_by_id(ptr->vrf_id);
 	assert(vrf);
 
-	IFNAME_RB_REMOVE(vrf, ifp);
-	if (ifp->ifindex != IFINDEX_INTERNAL)
-		IFINDEX_RB_REMOVE(vrf, ifp);
+	IFNAME_RB_REMOVE(vrf, ptr);
+	if (ptr->ifindex != IFINDEX_INTERNAL)
+		IFINDEX_RB_REMOVE(vrf, ptr);
 
-	if_delete_retain(ifp);
+	if_delete_retain(ptr);
 
-	list_delete(&ifp->connected);
-	list_delete(&ifp->nbr_connected);
+	list_delete(&ptr->connected);
+	list_delete(&ptr->nbr_connected);
 
-	if_link_params_free(ifp);
+	if_link_params_free(ptr);
 
-	XFREE(MTYPE_TMP, ifp->desc);
+	XFREE(MTYPE_TMP, ptr->desc);
 
-	XFREE(MTYPE_IF, ifp);
+	XFREE(MTYPE_IF, ptr);
+	*ifp = NULL;
 }
 
 /* Used only internally to check within VRF only */
@@ -1148,7 +1150,7 @@ void if_terminate(struct vrf *vrf)
 			ifp->node->info = NULL;
 			route_unlock_node(ifp->node);
 		}
-		if_delete(ifp);
+		if_delete(&ifp);
 	}
 }
 
@@ -1530,7 +1532,7 @@ static int lib_interface_destroy(enum nb_event event,
 		ifp = nb_running_unset_entry(dnode);
 
 		ifp->configured = false;
-		if_delete(ifp);
+		if_delete(&ifp);
 		break;
 	}
 
