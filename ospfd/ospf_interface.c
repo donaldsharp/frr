@@ -271,7 +271,7 @@ struct ospf_interface *ospf_if_new(struct ospf *ospf, struct interface *ifp,
 	if (IS_DEBUG_OSPF_EVENT)
 		zlog_debug("%s: ospf interface %s vrf %s id %u created",
 			   __PRETTY_FUNCTION__, ifp->name,
-			   ospf_vrf_id_to_name(ospf->vrf_id), ospf->vrf_id);
+			   ospf->name, ospf->vrf_id);
 
 	return oi;
 }
@@ -840,7 +840,7 @@ struct ospf_interface *ospf_vl_new(struct ospf *ospf,
 	struct prefix_ipv4 *p;
 
 	if (IS_DEBUG_OSPF_EVENT)
-		zlog_debug("ospf_vl_new(): Start");
+		zlog_debug("ospf_vl_new()(%s): Start", ospf->name);
 	if (vlink_count == OSPF_VL_MAX_COUNT) {
 		if (IS_DEBUG_OSPF_EVENT)
 			zlog_debug(
