@@ -24,6 +24,7 @@ DEFINE_MTYPE_STATIC(ZEBRA, ZEBRA_RT_TABLE, "Zebra VRF table");
 struct zebra_router zrouter = {
 	.multipath_num = MULTIPATH_NUM,
 	.ipv4_multicast_mode = MCAST_NO_CONFIG,
+	.v6_rr_semantics = true,
 };
 
 static inline int
