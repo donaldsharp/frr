@@ -73,7 +73,7 @@ int retain_mode = 0;
 
 int graceful_restart;
 
-bool v6_rr_semantics = false;
+bool v6_rr_semantics = true;
 
 /* Receive buffer size for kernel control sockets */
 #define RCVBUFSIZE_MIN 4194304
