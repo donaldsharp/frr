@@ -87,6 +87,67 @@ static int sharp_ifp_down(struct interface *ifp)
 	return 0;
 }
 
+static void sharp_nhg_add_helper(struct zapi_route *api,
+				 struct nexthop_group *nhg)
+{
+	struct zapi_nexthop *api_nh;
+	struct nexthop *nh;
+	size_t i = 0;
+
+	for (ALL_NEXTHOPS_PTR(nhg, nh)) {
+		api_nh = &api->nexthops[i];
+		api_nh->vrf_id = nh->vrf_id;
+		api_nh->type = nh->type;
+		api_nh->weight = nh->weight;
+
+		switch (nh->type) {
+		case NEXTHOP_TYPE_IPV4:
+			api_nh->gate = nh->gate;
+			break;
+		case NEXTHOP_TYPE_IPV4_IFINDEX:
+			api_nh->gate = nh->gate;
+			api_nh->ifindex = nh->ifindex;
+			break;
+		case NEXTHOP_TYPE_IFINDEX:
+			api_nh->ifindex = nh->ifindex;
+			break;
+		case NEXTHOP_TYPE_IPV6:
+			memcpy(&api_nh->gate.ipv6, &nh->gate.ipv6, 16);
+			break;
+		case NEXTHOP_TYPE_IPV6_IFINDEX:
+			api_nh->ifindex = nh->ifindex;
+			memcpy(&api_nh->gate.ipv6, &nh->gate.ipv6, 16);
+			break;
+		case NEXTHOP_TYPE_BLACKHOLE:
+			api_nh->bh_type = nh->bh_type;
+			break;
+		}
+
+		if (nh->nh_label && nh->nh_label->num_labels > 0) {
+			int j;
+
+			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_LABEL);
+
+			api_nh->label_num = nh->nh_label->num_labels;
+			for (j = 0; j < nh->nh_label->num_labels; j++)
+				api_nh->labels[j] = nh->nh_label->label[j];
+		}
+
+		i++;
+	}
+
+	api->nexthop_num = i;
+}
+
+static void sharp_nhg_add(struct nexthop_group *nhg)
+{
+	static uint32_t id = 10000;
+	struct zapi_route api;
+
+	sharp_nhg_add_helper(&api, nhg);
+	zclient_nhg_add(zclient, id, api.nexthop_num, &api.nexthops[0]);
+}
+
 void sharp_install_routes_helper(struct prefix *p, vrf_id_t vrf_id,
 				 uint8_t instance, struct nexthop_group *nhg,
 				 uint32_t routes)
@@ -103,6 +164,7 @@ void sharp_install_routes_helper(struct prefix *p, vrf_id_t vrf_id,
 		temp = ntohl(p->u.val32[3]);
 
 	monotime(&sg.r.t_start);
+	sharp_nhg_add(nhg);
 	for (i = 0; i < routes; i++) {
 		route_add(p, vrf_id, (uint8_t)instance, nhg);
 		if (v4)
@@ -225,9 +287,6 @@ void route_add(struct prefix *p, vrf_id_t vrf_id,
 	       uint8_t instance, struct nexthop_group *nhg)
 {
 	struct zapi_route api;
-	struct zapi_nexthop *api_nh;
-	struct nexthop *nh;
-	int i = 0;
 
 	memset(&api, 0, sizeof(api));
 	api.vrf_id = vrf_id;
@@ -239,48 +298,7 @@ void route_add(struct prefix *p, vrf_id_t vrf_id,
 	SET_FLAG(api.flags, ZEBRA_FLAG_ALLOW_RECURSION);
 	SET_FLAG(api.message, ZAPI_MESSAGE_NEXTHOP);
 
-	for (ALL_NEXTHOPS_PTR(nhg, nh)) {
-		api_nh = &api.nexthops[i];
-		api_nh->vrf_id = nh->vrf_id;
-		api_nh->type = nh->type;
-		api_nh->weight = nh->weight;
-
-		switch (nh->type) {
-		case NEXTHOP_TYPE_IPV4:
-			api_nh->gate = nh->gate;
-			break;
-		case NEXTHOP_TYPE_IPV4_IFINDEX:
-			api_nh->gate = nh->gate;
-			api_nh->ifindex = nh->ifindex;
-			break;
-		case NEXTHOP_TYPE_IFINDEX:
-			api_nh->ifindex = nh->ifindex;
-			break;
-		case NEXTHOP_TYPE_IPV6:
-			memcpy(&api_nh->gate.ipv6, &nh->gate.ipv6, 16);
-			break;
-		case NEXTHOP_TYPE_IPV6_IFINDEX:
-			api_nh->ifindex = nh->ifindex;
-			memcpy(&api_nh->gate.ipv6, &nh->gate.ipv6, 16);
-			break;
-		case NEXTHOP_TYPE_BLACKHOLE:
-			api_nh->bh_type = nh->bh_type;
-			break;
-		}
-
-		if (nh->nh_label && nh->nh_label->num_labels > 0) {
-			int j;
-
-			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_LABEL);
-
-			api_nh->label_num = nh->nh_label->num_labels;
-			for (j = 0; j < nh->nh_label->num_labels; j++)
-				api_nh->labels[j] = nh->nh_label->label[j];
-		}
-
-		i++;
-	}
-	api.nexthop_num = i;
+	sharp_nhg_add_helper(&api, nhg);
 
 	zclient_route_send(ZEBRA_ROUTE_ADD, zclient, &api);
 }
