@@ -49,13 +49,11 @@ DEFINE_MTYPE_STATIC(ZEBRA, NHG_CTX, "Nexthop Group Context");
 /* id counter to keep in sync with kernel */
 uint32_t id_counter;
 
-static struct nhg_hash_entry *depends_find(const struct nexthop *nh,
-					   afi_t afi);
+static struct nhg_hash_entry *depends_find(const struct nexthop *nh);
 static void depends_add(struct nhg_connected_tree_head *head,
 			struct nhg_hash_entry *depend);
 static struct nhg_hash_entry *
-depends_find_add(struct nhg_connected_tree_head *head, struct nexthop *nh,
-		 afi_t afi);
+depends_find_add(struct nhg_connected_tree_head *head, struct nexthop *nh);
 static struct nhg_hash_entry *
 depends_find_id_add(struct nhg_connected_tree_head *head, uint32_t id);
 static void depends_decrement_free(struct nhg_connected_tree_head *head);
@@ -322,7 +320,6 @@ static struct nhg_hash_entry *zebra_nhg_copy(const struct nhg_hash_entry *copy,
 	nexthop_group_copy(nhe->nhg, copy->nhg);
 
 	nhe->vrf_id = copy->vrf_id;
-	nhe->afi = copy->afi;
 	nhe->type = copy->type ? copy->type : ZEBRA_ROUTE_NHG;
 	nhe->refcnt = 0;
 	nhe->dplane_ref = zebra_router_get_next_sequence();
@@ -353,8 +350,7 @@ uint32_t zebra_nhg_hash_key(const void *arg)
 
 	uint32_t key = 0x5a351234;
 
-	key = jhash_3words(nhe->vrf_id, nhe->afi, nexthop_group_hash(nhe->nhg),
-			   key);
+	key = jhash_2words(nhe->vrf_id, nexthop_group_hash(nhe->nhg), key);
 
 	return key;
 }
@@ -378,9 +374,6 @@ bool zebra_nhg_hash_equal(const void *arg1, const void *arg2)
 		return true;
 
 	if (nhe1->vrf_id != nhe2->vrf_id)
-		return false;
-
-	if (nhe1->afi != nhe2->afi)
 		return false;
 
 	/* Nexthops should be sorted */
@@ -473,21 +466,21 @@ static int zebra_nhg_process_grp(struct nexthop_group *nhg,
 }
 
 static void handle_recursive_depend(struct nhg_connected_tree_head *nhg_depends,
-				    struct nexthop *nh, afi_t afi)
+				    struct nexthop *nh)
 {
 	struct nhg_hash_entry *depend = NULL;
 	struct nexthop_group resolved_ng = {};
 
 	nexthop_group_add_sorted(&resolved_ng, nh);
 
-	depend = zebra_nhg_rib_find(0, &resolved_ng, afi);
+	depend = zebra_nhg_rib_find(0, &resolved_ng);
 	depends_add(nhg_depends, depend);
 }
 
 static bool zebra_nhg_find(struct nhg_hash_entry **nhe, uint32_t id,
 			   struct nexthop_group *nhg,
 			   struct nhg_connected_tree_head *nhg_depends,
-			   vrf_id_t vrf_id, afi_t afi, int type)
+			   vrf_id_t vrf_id, int type)
 {
 	struct nhg_hash_entry lookup = {};
 
@@ -504,36 +497,7 @@ static bool zebra_nhg_find(struct nhg_hash_entry **nhe, uint32_t id,
 	lookup.type = type ? type : ZEBRA_ROUTE_NHG;
 	lookup.nhg = nhg;
 
-	if (lookup.nhg->nexthop->next) {
-		/* Groups can have all vrfs and AF's in them */
-		lookup.afi = AFI_UNSPEC;
-		lookup.vrf_id = 0;
-	} else {
-		switch (lookup.nhg->nexthop->type) {
-		case (NEXTHOP_TYPE_IFINDEX):
-		case (NEXTHOP_TYPE_BLACKHOLE):
-			/*
-			 * This switch case handles setting the afi different
-			 * for ipv4/v6 routes. Ifindex/blackhole nexthop
-			 * objects cannot be ambiguous, they must be Address
-			 * Family specific. If we get here, we will either use
-			 * the AF of the route, or the one we got passed from
-			 * here from the kernel.
-			 */
-			lookup.afi = afi;
-			break;
-		case (NEXTHOP_TYPE_IPV4_IFINDEX):
-		case (NEXTHOP_TYPE_IPV4):
-			lookup.afi = AFI_IP;
-			break;
-		case (NEXTHOP_TYPE_IPV6_IFINDEX):
-		case (NEXTHOP_TYPE_IPV6):
-			lookup.afi = AFI_IP6;
-			break;
-		}
-
-		lookup.vrf_id = vrf_id;
-	}
+	lookup.vrf_id = vrf_id;
 
 	if (id)
 		(*nhe) = zebra_nhg_lookup_id(id);
@@ -565,13 +529,12 @@ static bool zebra_nhg_find(struct nhg_hash_entry **nhe, uint32_t id,
 
 				for (nh = nhg->nexthop; nh; nh = nh->next)
 					depends_find_add(&lookup.nhg_depends,
-							 nh, afi);
+							 nh);
 			} else if (CHECK_FLAG(nhg->nexthop->flags,
 					      NEXTHOP_FLAG_RECURSIVE)) {
 				zebra_nhg_depends_init(&lookup);
 				handle_recursive_depend(&lookup.nhg_depends,
-							nhg->nexthop->resolved,
-							afi);
+							nhg->nexthop->resolved);
 				recursive = true;
 			}
 		}
@@ -587,14 +550,14 @@ static bool zebra_nhg_find(struct nhg_hash_entry **nhe, uint32_t id,
 
 /* Find/create a single nexthop */
 static struct nhg_hash_entry *
-zebra_nhg_find_nexthop(uint32_t id, struct nexthop *nh, afi_t afi, int type)
+zebra_nhg_find_nexthop(uint32_t id, struct nexthop *nh, int type)
 {
 	struct nhg_hash_entry *nhe = NULL;
 	struct nexthop_group nhg = {};
 
 	nexthop_group_add_sorted(&nhg, nh);
 
-	zebra_nhg_find(&nhe, id, &nhg, NULL, nh->vrf_id, afi, type);
+	zebra_nhg_find(&nhe, id, &nhg, NULL, nh->vrf_id, type);
 
 	return nhe;
 }
@@ -632,11 +595,6 @@ static vrf_id_t nhg_ctx_get_vrf_id(const struct nhg_ctx *ctx)
 static int nhg_ctx_get_type(const struct nhg_ctx *ctx)
 {
 	return ctx->type;
-}
-
-static int nhg_ctx_get_afi(const struct nhg_ctx *ctx)
-{
-	return ctx->afi;
 }
 
 static struct nexthop *nhg_ctx_get_nh(struct nhg_ctx *ctx)
@@ -686,7 +644,7 @@ done:
 
 static struct nhg_ctx *nhg_ctx_init(uint32_t id, struct nexthop *nh,
 				    struct nh_grp *grp, vrf_id_t vrf_id,
-				    afi_t afi, int type, uint8_t count)
+				    int type, uint8_t count)
 {
 	struct nhg_ctx *ctx = NULL;
 
@@ -694,7 +652,6 @@ static struct nhg_ctx *nhg_ctx_init(uint32_t id, struct nexthop *nh,
 
 	ctx->id = id;
 	ctx->vrf_id = vrf_id;
-	ctx->afi = afi;
 	ctx->type = type;
 	ctx->count = count;
 
@@ -836,7 +793,6 @@ static int nhg_ctx_process_new(struct nhg_ctx *ctx)
 	uint8_t count = nhg_ctx_get_count(ctx);
 	vrf_id_t vrf_id = nhg_ctx_get_vrf_id(ctx);
 	int type = nhg_ctx_get_type(ctx);
-	afi_t afi = nhg_ctx_get_afi(ctx);
 
 	lookup = zebra_nhg_lookup_id(id);
 
@@ -857,15 +813,13 @@ static int nhg_ctx_process_new(struct nhg_ctx *ctx)
 			return -ENOENT;
 		}
 
-		if (!zebra_nhg_find(&nhe, id, nhg, &nhg_depends, vrf_id, type,
-				    afi))
+		if (!zebra_nhg_find(&nhe, id, nhg, &nhg_depends, vrf_id, type))
 			depends_decrement_free(&nhg_depends);
 
 		/* These got copied over in zebra_nhg_alloc() */
 		nexthop_group_delete(&nhg);
 	} else
-		nhe = zebra_nhg_find_nexthop(id, nhg_ctx_get_nh(ctx), afi,
-					     type);
+		nhe = zebra_nhg_find_nexthop(id, nhg_ctx_get_nh(ctx), type);
 
 	if (nhe) {
 		if (id != nhe->id) {
@@ -1001,8 +955,7 @@ int nhg_ctx_process(struct nhg_ctx *ctx)
 
 /* Kernel-side, you either get a single new nexthop or a array of ID's */
 int zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh, struct nh_grp *grp,
-			  uint8_t count, vrf_id_t vrf_id, afi_t afi, int type,
-			  int startup)
+			  uint8_t count, vrf_id_t vrf_id, int type, int startup)
 {
 	struct nhg_ctx *ctx = NULL;
 
@@ -1012,7 +965,7 @@ int zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh, struct nh_grp *grp,
 		 */
 		id_counter = id;
 
-	ctx = nhg_ctx_init(id, nh, grp, vrf_id, afi, type, count);
+	ctx = nhg_ctx_init(id, nh, grp, vrf_id, type, count);
 	nhg_ctx_set_op(ctx, NHG_CTX_OP_NEW);
 
 	/* Under statup conditions, we need to handle them immediately
@@ -1035,7 +988,7 @@ int zebra_nhg_kernel_del(uint32_t id)
 {
 	struct nhg_ctx *ctx = NULL;
 
-	ctx = nhg_ctx_init(id, NULL, NULL, 0, 0, 0, 0);
+	ctx = nhg_ctx_init(id, NULL, NULL, 0, 0, 0);
 
 	nhg_ctx_set_op(ctx, NHG_CTX_OP_DEL);
 
@@ -1048,7 +1001,7 @@ int zebra_nhg_kernel_del(uint32_t id)
 }
 
 /* Some dependency helper functions */
-static struct nhg_hash_entry *depends_find(const struct nexthop *nh, afi_t afi)
+static struct nhg_hash_entry *depends_find(const struct nexthop *nh)
 {
 	struct nexthop lookup;
 	struct nhg_hash_entry *nhe = NULL;
@@ -1062,7 +1015,7 @@ static struct nhg_hash_entry *depends_find(const struct nexthop *nh, afi_t afi)
 	memset(&lookup, 0, sizeof(lookup));
 	nexthop_copy(&lookup, nh, NULL);
 
-	nhe = zebra_nhg_find_nexthop(0, &lookup, afi, 0);
+	nhe = zebra_nhg_find_nexthop(0, &lookup, 0);
 
 	/* The copy may have allocated labels; free them if necessary. */
 	nexthop_del_labels(&lookup);
@@ -1079,12 +1032,11 @@ static void depends_add(struct nhg_connected_tree_head *head,
 }
 
 static struct nhg_hash_entry *
-depends_find_add(struct nhg_connected_tree_head *head, struct nexthop *nh,
-		 afi_t afi)
+depends_find_add(struct nhg_connected_tree_head *head, struct nexthop *nh)
 {
 	struct nhg_hash_entry *depend = NULL;
 
-	depend = depends_find(nh, afi);
+	depend = depends_find(nh);
 
 	if (depend)
 		depends_add(head, depend);
@@ -1112,8 +1064,8 @@ static void depends_decrement_free(struct nhg_connected_tree_head *head)
 }
 
 /* Rib-side, you get a nexthop group struct */
-struct nhg_hash_entry *
-zebra_nhg_rib_find(uint32_t id, struct nexthop_group *nhg, afi_t rt_afi)
+struct nhg_hash_entry *zebra_nhg_rib_find(uint32_t id,
+					  struct nexthop_group *nhg)
 {
 	struct nhg_hash_entry *nhe = NULL;
 
@@ -1123,7 +1075,7 @@ zebra_nhg_rib_find(uint32_t id, struct nexthop_group *nhg, afi_t rt_afi)
 		return NULL;
 	}
 
-	zebra_nhg_find(&nhe, id, nhg, NULL, nhg->nexthop->vrf_id, rt_afi, 0);
+	zebra_nhg_find(&nhe, id, nhg, NULL, nhg->nexthop->vrf_id, 0);
 
 	return nhe;
 }
@@ -1673,8 +1625,6 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re)
 	ifindex_t prev_index;
 	uint8_t curr_active = 0;
 
-	afi_t rt_afi = family2afi(rn->p.family);
-
 	UNSET_FLAG(re->status, ROUTE_ENTRY_CHANGED);
 
 	/* Copy over the nexthops in current state */
@@ -1726,7 +1676,7 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re)
 	if (CHECK_FLAG(re->status, ROUTE_ENTRY_CHANGED)) {
 		struct nhg_hash_entry *new_nhe = NULL;
 
-		new_nhe = zebra_nhg_rib_find(0, &new_grp, rt_afi);
+		new_nhe = zebra_nhg_rib_find(0, &new_grp);
 
 		route_entry_update_nhe(re, new_nhe);
 	}

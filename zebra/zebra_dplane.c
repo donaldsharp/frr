@@ -1593,7 +1593,6 @@ static int dplane_ctx_nexthop_init(struct zebra_dplane_ctx *ctx,
 
 	/* Copy over nhe info */
 	ctx->u.rinfo.nhe.id = nhe->id;
-	ctx->u.rinfo.nhe.afi = nhe->afi;
 	ctx->u.rinfo.nhe.vrf_id = nhe->vrf_id;
 	ctx->u.rinfo.nhe.type = nhe->type;
 

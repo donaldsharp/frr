@@ -2438,8 +2438,8 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			vrf_id = nh.vrf_id;
 		}
 
-		if (zebra_nhg_kernel_find(id, &nh, grp, grp_count, vrf_id, afi,
-					  type, startup))
+		if (zebra_nhg_kernel_find(id, &nh, grp, grp_count, vrf_id, type,
+					  startup))
 			return -1;
 
 	} else if (h->nlmsg_type == RTM_DELNEXTHOP)

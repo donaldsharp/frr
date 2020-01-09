@@ -1277,16 +1277,13 @@ static int show_nexthop_group_id_cmd_helper(struct vty *vty, uint32_t id)
 }
 
 static void show_nexthop_group_cmd_helper(struct vty *vty,
-					  struct zebra_vrf *zvrf, afi_t afi)
+					  struct zebra_vrf *zvrf)
 {
 	struct list *list = hash_to_list(zrouter.nhgs);
 	struct nhg_hash_entry *nhe = NULL;
 	struct listnode *node = NULL;
 
 	for (ALL_LIST_ELEMENTS_RO(list, node, nhe)) {
-
-		if (afi && nhe->afi != afi)
-			continue;
 
 		if (nhe->vrf_id != zvrf->vrf->vrf_id)
 			continue;
@@ -1351,26 +1348,19 @@ DEFPY (show_interface_nexthop_group,
 
 DEFPY (show_nexthop_group,
        show_nexthop_group_cmd,
-       "show nexthop-group rib <(0-4294967295)$id|[<ip$v4|ipv6$v6>] [vrf <NAME$vrf_name|all$vrf_all>]>",
+       "show nexthop-group rib <(0-4294967295)$id [vrf <NAME$vrf_name|all$vrf_all>]>",
        SHOW_STR
        "Show Nexthop Groups\n"
        "RIB information\n"
        "Nexthop Group ID\n"
-       IP_STR
-       IP6_STR
        VRF_FULL_CMD_HELP_STR)
 {
 
 	struct zebra_vrf *zvrf = NULL;
-	afi_t afi = 0;
 
 	if (id)
 		return show_nexthop_group_id_cmd_helper(vty, id);
 
-	if (v4)
-		afi = AFI_IP;
-	else if (v6)
-		afi = AFI_IP6;
 
 	if (vrf_all) {
 		struct vrf *vrf;
@@ -1383,7 +1373,7 @@ DEFPY (show_nexthop_group,
 				continue;
 
 			vty_out(vty, "VRF: %s\n", vrf->name);
-			show_nexthop_group_cmd_helper(vty, zvrf, afi);
+			show_nexthop_group_cmd_helper(vty, zvrf);
 		}
 
 		return CMD_SUCCESS;
@@ -1399,7 +1389,7 @@ DEFPY (show_nexthop_group,
 		return CMD_WARNING;
 	}
 
-	show_nexthop_group_cmd_helper(vty, zvrf, afi);
+	show_nexthop_group_cmd_helper(vty, zvrf);
 
 	return CMD_SUCCESS;
 }

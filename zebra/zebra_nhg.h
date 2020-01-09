@@ -45,7 +45,6 @@ PREDECL_RBTREE_UNIQ(nhg_connected_tree);
 
 struct nhg_hash_entry {
 	uint32_t id;
-	afi_t afi;
 	vrf_id_t vrf_id;
 	int type;
 
@@ -133,7 +132,7 @@ struct nhg_ctx {
 	uint32_t id;
 
 	vrf_id_t vrf_id;
-	afi_t afi;
+	//	afi_t afi;
 	/*
 	 * This should only every be ZEBRA_ROUTE_NHG unless we get a a kernel
 	 * created nexthop not made by us.
@@ -192,14 +191,13 @@ extern int nhg_ctx_process(struct nhg_ctx *ctx);
 /* Find via kernel nh creation */
 extern int zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh,
 				 struct nh_grp *grp, uint8_t count,
-				 vrf_id_t vrf_id, afi_t afi, int type,
-				 int startup);
+				 vrf_id_t vrf_id, int type, int startup);
 /* Del via kernel */
 extern int zebra_nhg_kernel_del(uint32_t id);
 
 /* Find via route creation */
-extern struct nhg_hash_entry *
-zebra_nhg_rib_find(uint32_t id, struct nexthop_group *nhg, afi_t rt_afi);
+extern struct nhg_hash_entry *zebra_nhg_rib_find(uint32_t id,
+						 struct nexthop_group *nhg);
 
 /* Reference counter functions */
 extern void zebra_nhg_decrement_ref(struct nhg_hash_entry *nhe);
