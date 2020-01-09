@@ -2576,7 +2576,7 @@ static void mpls_zebra_nhg_update(struct route_entry *re, afi_t afi,
 {
 	struct nhg_hash_entry *nhe;
 
-	nhe = zebra_nhg_rib_find(0, new_grp, afi);
+	nhe = zebra_nhg_rib_find(re->vrf_id, 0, new_grp, afi);
 
 	route_entry_update_nhe(re, nhe);
 }

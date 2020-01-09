@@ -592,10 +592,12 @@ zebra_nhg_find_nexthop(uint32_t id, struct nexthop *nh, afi_t afi, int type)
 {
 	struct nhg_hash_entry *nhe = NULL;
 	struct nexthop_group nhg = {};
+	vrf_id_t vrf_id = !vrf_is_backend_netns() ?
+		VRF_DEFAULT : nh->vrf_id;
 
 	nexthop_group_add_sorted(&nhg, nh);
 
-	zebra_nhg_find(&nhe, id, &nhg, NULL, nh->vrf_id, afi, type);
+	zebra_nhg_find(&nhe, id, &nhg, NULL, vrf_id, afi, type);
 
 	return nhe;
 }
@@ -1036,7 +1038,7 @@ int zebra_nhg_kernel_del(uint32_t id)
 {
 	struct nhg_ctx *ctx = NULL;
 
-	ctx = nhg_ctx_init(id, NULL, NULL, 0, 0, 0, 0);
+	ctx = nhg_ctx_init(id, NULL, NULL, VRF_DEFAULT, 0, 0, 0);
 
 	nhg_ctx_set_op(ctx, NHG_CTX_OP_DEL);
 
@@ -1117,6 +1119,8 @@ struct nhg_hash_entry *
 zebra_nhg_rib_find(uint32_t id, struct nexthop_group *nhg, afi_t rt_afi)
 {
 	struct nhg_hash_entry *nhe = NULL;
+	vrf_id_t vrf_id = !vrf_backend_is_netns() ?
+		VRF_DEFAULT : nhg->nexthop->vrf_id;
 
 	if (!(nhg && nhg->nexthop)) {
 		flog_err(EC_ZEBRA_TABLE_LOOKUP_FAILED,
@@ -1124,7 +1128,7 @@ zebra_nhg_rib_find(uint32_t id, struct nexthop_group *nhg, afi_t rt_afi)
 		return NULL;
 	}
 
-	zebra_nhg_find(&nhe, id, nhg, NULL, nhg->nexthop->vrf_id, rt_afi, 0);
+	zebra_nhg_find(&nhe, id, nhg, NULL, vrf_id, rt_afi, 0);
 
 	return nhe;
 }
