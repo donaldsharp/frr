@@ -1397,8 +1397,7 @@ stream_failure:
 	return;
 }
 
-
-void zserv_nexthop_num_warn(const char *caller, const struct prefix *p,
+bool zserv_nexthop_num_warn(const char *caller, const struct prefix *p,
 			    const unsigned int nexthop_num)
 {
 	if (nexthop_num > zrouter.multipath_num) {
@@ -1409,7 +1408,10 @@ void zserv_nexthop_num_warn(const char *caller, const struct prefix *p,
 			EC_ZEBRA_MORE_NH_THAN_MULTIPATH,
 			"%s: Prefix %s has %d nexthops, but we can only use the first %d",
 			caller, buff, nexthop_num, zrouter.multipath_num);
+		return true;
 	}
+
+	return false;
 }
 
 /*
