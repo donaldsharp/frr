@@ -41,6 +41,7 @@
 #include "zebra_errors.h"
 #include "zebra_dplane.h"
 #include "zebra/interface.h"
+#include "zebra/zebra_vxlan.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, NHG, "Nexthop Group Entry");
 DEFINE_MTYPE_STATIC(ZEBRA, NHG_CONNECTED, "Nexthop Group Connected");
@@ -1955,3 +1956,4 @@ void zebra_nhg_sweep_table(struct hash *hash)
 {
 	hash_iterate(hash, zebra_nhg_sweep_entry, NULL);
 }
+

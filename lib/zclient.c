@@ -941,6 +941,25 @@ done:
 	return ret;
 }
 
+extern void zclient_nhg_add(struct zclient *zclient, uint32_t id,
+			    size_t nhops, struct zapi_nexthop *znh)
+{
+	struct stream *s = zclient->obuf;
+	size_t i;
+
+	zapi_nexthop_group_sort(znh, nhops);
+
+	stream_reset(s);
+	zclient_create_header(s, ZEBRA_NHG_ADD, VRF_DEFAULT);
+
+	stream_putl(s, id);
+	stream_putw(s, nhops);
+	for (i = 0; i < nhops; i++) {
+		zapi_nexthop_encode(s, znh, 0);
+		znh++;
+	}
+}
+
 int zapi_route_encode(uint8_t cmd, struct stream *s, struct zapi_route *api)
 {
 	struct zapi_nexthop *api_nh;
@@ -1043,8 +1062,8 @@ int zapi_route_encode(uint8_t cmd, struct stream *s, struct zapi_route *api)
 /*
  * Decode a single zapi nexthop object
  */
-static int zapi_nexthop_decode(struct stream *s, struct zapi_nexthop *api_nh,
-			       uint32_t api_flags)
+int zapi_nexthop_decode(struct stream *s, struct zapi_nexthop *api_nh,
+			uint32_t api_flags)
 {
 	int ret = -1;
 

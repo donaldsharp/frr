@@ -183,6 +183,8 @@ typedef enum {
 	ZEBRA_MLAG_CLIENT_REGISTER,
 	ZEBRA_MLAG_CLIENT_UNREGISTER,
 	ZEBRA_MLAG_FORWARD_MSG,
+	ZEBRA_NHG_ADD,
+	ZEBRA_NHG_NOTIFY_OWNER,
 	ZEBRA_ERROR,
 } zebra_message_types_t;
 
@@ -306,6 +308,7 @@ struct zclient {
 	int (*mlag_process_up)(void);
 	int (*mlag_process_down)(void);
 	int (*mlag_handle_msg)(struct stream *msg, int len);
+	int (*nhg_notify_owner)(ZAPI_CALLBACK_ARGS);
 	int (*handle_error)(enum zebra_error_types error);
 };
 
@@ -727,7 +730,9 @@ extern int zclient_send_rnh(struct zclient *zclient, int command,
 int zapi_nexthop_encode(struct stream *s, const struct zapi_nexthop *api_nh,
 			uint32_t api_flags);
 extern int zapi_route_encode(uint8_t, struct stream *, struct zapi_route *);
-extern int zapi_route_decode(struct stream *, struct zapi_route *);
+extern int zapi_route_decode(struct stream *s, struct zapi_route *);
+extern int zapi_nexthop_decode(struct stream *s, struct zapi_nexthop *api_nh,
+			       uint32_t api_flags);
 bool zapi_route_notify_decode(struct stream *s, struct prefix *p,
 			      uint32_t *tableid,
 			      enum zapi_route_notify_owner *note);
@@ -738,6 +743,11 @@ bool zapi_rule_notify_decode(struct stream *s, uint32_t *seqno,
 bool zapi_ipset_notify_decode(struct stream *s,
 			      uint32_t *unique,
 			     enum zapi_ipset_notify_owner *note);
+
+extern void zclient_nhg_add(struct zclient *zclient,
+			    uint32_t id,
+			    size_t nhops,
+			    struct zapi_nexthop *znh);
 
 #define ZEBRA_IPSET_NAME_SIZE   32
 
