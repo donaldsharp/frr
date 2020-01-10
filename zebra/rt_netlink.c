@@ -2364,6 +2364,9 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 
 	nhm = NLMSG_DATA(h);
 
+	if (ns_id)
+		vrf_id = ns_id;
+
 	if (startup && h->nlmsg_type != RTM_NEWNEXTHOP)
 		return 0;
 
@@ -2435,7 +2438,6 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			SET_FLAG(nh.flags, NEXTHOP_FLAG_ACTIVE);
 			if (nhm->nh_flags & RTNH_F_ONLINK)
 				SET_FLAG(nh.flags, NEXTHOP_FLAG_ONLINK);
-			vrf_id = nh.vrf_id;
 		}
 
 		if (zebra_nhg_kernel_find(id, &nh, grp, grp_count, vrf_id, type,
