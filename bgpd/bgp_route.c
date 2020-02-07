@@ -1986,12 +1986,14 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 				  PEER_FLAG_FORCE_NEXTHOP_SELF)) {
 			if (!reflect
 			    || CHECK_FLAG(peer->af_flags[afi][safi],
-					  PEER_FLAG_FORCE_NEXTHOP_SELF))
+					  PEER_FLAG_FORCE_NEXTHOP_SELF)) {
+				zlog_debug("\tsurprise mfer");	
 				subgroup_announce_reset_nhop(
 					(peer_cap_enhe(peer, afi, safi)
 						 ? AF_INET6
 						 : p->family),
 					attr);
+			}
 		} else if (peer->sort == BGP_PEER_EBGP) {
 			/* Can also reset the nexthop if announcing to EBGP, but
 			 * only if
@@ -2002,22 +2004,26 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 			if ((p->family == AF_INET) &&
 				(!bgp_subgrp_multiaccess_check_v4(
 					piattr->nexthop,
-					subgrp)))
+					subgrp))) {
+				zlog_debug("EBGP reseting nhop");
 				subgroup_announce_reset_nhop(
 					(peer_cap_enhe(peer, afi, safi)
 						 ? AF_INET6
 						 : p->family),
 						attr);
+			}
 
 			if ((p->family == AF_INET6) &&
 				(!bgp_subgrp_multiaccess_check_v6(
 					piattr->mp_nexthop_global,
-					subgrp)))
+					subgrp))) {
+				zlog_debug("EBGP v6 resetting nhop");
 				subgroup_announce_reset_nhop(
 					(peer_cap_enhe(peer, afi, safi)
 						? AF_INET6
 						: p->family),
 						attr);
+			}
 
 
 
@@ -2030,7 +2036,7 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 			if (peer_cap_enhe(peer, afi, safi))
 				family = AF_INET6;
 
-			if (bgp_debug_update(NULL, p, subgrp->update_group, 0))
+			//if (bgp_debug_update(NULL, p, subgrp->update_group, 0))
 				zlog_debug(
 					"%s: BGP_PATH_ANNC_NH_SELF, family=%s",
 					__func__, family2str(family));
@@ -2047,8 +2053,10 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 	 * the same interface.
 	 */
 	if (p->family == AF_INET6 || peer_cap_enhe(peer, afi, safi)) {
-		if (IN6_IS_ADDR_LINKLOCAL(&attr->mp_nexthop_global))
+		if (IN6_IS_ADDR_LINKLOCAL(&attr->mp_nexthop_global)) {
+			zlog_debug("v6 ll reset nhop");
 			subgroup_announce_reset_nhop(AF_INET6, attr);
+		}
 	}
 
 	return 1;
@@ -3202,8 +3210,10 @@ static int bgp_update_martian_nexthop(struct bgp *bgp, afi_t afi, safi_t safi,
 	if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_NEXT_HOP)) {
 		if (attr->nexthop.s_addr == INADDR_ANY
 		    || IPV4_CLASS_DE(ntohl(attr->nexthop.s_addr))
-		    || bgp_nexthop_self(bgp, afi, type, stype, attr, rn))
+		    || bgp_nexthop_self(bgp, afi, type, stype, attr, rn)) {
+			zlog_debug("martian_update_nexthop: A");
 			return 1;
+		}
 	}
 
 	/* If MP_NEXTHOP is present, validate it. */

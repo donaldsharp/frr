@@ -551,14 +551,18 @@ int bgp_multiaccess_check_v4(struct in_addr nexthop, struct peer *peer)
 	struct bgp_node *rn2;
 	struct prefix p;
 	int ret;
+	char buf[100];
 
+	zlog_debug("multicaccess_check_v4: %s", inet_ntop(AF_INET, &nexthop, buf, sizeof(buf)));
 	p.family = AF_INET;
 	p.prefixlen = IPV4_MAX_BITLEN;
 	p.u.prefix4 = nexthop;
 
 	rn1 = bgp_node_match(peer->bgp->connected_table[AFI_IP], &p);
-	if (!rn1)
+	if (!rn1) {
+		zlog_debug("\tNot in connected table");
 		return 0;
+	}
 
 	p.family = AF_INET;
 	p.prefixlen = IPV4_MAX_BITLEN;
@@ -566,12 +570,14 @@ int bgp_multiaccess_check_v4(struct in_addr nexthop, struct peer *peer)
 
 	rn2 = bgp_node_match(peer->bgp->connected_table[AFI_IP], &p);
 	if (!rn2) {
+		zlog_debug("\tPeer not in connected table");
 		bgp_unlock_node(rn1);
 		return 0;
 	}
 
 	ret = (rn1 == rn2) ? 1 : 0;
 
+	zlog_debug("\tret: %d", ret);
 	bgp_unlock_node(rn1);
 	bgp_unlock_node(rn2);
 
