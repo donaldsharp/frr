@@ -3288,8 +3288,8 @@ static int process_type2_route(struct peer *peer, afi_t afi, safi_t safi,
 	p.prefix.route_type = BGP_EVPN_MAC_IP_ROUTE;
 
 	/* Copy Ethernet Seg Identifier */
-	memcpy(&evpn.eth_s_id.val, pfx, ESI_LEN);
-	pfx += ESI_LEN;
+	//memcpy(&evpn.eth_s_id.val, pfx, ESI_LEN);
+	//pfx += ESI_LEN;
 
 	/* Copy Ethernet Tag */
 	memcpy(&eth_tag, pfx, 4);
@@ -3486,8 +3486,8 @@ static int process_type5_route(struct peer *peer, afi_t afi, safi_t safi,
 	memset(&evpn, 0, sizeof(evpn));
 
 	/* Fetch ESI */
-	memcpy(&evpn.eth_s_id.val, pfx, 10);
-	pfx += 10;
+	//memcpy(&evpn.eth_s_id.val, pfx, 10);
+	//pfx += 10;
 
 	/* Fetch Ethernet Tag. */
 	memcpy(&eth_tag, pfx, 4);
@@ -3537,7 +3537,7 @@ static int process_type5_route(struct peer *peer, afi_t afi, safi_t safi,
 
 	if (attr) {
 		is_valid_update = true;
-		if (is_zero_mac(&attr->rmac) && is_zero_esi(&evpn.eth_s_id) &&
+		if (is_zero_mac(&attr->rmac) &&
 		    is_zero_gw_ip(&evpn.gw_ip, gw_afi))
 			is_valid_update = false;
 
@@ -3582,9 +3582,9 @@ static void evpn_mpattr_encode_type5(struct stream *s, const struct prefix *p,
 	/* Prefix contains RD, ESI, EthTag, IP length, IP, GWIP and VNI */
 	stream_putc(s, 8 + 10 + 4 + 1 + len + 3);
 	stream_put(s, prd->val, 8);
-	if (attr)
-		stream_put(s, &(attr->evpn_overlay.eth_s_id), 10);
-	else
+//	if (attr)
+//		stream_put(s, &(attr->evpn_overlay.eth_s_id), 10);
+//	else
 		stream_put(s, &temp, 10);
 	stream_putl(s, p_evpn_p->prefix_addr.eth_tag);
 	stream_putc(s, p_evpn_p->prefix_addr.ip_prefix_length);
@@ -4322,9 +4322,9 @@ void bgp_evpn_encode_prefix(struct stream *s, const struct prefix *p,
 			len += 3;
 		stream_putc(s, len);
 		stream_put(s, prd->val, 8);   /* RD */
-		if (attr)
-			stream_put(s, &attr->evpn_overlay.eth_s_id, ESI_LEN);
-		else
+//		if (attr)
+//			stream_put(s, &attr->evpn_overlay.eth_s_id, ESI_LEN);
+//		else
 			stream_put(s, 0, 10);
 		stream_putl(s, evp->prefix.macip_addr.eth_tag);	/* Ethernet Tag ID */
 		stream_putc(s, 8 * ETH_ALEN); /* Mac Addr Len - bits */
