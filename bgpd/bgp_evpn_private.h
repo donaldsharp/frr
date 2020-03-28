@@ -539,6 +539,13 @@ static inline bool bgp_evpn_is_svi_macip_enabled(struct bgpevpn *vpn)
 		vpn->advertise_svi_macip);
 }
 
+static inline bool bgp_evpn_is_path_local(struct bgp *bgp,
+					  struct bgp_path_info *pi)
+{
+	return (pi->peer == bgp->peer_self && pi->type == ZEBRA_ROUTE_BGP
+		&& pi->sub_type == BGP_ROUTE_STATIC);
+}
+
 extern struct zclient *zclient;
 
 extern void bgp_evpn_install_uninstall_default_route(struct bgp *bgp_vrf,
