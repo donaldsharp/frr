@@ -245,6 +245,32 @@ static enum zebra_link_type netlink_to_zebra_link_type(unsigned int hwt)
 	}
 }
 
+static void zebra_evpn_if_init(struct zebra_if *zif)
+{
+	return;
+}
+
+static inline void zebra_if_set_ziftype(struct interface *ifp,
+					zebra_iftype_t zif_type,
+					zebra_slave_iftype_t zif_slave_type)
+{
+	struct zebra_if *zif;
+
+	zif = (struct zebra_if *)ifp->info;
+	zif->zif_slave_type = zif_slave_type;
+
+	if (zif->zif_type != zif_type) {
+		zif->zif_type = zif_type;
+		/* If the if_type has been set to bond initialize ES info
+		 * against it. XXX - note that we don't handle the case where
+		 * a zif changes from bond to non-bond; it is really
+		 * an unexpected/error condition.
+		 */
+		zebra_evpn_if_init(zif);
+	}
+}
+
+
 static void netlink_determine_zebra_iftype(const char *kind,
 					   zebra_iftype_t *zif_type)
 {
