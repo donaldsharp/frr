@@ -346,13 +346,15 @@ static inline void encode_mac_mobility_extcomm(int static_mac, uint32_t seq,
 }
 
 static inline void encode_na_flag_extcomm(struct ecommunity_val *eval,
-					  uint8_t na_flag)
+					  uint8_t na_flag, bool proxy)
 {
 	memset(eval, 0, sizeof(*eval));
 	eval->val[0] = ECOMMUNITY_ENCODE_EVPN;
 	eval->val[1] = ECOMMUNITY_EVPN_SUBTYPE_ND;
 	if (na_flag)
 		eval->val[2] |= ECOMMUNITY_EVPN_SUBTYPE_ND_ROUTER_FLAG;
+	if (proxy)
+		eval->val[2] |= ECOMMUNITY_EVPN_SUBTYPE_PROXY_FLAG;
 }
 
 static inline void ip_prefix_from_type5_prefix(const struct prefix_evpn *evp,
