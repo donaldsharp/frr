@@ -3037,7 +3037,7 @@ static int install_uninstall_evpn_route(struct bgp *bgp, afi_t afi, safi_t safi,
 			 * imoort of an es route for esi2 into esi1
 			 */
 			es = bgp_evpn_es_find(&evp->prefix.es_addr.esi);
-			if (es && is_es_local(es))
+			if (es && bgp_evpn_is_es_local(es))
 				bgp_evpn_es_route_install_uninstall(
 					bgp, es, afi, safi, evp, pi, import);
 		}
