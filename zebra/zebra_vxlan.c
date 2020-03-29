@@ -2552,7 +2552,8 @@ static int zvni_neigh_install(zebra_vni_t *zvni, zebra_neigh_t *n)
 		flags |= DPLANE_NTF_ROUTER;
 	ZEBRA_NEIGH_SET_ACTIVE(n);
 
-	dplane_neigh_add(vlan_if, &n->ip, &n->emac, flags);
+	dplane_rem_neigh_add(vlan_if, &n->ip, &n->emac, flags,
+			     false /*was_static*/);
 
 	return ret;
 }
@@ -2587,7 +2588,7 @@ static int zvni_neigh_uninstall(zebra_vni_t *zvni, zebra_neigh_t *n)
 	ZEBRA_NEIGH_SET_INACTIVE(n);
 	n->loc_seq = 0;
 
-	dplane_neigh_delete(vlan_if, &n->ip);
+	dplane_rem_neigh_delete(vlan_if, &n->ip);
 
 	return 0;
 }
@@ -2610,7 +2611,7 @@ static int zvni_neigh_probe(zebra_vni_t *zvni, zebra_neigh_t *n)
 	if (!vlan_if)
 		return -1;
 
-	dplane_neigh_update(vlan_if, &n->ip, &n->emac);
+	dplane_rem_neigh_update(vlan_if, &n->ip, &n->emac);
 
 	return 0;
 }
@@ -3788,19 +3789,18 @@ static struct interface *zvni_map_to_macvlan(struct interface *br_if,
 	return found ? tmp_if : NULL;
 }
 
-
 /*
  * Install remote MAC into the forwarding plane.
  */
 static int zvni_mac_install(zebra_vni_t *zvni, zebra_mac_t *mac)
 {
-	const struct zebra_if *zif, *br_zif;
-	const struct zebra_l2info_vxlan *vxl;
-	bool sticky;
-	enum zebra_dplane_result res;
+	const struct zebra_if *zif; //, *br_zif;
+	// const struct zebra_l2info_vxlan *vxl;
+	// bool sticky;
+	enum zebra_dplane_result res = ZEBRA_DPLANE_REQUEST_SUCCESS;
 	const struct interface *br_ifp;
-	vlanid_t vid;
-	uint32_t nhg_id;
+	// vlanid_t vid;
+	// uint32_t nhg_id;
 
 	if (!(mac->flags & ZEBRA_MAC_REMOTE))
 		return 0;
@@ -3813,10 +3813,10 @@ static int zvni_mac_install(zebra_vni_t *zvni, zebra_mac_t *mac)
 	if (br_ifp == NULL)
 		return -1;
 
-	vxl = &zif->l2info.vxl;
+	// vxl = &zif->l2info.vxl;
 
-	sticky = !!CHECK_FLAG(mac->flags,
-			 (ZEBRA_MAC_STICKY | ZEBRA_MAC_REMOTE_DEF_GW));
+	// sticky = !!CHECK_FLAG(mac->flags,
+	//		 (ZEBRA_MAC_STICKY | ZEBRA_MAC_REMOTE_DEF_GW));
 
 	/* If nexthop group for the FDB entry is inactive (not programmed in
 	 * the dataplane) the MAC entry cannot be installed
@@ -3824,20 +3824,21 @@ static int zvni_mac_install(zebra_vni_t *zvni, zebra_mac_t *mac)
 	if (mac->es) {
 		if (!(mac->es->flags & ZEBRA_EVPNES_NHG_ACTIVE))
 			return -1;
-		nhg_id = mac->es->nhg_id;
+		// nhg_id = mac->es->nhg_id;
 	} else {
-		nhg_id = 0;
+		// nhg_id = 0;
 	}
 
-	br_zif = (const struct zebra_if *)(br_ifp->info);
+	// br_zif = (const struct zebra_if *)(br_ifp->info);
 
+#if 0
 	if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif))
 		vid = vxl->access_vlan;
 	else
 		vid = 0;
-
-	res = dplane_mac_add(zvni->vxlan_if, br_ifp, vid, &mac->macaddr,
-			     mac->fwd_info.r_vtep_ip, sticky, nhg_id);
+#endif
+	// res = dplane_mac_add(zvni->vxlan_if, br_ifp, vid, &mac->macaddr,
+	//		     mac->fwd_info.r_vtep_ip, sticky, nhg_id, false);
 	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
 		return 0;
 	else
@@ -3886,7 +3887,7 @@ static int zvni_mac_uninstall(zebra_vni_t *zvni, zebra_mac_t *mac)
 	ifp = zvni->vxlan_if;
 	vtep_ip = mac->fwd_info.r_vtep_ip;
 
-	res = dplane_mac_del(ifp, br_ifp, vid, &mac->macaddr, vtep_ip);
+	res = dplane_rem_mac_del(ifp, br_ifp, vid, &mac->macaddr, vtep_ip);
 	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
 		return 0;
 	else
@@ -4649,11 +4650,11 @@ static int zl3vni_rmac_del(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac)
  */
 static int zl3vni_rmac_install(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac)
 {
-	const struct zebra_if *zif = NULL, *br_zif = NULL;
-	const struct zebra_l2info_vxlan *vxl = NULL;
+	const struct zebra_if *zif = NULL; //, *br_zif = NULL;
+	// const struct zebra_l2info_vxlan *vxl = NULL;
 	const struct interface *br_ifp;
-	enum zebra_dplane_result res;
-	vlanid_t vid;
+	enum zebra_dplane_result res = ZEBRA_DPLANE_REQUEST_SUCCESS;
+	// vlanid_t vid;
 
 	if (!(CHECK_FLAG(zrmac->flags, ZEBRA_MAC_REMOTE))
 	    || !(CHECK_FLAG(zrmac->flags, ZEBRA_MAC_REMOTE_RMAC)))
@@ -4667,17 +4668,18 @@ static int zl3vni_rmac_install(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac)
 	if (br_ifp == NULL)
 		return -1;
 
-	vxl = &zif->l2info.vxl;
+		// vxl = &zif->l2info.vxl;
 
-	br_zif = (const struct zebra_if *)br_ifp->info;
+		// br_zif = (const struct zebra_if *)br_ifp->info;
 
+#if 0
 	if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif))
 		vid = vxl->access_vlan;
 	else
 		vid = 0;
-
-	res = dplane_mac_add(zl3vni->vxlan_if, br_ifp, vid, &zrmac->macaddr,
-			     zrmac->fwd_info.r_vtep_ip, 0, 0);
+#endif
+	// res = dplane_mac_add(zl3vni->vxlan_if, br_ifp, vid, &zrmac->macaddr,
+	//		     zrmac->fwd_info.r_vtep_ip, 0, 0, false);
 	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
 		return 0;
 	else
@@ -4726,8 +4728,8 @@ static int zl3vni_rmac_uninstall(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac)
 	else
 		vid = 0;
 
-	res = dplane_mac_del(zl3vni->vxlan_if, br_ifp, vid,
-			     &zrmac->macaddr, zrmac->fwd_info.r_vtep_ip);
+	res = dplane_rem_mac_del(zl3vni->vxlan_if, br_ifp, vid, &zrmac->macaddr,
+				 zrmac->fwd_info.r_vtep_ip);
 	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
 		return 0;
 	else
@@ -4905,7 +4907,8 @@ static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 	if (n->flags & ZEBRA_NEIGH_ROUTER_FLAG)
 		flags |= DPLANE_NTF_ROUTER;
 
-	dplane_neigh_add(zl3vni->svi_if, &n->ip, &n->emac, flags);
+	dplane_rem_neigh_add(zl3vni->svi_if, &n->ip, &n->emac, flags,
+			     false /*was_static*/);
 
 	return ret;
 }
@@ -4922,7 +4925,7 @@ static int zl3vni_nh_uninstall(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 	if (!zl3vni->svi_if || !if_is_operative(zl3vni->svi_if))
 		return 0;
 
-	dplane_neigh_delete(zl3vni->svi_if, &n->ip);
+	dplane_rem_neigh_delete(zl3vni->svi_if, &n->ip);
 
 	return 0;
 }
@@ -7714,13 +7717,10 @@ int zebra_vxlan_handle_kernel_neigh_del(struct interface *ifp,
  * also be for a remote neighbor (e.g., ageout notification). It could
  * also be a "move" scenario.
  */
-int zebra_vxlan_handle_kernel_neigh_update(struct interface *ifp,
-					   struct interface *link_if,
-					   struct ipaddr *ip,
-					   struct ethaddr *macaddr,
-					   uint16_t state,
-					   bool is_ext,
-					   bool is_router)
+int zebra_vxlan_handle_kernel_neigh_update(
+	struct interface *ifp, struct interface *link_if, struct ipaddr *ip,
+	struct ethaddr *macaddr, uint16_t state, bool is_ext, bool is_router,
+	bool local_inactive, bool dp_static)
 {
 	char buf[ETHER_ADDR_STRLEN];
 	char buf2[INET6_ADDRSTRLEN];
@@ -8150,7 +8150,8 @@ int zebra_vxlan_local_mac_del(struct interface *ifp, struct interface *br_if,
 int zebra_vxlan_local_mac_add_update(struct interface *ifp,
 				     struct interface *br_if,
 				     struct ethaddr *macaddr, vlanid_t vid,
-				     bool sticky)
+				     bool sticky, bool local_inactive,
+				     bool dp_static)
 {
 	zebra_vni_t *zvni;
 	zebra_mac_t *mac;
