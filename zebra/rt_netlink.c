@@ -3702,6 +3702,86 @@ ssize_t netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx, void *data,
 	return total;
 }
 
+/* Netlink-specific handler for br_port updates using dataplane context */
+enum zebra_dplane_result kernel_br_port_update_ctx(
+		struct zebra_dplane_ctx *ctx)
+{
+	struct {
+		struct nlmsghdr n;
+		struct ifinfomsg ifm;
+		char buf[512];
+	} req;
+	int ret;
+	int cmd = RTM_SETLINK;
+	uint32_t nhg_id;
+	uint32_t flags;
+	uint8_t block_bum;
+	const struct in_addr *sph_filters;
+	uint32_t sph_filter_cnt;
+	uint32_t kern_sph_filters[BR_SPH_LIST_SIZE];
+	uint32_t max_filters;
+	uint32_t i;
+	struct rtattr *nest;
+
+	nhg_id = dplane_ctx_get_br_port_backup_nhg_id(ctx);
+	flags = dplane_ctx_get_br_port_flags(ctx);
+	sph_filters = dplane_ctx_get_br_port_sph_filters(ctx);
+	sph_filter_cnt = dplane_ctx_get_br_port_sph_filter_cnt(ctx);
+
+	memset(&req, 0, sizeof(req));
+
+	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
+	req.n.nlmsg_flags = NLM_F_REQUEST;
+	req.n.nlmsg_type = cmd;
+	req.ifm.ifi_family = AF_BRIDGE;
+	req.ifm.ifi_index = dplane_ctx_get_ifindex(ctx);
+
+	nest = addattr_nest(&req.n, sizeof(req),
+			IFLA_PROTINFO | NLA_F_NESTED);
+	/* backup NHG */
+	addattr32(&req.n, sizeof(req), IFLA_BRPORT_DUMMY_BACKUP_NHID,
+		  nhg_id);
+
+	/* non-DF BUM block filter */
+	block_bum = (flags & DPLANE_BR_PORT_NON_DF) ? 1 : 0;
+	addattr_l(&req.n, sizeof(req), IFLA_BRPORT_DUMMY_BLOCK_BUM,
+		  &block_bum, sizeof(block_bum));
+
+	/* SPH filter */
+	memset(kern_sph_filters, 0, sizeof(kern_sph_filters));
+	max_filters =  (sph_filter_cnt < BR_SPH_LIST_SIZE) ?
+		sph_filter_cnt : BR_SPH_LIST_SIZE;
+	for (i = 0; i < max_filters; ++i)
+		kern_sph_filters[i] = sph_filters[i].s_addr;
+	addattr_l(&req.n, sizeof(req), IFLA_BRPORT_DUMMY_SPH_FILTER,
+		  &kern_sph_filters, sizeof(kern_sph_filters));
+	addattr_nest_end(&req.n, nest);
+
+	if (IS_ZEBRA_DEBUG_KERNEL) {
+		char vtep_str[ES_VTEP_LIST_STR_SZ];
+
+		vtep_str[0] = '\0';
+		for (i = 0; i < sph_filter_cnt; ++i) {
+			sprintf(vtep_str + strlen(vtep_str), "%s ",
+					inet_ntoa(sph_filters[i]));
+		}
+		zlog_debug("Tx %s family %s IF %s(%d)%s backup_nhg 0x%x sph %s",
+				nl_msg_type_to_str(cmd),
+				nl_family_to_str(req.ifm.ifi_family),
+				dplane_ctx_get_ifname(ctx),
+				dplane_ctx_get_ifindex(ctx),
+				block_bum ? "block_bum " : "",
+				nhg_id, vtep_str);
+	}
+
+	ret = netlink_talk_info(netlink_talk_filter, &req.n,
+				dplane_ctx_get_ns(ctx), 0);
+	if (ret == 0)
+		return ZEBRA_DPLANE_REQUEST_SUCCESS;
+	else
+		return ZEBRA_DPLANE_REQUEST_FAILURE;
+}
+
 /*
  * In the event the kernel deletes ipv4 link-local neighbor entries created for
  * 5549 support, re-install them.
