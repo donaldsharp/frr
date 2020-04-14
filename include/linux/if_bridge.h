@@ -26,6 +26,8 @@
 
 #define BRCTL_VERSION 1
 
+#define BR_SPH_LIST_SIZE 10
+
 #define BRCTL_GET_VERSION 0
 #define BRCTL_GET_BRIDGES 1
 #define BRCTL_ADD_BRIDGE 2
