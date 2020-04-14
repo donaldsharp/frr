@@ -56,6 +56,9 @@ extern enum zebra_dplane_result kernel_lsp_update(
 
 enum zebra_dplane_result kernel_pw_update(struct zebra_dplane_ctx *ctx);
 
+enum zebra_dplane_result kernel_br_port_update_ctx(
+	struct zebra_dplane_ctx *ctx);
+
 enum zebra_dplane_result kernel_address_update_ctx(
 	struct zebra_dplane_ctx *ctx);
 
