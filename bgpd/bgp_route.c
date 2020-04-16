@@ -7809,6 +7809,16 @@ static void route_vty_short_status_out(struct vty *vty,
 		vty_out(vty, " ");
 }
 
+static char *bgp_nexthop_hostname(struct peer *peer,
+				  struct bgp_nexthop_cache *bnc)
+{
+	if (peer->hostname
+	    && CHECK_FLAG(peer->bgp->flags, BGP_FLAG_SHOW_HOSTNAME)
+	    && CHECK_FLAG(bnc->flags, BGP_NEXTHOP_CONNECTED))
+		return peer->hostname;
+	return NULL;
+}
+
 /* called from terminal list command */
 void route_vty_out(struct vty *vty, const struct prefix *p,
 		   struct bgp_path_info *path, int display, safi_t safi,
@@ -7828,6 +7838,8 @@ void route_vty_out(struct vty *vty, const struct prefix *p,
 	vrf_id_t nexthop_vrfid = VRF_DEFAULT;
 	const char *nexthop_vrfname = VRF_DEFAULT_NAME;
 	char esi_buf[ESI_STR_LEN];
+	char *nexthop_hostname =
+		bgp_nexthop_hostname(path->peer, path->nexthop);
 
 	if (json_paths)
 		json_path = json_object_new_object();
@@ -8962,6 +8974,8 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 	bool nexthop_self =
 		CHECK_FLAG(path->flags, BGP_PATH_ANNC_NH_SELF) ? true : false;
 	int i;
+	char *nexthop_hostname =
+		bgp_nexthop_hostname(path->peer, path->nexthop);
 
 	if (json_paths) {
 		json_path = json_object_new_object();
