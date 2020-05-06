@@ -9182,7 +9182,7 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 				if (path->peer->hostname)
 					json_object_string_add(
 						json_nexthop_global, "hostname",
-						nexthop_hostname);
+						path->peer->hostname);
 			} else {
 				if (nexthop_hostname)
 					vty_out(vty, "    %pI4(%s)",
@@ -9201,7 +9201,7 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 				if (path->peer->hostname)
 					json_object_string_add(
 						json_nexthop_global, "hostname",
-						nexthop_hostname);
+						path->peer->hostname);
 			} else {
 				if (nexthop_hostname)
 					vty_out(vty, "    %pI4(%s)",
