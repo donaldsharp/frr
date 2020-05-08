@@ -22,6 +22,7 @@
 #include "command.h"
 #include "prefix.h"
 #include "lib/json.h"
+#include "lib/vxlan.h"
 #include "stream.h"
 
 #include "bgpd/bgpd.h"
@@ -4603,7 +4604,8 @@ DEFPY(test_es_add, test_es_add_cmd,
 			oper_up = false;
 		vtep_ip = bgp->router_id;
 
-		ret = bgp_evpn_local_es_add(bgp, &esi, vtep_ip, oper_up);
+		ret = bgp_evpn_local_es_add(bgp, &esi, vtep_ip, oper_up,
+					    EVPN_MH_DF_PREF_MIN);
 		if (ret == -1) {
 			vty_out(vty, "%%Failed to add ES\n");
 			return CMD_WARNING;
