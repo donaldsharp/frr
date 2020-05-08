@@ -279,7 +279,8 @@ struct irdp_interface;
 struct zebra_evpn_es;
 struct zebra_es_if_info {
 	struct ethaddr sysmac;
-	uint32_t lid;		  /* local-id; has to be unique per-ES-sysmac */
+	uint32_t lid; /* local-id; has to be unique per-ES-sysmac */
+	uint16_t df_pref;
 	struct zebra_evpn_es *es; /* local ES */
 };
 
