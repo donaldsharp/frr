@@ -622,6 +622,7 @@ static struct route_map *route_map_new(const char *name)
 	struct route_map *new;
 
 	new = XCALLOC(MTYPE_ROUTE_MAP, sizeof(struct route_map));
+	new->optimization_disabled = true;
 	new->name = XSTRDUP(MTYPE_ROUTE_MAP_NAME, name);
 	QOBJ_REG(new, route_map);
 	return new;
