@@ -2440,15 +2440,12 @@ DEFUN (show_evpn_global,
 	return CMD_SUCCESS;
 }
 
-DEFPY(show_evpn_es,
-      show_evpn_es_cmd,
-      "show evpn es [NAME$esi_str] [json$json] [detail$detail]",
+DEFPY(show_evpn_es, show_evpn_es_cmd,
+      "show evpn es [NAME$esi_str|detail$detail] [json$json]",
       SHOW_STR
       "EVPN\n"
       "Ethernet Segment\n"
-      "ES ID\n"
-      JSON_STR
-      "Detailed information\n")
+      "ES ID\n" JSON_STR "Detailed information\n")
 {
 	esi_t esi;
 	bool uj = !!json;
@@ -2469,16 +2466,14 @@ DEFPY(show_evpn_es,
 	return CMD_SUCCESS;
 }
 
-DEFPY(show_evpn_es_evi,
-      show_evpn_es_evi_cmd,
-      "show evpn es-evi [vni (1-16777215)$vni] [json$json] [detail$detail]",
+DEFPY(show_evpn_es_evi, show_evpn_es_evi_cmd,
+      "show evpn es-evi [vni (1-16777215)$vni] [detail$detail] [json$json]",
       SHOW_STR
       "EVPN\n"
       "Ethernet Segment per EVI\n"
       "VxLAN Network Identifier\n"
       "VNI\n"
-      JSON_STR
-      "Detailed information\n")
+      "Detailed information\n" JSON_STR)
 {
 	bool uj = !!json;
 	bool ud = !!detail;
@@ -2491,15 +2486,13 @@ DEFPY(show_evpn_es_evi,
 	return CMD_SUCCESS;
 }
 
-DEFPY(show_evpn_access_vlan,
-      show_evpn_access_vlan_cmd,
-      "show evpn access-vlan [(1-4094)$vid] [json$json] [detail$detail]",
+DEFPY(show_evpn_access_vlan, show_evpn_access_vlan_cmd,
+      "show evpn access-vlan [(1-4094)$vid | detail$detail] [json$json]",
       SHOW_STR
       "EVPN\n"
       "Access VLANs\n"
       "VLAN ID\n"
-      JSON_STR
-      "Detailed information\n")
+      "Detailed information\n" JSON_STR)
 {
 	bool uj = !!json;
 
