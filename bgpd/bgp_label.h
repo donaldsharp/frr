@@ -52,14 +52,26 @@ static inline int bgp_labeled_safi(safi_t safi)
 	return 0;
 }
 
+#if defined __BIG_ENDIAN__
+#define ZERO_BYTE   4
+#define FIRST_BYTE  2
+#define SECOND_BYTE 1
+#define THIRD_BYTE  0
+#else
+#define ZERO_BYTE   0
+#define FIRST_BYTE  1
+#define SECOND_BYTE 2
+#define THIRD_BYTE  3
+#endif
 static inline int bgp_is_withdraw_label(mpls_label_t *label)
 {
 	uint8_t *pkt = (uint8_t *)label;
 
 	/* The check on pkt[2] for 0x00 or 0x02 is in case bgp_set_valid_label()
 	 * was called on the withdraw label */
-	if (((pkt[0] == 0x80) || (pkt[0] == 0x00)) && (pkt[1] == 0x00)
-	    && ((pkt[2] == 0x00) || (pkt[2] == 0x02)))
+	if (((pkt[ZERO_BYTE] == 0x80) ||
+	     (pkt[ZERO_BYTE] == 0x00)) && (pkt[FIRST_BYTE] == 0x00)
+	    && ((pkt[SECOND_BYTE] == 0x00) || (pkt[SECOND_BYTE] == 0x02)))
 		return 1;
 	return 0;
 }
@@ -67,23 +79,26 @@ static inline int bgp_is_withdraw_label(mpls_label_t *label)
 static inline int bgp_is_valid_label(mpls_label_t *label)
 {
 	uint8_t *t = (uint8_t *)label;
+
 	if (!t)
 		return 0;
-	return (t[2] & 0x02);
+	return (t[SECOND_BYTE] & 0x02);
 }
 
 static inline void bgp_set_valid_label(mpls_label_t *label)
 {
 	uint8_t *t = (uint8_t *)label;
+
 	if (t)
-		t[2] |= 0x02;
+		t[SECOND_BYTE] |= 0x02;
 }
 
 static inline void bgp_unset_valid_label(mpls_label_t *label)
 {
 	uint8_t *t = (uint8_t *)label;
+
 	if (t)
-		t[2] &= ~0x02;
+		t[SECOND_BYTE] &= ~0x02;
 }
 
 static inline void bgp_register_for_label(struct bgp_node *rn,
@@ -100,27 +115,38 @@ static inline void bgp_unregister_for_label(struct bgp_node *rn)
 /* Label stream to value */
 static inline uint32_t label_pton(mpls_label_t *label)
 {
+#if defined __LITTLE_ENDIAN__
 	uint8_t *t = (uint8_t *)label;
-	return ((((unsigned int)t[0]) << 12) | (((unsigned int)t[1]) << 4)
-		| ((unsigned int)((t[2] & 0xF0) >> 4)));
+
+	return ((((unsigned int)t[ZERO_BYTE]) << 12) |
+		(((unsigned int)t[FIRST_BYTE]) << 4)
+		| ((unsigned int)((t[SECOND_BYTE] & 0xF0) >> 4)));
+#else
+	uint32_t *t = (uint32_t *)label;
+	return *t;
+#endif
 }
 
 /* Encode label values */
 static inline void label_ntop(uint32_t l, int bos, mpls_label_t *label)
 {
 	uint8_t *t = (uint8_t *)label;
-	t[0] = ((l & 0x000FF000) >> 12);
-	t[1] = ((l & 0x00000FF0) >> 4);
-	t[2] = ((l & 0x0000000F) << 4);
+
+#if defined __LITTLE_ENDIAN__
+	t[ZERO_BYTE] = ((l & 0x000FF000) >> 12);
+	t[FIRST_BYTE] = ((l & 0x00000FF0) >> 4);
+	t[SECOND_BYTE] = ((l & 0x0000000F) << 4);
+#endif
 	if (bos)
-		t[2] |= 0x01;
+		t[SECOND_BYTE] |= 0x01;
 }
 
 /* Return BOS value of label stream */
 static inline uint8_t label_bos(mpls_label_t *label)
 {
 	uint8_t *t = (uint8_t *)label;
-	return (t[2] & 0x01);
+
+	return (t[SECOND_BYTE] & 0x01);
 };
 
 #endif /* _BGP_LABEL_H */
