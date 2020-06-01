@@ -918,8 +918,8 @@ route_match_vni(void *rule, const struct prefix *prefix,
 			return RMAP_NOMATCH;
 
 		for ( ; label_cnt < BGP_MAX_LABELS &&
-			label_cnt < path->extra->num_labels; label_cnt++) {
-			if (vni == label2vni(&path->extra->label[label_cnt]))
+			label_cnt < path->extra->ls.num_labels; label_cnt++) {
+			if (vni == label2vni(&path->extra->ls.label[label_cnt]))
 				return RMAP_MATCH;
 		}
 	}

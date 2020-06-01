@@ -418,11 +418,11 @@ static bool labels_same(struct bgp_path_info *bpi, mpls_label_t *label,
 			return false;
 	}
 
-	if (n != bpi->extra->num_labels)
+	if (n != bpi->extra->ls.num_labels)
 		return false;
 
 	for (i = 0; i < n; ++i) {
-		if (label[i] != bpi->extra->label[i])
+		if (label[i] != bpi->extra->ls.label[i])
 			return false;
 	}
 	return true;
@@ -441,7 +441,7 @@ static void setlabels(struct bgp_path_info *bpi,
 
 	if (!num_labels) {
 		if (bpi->extra)
-			bpi->extra->num_labels = 0;
+			bpi->extra->ls.num_labels = 0;
 		return;
 	}
 
@@ -449,12 +449,12 @@ static void setlabels(struct bgp_path_info *bpi,
 	uint32_t i;
 
 	for (i = 0; i < num_labels; ++i) {
-		extra->label[i] = label[i];
+		extra->ls.label[i] = label[i];
 		if (!bgp_is_valid_label(&label[i])) {
-			bgp_set_valid_label(&extra->label[i]);
+			bgp_set_valid_label(&extra->ls.label[i]);
 		}
 	}
-	extra->num_labels = num_labels;
+	extra->ls.num_labels = num_labels;
 }
 
 /*
@@ -1213,11 +1213,11 @@ vpn_leak_to_vrf_update_onevrf(struct bgp *bgp_vrf,	    /* to */
 
 		/* copy labels */
 		if (!origin_local && path_vpn->extra
-		    && path_vpn->extra->num_labels) {
-			num_labels = path_vpn->extra->num_labels;
+		    && path_vpn->extra->ls.num_labels) {
+			num_labels = path_vpn->extra->ls.num_labels;
 			if (num_labels > BGP_MAX_LABELS)
 				num_labels = BGP_MAX_LABELS;
-			pLabels = path_vpn->extra->label;
+			pLabels = path_vpn->extra->ls.label;
 		}
 	}
 

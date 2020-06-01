@@ -1528,8 +1528,8 @@ static int update_evpn_type5_route_entry(struct bgp *bgp_evpn,
 		/* Type-5 routes advertise the L3-VNI */
 		bgp_path_info_extra_get(pi);
 		vni2label(bgp_vrf->l3vni, &label);
-		memcpy(&pi->extra->label, &label, sizeof(label));
-		pi->extra->num_labels = 1;
+		memcpy(&pi->extra->ls.label[0], &label, sizeof(label));
+		pi->extra->ls.num_labels = 1;
 
 		/* add the route entry to route node*/
 		bgp_path_info_add(rn, pi);
@@ -1727,8 +1727,8 @@ static int update_evpn_route_entry(struct bgp *bgp, struct bgpevpn *vpn,
 			}
 		}
 
-		memcpy(&tmp_pi->extra->label, label, sizeof(label));
-		tmp_pi->extra->num_labels = num_labels;
+		memcpy(&tmp_pi->extra->ls.label, label, sizeof(label));
+		tmp_pi->extra->ls.num_labels = num_labels;
 		/* Mark route as self type-2 route */
 		if (flags && CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_SVI_IP))
 			tmp_pi->extra->af_flags = BGP_EVPN_MACIP_TYPE_SVI_IP;
@@ -1755,8 +1755,8 @@ static int update_evpn_route_entry(struct bgp *bgp, struct bgpevpn *vpn,
 					num_labels++;
 				}
 			}
-			memcpy(&tmp_pi->extra->label, label, sizeof(label));
-			tmp_pi->extra->num_labels = num_labels;
+			memcpy(&tmp_pi->extra->ls.label, label, sizeof(label));
+			tmp_pi->extra->ls.num_labels = num_labels;
 
 			/* The attribute has changed. */
 			/* Add (or update) attribute to hash. */
@@ -2545,11 +2545,10 @@ bgp_create_evpn_bgp_path_info(struct bgp_path_info *parent_pi,
 	bgp_path_info_extra_get(pi);
 	pi->extra->parent = bgp_path_info_lock(parent_pi);
 	bgp_lock_node((struct bgp_node *)parent_pi->net);
-	if (parent_pi->extra) {
-		memcpy(&pi->extra->label, &parent_pi->extra->label,
-		       sizeof(pi->extra->label));
-		pi->extra->num_labels = parent_pi->extra->num_labels;
-	}
+	if (parent_pi->extra)
+		memcpy(&pi->extra->ls, &parent_pi->extra->ls,
+		       sizeof(pi->extra->ls));
+
 	bgp_path_info_add(rn, pi);
 
 	return pi;

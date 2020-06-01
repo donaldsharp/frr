@@ -99,6 +99,12 @@ enum bgp_show_adj_route_type {
 #define BGP_NLRI_PARSE_ERROR_ADDRESS_FAMILY -14
 #define BGP_NLRI_PARSE_ERROR -32
 
+struct bgp_mpls_label_stack {
+	uint8_t num_labels;
+	uint8_t reserved[3];
+	mpls_label_t label[BGP_MAX_LABELS];
+};
+
 /* Ancillary information to struct bgp_path_info,
  * used for uncommonly used data (aggregation, MPLS, etc.)
  * and lazily allocated to save memory.
@@ -114,8 +120,11 @@ struct bgp_path_info_extra {
 	uint32_t igpmetric;
 
 	/* MPLS label(s) - VNI(s) for EVPN-VxLAN  */
+	struct bgp_mpls_label_stack ls;
+#if 0
 	mpls_label_t label[BGP_MAX_LABELS];
 	uint32_t num_labels;
+#endif
 
 	/* af specific flags */
 	uint16_t af_flags;

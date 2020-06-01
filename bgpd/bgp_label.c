@@ -104,7 +104,7 @@ mpls_label_t bgp_adv_label(struct bgp_node *rn, struct bgp_path_info *pi,
 	if (!rn || !pi || !to)
 		return MPLS_INVALID_LABEL;
 
-	remote_label = pi->extra ? pi->extra->label[0] : MPLS_INVALID_LABEL;
+	remote_label = pi->extra ? pi->extra->ls.label[0] : MPLS_INVALID_LABEL;
 	from = pi->peer;
 	reflect =
 		((from->sort == BGP_PEER_IBGP) && (to->sort == BGP_PEER_IBGP));

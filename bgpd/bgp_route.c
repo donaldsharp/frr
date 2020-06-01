@@ -180,8 +180,8 @@ static struct bgp_path_info_extra *bgp_path_info_extra_new(void)
 	struct bgp_path_info_extra *new;
 	new = XCALLOC(MTYPE_BGP_ROUTE_EXTRA,
 		      sizeof(struct bgp_path_info_extra));
-	new->label[0] = MPLS_INVALID_LABEL;
-	new->num_labels = 0;
+	new->ls.label[0] = MPLS_INVALID_LABEL;
+	new->ls.num_labels = 0;
 	new->bgp_fs_pbr = NULL;
 	new->bgp_fs_iprule = NULL;
 	return new;
@@ -968,9 +968,9 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 		/* If one path has a label but the other does not, do not treat
 		 * them as equals for multipath
 		 */
-		if ((new->extra &&bgp_is_valid_label(&new->extra->label[0]))
+		if ((new->extra &&bgp_is_valid_label(&new->extra->ls.label[0]))
 		    != (exist->extra
-			&& bgp_is_valid_label(&exist->extra->label[0]))) {
+			&& bgp_is_valid_label(&exist->extra->ls.label[0]))) {
 			if (debug)
 				zlog_debug(
 					"%s: %s and %s cannot be multipath, one has a label while the other does not",
@@ -1361,9 +1361,9 @@ static int bgp_input_modifier(struct peer *peer, const struct prefix *p,
 		rmap_path.extra = &extra;
 		rmap_path.net = rn;
 
-		extra.num_labels = num_labels;
+		extra.ls.num_labels = num_labels;
 		if (label && num_labels && num_labels <= BGP_MAX_LABELS)
-			memcpy(extra.label, label,
+			memcpy(extra.ls.label, label,
 				num_labels * sizeof(mpls_label_t));
 
 		SET_FLAG(peer->rmap_type, PEER_RMAP_TYPE_IN);
@@ -1635,8 +1635,8 @@ bool subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 	 * off box as that the RT and RD created are localy
 	 * significant and globaly useless.
 	 */
-	if (safi == SAFI_MPLS_VPN && pi->extra && pi->extra->num_labels
-	    && pi->extra->label[0] == BGP_PREVENT_VRF_2_VRF_LEAK)
+	if (safi == SAFI_MPLS_VPN && pi->extra && pi->extra->ls.num_labels
+	    && pi->extra->ls.label[0] == BGP_PREVENT_VRF_2_VRF_LEAK)
 		return false;
 
 	/* If it's labeled safi, make sure the route has a valid label. */
@@ -3514,7 +3514,7 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		if (!CHECK_FLAG(pi->flags, BGP_PATH_REMOVED)
 		    && attrhash_cmp(pi->attr, attr_new)
 		    && (!has_valid_label
-			|| memcmp(&(bgp_path_info_extra_get(pi))->label, label,
+			|| memcmp(&(bgp_path_info_extra_get(pi))->ls.label, label,
 				  num_labels * sizeof(mpls_label_t))
 				   == 0)
 		    && (overlay_index_equal(
@@ -3688,13 +3688,13 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		/* Update MPLS label */
 		if (has_valid_label) {
 			extra = bgp_path_info_extra_get(pi);
-			if (extra->label != label) {
-				memcpy(&extra->label, label,
+			if (extra->ls.label != label) {
+				memcpy(&extra->ls.label, label,
 				       num_labels * sizeof(mpls_label_t));
-				extra->num_labels = num_labels;
+				extra->ls.num_labels = num_labels;
 			}
 			if (!(afi == AFI_L2VPN && safi == SAFI_EVPN))
-				bgp_set_valid_label(&extra->label[0]);
+				bgp_set_valid_label(&extra->ls.label[0]);
 		}
 
 		/* Update SRv6 SID */
@@ -3883,13 +3883,13 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	/* Update MPLS label */
 	if (has_valid_label) {
 		extra = bgp_path_info_extra_get(new);
-		if (extra->label != label) {
-			memcpy(&extra->label, label,
+		if (extra->ls.label != label) {
+			memcpy(&extra->ls.label, label,
 			       num_labels * sizeof(mpls_label_t));
-			extra->num_labels = num_labels;
+			extra->ls.num_labels = num_labels;
 		}
 		if (!(afi == AFI_L2VPN && safi == SAFI_EVPN))
-			bgp_set_valid_label(&extra->label[0]);
+			bgp_set_valid_label(&extra->ls.label[0]);
 	}
 
 	/* Update SRv6 SID */
@@ -4285,9 +4285,9 @@ static void bgp_soft_reconfig_table(struct peer *peer, afi_t afi, safi_t safi,
 					break;
 
 			if (pi && pi->extra)
-				num_labels = pi->extra->num_labels;
+				num_labels = pi->extra->ls.num_labels;
 			if (num_labels)
-				label_pnt = &pi->extra->label[0];
+				label_pnt = &pi->extra->ls.label[0];
 			if (pi)
 				memcpy(&evpn, &pi->attr->evpn_overlay,
 				       sizeof(evpn));
@@ -5366,7 +5366,7 @@ static void bgp_static_update_safi(struct bgp *bgp, const struct prefix *p,
 			pi->uptime = bgp_clock();
 #ifdef ENABLE_BGP_VNC
 			if (pi->extra)
-				label = decode_label(&pi->extra->label[0]);
+				label = decode_label(&pi->extra->ls.label[0]);
 #endif
 
 			/* Process change. */
@@ -5395,8 +5395,8 @@ static void bgp_static_update_safi(struct bgp *bgp, const struct prefix *p,
 	SET_FLAG(new->flags, BGP_PATH_VALID);
 	new->extra = bgp_path_info_extra_new();
 	if (num_labels) {
-		new->extra->label[0] = bgp_static->label;
-		new->extra->num_labels = num_labels;
+		new->extra->ls.label[0] = bgp_static->label;
+		new->extra->ls.num_labels = num_labels;
 	}
 #ifdef ENABLE_BGP_VNC
 	label = decode_label(&bgp_static->label);
@@ -8201,7 +8201,7 @@ void route_vty_out_tag(struct vty *vty, const struct prefix *p,
 		}
 	}
 
-	label = decode_label(&path->extra->label[0]);
+	label = decode_label(&path->extra->ls.label[0]);
 
 	if (bgp_is_valid_label(&label)) {
 		if (json) {
@@ -8663,9 +8663,9 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp,
 
 		buf2[0] = '\0';
 		tag_buf[0] = '\0';
-		if (path->extra && path->extra->num_labels) {
-			bgp_evpn_label2str(path->extra->label,
-					   path->extra->num_labels, tag_buf,
+		if (path->extra && path->extra->ls.num_labels) {
+			bgp_evpn_label2str(path->extra->ls.label,
+					   path->extra->ls.num_labels, tag_buf,
 					   sizeof(tag_buf));
 		}
 		if (safi == SAFI_EVPN) {
@@ -9344,9 +9344,9 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp,
 		bgp_damp_info_vty(vty, path, afi, safi, json_path);
 
 	/* Remote Label */
-	if (path->extra && bgp_is_valid_label(&path->extra->label[0])
+	if (path->extra && bgp_is_valid_label(&path->extra->ls.label[0])
 	    && (safi != SAFI_EVPN && !is_route_parent_evpn(path))) {
-		mpls_label_t label = label_pton(&path->extra->label[0]);
+		mpls_label_t label = label_pton(&path->extra->ls.label[0]);
 
 		if (json_paths)
 			json_object_int_add(json_path, "remoteLabel", label);

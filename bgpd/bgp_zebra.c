@@ -1312,7 +1312,7 @@ void bgp_zebra_announce(struct bgp_node *rn, const struct prefix *p,
 						__func__, buf_prefix,
 						bgp_is_valid_label(
 							&mpinfo->extra
-								 ->label[0]));
+								 ->ls.label[0]));
 				} else {
 					zlog_debug(
 						"%s: p=%s, extra is NULL, no label",
@@ -1390,10 +1390,10 @@ void bgp_zebra_announce(struct bgp_node *rn, const struct prefix *p,
 			continue;
 
 		if (mpinfo->extra
-		    && bgp_is_valid_label(&mpinfo->extra->label[0])
+		    && bgp_is_valid_label(&mpinfo->extra->ls.label[0])
 		    && !CHECK_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE)) {
 			has_valid_label = 1;
-			label = label_pton(&mpinfo->extra->label[0]);
+			label = label_pton(&mpinfo->extra->ls.label[0]);
 
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_LABEL);
 
