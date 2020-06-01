@@ -8664,8 +8664,7 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp,
 		buf2[0] = '\0';
 		tag_buf[0] = '\0';
 		if (path->extra && path->extra->ls.num_labels) {
-			bgp_evpn_label2str(path->extra->ls.label,
-					   path->extra->ls.num_labels, tag_buf,
+			bgp_evpn_label2str(&path->extra->ls, tag_buf,
 					   sizeof(tag_buf));
 		}
 		if (safi == SAFI_EVPN) {

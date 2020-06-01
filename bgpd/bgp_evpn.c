@@ -4906,14 +4906,13 @@ int bgp_evpn_uninstall_routes(struct bgp *bgp, struct bgpevpn *vpn)
 /*
  * TODO: Hardcoded for a maximum of 2 VNIs right now
  */
-char *bgp_evpn_label2str(mpls_label_t *label, uint32_t num_labels, char *buf,
-			 int len)
+char *bgp_evpn_label2str(struct bgp_mpls_label_stack *ls, char *buf, int len)
 {
 	vni_t vni1, vni2;
 
-	vni1 = label2vni(label);
-	if (num_labels == 2) {
-		vni2 = label2vni(label + 1);
+	vni1 = label2vni(ls->label);
+	if (ls->num_labels == 2) {
+		vni2 = label2vni(ls->label + 1);
 		snprintf(buf, len, "%u/%u", vni1, vni2);
 	} else
 		snprintf(buf, len, "%u", vni1);

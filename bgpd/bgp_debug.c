@@ -2592,11 +2592,15 @@ const char *bgp_debug_rdpfxpath2str(afi_t afi, safi_t safi,
 
 	tag_buf[0] = '\0';
 	if (bgp_labeled_safi(safi) && num_labels) {
+		struct bgp_mpls_label_stack ls;
 
+		memset(&ls, 0, sizeof(ls));
+		ls.num_labels = num_labels;
+		memcpy(&ls.label, label, ls.num_labels * sizeof(mpls_label_t));
 		if (safi == SAFI_EVPN) {
 			char tag_buf2[20];
 
-			bgp_evpn_label2str(label, num_labels, tag_buf2, 20);
+			bgp_evpn_label2str(&ls, tag_buf2, 20);
 			snprintf(tag_buf, sizeof(tag_buf), " label %s",
 				 tag_buf2);
 		} else {
