@@ -702,8 +702,11 @@ struct bpacket *subgroup_update_packet(struct update_subgroup *subgrp)
 	int addpath_overhead = 0;
 	uint32_t addpath_tx_id = 0;
 	struct prefix_rd *prd = NULL;
-	mpls_label_t label = MPLS_INVALID_LABEL, *label_pnt = NULL;
-	uint32_t num_labels = 0;
+	struct bgp_mpls_label_stack ls;
+
+	memset(&ls, 0, sizeof(ls));
+	ls.num_labels = 0;
+	ls.label = MPLS_INVALID_LABEL;
 
 	if (!subgrp)
 		return NULL;
