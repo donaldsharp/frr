@@ -342,8 +342,12 @@ int bgp_nlri_parse_label(struct peer *peer, struct attr *attr,
 	safi_t safi;
 	int addpath_encoded;
 	uint32_t addpath_id;
-	mpls_label_t label = MPLS_INVALID_LABEL;
+	struct bgp_mpls_label_stack ls;
 	uint8_t llen;
+
+	memset(&ls, 0, sizeof(ls));
+	ls.label[0] = MPLS_INVALID_LABEL;
+	ls.num_labels = 1;
 
 	pnt = packet->nlri;
 	lim = pnt + packet->length;
@@ -386,7 +390,7 @@ int bgp_nlri_parse_label(struct peer *peer, struct attr *attr,
 		}
 
 		/* Fill in the labels */
-		llen = bgp_nlri_get_labels(peer, pnt, psize, &label);
+		llen = bgp_nlri_get_labels(peer, pnt, psize, &ls.label[0]);
 		p.prefixlen = prefixlen - BSIZE(llen);
 
 		/* There needs to be at least one label */
@@ -459,11 +463,11 @@ int bgp_nlri_parse_label(struct peer *peer, struct attr *attr,
 		if (attr) {
 			bgp_update(peer, &p, addpath_id, attr, packet->afi,
 				   SAFI_UNICAST, ZEBRA_ROUTE_BGP,
-				   BGP_ROUTE_NORMAL, NULL, &label, 1, 0, NULL);
+				   BGP_ROUTE_NORMAL, NULL, &ls, 0, NULL);
 		} else {
 			bgp_withdraw(peer, &p, addpath_id, attr, packet->afi,
 				     SAFI_UNICAST, ZEBRA_ROUTE_BGP,
-				     BGP_ROUTE_NORMAL, NULL, &label, 1, NULL);
+				     BGP_ROUTE_NORMAL, NULL, &ls, NULL);
 		}
 	}
 

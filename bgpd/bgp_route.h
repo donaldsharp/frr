@@ -574,16 +574,15 @@ extern int bgp_static_unset_safi(afi_t afi, safi_t safi, struct vty *,
 
 /* this is primarily for MPLS-VPN */
 extern int bgp_update(struct peer *peer, const struct prefix *p,
-		      uint32_t addpath_id, struct attr *attr,
-		      afi_t afi, safi_t safi, int type, int sub_type,
-		      struct prefix_rd *prd, mpls_label_t *label,
-		      uint32_t num_labels, int soft_reconfig,
-		      struct bgp_route_evpn *evpn);
+		      uint32_t addpath_id, struct attr *attr, afi_t afi,
+		      safi_t safi, int type, int sub_type,
+		      struct prefix_rd *prd, struct bgp_mpls_label_stack *ls,
+		      int soft_reconfig, struct bgp_route_evpn *evpn);
 extern int bgp_withdraw(struct peer *peer, const struct prefix *p,
 			uint32_t addpath_id, struct attr *attr, afi_t afi,
 			safi_t safi, int type, int sub_type,
-			struct prefix_rd *prd, mpls_label_t *label,
-			uint32_t num_labels, struct bgp_route_evpn *evpn);
+			struct prefix_rd *prd, struct bgp_mpls_label_stack *ls,
+			struct bgp_route_evpn *evpn);
 
 /* for bgp_nexthop and bgp_damp */
 extern void bgp_process(struct bgp *, struct bgp_node *, afi_t, safi_t);

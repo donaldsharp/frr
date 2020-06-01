@@ -96,6 +96,9 @@ int bgp_nlri_parse_flowspec(struct peer *peer, struct attr *attr,
 	struct prefix p;
 	int ret;
 	void *temp;
+	struct bgp_mpls_label_stack ls;
+
+	memset(&ls, 0, sizeof(ls));
 
 	/* Start processing the NLRI - there may be multiple in the MP_REACH */
 	pnt = packet->nlri;
@@ -183,15 +186,13 @@ int bgp_nlri_parse_flowspec(struct peer *peer, struct attr *attr,
 		}
 		/* Process the route. */
 		if (!withdraw)
-			ret = bgp_update(peer, &p, 0, attr,
-					 afi, safi,
+			ret = bgp_update(peer, &p, 0, attr, afi, safi,
 					 ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-					 NULL, NULL, 0, 0, NULL);
+					 NULL, &ls, 0, NULL);
 		else
-			ret = bgp_withdraw(peer, &p, 0, attr,
-					   afi, safi,
+			ret = bgp_withdraw(peer, &p, 0, attr, afi, safi,
 					   ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-					   NULL, NULL, 0, NULL);
+					   NULL, &ls, NULL);
 		if (ret) {
 			flog_err(EC_BGP_FLOWSPEC_INSTALLATION,
 				 "Flowspec NLRI failed to be %s.",

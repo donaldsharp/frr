@@ -1323,8 +1323,9 @@ static bool bgp_cluster_filter(struct peer *peer, struct attr *attr)
 
 static int bgp_input_modifier(struct peer *peer, const struct prefix *p,
 			      struct attr *attr, afi_t afi, safi_t safi,
-			      const char *rmap_name, mpls_label_t *label,
-			      uint32_t num_labels, struct bgp_node *rn)
+			      const char *rmap_name,
+			      struct bgp_mpls_label_stack *ls,
+			      struct bgp_node *rn)
 {
 	struct bgp_filter *filter;
 	struct bgp_path_info rmap_path = { 0 };
@@ -1361,10 +1362,10 @@ static int bgp_input_modifier(struct peer *peer, const struct prefix *p,
 		rmap_path.extra = &extra;
 		rmap_path.net = rn;
 
-		extra.ls.num_labels = num_labels;
-		if (label && num_labels && num_labels <= BGP_MAX_LABELS)
-			memcpy(extra.ls.label, label,
-				num_labels * sizeof(mpls_label_t));
+		extra.ls.num_labels = ls->num_labels;
+		if (ls->num_labels && ls->num_labels <= BGP_MAX_LABELS)
+			memcpy(extra.ls.label, ls->label,
+			       ls->num_labels * sizeof(mpls_label_t));
 
 		SET_FLAG(peer->rmap_type, PEER_RMAP_TYPE_IN);
 
@@ -3301,8 +3302,8 @@ bool bgp_update_martian_nexthop(struct bgp *bgp, afi_t afi, safi_t safi,
 
 int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	       struct attr *attr, afi_t afi, safi_t safi, int type,
-	       int sub_type, struct prefix_rd *prd, mpls_label_t *label,
-	       uint32_t num_labels, int soft_reconfig,
+	       int sub_type, struct prefix_rd *prd,
+	       struct bgp_mpls_label_stack *ls, int soft_reconfig,
 	       struct bgp_route_evpn *evpn)
 {
 	int ret;
@@ -3336,9 +3337,9 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	rn = bgp_afi_node_get(bgp->rib[afi][safi], afi, safi, p, prd);
 	/* TODO: Check to see if we can get rid of "is_valid_label" */
 	if (afi == AFI_L2VPN && safi == SAFI_EVPN)
-		has_valid_label = (num_labels > 0) ? 1 : 0;
+		has_valid_label = ls ? (ls->num_labels > 0) ? 1 : 0 : 0;
 	else
-		has_valid_label = bgp_is_valid_label(label);
+		has_valid_label = ls ? bgp_is_valid_label(&ls->label[0]) : 0;
 
 	/* When peer's soft reconfiguration enabled.  Record input packet in
 	   Adj-RIBs-In.  */
@@ -3450,8 +3451,8 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	 * commands, so we need bgp_attr_flush in the error paths, until we
 	 * intern
 	 * the attr (which takes over the memory references) */
-	if (bgp_input_modifier(peer, p, &new_attr, afi, safi, NULL,
-		label, num_labels, rn) == RMAP_DENY) {
+	if (bgp_input_modifier(peer, p, &new_attr, afi, safi, NULL, ls, rn)
+	    == RMAP_DENY) {
 		peer->stat_pfx_filter++;
 		reason = "route-map;";
 		bgp_attr_flush(&new_attr);
@@ -3514,12 +3515,13 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		if (!CHECK_FLAG(pi->flags, BGP_PATH_REMOVED)
 		    && attrhash_cmp(pi->attr, attr_new)
 		    && (!has_valid_label
-			|| memcmp(&(bgp_path_info_extra_get(pi))->ls.label, label,
-				  num_labels * sizeof(mpls_label_t))
+			|| memcmp(&(bgp_path_info_extra_get(pi))->ls.label,
+				  ls->label,
+				  ls->num_labels * sizeof(mpls_label_t))
 				   == 0)
 		    && (overlay_index_equal(
-			       afi, pi, evpn == NULL ? NULL : &evpn->eth_s_id,
-			       evpn == NULL ? NULL : &evpn->gw_ip))) {
+			    afi, pi, evpn == NULL ? NULL : &evpn->eth_s_id,
+			    evpn == NULL ? NULL : &evpn->gw_ip))) {
 			if (CHECK_FLAG(bgp->af_flags[afi][safi],
 				       BGP_CONFIG_DAMPENING)
 			    && peer->sort == BGP_PEER_EBGP

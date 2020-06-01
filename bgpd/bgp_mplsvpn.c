@@ -110,12 +110,13 @@ int bgp_nlri_parse_vpn(struct peer *peer, struct attr *attr,
 	struct rd_as rd_as;
 	struct rd_ip rd_ip;
 	struct prefix_rd prd = {0};
-	mpls_label_t label = {0};
+	struct bgp_mpls_label_stack ls;
 	afi_t afi;
 	safi_t safi;
 	int addpath_encoded;
 	uint32_t addpath_id;
 
+	memset(&ls, 0, sizeof(ls));
 	/* Make prefix_rd */
 	prd.family = AF_UNSPEC;
 	prd.prefixlen = 64;
@@ -192,8 +193,9 @@ int bgp_nlri_parse_vpn(struct peer *peer, struct attr *attr,
 		}
 
 		/* Copy label to prefix. */
-		memcpy(&label, pnt, BGP_LABEL_BYTES);
-		bgp_set_valid_label(&label);
+		memcpy(&ls.label[0], pnt, BGP_LABEL_BYTES);
+		bgp_set_valid_label(&ls.label[0]);
+		ls.num_labels = 1;
 
 		/* Copy routing distinguisher to rd. */
 		memcpy(&prd.val, pnt + BGP_LABEL_BYTES, 8);
@@ -233,11 +235,11 @@ int bgp_nlri_parse_vpn(struct peer *peer, struct attr *attr,
 		if (attr) {
 			bgp_update(peer, &p, addpath_id, attr, packet->afi,
 				   SAFI_MPLS_VPN, ZEBRA_ROUTE_BGP,
-				   BGP_ROUTE_NORMAL, &prd, &label, 1, 0, NULL);
+				   BGP_ROUTE_NORMAL, &prd, &ls, 0, NULL);
 		} else {
 			bgp_withdraw(peer, &p, addpath_id, attr, packet->afi,
 				     SAFI_MPLS_VPN, ZEBRA_ROUTE_BGP,
-				     BGP_ROUTE_NORMAL, &prd, &label, 1, NULL);
+				     BGP_ROUTE_NORMAL, &prd, &ls, NULL);
 		}
 	}
 	/* Packet length consistency check. */

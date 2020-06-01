@@ -152,10 +152,11 @@ static void bgp_process_mac_rescan_table(struct bgp *bgp, struct peer *peer,
 			const struct prefix *p = bgp_node_get_prefix(rn);
 			const struct prefix_evpn *pevpn = (const struct prefix_evpn *)p;
 			struct prefix_rd prd;
-			uint32_t num_labels = 0;
-			mpls_label_t *label_pnt = NULL;
+			struct bgp_mpls_label_stack ls;
+
 			struct bgp_route_evpn evpn;
 
+			memset(&ls, 0, sizeof(ls));
 			if (pevpn->family == AF_EVPN &&
 			    pevpn->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE &&
 			    memcmp(&p->u.prefix_evpn.macip_addr.mac,
@@ -180,11 +181,6 @@ static void bgp_process_mac_rescan_table(struct bgp *bgp, struct peer *peer,
 			    !rn_affected)
 				continue;
 
-			if (pi->extra)
-				num_labels = pi->extra->ls.num_labels;
-			if (num_labels)
-				label_pnt = &pi->extra->ls.label[0];
-
 			prd.family = AF_UNSPEC;
 			prd.prefixlen = 64;
 			memcpy(&prd.val, prn_p->u.val, 8);
@@ -194,8 +190,13 @@ static void bgp_process_mac_rescan_table(struct bgp *bgp, struct peer *peer,
 					char pfx_buf[BGP_PRD_PATH_STRLEN];
 
 					bgp_debug_rdpfxpath2str(
-						AFI_L2VPN, SAFI_EVPN, &prd,
-						p, label_pnt, num_labels,
+						AFI_L2VPN, SAFI_EVPN, &prd, p,
+						pi->extra ? &pi->extra->ls
+								     .label[0]
+							  : NULL,
+						pi->extra ? pi->extra->ls
+								    .num_labels
+							  : 0,
 						pi->addpath_rx_id ? 1 : 0,
 						pi->addpath_rx_id, pfx_buf,
 						sizeof(pfx_buf));
@@ -207,13 +208,11 @@ static void bgp_process_mac_rescan_table(struct bgp *bgp, struct peer *peer,
 			}
 
 			memcpy(&evpn, &pi->attr->evpn_overlay, sizeof(evpn));
-			int32_t ret = bgp_update(peer, p,
-						 pi->addpath_rx_id,
-						 pi->attr, AFI_L2VPN, SAFI_EVPN,
-						 ZEBRA_ROUTE_BGP,
-						 BGP_ROUTE_NORMAL, &prd,
-						 label_pnt, num_labels,
-						 1, &evpn);
+			int32_t ret = bgp_update(
+				peer, p, pi->addpath_rx_id, pi->attr, AFI_L2VPN,
+				SAFI_EVPN, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
+				&prd, pi->extra ? &pi->extra->ls : &ls, 1,
+				&evpn);
 
 			if (ret < 0)
 				bgp_unlock_node(rn);

@@ -3950,8 +3950,7 @@ static int process_type2_route(struct peer *peer, afi_t afi, safi_t safi,
 	struct bgp_route_evpn evpn;
 	uint8_t ipaddr_len;
 	uint8_t macaddr_len;
-	mpls_label_t label[BGP_MAX_LABELS]; /* holds the VNI(s) as in packet */
-	uint32_t num_labels = 0;
+	struct bgp_mpls_label_stack ls;
 	uint32_t eth_tag;
 	int ret;
 
@@ -4029,15 +4028,16 @@ static int process_type2_route(struct peer *peer, afi_t afi, safi_t safi,
 	pfx += ipaddr_len;
 
 	/* Get the VNI(s). Stored as bytes here. */
-	num_labels++;
-	memset(label, 0, sizeof(label));
-	memcpy(&label[0], pfx, BGP_LABEL_BYTES);
+	memset(&ls, 0, sizeof(ls));
+	ls.num_labels++;
+	memcpy(&ls.label[0], pfx, BGP_LABEL_BYTES);
+
 	pfx += BGP_LABEL_BYTES;
 	psize -= (33 + ipaddr_len);
 	/* Do we have a second VNI? */
 	if (psize) {
-		num_labels++;
-		memcpy(&label[1], pfx, BGP_LABEL_BYTES);
+		ls.num_labels++;
+		memcpy(&ls.label[1], pfx, BGP_LABEL_BYTES);
 		/*
 		 * If in future, we are required to access additional fields,
 		 * we MUST increment pfx by BGP_LABEL_BYTES in before reading
@@ -4049,11 +4049,11 @@ static int process_type2_route(struct peer *peer, afi_t afi, safi_t safi,
 	if (attr)
 		ret = bgp_update(peer, (struct prefix *)&p, addpath_id, attr,
 				 afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-				 &prd, &label[0], num_labels, 0, &evpn);
+				 &prd, &ls, 0, &evpn);
 	else
 		ret = bgp_withdraw(peer, (struct prefix *)&p, addpath_id, attr,
 				   afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-				   &prd, &label[0], num_labels, &evpn);
+				   &prd, &ls, &evpn);
 	return ret;
 }
 
@@ -4069,6 +4069,9 @@ static int process_type3_route(struct peer *peer, afi_t afi, safi_t safi,
 	uint8_t ipaddr_len;
 	uint32_t eth_tag;
 	int ret;
+	struct bgp_mpls_label_stack ls;
+
+	memset(&ls, 0, sizeof(ls));
 
 	/* Type-3 route should be either 17 or 29 bytes: RD (8), Eth Tag (4),
 	 * IP len (1) and IP (4 or 16).
@@ -4129,11 +4132,11 @@ static int process_type3_route(struct peer *peer, afi_t afi, safi_t safi,
 	if (attr)
 		ret = bgp_update(peer, (struct prefix *)&p, addpath_id, attr,
 				 afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-				 &prd, NULL, 0, 0, NULL);
+				 &prd, &ls, 0, NULL);
 	else
 		ret = bgp_withdraw(peer, (struct prefix *)&p, addpath_id, attr,
 				   afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-				   &prd, NULL, 0, NULL);
+				   &prd, &ls, NULL);
 	return ret;
 }
 
@@ -4150,7 +4153,9 @@ static int process_type4_route(struct peer *peer, afi_t afi, safi_t safi,
 	struct in_addr vtep_ip;
 	struct prefix_rd prd;
 	struct prefix_evpn p;
+	struct bgp_mpls_label_stack ls;
 
+	memset(&ls, 0, sizeof(ls));
 	/* Type-4 route should be either 23 or 35 bytes
 	 *  RD (8), ESI (10), ip-len (1), ip (4 or 16)
 	 */
@@ -4189,11 +4194,11 @@ static int process_type4_route(struct peer *peer, afi_t afi, safi_t safi,
 	if (attr) {
 		ret = bgp_update(peer, (struct prefix *)&p, addpath_id, attr,
 				 afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-				 &prd, NULL, 0, 0, NULL);
+				 &prd, &ls, 0, NULL);
 	} else {
 		ret = bgp_withdraw(peer, (struct prefix *)&p, addpath_id, attr,
 				   afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-				   &prd, NULL, 0, NULL);
+				   &prd, &ls, NULL);
 	}
 	return ret;
 }
@@ -4211,7 +4216,7 @@ static int process_type5_route(struct peer *peer, afi_t afi, safi_t safi,
 	struct bgp_route_evpn evpn;
 	uint8_t ippfx_len;
 	uint32_t eth_tag;
-	mpls_label_t label; /* holds the VNI as in the packet */
+	struct bgp_mpls_label_stack ls;
 	int ret;
 	afi_t gw_afi;
 	bool is_valid_update = false;
@@ -4284,8 +4289,9 @@ static int process_type5_route(struct peer *peer, afi_t afi, safi_t safi,
 	}
 
 	/* Get the VNI (in MPLS label field). Stored as bytes here. */
-	memset(&label, 0, sizeof(label));
-	memcpy(&label, pfx, BGP_LABEL_BYTES);
+	memset(&ls, 0, sizeof(ls));
+	memcpy(&ls.label[0], pfx, BGP_LABEL_BYTES);
+	ls.num_labels = 1;
 
 	/*
 	 * If in future, we are required to access additional fields,
@@ -4307,11 +4313,11 @@ static int process_type5_route(struct peer *peer, afi_t afi, safi_t safi,
 	if (is_valid_update)
 		ret = bgp_update(peer, (struct prefix *)&p, addpath_id, attr,
 				 afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-				 &prd, &label, 1, 0, &evpn);
+				 &prd, &ls, 0, &evpn);
 	else
 		ret = bgp_withdraw(peer, (struct prefix *)&p, addpath_id, attr,
 				   afi, safi, ZEBRA_ROUTE_BGP, BGP_ROUTE_NORMAL,
-				   &prd, &label, 1, &evpn);
+				   &prd, &ls, &evpn);
 
 	return ret;
 }
