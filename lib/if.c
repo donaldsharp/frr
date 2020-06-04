@@ -213,6 +213,9 @@ static void if_set_name(struct interface *ifp, const char *name,
 	vrf = vrf_lookup_by_name(vrf_name);
 	assert(vrf);
 
+	if (vrf->vrf_id == VRF_UNKNOWN)
+		vrf = vrf_lookup_by_name(VRF_DEFAULT_NAME);
+
 	if (if_cmp_name_func(ifp->name, name) == 0)
 		return;
 
@@ -1325,12 +1328,17 @@ DEFPY_NOSH (interface,
        VRF_CMD_HELP_STR)
 {
 	char xpath_list[XPATH_MAXLEN];
-	vrf_id_t vrf_id;
+	vrf_id_t vrf_id = VRF_UNKNOWN;
 	struct interface *ifp;
 	int ret;
 
 	if (!vrf_name)
 		vrf_name = VRF_DEFAULT_NAME;
+	else {
+		vrf_handler_create(vty, vrf_name, NULL);
+		vty->xpath_index = 0;
+		vty->node = CONFIG_NODE;
+	}
 
 	/*
 	 * This command requires special handling to maintain backward
@@ -1380,7 +1388,7 @@ DEFPY_NOSH (interface,
 		 * all interface-level commands are converted to the new
 		 * northbound model.
 		 */
-		ifp = if_lookup_by_name(ifname, vrf_id);
+		ifp = if_lookup_by_name_all_vrf(ifname);
 		if (ifp)
 			VTY_PUSH_CONTEXT(INTERFACE_NODE, ifp);
 	}
@@ -1524,11 +1532,6 @@ static int lib_interface_create(struct nb_cb_create_args *args)
 				  vrfname);
 			return NB_ERR_VALIDATION;
 		}
-		if (vrf->vrf_id == VRF_UNKNOWN) {
-			zlog_warn("%s: VRF %s is not active", __func__,
-				  vrf->name);
-			return NB_ERR_VALIDATION;
-		}
 
 		/* if VRF is netns or not yet known - init for instance
 		 * then assumption is that passed config is exact
@@ -1551,7 +1554,7 @@ static int lib_interface_create(struct nb_cb_create_args *args)
 		vrf = vrf_lookup_by_name(vrfname);
 		assert(vrf);
 #ifdef SUNOS_5
-		ifp = if_sunwzebra_get(ifname, vrf->vrf_id);
+		ifp = if_sunwzebra_get(ifname, vrf);
 #else
 		ifp = if_get_by_name(ifname, vrf->name);
 #endif /* SUNOS_5 */

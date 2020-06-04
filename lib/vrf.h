@@ -130,14 +130,6 @@ extern vrf_id_t vrf_name_to_id(const char *);
 			}                                                      \
 			return CMD_WARNING;                                    \
 		}                                                              \
-		if (_vrf->vrf_id == VRF_UNKNOWN) {                             \
-			if (USE_JSON) {                                        \
-				vty_out(vty, "{}\n");                          \
-			} else {                                               \
-				vty_out(vty, "%% VRF %s not active\n", NAME);  \
-			}                                                      \
-			return CMD_WARNING;                                    \
-		}                                                              \
 		(V) = _vrf->vrf_id;                                            \
 	} while (0)
 
