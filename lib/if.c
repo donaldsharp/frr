@@ -205,6 +205,25 @@ void if_down_via_zapi(struct interface *ifp)
 		(*ifp_master.down_hook)(ifp);
 }
 
+static void if_set_name(struct interface *ifp, const char *name)
+{
+	struct vrf *vrf;
+
+	vrf = vrf_get(ifp->vrf_id, NULL);
+	assert(vrf);
+
+	if (if_cmp_name_func(ifp->name, name) == 0)
+		return;
+
+	if (ifp->name[0] != '\0')
+		IFNAME_RB_REMOVE(vrf, ifp);
+
+	strlcpy(ifp->name, name, sizeof(ifp->name));
+
+	if (ifp->name[0] != '\0')
+		IFNAME_RB_INSERT(vrf, ifp);
+}
+
 struct interface *if_create_name(const char *name, vrf_id_t vrf_id)
 {
 	struct interface *ifp;
@@ -618,25 +637,6 @@ int if_set_index(struct interface *ifp, ifindex_t ifindex)
 	}
 
 	return 0;
-}
-
-void if_set_name(struct interface *ifp, const char *name)
-{
-	struct vrf *vrf;
-
-	vrf = vrf_get(ifp->vrf_id, NULL);
-	assert(vrf);
-
-	if (if_cmp_name_func(ifp->name, name) == 0)
-		return;
-
-	if (ifp->name[0] != '\0')
-		IFNAME_RB_REMOVE(vrf, ifp);
-
-	strlcpy(ifp->name, name, sizeof(ifp->name));
-
-	if (ifp->name[0] != '\0')
-		IFNAME_RB_INSERT(vrf, ifp);
 }
 
 /* Does interface up ? */
