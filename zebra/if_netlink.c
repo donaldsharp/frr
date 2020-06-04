@@ -1307,8 +1307,10 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 					ifi->ifi_flags);
 
 			if (ifp == NULL) {
+				struct vrf *vrf = vrf_lookup_by_id(vrf_id);
+
 				/* unknown interface */
-				ifp = if_get_by_name(name, vrf_id);
+				ifp = if_get_by_name(name, vrf->name);
 			} else {
 				/* pre-configured interface, learnt now */
 				if (ifp->vrf_id != vrf_id)

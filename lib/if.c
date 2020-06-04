@@ -557,27 +557,27 @@ size_t if_lookup_by_hwaddr(const uint8_t *hw_addr, size_t addrsz,
 
 /* Get interface by name if given name interface doesn't exist create
    one. */
-struct interface *if_get_by_name(const char *name, vrf_id_t vrf_id)
+struct interface *if_get_by_name(const char *name, const char *vrf_name)
 {
 	struct interface *ifp;
-	struct vrf *vrf = vrf_lookup_by_id(vrf_id);
+	struct vrf *vrf = vrf_lookup_by_name(vrf_name);
 
 	switch (vrf_get_backend()) {
 	case VRF_BACKEND_UNKNOWN:
 	case VRF_BACKEND_NETNS:
-		ifp = if_lookup_by_name(name, vrf_id);
+		ifp = if_lookup_by_name(name, vrf->vrf_id);
 		if (ifp)
 			return ifp;
 		return if_create_name(name, vrf->name);
 	case VRF_BACKEND_VRF_LITE:
 		ifp = if_lookup_by_name_all_vrf(name);
 		if (ifp) {
-			if (ifp->vrf_id == vrf_id)
+			if (ifp->vrf_id == vrf->vrf_id)
 				return ifp;
 			/* If it came from the kernel or by way of zclient,
 			 * believe it and update the ifp accordingly.
 			 */
-			if_update_to_new_vrf(ifp, vrf_id);
+			if_update_to_new_vrf(ifp, vrf->vrf_id);
 			return ifp;
 		}
 		return if_create_name(name, vrf->name);
@@ -820,12 +820,12 @@ void if_dump_all(void)
  *     if not:
  *     - no idea, just get the name in its entirety.
  */
-static struct interface *if_sunwzebra_get(const char *name, vrf_id_t vrf_id)
+static struct interface *if_sunwzebra_get(const char *name, struct vrf *vrf)
 {
 	struct interface *ifp;
 	char *cp;
 
-	if ((ifp = if_lookup_by_name(name, vrf_id)) != NULL)
+	if ((ifp = if_lookup_by_name(name, vrf->vrf_id)) != NULL)
 		return ifp;
 
 	/* hunt the primary interface name... */
@@ -833,7 +833,7 @@ static struct interface *if_sunwzebra_get(const char *name, vrf_id_t vrf_id)
 	if (cp)
 		*cp = '\0';
 
-	return if_get_by_name(name, vrf_id);
+	return if_get_by_name(name, vrf->name);
 }
 #endif /* SUNOS_5 */
 
@@ -1553,7 +1553,7 @@ static int lib_interface_create(struct nb_cb_create_args *args)
 #ifdef SUNOS_5
 		ifp = if_sunwzebra_get(ifname, vrf->vrf_id);
 #else
-		ifp = if_get_by_name(ifname, vrf->vrf_id);
+		ifp = if_get_by_name(ifname, vrf->name);
 #endif /* SUNOS_5 */
 
 		ifp->configured = true;

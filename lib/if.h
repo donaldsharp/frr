@@ -524,7 +524,8 @@ size_t if_lookup_by_hwaddr(const uint8_t *hw_addr, size_t addrsz,
 
 extern struct interface *if_lookup_by_name_all_vrf(const char *ifname);
 extern struct interface *if_lookup_by_name(const char *ifname, vrf_id_t vrf_id);
-extern struct interface *if_get_by_name(const char *ifname, vrf_id_t vrf_id);
+extern struct interface *if_get_by_name(const char *ifname,
+					const char *vrf_name);
 extern struct interface *if_get_by_ifindex(ifindex_t ifindex, vrf_id_t vrf_id,
 					   char *optional_name);
 /* Sets the index and adds to index list */
