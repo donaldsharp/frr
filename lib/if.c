@@ -205,11 +205,12 @@ void if_down_via_zapi(struct interface *ifp)
 		(*ifp_master.down_hook)(ifp);
 }
 
-static void if_set_name(struct interface *ifp, const char *name)
+static void if_set_name(struct interface *ifp, const char *name,
+			const char *vrf_name)
 {
 	struct vrf *vrf;
 
-	vrf = vrf_get(ifp->vrf_id, NULL);
+	vrf = vrf_lookup_by_name(vrf_name);
 	assert(vrf);
 
 	if (if_cmp_name_func(ifp->name, name) == 0)
@@ -227,10 +228,12 @@ static void if_set_name(struct interface *ifp, const char *name)
 struct interface *if_create_name(const char *name, vrf_id_t vrf_id)
 {
 	struct interface *ifp;
+	struct vrf *vrf;
 
+	vrf = vrf_lookup_by_id(vrf_id != VRF_UNKNOWN ? vrf_id : VRF_DEFAULT);
 	ifp = if_new(vrf_id);
 
-	if_set_name(ifp, name);
+	if_set_name(ifp, name, vrf->name);
 
 	hook_call(if_add, ifp);
 	return ifp;
@@ -240,12 +243,14 @@ struct interface *if_create_ifindex(ifindex_t ifindex, vrf_id_t vrf_id,
 				    char *optional_name)
 {
 	struct interface *ifp;
+	struct vrf *vrf;
 
+	vrf = vrf_lookup_by_id(vrf_id != VRF_UNKNOWN ? vrf_id : VRF_DEFAULT);
 	ifp = if_new(vrf_id);
 
 	if_set_index(ifp, ifindex);
 	if (optional_name)
-		if_set_name(ifp, optional_name);
+		if_set_name(ifp, optional_name, vrf->name);
 	hook_call(if_add, ifp);
 	return ifp;
 }
