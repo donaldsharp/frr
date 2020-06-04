@@ -112,14 +112,15 @@ void zebra_l2_map_slave_to_bond(struct zebra_l2info_bondslave *bond_slave,
 				vrf_id_t vrf_id)
 {
 	struct interface *bond_if;
+	struct vrf *vrf = vrf_lookup_by_id(vrf_id);
 
 	/* TODO: Handle change of master */
 	bond_if = if_lookup_by_index_all_vrf(bond_slave->bond_ifindex);
 	if (bond_if)
 		bond_slave->bond_if = bond_if;
 	else
-		bond_slave->bond_if = if_create_ifindex(bond_slave->bond_ifindex,
-							vrf_id, NULL);
+		bond_slave->bond_if = if_create_ifindex(
+			bond_slave->bond_ifindex, NULL, vrf->name);
 }
 
 void zebra_l2_unmap_slave_from_bond(struct zebra_l2info_bondslave *bond_slave)
