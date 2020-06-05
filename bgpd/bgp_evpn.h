@@ -27,7 +27,9 @@
 #define EVPN_ROUTE_STRLEN 200 /* Must be >> MAC + IPv6 strings. */
 #define EVPN_AUTORT_VXLAN 0x10000000
 
-#define EVPN_ENABLED(bgp)  (bgp)->advertise_all_vni
+#define EVPN_ENABLED(bgp)                                                      \
+       ((bgp)->advertise_all_vni || (bgp)->vrf_id == VRF_DEFAULT)
+
 static inline int is_evpn_enabled(void)
 {
 	struct bgp *bgp = NULL;
