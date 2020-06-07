@@ -2455,13 +2455,15 @@ static void zebra_evpn_local_mac_oper_state_change(struct zebra_evpn_es *es)
 
 		if (es->flags & ZEBRA_EVPNES_OPER_UP) {
 			if (IS_ZEBRA_DEBUG_EVPN_MH_MAC)
-				zlog_debug("mac %s move to acc %s es %s %s ",
-					   prefix_mac2str(&mac->macaddr, macbuf,
-							  sizeof(macbuf)),
-					   es->zif->ifp->name, es->esi_str,
-					   (es->flags & ZEBRA_EVPNES_OPER_UP)
-						   ? "up"
-						   : "down");
+				zlog_debug(
+					"VNI %u mac %s move to acc %s es %s %s ",
+					mac->zevpn->vni,
+					prefix_mac2str(&mac->macaddr, macbuf,
+						       sizeof(macbuf)),
+					es->zif->ifp->name, es->esi_str,
+					(es->flags & ZEBRA_EVPNES_OPER_UP)
+						? "up"
+						: "down");
 			/* switch the local macs to access port */
 			if (zebra_evpn_sync_mac_dp_install(
 				    mac, false /*set_inactive*/,
@@ -2480,13 +2482,15 @@ static void zebra_evpn_local_mac_oper_state_change(struct zebra_evpn_es *es)
 			if (!(es->flags & ZEBRA_EVPNES_NHG_ACTIVE))
 				continue;
 			if (IS_ZEBRA_DEBUG_EVPN_MH_MAC)
-				zlog_debug("mac %s move to nhg %u es %s %s ",
-					   prefix_mac2str(&mac->macaddr, macbuf,
-							  sizeof(macbuf)),
-					   es->nhg_id, es->esi_str,
-					   (es->flags & ZEBRA_EVPNES_OPER_UP)
-						   ? "up"
-						   : "down");
+				zlog_debug(
+					"VNI %u mac %s move to nhg %u es %s %s ",
+					mac->zevpn->vni,
+					prefix_mac2str(&mac->macaddr, macbuf,
+						       sizeof(macbuf)),
+					es->nhg_id, es->esi_str,
+					(es->flags & ZEBRA_EVPNES_OPER_UP)
+						? "up"
+						: "down");
 			zebra_evpn_rem_mac_install(mac->zevpn, mac,
 						   true /*was_static*/);
 		}
