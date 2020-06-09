@@ -1682,6 +1682,7 @@ def ignore_unconfigurable_lines(lines_to_add, lines_to_del):
                     "username",
                     "password",
                     "line vty",
+                    "zebra nexthop proto only",
                     "service integrated-vtysh-config",
                 ]
             ]
