@@ -720,6 +720,8 @@ struct thread_master *frr_init(void)
 	const char *dir;
 
 	dir = di->module_path ? di->module_path : frr_moduledir;
+	bool see_cumulus_mlag = false;
+	bool is_zebra = false;
 
 	srandom(time(NULL));
 	frr_defaults_apply();
@@ -771,15 +773,32 @@ struct thread_master *frr_init(void)
 			frr_mkdir(di->vty_path, true);
 	}
 
+	if (strncmp(di->logname, "ZEBRA", strlen("ZEBRA")) == 0)
+		is_zebra = true;
+
 	frrmod_init(di->module);
 	while (modules) {
 		modules = (oc = modules)->next;
-		module = frrmod_load(oc->arg, dir, _err_print, __func__);
-		if (!module)
+
+		if (strncmp(oc->arg, "cumulus_mlag", strlen("cumulus_mlag"))
+		    == 0)
+			see_cumulus_mlag = true;
+
+		module = frrmod_load(oc->arg, dir, moderr, sizeof(moderr));
+		if (!module) {
+			fprintf(stderr, "%s\n", moderr);
 			exit(1);
 		XFREE(MTYPE_TMP, oc);
 	}
 
+	if (is_zebra && !see_cumulus_mlag) {
+		module = frrmod_load("cumulus_mlag", dir, moderr,
+				     sizeof(moderr));
+		if (!module) {
+			fprintf(stderr, "%s\n", moderr);
+			exit(1);
+		}
+	}
 	zprivs_init(di->privs);
 
 	master = thread_master_create(NULL);
