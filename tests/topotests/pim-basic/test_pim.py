@@ -47,11 +47,13 @@ class PIMTopo(Topo):
         "Build function"
         tgen = get_topogen(self)
 
-        for routern in range(1, 4):
+        for routern in range(1, 5):
             tgen.add_router("r{}".format(routern))
 
         tgen.add_router("rp")
 
+        #    r4
+        #   \ /
         #   rp ------ r1 -------- r2
         #              \
         #               --------- r3
@@ -59,6 +61,7 @@ class PIMTopo(Topo):
         # r2 -> .2
         # rp -> .3
         # r3 -> .4
+        # r4 -> .5
         # loopback network is 10.254.0.X/32
         #
         # r1 <- sw1 -> r2
@@ -76,10 +79,22 @@ class PIMTopo(Topo):
         sw.add_link(tgen.gears["rp"])
 
         # 10.0.40.0/24
+        # r1-eth2 <-> r3-eth0
         sw = tgen.add_switch("sw3")
         sw.add_link(tgen.gears["r1"])
         sw.add_link(tgen.gears["r3"])
 
+        # 10.0.50.0/24
+        # rp-eth1 <-> r4-eth0
+        sw = tgen.add_switch("sw4")
+        sw.add_link(tgen.gears["rp"])
+        sw.add_link(tgen.gears["r4"])
+
+        # 10.0.60.0/24
+        # rp-eth2 <-> r4-eth1
+        sw = tgen.add_switch("sw5")
+        sw.add_link(tgen.gears["rp"])
+        sw.add_link(tgen.gears["r4"])
 
 def setup_module(mod):
     "Sets up the pytest environment"
