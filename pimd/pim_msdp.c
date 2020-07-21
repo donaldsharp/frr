@@ -423,7 +423,6 @@ void pim_msdp_sa_ref(struct pim_instance *pim, struct pim_msdp_peer *mp,
 					   sa->sg_str);
 			}
 			/* send an immediate SA update to peers */
-			sa->rp = pim->msdp.originator_id;
 			pim_msdp_pkt_sa_tx_one(sa);
 		}
 		sa->flags &= ~PIM_MSDP_SAF_STALE;

@@ -444,7 +444,8 @@ void pim_msdp_pkt_sa_tx(struct pim_instance *pim)
 
 void pim_msdp_pkt_sa_tx_one(struct pim_msdp_sa *sa)
 {
-	pim_msdp_pkt_sa_fill_hdr(sa->pim, 1 /* cnt */, sa->rp);
+	pim_msdp_pkt_sa_fill_hdr(sa->pim, 1 /* cnt */,
+				 sa->pim->msdp.originator_id);
 	pim_msdp_pkt_sa_fill_one(sa);
 	pim_msdp_pkt_sa_push(sa->pim, NULL);
 	pim_msdp_pkt_sa_tx_done(sa->pim);
@@ -457,8 +458,8 @@ void pim_msdp_pkt_sa_tx_to_one_peer(struct pim_msdp_peer *mp)
 	pim_msdp_pkt_sa_tx_done(mp->pim);
 }
 
-void pim_msdp_pkt_sa_tx_one_to_one_peer(struct pim_msdp_peer *mp,
-					struct in_addr rp, struct prefix_sg sg)
+void pim_msdp_pkt_sa_forward(struct pim_msdp_peer *mp, struct in_addr rp,
+			     struct prefix_sg sg)
 {
 	struct pim_msdp_sa sa;
 
@@ -525,7 +526,7 @@ static void pim_msdp_pkt_sa_rx_one(struct pim_msdp_peer *mp, struct in_addr rp)
 		if (!pim_msdp_peer_rpf_check(peer, rp)
 		    && (strcmp(mp->mesh_group_name, peer->mesh_group_name)
 			|| !strcmp(mp->mesh_group_name, "default"))) {
-			pim_msdp_pkt_sa_tx_one_to_one_peer(peer, rp, sg);
+			pim_msdp_pkt_sa_forward(peer, rp, sg);
 		}
 	}
 }
