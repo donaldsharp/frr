@@ -1362,6 +1362,7 @@ void vpn_leak_to_vrf_withdraw_all(struct bgp *bgp_vrf, /* to */
 
 	if (debug)
 		zlog_debug("%s: entry", __func__);
+
 	/*
 	 * Walk vrf table, delete bpi with bgp_orig in a different vrf
 	 */
@@ -2553,7 +2554,8 @@ int bgp_vpn_leak_unimport(struct bgp *from_bgp, struct vty *vty)
 	bool is_vrf_leak_bind;
 	int debug;
 
-	if (from_bgp->inst_type != BGP_INSTANCE_TYPE_VRF)
+	if (from_bgp->inst_type != BGP_INSTANCE_TYPE_VRF
+	    && from_bgp->inst_type != BGP_INSTANCE_TYPE_DEFAULT)
 		return 0;
 
 	debug = (BGP_DEBUG(vpn, VPN_LEAK_TO_VRF) |

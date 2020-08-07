@@ -4794,14 +4794,20 @@ void bgp_cleanup_routes(struct bgp *bgp)
 		if (afi != AFI_L2VPN) {
 			safi_t safi;
 			safi = SAFI_MPLS_VPN;
-			for (dest = bgp_table_top(bgp->rib[afi][safi]); dest;
-			     dest = bgp_route_next(dest)) {
-				table = bgp_dest_get_bgp_table_info(dest);
-				if (table != NULL) {
-					bgp_cleanup_table(bgp, table, safi);
-					bgp_table_finish(&table);
-					bgp_dest_set_bgp_table_info(dest, NULL);
-					bgp_dest_unlock_node(dest);
+			if (bgp->inst_type != BGP_INSTANCE_TYPE_DEFAULT
+			    || !CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
+				for (dest = bgp_table_top(bgp->rib[afi][safi]);
+				     dest; dest = bgp_route_next(dest)) {
+					table = bgp_dest_get_bgp_table_info(
+						dest);
+					if (table != NULL) {
+						bgp_cleanup_table(bgp, table,
+								  safi);
+						bgp_table_finish(&table);
+						bgp_dest_set_bgp_table_info(
+							dest, NULL);
+						bgp_dest_unlock_node(dest);
+					}
 				}
 			}
 			safi = SAFI_ENCAP;
@@ -10102,7 +10108,7 @@ static int bgp_show(struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
 		bgp = bgp_get_default();
 	}
 
-	if (bgp == NULL) {
+	if (bgp == NULL || CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
 		if (!use_json)
 			vty_out(vty, "No BGP process is configured\n");
 		else
@@ -10143,6 +10149,9 @@ static void bgp_show_all_instances_routes_vty(struct vty *vty, afi_t afi,
 		vty_out(vty, "{\n");
 
 	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
+		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
+		    && CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN))
+			continue;
 		route_output = true;
 		if (use_json) {
 			if (!is_first)
@@ -10595,7 +10604,7 @@ static int bgp_show_route(struct vty *vty, struct bgp *bgp, const char *ip_str,
 {
 	if (!bgp) {
 		bgp = bgp_get_default();
-		if (!bgp) {
+		if (!bgp || CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
 			if (!use_json)
 				vty_out(vty, "No BGP process is configured\n");
 			else
@@ -12050,7 +12059,7 @@ DEFUN (show_ip_bgp_vpn_all_route_prefix,
 	int idx = 0;
 	char *network = NULL;
 	struct bgp *bgp = bgp_get_default();
-	if (!bgp) {
+	if (!bgp || CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
 		vty_out(vty, "Can't find default instance\n");
 		return CMD_WARNING;
 	}
@@ -13198,7 +13207,8 @@ static int bgp_clear_damp_route(struct vty *vty, const char *view_name,
 		}
 	} else {
 		bgp = bgp_get_default();
-		if (bgp == NULL) {
+		if (bgp == NULL
+		    || CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
 			vty_out(vty, "%% No BGP process is configured\n");
 			return CMD_WARNING;
 		}

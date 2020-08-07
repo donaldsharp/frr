@@ -1089,7 +1089,7 @@ DEFUN_HIDDEN (bgp_local_mac,
 	seq = strtoul(argv[7]->arg, NULL, 10);
 
 	bgp = bgp_get_default();
-	if (!bgp) {
+	if (!bgp || CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
 		vty_out(vty, "Default BGP instance is not there\n");
 		return CMD_WARNING;
 	}
@@ -1129,7 +1129,7 @@ DEFUN_HIDDEN (no_bgp_local_mac,
 	memset(&ip, 0, sizeof(ip));
 
 	bgp = bgp_get_default();
-	if (!bgp) {
+	if (!bgp || CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
 		vty_out(vty, "Default BGP instance is not there\n");
 		return CMD_WARNING;
 	}
@@ -1290,7 +1290,7 @@ DEFUN (no_router_bgp,
 	} else {
 		as = strtoul(argv[idx_asn]->arg, NULL, 10);
 
-		if (argc > 4)
+		if (argc > 4 && strncmp(argv[4]->arg, "vrf", 3) == 0)
 			name = argv[idx_vrf]->arg;
 
 		/* Lookup bgp structure. */
@@ -1322,6 +1322,14 @@ DEFUN (no_router_bgp,
 		}
 	}
 
+	/* Set flag indicating default bgp instance as hidden */
+	if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
+	    && (vpn_leak_to_vpn_active(bgp, AFI_IP, NULL)
+		|| vpn_leak_to_vpn_active(bgp, AFI_IP6, NULL))) {
+		zlog_info("Marking the instance as hidden");
+		SET_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN);
+	}
+
 	if (bgp_vpn_leak_unimport(bgp, vty))
 		return CMD_WARNING_CONFIG_FAILED;
 
@@ -1329,7 +1337,6 @@ DEFUN (no_router_bgp,
 
 	return CMD_SUCCESS;
 }
-
 
 /* BGP router-id.  */
 
@@ -7866,6 +7873,12 @@ DEFPY(bgp_imexport_vrf, bgp_imexport_vrf_cmd,
 			return CMD_WARNING;
 		}
 	}
+	if ((strcmp(import_name, VRF_DEFAULT_NAME) == 0)
+	    && CHECK_FLAG(bgp_default->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
+		vty_out(vty,
+			"VRF default is not configured as a bgp instance\n");
+		return CMD_WARNING;
+	}
 
 	vrf_bgp = bgp_lookup_by_name(import_name);
 	if (!vrf_bgp) {
@@ -8591,7 +8604,7 @@ DEFUN(show_bgp_martian_nexthop_db, show_bgp_martian_nexthop_db_cmd,
 	else
 		bgp = bgp_get_default();
 
-	if (!bgp) {
+	if (!bgp || CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
 		vty_out(vty, "%% No BGP process is configured\n");
 		return CMD_WARNING;
 	}
@@ -8911,6 +8924,11 @@ static int bgp_show_summary(struct vty *vty, struct bgp *bgp, int afi, int safi,
 	json_object *json_peers = NULL;
 	struct peer_af *paf;
 	struct bgp_filter *filter;
+
+	if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
+	    && CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
+		return CMD_SUCCESS;
+	}
 
 	/* labeled-unicast routes are installed in the unicast table so in order
 	 * to
@@ -9527,6 +9545,10 @@ static void bgp_show_all_instances_summary_vty(struct vty *vty, afi_t afi,
 		vty_out(vty, "{\n");
 
 	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
+		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
+		    && CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
+			continue;
+		}
 		nbr_output = true;
 		if (use_json) {
 			if (!is_first)
@@ -12644,6 +12666,10 @@ static void bgp_show_all_instances_neighbors_vty(struct vty *vty,
 		vty_out(vty, "{\n");
 
 	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
+		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
+		    && CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
+			continue;
+		}
 		nbr_output = true;
 		if (use_json) {
 			if (!(json = json_object_new_object())) {
@@ -13301,6 +13327,10 @@ static void bgp_show_all_instances_updgrps_vty(struct vty *vty, afi_t afi,
 	struct bgp *bgp;
 
 	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
+		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
+		    && CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
+			continue;
+		}
 		vty_out(vty, "\nInstance %s:\n",
 			(bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)
 				? VRF_DEFAULT_NAME
@@ -13415,7 +13445,7 @@ DEFUN (show_bgp_updgrps_stats,
 	struct bgp *bgp;
 
 	bgp = bgp_get_default();
-	if (bgp)
+	if (bgp && !CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN))
 		update_group_show_stats(bgp, vty);
 
 	return CMD_SUCCESS;

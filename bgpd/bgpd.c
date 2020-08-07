@@ -3181,7 +3181,9 @@ int bgp_get(struct bgp **bgp_val, as_t *as, const char *name,
 	    enum bgp_instance_type inst_type)
 {
 	struct bgp *bgp;
+	struct peer *peer = NULL;
 	struct vrf *vrf = NULL;
+	struct listnode *node, *nnode;
 
 	/* Multiple instance check. */
 	if (name)
@@ -3191,7 +3193,16 @@ int bgp_get(struct bgp **bgp_val, as_t *as, const char *name,
 
 	/* Already exists. */
 	if (bgp) {
-		if (bgp->as != *as) {
+		/* Handle AS number change */
+		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
+		    && CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)
+		    && bgp->as != *as) {
+			bgp->as = *as;
+			/* Set all peer's local as number with this value. */
+			for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
+				peer->local_as = *as;
+			UNSET_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN);
+		} else if (bgp->as != *as) {
 			*as = bgp->as;
 			return BGP_ERR_INSTANCE_MISMATCH;
 		}
@@ -3298,9 +3309,7 @@ int bgp_delete(struct bgp *bgp)
 	struct listnode *node, *next;
 	struct vrf *vrf;
 	afi_t afi;
-	safi_t safi;
 	int i;
-	struct graceful_restart_info *gr_info;
 
 	assert(bgp);
 
@@ -3313,18 +3322,6 @@ int bgp_delete(struct bgp *bgp)
 
 	/* Set flag indicating bgp instance delete in progress */
 	SET_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS);
-
-	/* Delete the graceful restart info */
-	FOREACH_AFI_SAFI (afi, safi) {
-		gr_info = &bgp->gr_info[afi][safi];
-		if (!gr_info)
-			continue;
-
-		BGP_TIMER_OFF(gr_info->t_select_deferral);
-		BGP_TIMER_OFF(gr_info->t_route_select);
-		if (gr_info->route_list)
-			list_delete(&gr_info->route_list);
-	}
 
 	if (BGP_DEBUG(zebra, ZEBRA)) {
 		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)
@@ -3374,7 +3371,7 @@ int bgp_delete(struct bgp *bgp)
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, next, peer))
 		peer_delete(peer);
 
-	if (bgp->peer_self) {
+	if (bgp->peer_self && !CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
 		peer_delete(bgp->peer_self);
 		bgp->peer_self = NULL;
 	}
@@ -3384,7 +3381,8 @@ int bgp_delete(struct bgp *bgp)
 /* TODO - Other memory may need to be freed - e.g., NHT */
 
 #ifdef ENABLE_BGP_VNC
-	rfapi_delete(bgp);
+	if (!CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN))
+		rfapi_delete(bgp);
 #endif
 	bgp_cleanup_routes(bgp);
 
@@ -3409,14 +3407,15 @@ int bgp_delete(struct bgp *bgp)
 	/* Remove visibility via the master list - there may however still be
 	 * routes to be processed still referencing the struct bgp.
 	 */
-	listnode_delete(bm->bgp, bgp);
+	if (!CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN))
+		listnode_delete(bm->bgp, bgp);
 
 	/* Free interfaces in this instance. */
 	bgp_if_finish(bgp);
 
 	vrf = bgp_vrf_lookup_by_instance_type(bgp);
 	bgp_handle_socket(bgp, vrf, VRF_UNKNOWN, false);
-	if (vrf)
+	if (vrf && !CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN))
 		bgp_vrf_unlink(bgp, vrf);
 
 	/* Update EVPN VRF pointer */

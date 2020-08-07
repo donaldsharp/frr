@@ -658,7 +658,7 @@ int bgp_show_dampening_parameters(struct vty *vty, afi_t afi, safi_t safi)
 	struct bgp *bgp;
 	bgp = bgp_get_default();
 
-	if (bgp == NULL) {
+	if (bgp == NULL || CHECK_FLAG(bgp->flags, BGP_FLAG_DEFAULT_HIDDEN)) {
 		vty_out(vty, "No BGP process is configured\n");
 		return CMD_WARNING;
 	}
