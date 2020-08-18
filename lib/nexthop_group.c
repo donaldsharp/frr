@@ -954,10 +954,10 @@ static struct cmd_node nexthop_group_node = {
 	1
 };
 
-void nexthop_group_write_nexthop(struct vty *vty, struct nexthop *nh)
+void nexthop_group_write_nexthop_simple(struct vty *vty,
+					const struct nexthop *nh)
 {
 	char buf[100];
-	struct vrf *vrf;
 
 	vty_out(vty, "nexthop ");
 
@@ -984,6 +984,13 @@ void nexthop_group_write_nexthop(struct vty *vty, struct nexthop *nh)
 	case NEXTHOP_TYPE_BLACKHOLE:
 		break;
 	}
+}
+
+void nexthop_group_write_nexthop(struct vty *vty, const struct nexthop *nh)
+{
+	struct vrf *vrf;
+
+	nexthop_group_write_nexthop_simple(vty, nh);
 
 	if (nh->vrf_id != VRF_DEFAULT) {
 		vrf = vrf_lookup_by_id(nh->vrf_id);
