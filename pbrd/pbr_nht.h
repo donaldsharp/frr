@@ -27,6 +27,8 @@
 
 #define PBR_NHC_NAMELEN PBR_MAP_NAMELEN + 10
 
+extern struct hash *pbr_nhg_hash;
+
 struct pbr_nexthop_group_cache {
 	char name[PBR_NHC_NAMELEN];
 
@@ -44,6 +46,8 @@ struct pbr_nexthop_group_cache {
 
 struct pbr_nexthop_cache {
 	struct pbr_nexthop_group_cache *parent;
+
+	char vrf_name[VRF_NAMSIZ + 1];
 
 	struct nexthop *nexthop;
 
@@ -124,4 +128,6 @@ extern void pbr_nht_nexthop_update(struct zapi_route *nhr);
 extern void pbr_nht_nexthop_interface_update(struct interface *ifp);
 
 extern void pbr_nht_init(void);
+
+extern void pbr_nht_vrf_update(struct pbr_vrf *pbr_vrf);
 #endif
