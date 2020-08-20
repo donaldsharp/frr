@@ -76,6 +76,7 @@
 #include "zebra/zebra_l2.h"
 #include "zebra/netconf_netlink.h"
 #include "zebra/zebra_trace.h"
+#include "zebra/zebra_evpn_arp_nd.h"
 
 extern struct zebra_privs_t zserv_privs;
 uint8_t frr_protodown_r_bit = FRR_PROTODOWN_REASON_DEFAULT_BIT;
@@ -2165,10 +2166,14 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 		if (IS_ZEBRA_IF_BOND_SLAVE(ifp))
 			zebra_l2if_update_bond_slave(ifp, bond_ifindex, false);
 		/* Special handling for bridge or VxLAN interfaces. */
-		if (IS_ZEBRA_IF_BRIDGE(ifp))
+		if (IS_ZEBRA_IF_BRIDGE(ifp)) {
 			zebra_l2_bridge_del(ifp);
-		else if (IS_ZEBRA_IF_VXLAN(ifp))
-			zebra_l2_vxlanif_del(ifp);
+		} else {
+			if (IS_ZEBRA_IF_VXLAN(ifp))
+				zebra_l2_vxlanif_del(ifp);
+			else
+				zebra_evpn_arp_nd_if_update(ifp->info, false);
+		}
 
 		if_delete_update(&ifp);
 
