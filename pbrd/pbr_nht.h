@@ -50,7 +50,7 @@ struct pbr_nexthop_cache {
 	char vrf_name[VRF_NAMSIZ + 1];
 	char intf_name[INTERFACE_NAMSIZ + 1];
 
-	struct nexthop *nexthop;
+	struct nexthop nexthop;
 
 	bool looked_at;
 	bool valid;
