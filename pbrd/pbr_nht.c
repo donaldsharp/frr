@@ -337,6 +337,8 @@ pbr_nht_find_nhg_from_table_update(struct pbr_nexthop_group_cache *pnhgc,
 		       __func__, (installed ? "install" : "remove"), table_id,
 		       pnhgc->name);
 
+		if (installed)
+			pnhgc->attempts_to_reinstall = 0;
 		pnhgc->installed = installed;
 		pnhgc->valid = installed;
 		pbr_map_schedule_policy_from_nhg(pnhgc->name, pnhgc->installed);
@@ -357,6 +359,43 @@ void pbr_nht_route_installed_for_table(uint32_t table_id)
 {
 	hash_iterate(pbr_nhg_hash, pbr_nht_find_nhg_from_table_install,
 		     &table_id);
+}
+
+static int pbr_nht_rerun_nh_install(struct thread *t)
+{
+	struct pbr_nexthop_group_cache *pnhgc = THREAD_ARG(t);
+	struct nexthop_group_cmd *nhgc;
+
+	nhgc = nhgc_find(pnhgc->name);
+	if (!nhgc)
+		return 0;
+
+	pbr_nht_install_nexthop_group(pnhgc, nhgc->nhg);
+
+	return 0;
+}
+
+static void pbr_nht_find_nhg_from_table_fail(struct hash_bucket *b, void *data)
+{
+	struct pbr_nexthop_group_cache *pnhgc = b->data;
+	uint32_t table_id = *(uint32_t *)data;
+
+	if (pnhgc->table_id != table_id)
+		return;
+
+	if (!pnhgc->valid)
+		return;
+
+	if (pnhgc->attempts_to_reinstall++ == 5)
+		return;
+
+	thread_add_timer_msec(master, pbr_nht_rerun_nh_install, pnhgc, 100,
+			      &pnhgc->reinstall);
+}
+
+void pbr_nht_route_failed_for_table(uint32_t table_id)
+{
+	hash_iterate(pbr_nhg_hash, pbr_nht_find_nhg_from_table_fail, &table_id);
 }
 
 static void pbr_nht_find_nhg_from_table_remove(struct hash_bucket *b,

@@ -173,6 +173,7 @@ static int route_notify_owner(ZAPI_CALLBACK_ARGS)
 		DEBUGD(&pbr_dbg_zebra,
 		       "%s: [%s] Route install failure for table: %u", __func__,
 		       buf, table_id);
+		pbr_nht_route_failed_for_table(table_id);
 		break;
 	case ZAPI_ROUTE_BETTER_ADMIN_WON:
 		DEBUGD(&pbr_dbg_zebra,

@@ -41,6 +41,9 @@ struct pbr_nexthop_group_cache {
 	bool valid;
 
 	bool installed;
+
+	uint32_t attempts_to_reinstall;
+	struct thread *reinstall;
 };
 
 struct pbr_nexthop_cache {
@@ -99,6 +102,7 @@ extern void pbr_nht_delete_individual_nexthop(struct pbr_map_sequence *pbrms);
  * install/delete them as well.
  */
 extern void pbr_nht_route_installed_for_table(uint32_t table_id);
+extern void pbr_nht_route_failed_for_table(uint32_t table_id);
 extern void pbr_nht_route_removed_for_table(uint32_t table_id);
 
 /*
