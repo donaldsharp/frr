@@ -4164,6 +4164,16 @@ DEFPY (bgp_evpn_use_es_l3nhg,
 	return CMD_SUCCESS;
 }
 
+DEFPY (bgp_evpn_use_es_nh_as_neigh,
+       bgp_evpn_use_es_nh_as_neigh_cmd,
+       "[no$no] use-es-nh-as-neigh",
+       NO_STR
+       "install neighs for nexthops that use ES as dest \n")
+{
+	bgp_mh_info->bgp_evpn_nh_setup = no? false :true;
+	return CMD_SUCCESS;
+}
+
 DEFPY (bgp_evpn_ead_evi_rx_disable,
        bgp_evpn_ead_evi_rx_disable_cmd,
        "[no$no] disable-ead-evi-rx",
@@ -6461,6 +6471,14 @@ void bgp_config_write_evpn_info(struct vty *vty, struct bgp *bgp, afi_t afi,
 			vty_out(vty, "  no use-es-l3nhg\n");
 	}
 
+	if (bgp_mh_info->bgp_evpn_nh_setup !=
+			BGP_EVPN_MH_USE_ES_NH_AS_NEIGH_DEF) {
+		if (bgp_mh_info->bgp_evpn_nh_setup)
+			vty_out(vty, "  use-es-nh-as-neigh\n");
+		else
+			vty_out(vty, "  no use-es-nh-as-neigh\n");
+	}
+
 	if (bgp_mh_info->ead_evi_rx != BGP_EVPN_MH_EAD_EVI_RX_DEF) {
 		if (bgp_mh_info->ead_evi_rx)
 			vty_out(vty, "  no disable-ead-evi-rx\n");
@@ -6656,6 +6674,7 @@ void bgp_ethernetvpn_init(void)
 	install_element(BGP_EVPN_NODE, &bgp_evpn_flood_control_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_pip_ip_mac_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_use_es_l3nhg_cmd);
+	install_element(BGP_EVPN_NODE, &bgp_evpn_use_es_nh_as_neigh_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_evi_rx_disable_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_evi_tx_disable_cmd);
 	install_element(BGP_EVPN_NODE,
