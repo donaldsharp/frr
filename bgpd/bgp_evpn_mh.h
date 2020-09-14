@@ -34,6 +34,7 @@
 #define BGP_EVPN_CONS_CHECK_INTERVAL 60
 
 #define BGP_EVPN_MH_USE_ES_L3NHG_DEF true
+#define BGP_EVPN_MH_USE_ES_NH_AS_NEIGH_DEF true
 
 /* XXX - tune this */
 #define BGP_EVPN_MAX_EVI_PER_ES_FRAG 128
