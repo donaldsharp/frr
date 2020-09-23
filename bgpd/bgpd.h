@@ -160,6 +160,7 @@ struct bgp_master {
 	uint32_t flags;
 #define BM_FLAG_GRACEFUL_SHUTDOWN        (1 << 0)
 #define BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA (1 << 1)
+#define BM_FLAG_MAINTENANCE_MODE         (1 << 2)
 #define BM_FLAG_IPV6_NO_AUTO_RA		 (1 << 8)
 
 	bool terminating;	/* global flag that sigint terminate seen */
@@ -2710,9 +2711,12 @@ static inline void bgp_vrf_unlink(struct bgp *bgp, struct vrf *vrf)
 
 static inline bool bgp_in_graceful_shutdown(struct bgp *bgp)
 {
-	/* True if either set for this instance or globally */
+	/* True if either set for this instance or globally or
+	 * we are in maintenance mode
+	 */
 	return (!!CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN) ||
-	        !!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN));
+	        !!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN) ||
+	        !!CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE));
 }
 
 /* For benefit of rfapi */
