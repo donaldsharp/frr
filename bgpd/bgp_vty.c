@@ -9975,6 +9975,56 @@ DEFUN (clear_bgp_instance_ipv6_safi_prefix,
 		AFI_IP6, safi, NULL);
 }
 
+DEFUN (set_bgp_maintenance_mode,
+       set_bgp_maintenance_mode_cmd,
+       "set bgp maintenance-mode",
+       "Set a parameter\n"
+       BGP_STR
+       "Maintenance Mode (isolation)\n")
+{
+	struct listnode *node, *nnode;
+	struct bgp *bgp;
+
+	if (CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE))
+		return CMD_SUCCESS;
+
+	/* Set flag globally */
+	SET_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE);
+
+	/* When we enter maintenance mode, the BGP action is to
+	 * initiate graceful shutdown.
+	 */
+	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
+		bgp_initiate_graceful_shut_unshut(vty, bgp);
+
+	return CMD_SUCCESS;
+}
+
+DEFUN (clear_bgp_maintenance_mode,
+       clear_bgp_maintenance_mode_cmd,
+       "clear bgp maintenance-mode",
+       CLEAR_STR
+       BGP_STR
+       "Maintenance Mode (isolation)\n")
+{
+	struct listnode *node, *nnode;
+	struct bgp *bgp;
+
+	if (!CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE))
+		return CMD_SUCCESS;
+
+	/* Set flag globally */
+	UNSET_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE);
+
+	/* When we exit maintenance mode, the BGP action is to
+	 * stop graceful shutdown.
+	 */
+	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
+		bgp_initiate_graceful_shut_unshut(vty, bgp);
+
+	return CMD_SUCCESS;
+}
+
 DEFUN (show_bgp_views,
        show_bgp_views_cmd,
        "show [ip] bgp views",
@@ -19521,6 +19571,9 @@ void bgp_vty_init(void)
 	install_element(ENABLE_NODE, &clear_ip_bgp_prefix_cmd);
 	install_element(ENABLE_NODE, &clear_bgp_ipv6_safi_prefix_cmd);
 	install_element(ENABLE_NODE, &clear_bgp_instance_ipv6_safi_prefix_cmd);
+
+	install_element(ENABLE_NODE, &set_bgp_maintenance_mode_cmd);
+	install_element(ENABLE_NODE, &clear_bgp_maintenance_mode_cmd);
 
 	/* "show [ip] bgp summary" commands. */
 	install_element(VIEW_NODE, &show_bgp_instance_all_ipv6_updgrps_cmd);
