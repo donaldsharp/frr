@@ -1818,8 +1818,12 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 					"%s(%u):%pFX Stale dplane result for re %p",
 					VRF_LOGNAME(vrf),
 					dplane_ctx_get_vrf(ctx), dest_pfx, re);
-		} else
-			UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
+		} else {
+			if (!zrouter.asic_offloaded ||
+			    (CHECK_FLAG(re->flags, ZEBRA_FLAG_OFFLOADED) ||
+			     CHECK_FLAG(re->flags, ZEBRA_FLAG_OFFLOAD_FAILED)))
+				UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
+		}
 	}
 
 	if (old_re) {
@@ -1896,8 +1900,14 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 				zvrf->installs++;
 
 			/* Notify route owner */
-			zsend_route_notify_owner_ctx(ctx, ZAPI_ROUTE_INSTALLED);
-
+			if (!zrouter.asic_offloaded)
+				zsend_route_notify_owner_ctx(ctx, ZAPI_ROUTE_INSTALLED);
+			else {
+				if (CHECK_FLAG(re->flags, ZEBRA_FLAG_OFFLOADED))
+					zsend_route_notify_owner_ctx(ctx, ZAPI_ROUTE_INSTALLED);
+				if (CHECK_FLAG(re->flags, ZEBRA_FLAG_OFFLOAD_FAILED))
+					zsend_route_notify_owner_ctx(ctx, ZAPI_ROUTE_FAIL_INSTALL);
+			}
 		} else {
 			if (re) {
 				SET_FLAG(re->status, ROUTE_ENTRY_FAILED);
@@ -2063,7 +2073,8 @@ static void rib_process_dplane_notify(struct zebra_dplane_ctx *ctx)
 	}
 
 	/* Ensure we clear the QUEUED flag */
-	UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
+	if (!zrouter.asic_offloaded)
+		UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
 
 	/* Is this a notification that ... matters? We mostly care about
 	 * the route that is currently selected for installation; we may also
