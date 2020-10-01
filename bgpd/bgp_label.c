@@ -94,15 +94,20 @@ int bgp_parse_fec_update(void)
 	return 1;
 }
 
-mpls_label_t bgp_adv_label(struct bgp_node *rn, struct bgp_path_info *pi,
-			   struct peer *to, afi_t afi, safi_t safi)
+bool bgp_adv_label(struct bgp_node *rn, struct bgp_path_info *pi,
+		   struct peer *to, afi_t afi, safi_t safi,
+		   struct bgp_mpls_label_stack *ls)
 {
 	struct peer *from;
 	mpls_label_t remote_label;
 	int reflect;
 
 	if (!rn || !pi || !to)
-		return MPLS_INVALID_LABEL;
+		return false;
+
+	assert(ls);
+
+	ls->num_labels = 1;
 
 	remote_label = pi->extra ? pi->extra->ls.label[0] : MPLS_INVALID_LABEL;
 	from = pi->peer;
@@ -111,13 +116,18 @@ mpls_label_t bgp_adv_label(struct bgp_node *rn, struct bgp_path_info *pi,
 
 	if (reflect
 	    && !CHECK_FLAG(to->af_flags[afi][safi],
-			   PEER_FLAG_FORCE_NEXTHOP_SELF))
-		return remote_label;
+			   PEER_FLAG_FORCE_NEXTHOP_SELF)) {
+		ls->label[0] = remote_label;
+		return true;
+	}
 
-	if (CHECK_FLAG(to->af_flags[afi][safi], PEER_FLAG_NEXTHOP_UNCHANGED))
-		return remote_label;
+	if (CHECK_FLAG(to->af_flags[afi][safi], PEER_FLAG_NEXTHOP_UNCHANGED)) {
+		ls->label[0] = remote_label;
+		return true;
+	}
 
-	return rn->local_label;
+	ls->label[0] = rn->local_label;
+	return true;
 }
 
 /**

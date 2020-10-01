@@ -1563,6 +1563,9 @@ bool subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 	int samepeer_safe = 0; /* for synthetic mplsvpns routes */
 	bool nh_reset = false;
 	uint64_t cum_bw;
+	struct bgp_mpls_label_stack ls;
+
+	memset(&ls, 0, sizeof(ls));
 
 	if (DISABLE_BGP_ANNOUNCE)
 		return false;

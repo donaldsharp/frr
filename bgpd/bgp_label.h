@@ -35,8 +35,9 @@ extern int bgp_reg_for_label_callback(mpls_label_t new_label, void *labelid,
 extern void bgp_reg_dereg_for_label(struct bgp_node *rn,
 				    struct bgp_path_info *pi, bool reg);
 extern int bgp_parse_fec_update(void);
-extern mpls_label_t bgp_adv_label(struct bgp_node *rn, struct bgp_path_info *pi,
-				  struct peer *to, afi_t afi, safi_t safi);
+extern bool bgp_adv_label(struct bgp_node *rn, struct bgp_path_info *pi,
+			  struct peer *to, afi_t afi, safi_t safi,
+			  struct bgp_mpls_label_stack *ls);
 
 extern int bgp_nlri_parse_label(struct peer *peer, struct attr *attr,
 				struct bgp_nlri *packet);
