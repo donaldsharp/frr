@@ -99,7 +99,7 @@ def setup_module(module):
 
     # This is a sample of configuration loading.
     router_list = tgen.routers()
-    for rname, router in router_list.iteritems():
+    for rname, router in router_list.items():
         router.load_config(
             TopoRouter.RD_ZEBRA, os.path.join(CWD, "{}/zebra.conf".format(rname))
         )
@@ -252,7 +252,7 @@ def ip_eigrp_topo(node):
         if code not in ["P", "A", "U", "Q", "R", "r", "s"]:
             continue
 
-        if not result.has_key(code):
+        if code not in result:
             result[code] = {}
 
         # Split network from the rest

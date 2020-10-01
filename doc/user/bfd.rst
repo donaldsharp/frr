@@ -143,7 +143,7 @@ BFD peers and profiles share the same BFD session configuration commands.
 .. clicmd:: transmit-interval (10-60000)
 
    The minimum transmission interval (less jitter) that this system
-   wants to use to send BFD control packets.
+   wants to use to send BFD control packets. Defaults to 300ms.
 
 .. index:: echo-interval (10-60000)
 .. clicmd:: echo-interval (10-60000)
@@ -159,7 +159,7 @@ BFD peers and profiles share the same BFD session configuration commands.
 
    It is recommended that the transmission interval of control packets
    to be increased after enabling echo-mode to reduce bandwidth usage.
-   For example: `transmission-interval 2000`.
+   For example: `transmit-interval 2000`.
 
    Echo mode is not supported on multi-hop setups (see :rfc:`5883`
    section 3).
@@ -169,6 +169,33 @@ BFD peers and profiles share the same BFD session configuration commands.
 
    Enables or disables the peer. When the peer is disabled an
    'administrative down' message is sent to the remote peer.
+
+
+.. index:: [no] passive-mode
+.. clicmd:: [no] passive-mode
+
+   Mark session as passive: a passive session will not attempt to start
+   the connection and will wait for control packets from peer before it
+   begins replying.
+
+   This feature is useful when you have a router that acts as the
+   central node of a star network and you want to avoid sending BFD
+   control packets you don't need to.
+
+   The default is active-mode (or ``no passive-mode``).
+
+.. index:: [no] minimum-ttl (1-254)
+.. clicmd:: [no] minimum-ttl (1-254)
+
+   For multi hop sessions only: configure the minimum expected TTL for
+   an incoming BFD control packet.
+
+   This feature serves the purpose of thightening the packet validation
+   requirements to avoid receiving BFD control packets from other
+   sessions.
+
+   The default value is 254 (which means we only expect one hop between
+   this system and the peer).
 
 
 BFD Peer Specific Commands
@@ -231,6 +258,53 @@ The following commands are available inside the BGP configuration node.
 
    Disallow to write CBIT independence in BFD outgoing packets. Also disallow
    to ignore BFD down notification. This is the default behaviour.
+
+
+.. index:: neighbor <A.B.C.D|X:X::X:X|WORD> bfd profile BFDPROF
+.. clicmd:: neighbor <A.B.C.D|X:X::X:X|WORD> bfd profile BFDPROF
+
+   Same as command ``neighbor <A.B.C.D|X:X::X:X|WORD> bfd``, but applies the
+   BFD profile to the sessions it creates or that already exist.
+
+
+.. index:: no neighbor <A.B.C.D|X:X::X:X|WORD> bfd profile BFDPROF
+.. clicmd:: no neighbor <A.B.C.D|X:X::X:X|WORD> bfd profile BFDPROF
+
+   Removes the BFD profile configuration from peer session(s).
+
+
+.. _bfd-isis-peer-config:
+
+IS-IS BFD Configuration
+-----------------------
+
+The following commands are available inside the interface configuration node.
+
+.. index:: isis bfd
+.. clicmd:: isis bfd
+
+   Listen for BFD events on peers created on the interface. Every time
+   a new neighbor is found a BFD peer is created to monitor the link
+   status for fast convergence.
+
+.. index:: no isis bfd
+.. clicmd:: no isis bfd
+
+   Removes any notification registration for this interface peers.
+
+   Note that there will be just one BFD session per interface. In case both
+   IPv4 and IPv6 support are configured then just a IPv6 based session is
+   created.
+
+.. index:: isis bfd profile BFDPROF
+.. clicmd:: isis bfd profile BFDPROF
+
+   Use a BFD profile BFDPROF as provided in the BFD configuration.
+
+.. index:: no isis bfd profile BFDPROF
+.. clicmd:: no isis bfd profile BFDPROF
+
+   Removes any BFD profile if present.
 
 .. _bfd-ospf-peer-config:
 
@@ -459,7 +533,7 @@ You can inspect the current BFD peer status in brief with the following commands
 
 ::
 
-   frr# show bfd peers brief 
+   frr# show bfd peers brief
    Session count: 1
    SessionId  LocalAddress         PeerAddress      Status
    =========  ============         ===========      ======

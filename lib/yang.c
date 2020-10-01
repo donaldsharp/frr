@@ -53,22 +53,30 @@ static const char *yang_module_imp_clb(const char *mod_name,
 {
 	struct yang_module_embed *e;
 
-	if (submod_name || submod_rev)
-		return NULL;
-
 	for (e = embeds; e; e = e->next) {
-		if (strcmp(e->mod_name, mod_name))
-			continue;
-		if (mod_rev && strcmp(e->mod_rev, mod_rev))
-			continue;
+		if (e->sub_mod_name && submod_name) {
+			if (strcmp(e->sub_mod_name, submod_name))
+				continue;
+
+			if (submod_rev && strcmp(e->sub_mod_rev, submod_rev))
+				continue;
+		} else {
+			if (strcmp(e->mod_name, mod_name))
+				continue;
+
+			if (mod_rev && strcmp(e->mod_rev, mod_rev))
+				continue;
+		}
 
 		*format = e->format;
 		return e->data;
 	}
 
-	flog_warn(EC_LIB_YANG_MODULE_LOAD,
-		  "YANG model \"%s@%s\" not embedded, trying external file",
-		  mod_name, mod_rev ? mod_rev : "*");
+	flog_warn(
+		EC_LIB_YANG_MODULE_LOAD,
+		"YANG model \"%s@%s\" \"%s@%s\"not embedded, trying external file",
+		mod_name, mod_rev ? mod_rev : "*",
+		submod_name ? submod_name : "*", submod_rev ? submod_rev : "*");
 	return NULL;
 }
 
@@ -76,6 +84,9 @@ static const char *yang_module_imp_clb(const char *mod_name,
 static const char *const frr_native_modules[] = {
 	"frr-interface",
 	"frr-vrf",
+	"frr-routing",
+	"frr-route-map",
+	"frr-nexthop",
 	"frr-ripd",
 	"frr-ripngd",
 	"frr-isisd",
@@ -136,10 +147,14 @@ struct yang_module *yang_module_find(const char *module_name)
 }
 
 int yang_snodes_iterate_subtree(const struct lys_node *snode,
+				const struct lys_module *module,
 				yang_iterate_cb cb, uint16_t flags, void *arg)
 {
 	struct lys_node *child;
 	int ret = YANG_ITER_CONTINUE;
+
+	if (module && snode->module != module)
+		goto next;
 
 	if (CHECK_FLAG(flags, YANG_ITER_FILTER_IMPLICIT)) {
 		switch (snode->nodetype) {
@@ -203,11 +218,8 @@ next:
 		return YANG_ITER_CONTINUE;
 
 	LY_TREE_FOR (snode->child, child) {
-		if (!CHECK_FLAG(flags, YANG_ITER_ALLOW_AUGMENTATIONS)
-		    && child->parent != snode)
-			continue;
-
-		ret = yang_snodes_iterate_subtree(child, cb, flags, arg);
+		ret = yang_snodes_iterate_subtree(child, module, cb, flags,
+						  arg);
 		if (ret == YANG_ITER_STOP)
 			return ret;
 	}
@@ -222,15 +234,16 @@ int yang_snodes_iterate_module(const struct lys_module *module,
 	int ret = YANG_ITER_CONTINUE;
 
 	LY_TREE_FOR (module->data, snode) {
-		ret = yang_snodes_iterate_subtree(snode, cb, flags, arg);
+		ret = yang_snodes_iterate_subtree(snode, module, cb, flags,
+						  arg);
 		if (ret == YANG_ITER_STOP)
 			return ret;
 	}
 
 	for (uint8_t i = 0; i < module->augment_size; i++) {
 		ret = yang_snodes_iterate_subtree(
-			(const struct lys_node *)&module->augment[i], cb, flags,
-			arg);
+			(const struct lys_node *)&module->augment[i], module,
+			cb, flags, arg);
 		if (ret == YANG_ITER_STOP)
 			return ret;
 	}
@@ -244,9 +257,14 @@ int yang_snodes_iterate_all(yang_iterate_cb cb, uint16_t flags, void *arg)
 	int ret = YANG_ITER_CONTINUE;
 
 	RB_FOREACH (module, yang_modules, &yang_modules) {
-		ret = yang_snodes_iterate_module(module->info, cb, flags, arg);
-		if (ret == YANG_ITER_STOP)
-			return ret;
+		struct lys_node *snode;
+
+		LY_TREE_FOR (module->info->data, snode) {
+			ret = yang_snodes_iterate_subtree(snode, NULL, cb,
+							  flags, arg);
+			if (ret == YANG_ITER_STOP)
+				return ret;
+		}
 	}
 
 	return ret;
@@ -448,6 +466,32 @@ bool yang_dnode_exists(const struct lyd_node *dnode, const char *xpath_fmt, ...)
 	return found;
 }
 
+void yang_dnode_iterate(yang_dnode_iter_cb cb, void *arg,
+			const struct lyd_node *dnode, const char *xpath_fmt,
+			...)
+{
+	va_list ap;
+	char xpath[XPATH_MAXLEN];
+	struct ly_set *set;
+
+	va_start(ap, xpath_fmt);
+	vsnprintf(xpath, sizeof(xpath), xpath_fmt, ap);
+	va_end(ap);
+
+	set = lyd_find_path(dnode, xpath);
+	assert(set);
+	for (unsigned int i = 0; i < set->number; i++) {
+		int ret;
+
+		dnode = set->set.d[i];
+		ret = (*cb)(dnode, arg);
+		if (ret == YANG_ITER_STOP)
+			return;
+	}
+
+	ly_set_free(set);
+}
+
 bool yang_dnode_is_default(const struct lyd_node *dnode, const char *xpath_fmt,
 			   ...)
 {
@@ -621,6 +665,34 @@ static void ly_log_cb(LY_LOG_LEVEL level, const char *msg, const char *path)
 		zlog(priority, "libyang: %s", msg);
 }
 
+const char *yang_print_errors(struct ly_ctx *ly_ctx, char *buf, size_t buf_len)
+{
+	struct ly_err_item *ei;
+	const char *path;
+
+	ei = ly_err_first(ly_ctx);
+	if (!ei)
+		return "";
+
+	strlcpy(buf, "YANG error(s):\n", buf_len);
+	for (; ei; ei = ei->next) {
+		strlcat(buf, " ", buf_len);
+		strlcat(buf, ei->msg, buf_len);
+		strlcat(buf, "\n", buf_len);
+	}
+
+	path = ly_errpath(ly_ctx);
+	if (path) {
+		strlcat(buf, " YANG path: ", buf_len);
+		strlcat(buf, path, buf_len);
+		strlcat(buf, "\n", buf_len);
+	}
+
+	ly_err_clean(ly_ctx, NULL);
+
+	return buf;
+}
+
 void yang_debugging_set(bool enable)
 {
 	if (enable) {
@@ -694,4 +766,148 @@ void yang_terminate(void)
 	}
 
 	ly_ctx_destroy(ly_native_ctx, NULL);
+}
+
+const struct lyd_node *yang_dnode_get_parent(const struct lyd_node *dnode,
+					     const char *name)
+{
+	const struct lyd_node *orig_dnode = dnode;
+
+	while (orig_dnode) {
+		switch (orig_dnode->schema->nodetype) {
+		case LYS_LIST:
+		case LYS_CONTAINER:
+			if (!strcmp(orig_dnode->schema->name, name))
+				return orig_dnode;
+			break;
+		default:
+			break;
+		}
+
+		orig_dnode = orig_dnode->parent;
+	}
+
+	return NULL;
+}
+
+/* API to check if the given node is last node in the list */
+static bool yang_is_last_list_dnode(const struct lyd_node *dnode)
+{
+	return (((dnode->next == NULL)
+	     || (dnode->next
+		 && (strcmp(dnode->next->schema->name, dnode->schema->name)
+		     != 0)))
+	    && dnode->prev
+	    && ((dnode->prev == dnode)
+		|| (strcmp(dnode->prev->schema->name, dnode->schema->name)
+		    != 0)));
+}
+
+/* API to check if the given node is last node in the data tree level */
+static bool yang_is_last_level_dnode(const struct lyd_node *dnode)
+{
+	const struct lyd_node *parent;
+	const struct lys_node_list *snode;
+	const struct lyd_node *key_leaf;
+	uint8_t keys_size;
+
+	switch (dnode->schema->nodetype) {
+	case LYS_LIST:
+		assert(dnode->parent);
+		parent = dnode->parent;
+		snode = (struct lys_node_list *)parent->schema;
+		key_leaf = dnode->prev;
+		for (keys_size = 1; keys_size < snode->keys_size; keys_size++)
+			key_leaf = key_leaf->prev;
+		if (key_leaf->prev == dnode)
+			return true;
+		break;
+	case LYS_CONTAINER:
+		return true;
+	default:
+		break;
+	}
+
+	return false;
+}
+
+
+const struct lyd_node *
+yang_get_subtree_with_no_sibling(const struct lyd_node *dnode)
+{
+	bool parent = true;
+	const struct lyd_node *node;
+	const struct lys_node_container *snode;
+
+	node = dnode;
+	if (node->schema->nodetype != LYS_LIST)
+		return node;
+
+	while (parent) {
+		switch (node->schema->nodetype) {
+		case LYS_CONTAINER:
+			snode = (struct lys_node_container *)node->schema;
+			if ((!snode->presence)
+			    && yang_is_last_level_dnode(node)) {
+				if (node->parent
+				    && (node->parent->schema->module
+					== dnode->schema->module))
+					node = node->parent;
+				else
+					parent = false;
+			} else
+				parent = false;
+			break;
+		case LYS_LIST:
+			if (yang_is_last_list_dnode(node)
+			    && yang_is_last_level_dnode(node)) {
+				if (node->parent
+				    && (node->parent->schema->module
+					== dnode->schema->module))
+					node = node->parent;
+				else
+					parent = false;
+			} else
+				parent = false;
+			break;
+		default:
+			parent = false;
+			break;
+		}
+	}
+	return node;
+}
+
+uint32_t yang_get_list_pos(const struct lyd_node *node)
+{
+	return lyd_list_pos(node);
+}
+
+uint32_t yang_get_list_elements_count(const struct lyd_node *node)
+{
+	unsigned int count;
+	struct lys_node *schema;
+
+	if (!node
+	    || ((node->schema->nodetype != LYS_LIST)
+		&& (node->schema->nodetype != LYS_LEAFLIST))) {
+		return 0;
+	}
+
+	schema = node->schema;
+	count = 0;
+	do {
+		if (node->schema == schema)
+			++count;
+		node = node->next;
+	} while (node);
+	return count;
+}
+
+
+const struct lyd_node *yang_dnode_get_child(const struct lyd_node *dnode)
+{
+	if (dnode)
+		return dnode->child;
+	return NULL;
 }

@@ -180,6 +180,7 @@ static struct quagga_signal_t ldp_signals[] =
 };
 
 static const struct frr_yang_module_info *const ldpd_yang_modules[] = {
+	&frr_filter_info,
 	&frr_vrf_info,
 };
 
@@ -494,7 +495,8 @@ start_child(enum ldpd_process p, char *argv0, int fd_async, int fd_sync)
 	int	 argc = 0, nullfd;
 	pid_t	 pid;
 
-	switch (pid = fork()) {
+	pid = fork();
+	switch (pid) {
 	case -1:
 		fatal("cannot fork");
 	case 0:
@@ -584,6 +586,13 @@ main_dispatch_ldpe(struct thread *thread)
 				fatalx("IMSG_ACL_CHECK imsg with wrong len");
 			ldp_acl_reply(iev, (struct acl_check *)imsg.data);
 			break;
+		case IMSG_LDP_SYNC_IF_STATE_UPDATE:
+			if (imsg.hdr.len != IMSG_HEADER_SIZE +
+			    sizeof(struct ldp_igp_sync_if_state))
+				fatalx("IMSG_LDP_SYNC_IF_STATE_UPDATE imsg with wrong len");
+
+			ldp_sync_zebra_send_state_update((struct ldp_igp_sync_if_state *)imsg.data);
+			break;
 		default:
 			log_debug("%s: error handling imsg %d", __func__,
 			    imsg.hdr.type);
@@ -660,23 +669,19 @@ main_dispatch_lde(struct thread *thread)
 			switch (imsg.hdr.type) {
 			case IMSG_KPW_ADD:
 				if (kmpw_add(imsg.data))
-					log_warnx("%s: error adding "
-					    "pseudowire", __func__);
+					log_warnx("%s: error adding pseudowire", __func__);
 				break;
 			case IMSG_KPW_DELETE:
 				if (kmpw_del(imsg.data))
-					log_warnx("%s: error deleting "
-					    "pseudowire", __func__);
+					log_warnx("%s: error deleting pseudowire", __func__);
 				break;
 			case IMSG_KPW_SET:
 				if (kmpw_set(imsg.data))
-					log_warnx("%s: error setting "
-					    "pseudowire", __func__);
+					log_warnx("%s: error setting pseudowire", __func__);
 				break;
 			case IMSG_KPW_UNSET:
 				if (kmpw_unset(imsg.data))
-					log_warnx("%s: error unsetting "
-					    "pseudowire", __func__);
+					log_warnx("%s: error unsetting pseudowire", __func__);
 				break;
 			}
 			break;
@@ -855,8 +860,7 @@ main_imsg_send_net_socket(int af, enum socket_type type)
 
 	fd = ldp_create_socket(af, type);
 	if (fd == -1) {
-		log_warnx("%s: failed to create %s socket for address-family "
-		    "%s", __func__, socket_name(type), af_name(af));
+		log_warnx("%s: failed to create %s socket for address-family %s", __func__, socket_name(type), af_name(af));
 		return;
 	}
 
@@ -1151,6 +1155,7 @@ ldp_config_reset_main(struct ldpd_conf *conf)
 	conf->lhello_interval = DEFAULT_HELLO_INTERVAL;
 	conf->thello_holdtime = TARGETED_DFLT_HOLDTIME;
 	conf->thello_interval = DEFAULT_HELLO_INTERVAL;
+	conf->wait_for_sync_interval = DFLT_WAIT_FOR_SYNC;
 	conf->trans_pref = DUAL_STACK_LDPOV6;
 	conf->flags = 0;
 }
@@ -1281,6 +1286,14 @@ merge_config(struct ldpd_conf *conf, struct ldpd_conf *xconf)
 static void
 merge_global(struct ldpd_conf *conf, struct ldpd_conf *xconf)
 {
+	/* Removing global LDP config requires resetting LDP IGP Sync FSM */
+	if ((conf->flags & F_LDPD_ENABLED) &&
+	    (!(xconf->flags & F_LDPD_ENABLED)))
+	{
+		if (ldpd_process == PROC_LDP_ENGINE)
+			ldp_sync_fsm_reset_all();
+	}
+
 	/* change of router-id requires resetting all neighborships */
 	if (conf->rtr_id.s_addr != xconf->rtr_id.s_addr) {
 		if (ldpd_process == PROC_LDP_ENGINE) {
@@ -1306,6 +1319,7 @@ merge_global(struct ldpd_conf *conf, struct ldpd_conf *xconf)
 	conf->lhello_interval = xconf->lhello_interval;
 	conf->thello_holdtime = xconf->thello_holdtime;
 	conf->thello_interval = xconf->thello_interval;
+	conf->wait_for_sync_interval = xconf->wait_for_sync_interval;
 
 	if (conf->trans_pref != xconf->trans_pref) {
 		if (ldpd_process == PROC_LDP_ENGINE)
@@ -1332,6 +1346,7 @@ merge_af(int af, struct ldpd_af_conf *af_conf, struct ldpd_af_conf *xa)
 	int		 reset_nbrs_ipv4 = 0;
 	int		 reset_nbrs = 0;
 	int		 update_sockets = 0;
+	int		 change_ldp_disabled = 0;
 
 	/* update timers */
 	if (af_conf->keepalive != xa->keepalive) {
@@ -1364,6 +1379,11 @@ merge_af(int af, struct ldpd_af_conf *af_conf, struct ldpd_af_conf *xa)
 	if ((af_conf->flags & F_LDPD_AF_ALLOCHOSTONLY)
 	    != (xa->flags & F_LDPD_AF_ALLOCHOSTONLY))
 		change_host_label = 1;
+
+	/* disabling LDP for address family */
+	if ((af_conf->flags & F_LDPD_AF_ENABLED) &&
+	    !(xa->flags & F_LDPD_AF_ENABLED))
+		change_ldp_disabled = 1;
 
 	af_conf->flags = xa->flags;
 
@@ -1412,6 +1432,9 @@ merge_af(int af, struct ldpd_af_conf *af_conf, struct ldpd_af_conf *xa)
 			lde_change_egress_label(af);
 		if (change_host_label)
 			lde_change_allocate_filter(af);
+		if (change_ldp_disabled)
+			lde_route_update_release_all(af);
+
 		break;
 	case PROC_LDP_ENGINE:
 		if (stop_init_backoff)
@@ -1437,13 +1460,22 @@ merge_ifaces(struct ldpd_conf *conf, struct ldpd_conf *xconf)
 	struct iface		*iface, *itmp, *xi;
 
 	RB_FOREACH_SAFE(iface, iface_head, &conf->iface_tree, itmp) {
-		/* find deleted interfaces */
+		/* find deleted interfaces, which occurs when LDP is removed
+		 * for all address families
+		 */
 		if (if_lookup_name(xconf, iface->name) == NULL) {
 			switch (ldpd_process) {
 			case PROC_LDP_ENGINE:
 				ldpe_if_exit(iface);
 				break;
 			case PROC_LDE_ENGINE:
+				if (iface->ipv4.enabled)
+					lde_route_update_release(iface,
+					    AF_INET);
+				if (iface->ipv6.enabled)
+					lde_route_update_release(iface,
+					    AF_INET6);
+				break;
 			case PROC_MAIN:
 				break;
 			}
@@ -1469,6 +1501,29 @@ merge_ifaces(struct ldpd_conf *conf, struct ldpd_conf *xconf)
 				break;
 			}
 			continue;
+		}
+
+		/* update labels when adding or removing ldp on an
+		 * interface
+		 */
+		if (ldpd_process == PROC_LDE_ENGINE) {
+			/* if we are removing lpd config for an address
+			 * family on an interface then advertise routes
+			 * learned over this interface as if they were
+			 * connected routes
+			 */
+			if (iface->ipv4.enabled && !xi->ipv4.enabled)
+				lde_route_update_release(iface, AF_INET);
+			if (iface->ipv6.enabled && !xi->ipv6.enabled)
+				lde_route_update_release(iface, AF_INET6);
+
+			/* if we are adding lpd config for an address
+			 * family on an interface then add proper labels
+			 */
+			if (!iface->ipv4.enabled && xi->ipv4.enabled)
+				lde_route_update(iface, AF_INET);
+			if (!iface->ipv6.enabled && xi->ipv6.enabled)
+				lde_route_update(iface, AF_INET6);
 		}
 
 		/* update existing interfaces */

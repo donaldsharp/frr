@@ -22,14 +22,10 @@
 #ifndef _ZEBRA_PREFIX_H
 #define _ZEBRA_PREFIX_H
 
-#ifdef SUNOS_5
-#include <sys/ethernet.h>
-#else
 #ifdef GNU_LINUX
 #include <net/ethernet.h>
 #else
 #include <netinet/if_ether.h>
-#endif
 #endif
 #include "sockunion.h"
 #include "ipaddr.h"
@@ -43,8 +39,35 @@ extern "C" {
 #define ETH_ALEN 6
 #endif
 
+/* EVPN route types. */
+typedef enum {
+	BGP_EVPN_AD_ROUTE = 1,    /* Ethernet Auto-Discovery (A-D) route */
+	BGP_EVPN_MAC_IP_ROUTE,    /* MAC/IP Advertisement route */
+	BGP_EVPN_IMET_ROUTE,      /* Inclusive Multicast Ethernet Tag route */
+	BGP_EVPN_ES_ROUTE,        /* Ethernet Segment route */
+	BGP_EVPN_IP_PREFIX_ROUTE, /* IP Prefix route */
+} bgp_evpn_route_type;
+
+/* value of first byte of ESI */
+#define ESI_TYPE_ARBITRARY 0  /* */
+#define ESI_TYPE_LACP      1  /* <> */
+#define ESI_TYPE_BRIDGE    2  /* <Root bridge Mac-6B>:<Root Br Priority-2B>:00 */
+#define ESI_TYPE_MAC       3  /* <Syst Mac Add-6B>:<Local Discriminator Value-3B> */
+#define ESI_TYPE_ROUTER    4  /* <RouterId-4B>:<Local Discriminator Value-4B> */
+#define ESI_TYPE_AS        5  /* <AS-4B>:<Local Discriminator Value-4B> */
+
+#define MAX_ESI {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+
+
+#define EVPN_ETH_TAG_BYTES 4
 #define ESI_BYTES 10
 #define ESI_STR_LEN (3 * ESI_BYTES)
+
+/* Maximum number of VTEPs per-ES -
+ * XXX - temporary limit for allocating strings etc.
+ */
+#define ES_VTEP_MAX_CNT 10
+#define ES_VTEP_LIST_STR_SZ (ES_VTEP_MAX_CNT * 16)
 
 #define ETHER_ADDR_STRLEN (3*ETH_ALEN)
 /*
@@ -64,12 +87,13 @@ struct ethaddr {
 #define PREFIX_LEN_ROUTE_TYPE_5_IPV6 (30*8)
 
 typedef struct esi_t_ {
-	uint8_t val[10];
+	uint8_t val[ESI_BYTES];
 } esi_t;
 
 struct evpn_ead_addr {
 	esi_t esi;
 	uint32_t eth_tag;
+	struct ipaddr ip;
 };
 
 struct evpn_macip_addr {
@@ -148,6 +172,7 @@ struct evpn_addr {
 #endif
 
 struct flowspec_prefix {
+	uint8_t family;
 	uint16_t prefixlen; /* length in bytes */
 	uintptr_t ptr;
 };
@@ -217,39 +242,45 @@ struct prefix_evpn {
 
 static inline int is_evpn_prefix_ipaddr_none(const struct prefix_evpn *evp)
 {
-	if (evp->prefix.route_type == 2)
+	if (evp->prefix.route_type == BGP_EVPN_AD_ROUTE)
+		return IS_IPADDR_NONE(&(evp)->prefix.ead_addr.ip);
+	if (evp->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
 		return IS_IPADDR_NONE(&(evp)->prefix.macip_addr.ip);
-	if (evp->prefix.route_type == 3)
+	if (evp->prefix.route_type == BGP_EVPN_IMET_ROUTE)
 		return IS_IPADDR_NONE(&(evp)->prefix.imet_addr.ip);
-	if (evp->prefix.route_type == 4)
+	if (evp->prefix.route_type == BGP_EVPN_ES_ROUTE)
 		return IS_IPADDR_NONE(&(evp)->prefix.es_addr.ip);
-	if (evp->prefix.route_type == 5)
+	if (evp->prefix.route_type == BGP_EVPN_IP_PREFIX_ROUTE)
 		return IS_IPADDR_NONE(&(evp)->prefix.prefix_addr.ip);
 	return 0;
 }
 
 static inline int is_evpn_prefix_ipaddr_v4(const struct prefix_evpn *evp)
 {
-	if (evp->prefix.route_type == 2)
+	if (evp->prefix.route_type == BGP_EVPN_AD_ROUTE)
+		return IS_IPADDR_V4(&(evp)->prefix.ead_addr.ip);
+	if (evp->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
 		return IS_IPADDR_V4(&(evp)->prefix.macip_addr.ip);
-	if (evp->prefix.route_type == 3)
+	if (evp->prefix.route_type == BGP_EVPN_IMET_ROUTE)
 		return IS_IPADDR_V4(&(evp)->prefix.imet_addr.ip);
-	if (evp->prefix.route_type == 4)
+	if (evp->prefix.route_type == BGP_EVPN_ES_ROUTE)
 		return IS_IPADDR_V4(&(evp)->prefix.es_addr.ip);
-	if (evp->prefix.route_type == 5)
+	if (evp->prefix.route_type == BGP_EVPN_IP_PREFIX_ROUTE)
 		return IS_IPADDR_V4(&(evp)->prefix.prefix_addr.ip);
 	return 0;
 }
 
 static inline int is_evpn_prefix_ipaddr_v6(const struct prefix_evpn *evp)
 {
-	if (evp->prefix.route_type == 2)
+	if (evp->prefix.route_type == BGP_EVPN_AD_ROUTE)
+		return IS_IPADDR_V6(&(evp)->prefix.ead_addr.ip);
+	if (evp->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
 		return IS_IPADDR_V6(&(evp)->prefix.macip_addr.ip);
-	if (evp->prefix.route_type == 3)
+	if (evp->prefix.route_type == BGP_EVPN_IMET_ROUTE)
 		return IS_IPADDR_V6(&(evp)->prefix.imet_addr.ip);
-	if (evp->prefix.route_type == 4)
+	if (evp->prefix.route_type == BGP_EVPN_ES_ROUTE)
 		return IS_IPADDR_V6(&(evp)->prefix.es_addr.ip);
-	if (evp->prefix.route_type == 5)
+	if (evp->prefix.route_type == BGP_EVPN_IP_PREFIX_ROUTE)
 		return IS_IPADDR_V6(&(evp)->prefix.prefix_addr.ip);
 	return 0;
 }
@@ -295,6 +326,7 @@ union prefixptr {
 	prefixtype(prefixptr, struct prefix_ipv6, p6)
 	prefixtype(prefixptr, struct prefix_evpn, evp)
 	prefixtype(prefixptr, struct prefix_fs,   fs)
+	prefixtype(prefixptr, struct prefix_rd,   rd)
 } __attribute__((transparent_union));
 
 union prefixconstptr {
@@ -303,6 +335,7 @@ union prefixconstptr {
 	prefixtype(prefixconstptr, const struct prefix_ipv6, p6)
 	prefixtype(prefixconstptr, const struct prefix_evpn, evp)
 	prefixtype(prefixconstptr, const struct prefix_fs,   fs)
+	prefixtype(prefixconstptr, const struct prefix_rd,   rd)
 } __attribute__((transparent_union));
 
 #ifndef INET_ADDRSTRLEN
@@ -374,12 +407,7 @@ static inline void ipv4_addr_copy(struct in_addr *dst,
 
 /* glibc defines s6_addr32 to __in6_u.__u6_addr32 if __USE_{MISC || GNU} */
 #ifndef s6_addr32
-#if defined(SUNOS_5)
-/* Some SunOS define s6_addr32 only to kernel */
-#define s6_addr32 _S6_un._S6_u32
-#else
 #define s6_addr32 __u6_addr.__u6_addr32
-#endif /* SUNOS_5 */
 #endif /*s6_addr32*/
 
 /* Prototypes. */
@@ -390,8 +418,16 @@ extern const char *family2str(int family);
 extern const char *safi2str(safi_t safi);
 extern const char *afi2str(afi_t afi);
 
-/* Check bit of the prefix. */
-extern unsigned int prefix_bit(const uint8_t *prefix, const uint16_t prefixlen);
+/*
+ * Check bit of the prefix.
+ *
+ * prefix
+ *    byte buffer
+ *
+ * bit_index
+ *    which bit to fetch from byte buffer, 0 indexed.
+ */
+extern unsigned int prefix_bit(const uint8_t *prefix, const uint16_t bit_index);
 
 extern struct prefix *prefix_new(void);
 extern void prefix_free(struct prefix **p);
@@ -545,6 +581,8 @@ static inline int is_default_host_route(const struct prefix *p)
 }
 
 #ifdef _FRR_ATTRIBUTE_PRINTFRR
+#pragma FRR printfrr_ext "%pEA"  (struct ethaddr *)
+
 #pragma FRR printfrr_ext "%pI4"  (struct in_addr *)
 #pragma FRR printfrr_ext "%pI4"  (in_addr_t *)
 

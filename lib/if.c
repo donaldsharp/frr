@@ -188,7 +188,9 @@ void if_destroy_via_zapi(struct interface *ifp)
 	if (ifp_master.destroy_hook)
 		(*ifp_master.destroy_hook)(ifp);
 
+	ifp->oldifindex = ifp->ifindex;
 	if_set_index(ifp, IFINDEX_INTERNAL);
+
 	if (!ifp->configured)
 		if_delete(&ifp);
 }
@@ -217,16 +219,14 @@ struct interface *if_create_name(const char *name, vrf_id_t vrf_id)
 	return ifp;
 }
 
-struct interface *if_create_ifindex(ifindex_t ifindex, vrf_id_t vrf_id,
-				    char *optional_name)
+struct interface *if_create_ifindex(ifindex_t ifindex, vrf_id_t vrf_id)
 {
 	struct interface *ifp;
 
 	ifp = if_new(vrf_id);
 
 	if_set_index(ifp, ifindex);
-	if (optional_name)
-		if_set_name(ifp, optional_name);
+
 	hook_call(if_add, ifp);
 	return ifp;
 }
@@ -263,15 +263,21 @@ void if_update_to_new_vrf(struct interface *ifp, vrf_id_t vrf_id)
 	 */
 	if (yang_module_find("frr-interface")) {
 		struct lyd_node *if_dnode;
+		char oldpath[XPATH_MAXLEN];
+		char newpath[XPATH_MAXLEN];
 
 		if_dnode = yang_dnode_get(
 			running_config->dnode,
 			"/frr-interface:lib/interface[name='%s'][vrf='%s']/vrf",
 			ifp->name, old_vrf->name);
+
 		if (if_dnode) {
-			nb_running_unset_entry(if_dnode->parent);
+			yang_dnode_get_path(if_dnode->parent, oldpath,
+					    sizeof(oldpath));
 			yang_dnode_change_leaf(if_dnode, vrf->name);
-			nb_running_set_entry(if_dnode->parent, ifp);
+			yang_dnode_get_path(if_dnode->parent, newpath,
+					    sizeof(newpath));
+			nb_running_move_tree(oldpath, newpath);
 			running_config->version++;
 		}
 	}
@@ -371,6 +377,17 @@ struct interface *if_lookup_by_name(const char *name, vrf_id_t vrf_id)
 
 	if (!vrf || !name
 	    || strnlen(name, INTERFACE_NAMSIZ) == INTERFACE_NAMSIZ)
+		return NULL;
+
+	strlcpy(if_tmp.name, name, sizeof(if_tmp.name));
+	return RB_FIND(if_name_head, &vrf->ifaces_by_name, &if_tmp);
+}
+
+struct interface *if_lookup_by_name_vrf(const char *name, struct vrf *vrf)
+{
+	struct interface if_tmp;
+
+	if (!name || strnlen(name, INTERFACE_NAMSIZ) == INTERFACE_NAMSIZ)
 		return NULL;
 
 	strlcpy(if_tmp.name, name, sizeof(if_tmp.name));
@@ -556,8 +573,7 @@ struct interface *if_get_by_name(const char *name, vrf_id_t vrf_id)
 	return NULL;
 }
 
-struct interface *if_get_by_ifindex(ifindex_t ifindex, vrf_id_t vrf_id,
-				    char *optional_name)
+struct interface *if_get_by_ifindex(ifindex_t ifindex, vrf_id_t vrf_id)
 {
 	struct interface *ifp;
 
@@ -567,7 +583,7 @@ struct interface *if_get_by_ifindex(ifindex_t ifindex, vrf_id_t vrf_id,
 		ifp = if_lookup_by_ifindex(ifindex, vrf_id);
 		if (ifp)
 			return ifp;
-		return if_create_ifindex(ifindex, vrf_id, optional_name);
+		return if_create_ifindex(ifindex, vrf_id);
 	case VRF_BACKEND_VRF_LITE:
 		ifp = if_lookup_by_index_all_vrf(ifindex);
 		if (ifp) {
@@ -579,7 +595,7 @@ struct interface *if_get_by_ifindex(ifindex_t ifindex, vrf_id_t vrf_id,
 			if_update_to_new_vrf(ifp, vrf_id);
 			return ifp;
 		}
-		return if_create_ifindex(ifindex, vrf_id, optional_name);
+		return if_create_ifindex(ifindex, vrf_id);
 	}
 
 	return NULL;
@@ -768,8 +784,7 @@ static void if_dump(const struct interface *ifp)
 		struct vrf *vrf = vrf_lookup_by_id(ifp->vrf_id);
 
 		zlog_info(
-			"Interface %s vrf %s(%u) index %d metric %d mtu %d "
-			"mtu6 %d %s",
+			"Interface %s vrf %s(%u) index %d metric %d mtu %d mtu6 %d %s",
 			ifp->name, VRF_LOGNAME(vrf), ifp->vrf_id, ifp->ifindex,
 			ifp->metric, ifp->mtu, ifp->mtu6,
 			if_flag_dump(ifp->flags));
@@ -786,44 +801,6 @@ void if_dump_all(void)
 		FOR_ALL_INTERFACES (vrf, ifp)
 			if_dump(ifp);
 }
-
-#ifdef SUNOS_5
-/* Need to handle upgrade from SUNWzebra to Quagga. SUNWzebra created
- * a seperate struct interface for each logical interface, so config
- * file may be full of 'interface fooX:Y'. Solaris however does not
- * expose logical interfaces via PF_ROUTE, so trying to track logical
- * interfaces can be fruitless, for that reason Quagga only tracks
- * the primary IP interface.
- *
- * We try accomodate SUNWzebra by:
- * - looking up the interface name, to see whether it exists, if so
- *   its useable
- *   - for protocol daemons, this could only because zebra told us of
- *     the interface
- *   - for zebra, only because it learnt from kernel
- * - if not:
- *   - search the name to see if it contains a sub-ipif / logical interface
- *     seperator, the ':' char. If it does:
- *     - text up to that char must be the primary name - get that name.
- *     if not:
- *     - no idea, just get the name in its entirety.
- */
-static struct interface *if_sunwzebra_get(const char *name, vrf_id_t vrf_id)
-{
-	struct interface *ifp;
-	char *cp;
-
-	if ((ifp = if_lookup_by_name(name, vrf_id)) != NULL)
-		return ifp;
-
-	/* hunt the primary interface name... */
-	cp = strchr(name, ':');
-	if (cp)
-		*cp = '\0';
-
-	return if_get_by_name(name, vrf_id);
-}
-#endif /* SUNOS_5 */
 
 #if 0
 /* For debug purpose. */
@@ -1305,7 +1282,7 @@ void if_link_params_free(struct interface *ifp)
 /*
  * XPath: /frr-interface:lib/interface
  */
-DEFPY_NOSH (interface,
+DEFPY_YANG_NOSH (interface,
        interface_cmd,
        "interface IFNAME [vrf NAME$vrf_name]",
        "Select an interface to configure\n"
@@ -1368,6 +1345,7 @@ DEFPY_NOSH (interface,
 		 * all interface-level commands are converted to the new
 		 * northbound model.
 		 */
+		nb_cli_pending_commit_check(vty);
 		ifp = if_lookup_by_name(ifname, vrf_id);
 		if (ifp)
 			VTY_PUSH_CONTEXT(INTERFACE_NODE, ifp);
@@ -1376,7 +1354,7 @@ DEFPY_NOSH (interface,
 	return ret;
 }
 
-DEFPY (no_interface,
+DEFPY_YANG (no_interface,
        no_interface_cmd,
        "no interface IFNAME [vrf NAME$vrf_name]",
        NO_STR
@@ -1411,7 +1389,7 @@ static void cli_show_interface(struct vty *vty, struct lyd_node *dnode,
 /*
  * XPath: /frr-interface:lib/interface/description
  */
-DEFPY (interface_desc,
+DEFPY_YANG (interface_desc,
        interface_desc_cmd,
        "description LINE...",
        "Interface specific description\n"
@@ -1428,7 +1406,7 @@ DEFPY (interface_desc,
 	return ret;
 }
 
-DEFPY  (no_interface_desc,
+DEFPY_YANG  (no_interface_desc,
 	no_interface_desc_cmd,
 	"no description",
 	NO_STR
@@ -1538,11 +1516,7 @@ static int lib_interface_create(struct nb_cb_create_args *args)
 	case NB_EV_APPLY:
 		vrf = vrf_lookup_by_name(vrfname);
 		assert(vrf);
-#ifdef SUNOS_5
-		ifp = if_sunwzebra_get(ifname, vrf->vrf_id);
-#else
 		ifp = if_get_by_name(ifname, vrf->vrf_id);
-#endif /* SUNOS_5 */
 
 		ifp->configured = true;
 		nb_running_set_entry(args->dnode, ifp);
@@ -1561,8 +1535,8 @@ static int lib_interface_destroy(struct nb_cb_destroy_args *args)
 	case NB_EV_VALIDATE:
 		ifp = nb_running_get_entry(args->dnode, NULL, true);
 		if (CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE)) {
-			zlog_warn("%s: only inactive interfaces can be deleted",
-				  __func__);
+			snprintf(args->errmsg, args->errmsg_len,
+				 "only inactive interfaces can be deleted");
 			return NB_ERR_VALIDATION;
 		}
 		break;

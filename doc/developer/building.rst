@@ -20,7 +20,6 @@ Building FRR
    building-frr-for-freebsd9
    building-frr-for-netbsd6
    building-frr-for-netbsd7
-   building-frr-for-omnios
    building-frr-for-openbsd6
    building-frr-for-openwrt
    building-frr-for-ubuntu1404
@@ -28,3 +27,4 @@ Building FRR
    building-frr-for-ubuntu1804
    building-frr-for-ubuntu2004
    building-frr-for-archlinux
+   building-docker

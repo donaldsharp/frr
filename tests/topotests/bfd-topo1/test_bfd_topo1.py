@@ -23,7 +23,7 @@
 #
 
 """
-test_bfd_topo1.py: Test the FRR/Quagga BFD daemon.
+test_bfd_topo1.py: Test the FRR BFD daemon.
 """
 
 import os
@@ -76,7 +76,7 @@ def setup_module(mod):
     tgen.start_topology()
 
     router_list = tgen.routers()
-    for rname, router in router_list.iteritems():
+    for rname, router in router_list.items():
         router.load_config(
             TopoRouter.RD_ZEBRA, os.path.join(CWD, "{}/zebra.conf".format(rname))
         )

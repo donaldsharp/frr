@@ -39,6 +39,7 @@
 #include "libfrr.h"
 #include "defaults.h"
 #include "lib_errors.h"
+#include "ldp_sync.h"
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_network.h"
@@ -57,6 +58,7 @@
 #include "ospfd/ospf_abr.h"
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_ase.h"
+#include "ospfd/ospf_ldp_sync.h"
 
 
 DEFINE_QOBJ_TYPE(ospf)
@@ -132,6 +134,18 @@ void ospf_router_id_update(struct ospf *ospf)
 			 * !(virtual | ptop) links
 			 */
 			ospf_nbr_self_reset(oi, router_id);
+
+			/*
+			 * If the old router id was not set, but now it
+			 * is and the interface is operative and the
+			 * state is ISM_Down we should kick the state
+			 * machine as that we processed the interfaces
+			 * based upon the network statement( or intf config )
+			 * but could not start it at that time.
+			 */
+			if (if_is_operative(oi->ifp) && oi->state == ISM_Down
+			    && router_id_old.s_addr == INADDR_ANY)
+				ospf_if_up(oi);
 		}
 
 		/* Flush (inline) all external LSAs based on the OSPF_LSA_SELF
@@ -292,6 +306,8 @@ static struct ospf *ospf_new(unsigned short instance, const char *name)
 	new->t_read = NULL;
 	new->oi_write_q = list_new();
 	new->write_oi_count = OSPF_WRITE_INTERFACE_COUNT_DEFAULT;
+
+	new->proactive_arp = OSPF_PROACTIVE_ARP_DEFAULT;
 
 	QOBJ_REG(new, ospf);
 
@@ -517,9 +533,9 @@ void ospf_terminate(void)
 
 	SET_FLAG(om->options, OSPF_MASTER_SHUTDOWN);
 
-	/* exit immediately if OSPF not actually running */
+	/* Skip some steps if OSPF not actually running */
 	if (listcount(om->ospf) == 0)
-		exit(0);
+		goto done;
 
 	bfd_gbl_exit();
 	for (ALL_LIST_ELEMENTS(om->ospf, node, nnode, ospf))
@@ -543,6 +559,7 @@ void ospf_terminate(void)
 	zclient_stop(zclient);
 	zclient_free(zclient);
 
+done:
 	frr_fini();
 }
 
@@ -603,6 +620,10 @@ static void ospf_finish_final(struct ospf *ospf)
 		ospf_vl_delete(ospf, vl_data);
 
 	list_delete(&ospf->vlinks);
+
+	/* shutdown LDP-Sync */
+	if (ospf->vrf_id == VRF_DEFAULT)
+		ospf_ldp_sync_gbl_exit(ospf, true);
 
 	/* Remove any ospf interface config params */
 	FOR_ALL_INTERFACES (vrf, ifp) {
@@ -673,6 +694,7 @@ static void ospf_finish_final(struct ospf *ospf)
 	OSPF_TIMER_OFF(ospf->t_lsa_refresher);
 	OSPF_TIMER_OFF(ospf->t_opaque_lsa_self);
 	OSPF_TIMER_OFF(ospf->t_sr_update);
+	OSPF_TIMER_OFF(ospf->t_default_routemap_timer);
 
 	LSDB_LOOP (OPAQUE_AS_LSDB(ospf), rn, lsa)
 		ospf_discard_from_db(ospf, ospf->lsdb, lsa);
@@ -931,6 +953,9 @@ static void add_ospf_interface(struct connected *co, struct ospf_area *area)
 	ospf_nbr_self_reset(oi, oi->ospf->router_id);
 
 	ospf_area_add_if(oi->area, oi);
+
+	/* if LDP-IGP Sync is configured globally inherit config */
+	ospf_ldp_sync_if_init(oi);
 
 	/*
 	 * if router_id is not configured, dont bring up

@@ -7,7 +7,7 @@
 ##
 AC_PREREQ([2.60])
 
-AC_INIT([frr], [7.5-dev], [https://github.com/frrouting/frr/issues])
+AC_INIT([frr], [7.6-dev], [https://github.com/frrouting/frr/issues])
 PACKAGE_URL="https://frrouting.org/"
 AC_SUBST([PACKAGE_URL])
 PACKAGE_FULLNAME="FRRouting"
@@ -542,7 +542,7 @@ AC_ARG_ENABLE([fabricd],
 AC_ARG_ENABLE([vrrpd],
   AS_HELP_STRING([--disable-vrrpd], [do not build vrrpd]))
 AC_ARG_ENABLE([bgp-announce],
-  AS_HELP_STRING([--disable-bgp-announce,], [turn off BGP route announcement]))
+  AS_HELP_STRING([--disable-bgp-announce], [turn off BGP route announcement]))
 AC_ARG_ENABLE([bgp-vnc],
   AS_HELP_STRING([--disable-bgp-vnc],[turn off BGP VNC support]))
 AC_ARG_ENABLE([bgp-bmp],
@@ -593,7 +593,7 @@ AC_ARG_ENABLE([rusage],
 AC_ARG_ENABLE([gcc_ultra_verbose],
   AS_HELP_STRING([--enable-gcc-ultra-verbose], [enable ultra verbose GCC warnings]))
 AC_ARG_ENABLE([backtrace],
-  AS_HELP_STRING([--disable-backtrace,], [disable crash backtraces (default autodetect)]))
+  AS_HELP_STRING([--disable-backtrace], [disable crash backtraces (default autodetect)]))
 AC_ARG_ENABLE([time-check],
   AS_HELP_STRING([--disable-time-check], [disable slow thread warning messages]))
 AC_ARG_ENABLE([cpu-time],
@@ -610,10 +610,6 @@ AC_ARG_ENABLE([cumulus],
   AS_HELP_STRING([--enable-cumulus], [enable Cumulus Switch Special Extensions]))
 AC_ARG_ENABLE([datacenter],
   AS_HELP_STRING([--enable-datacenter], [enable Compilation for Data Center Extensions]))
-AC_ARG_ENABLE([fuzzing],
-  AS_HELP_STRING([--enable-fuzzing], [enable ability to fuzz various parts of FRR]))
-AC_ARG_ENABLE([netlink_fuzzing],
-  AS_HELP_STRING([--enable-netlink-fuzzing], [enable ability to fuzz netlink listening socket in zebra]))
 AC_ARG_ENABLE([rr-semantics],
   AS_HELP_STRING([--disable-rr-semantics], [disable the v6 Route Replace semantics]))
 AC_ARG_ENABLE([protobuf],
@@ -644,6 +640,9 @@ AC_ARG_WITH([crypto],
   AS_HELP_STRING([--with-crypto=<internal|openssl>], [choose between different implementations of cryptographic functions(default value is --with-crypto=internal)]))
 AC_ARG_WITH([frr-format],
   AS_HELP_STRING([--with-frr-format[=<.../frr-format.so>]], [use frr-format GCC plugin]))
+
+AC_ARG_ENABLE([version-build-config],
+  AS_HELP_STRING([--disable-version-build-config], [do not include build configs in show version command]))
 
 #if openssl, else use the internal
 AS_IF([test "$with_crypto" = "openssl"], [
@@ -713,14 +712,6 @@ if test "$enable_datacenter" = "yes" ; then
   DFLT_NAME="datacenter"
 else
   DFLT_NAME="traditional"
-fi
-
-if test "$enable_fuzzing" = "yes" ; then
-  AC_DEFINE([HANDLE_ZAPI_FUZZING], [1], [Compile extensions to use with a fuzzer])
-fi
-
-if test "$enable_netlink_fuzzing" = "yes" ; then
-  AC_DEFINE([HANDLE_NETLINK_FUZZING], [1], [Compile extensions to use with a fuzzer for netlink])
 fi
 
 if test "$enable_cumulus" = "yes" ; then
@@ -1133,17 +1124,7 @@ is_linux=false
 AC_MSG_CHECKING([which operating system interface to use])
 case "$host_os" in
   sunos* | solaris2*)
-    AC_MSG_RESULT([Solaris])
-
-    AC_DEFINE([SUNOS_5], [1], [SunOS 5])
-    AC_DEFINE([SOLARIS_IPV6], [1], Solaris IPv6)
-    AC_DEFINE([_POSIX_C_SOURCE], [200809L], [enable POSIX.1-2008 and XPG7/SUSv4])
-
-    AC_CHECK_LIB([socket], [main])
-    AC_CHECK_LIB([nsl], [main])
-    AC_CHECK_LIB([umem], [main])
-    SOLARIS="solaris"
-    AC_MSG_WARN([--Solaris support is being considered for deprecation, please let us know if you are still using this--])
+    AC_MSG_FAILURE([Solaris support has been removed please see versions prior or equal to 7.5])
     ;;
   linux*)
     AC_MSG_RESULT([Linux])
@@ -1176,7 +1157,6 @@ case "$host_os" in
     AC_DEFINE([BSD_V6_SYSCTL], [1], [BSD v6 sysctl to turn on and off forwarding])
     ;;
 esac
-AM_CONDITIONAL([SOLARIS], [test "$SOLARIS" = "solaris"])
 AM_CONDITIONAL([LINUX], [${is_linux}])
 
 AC_SYS_LARGEFILE
@@ -1400,10 +1380,6 @@ case "$host_os" in
     AC_MSG_RESULT([pfpacket])
     ISIS_METHOD_MACRO="ISIS_METHOD_PFPACKET"
     ;;
-  solaris* | sunos*)
-    AC_MSG_RESULT([DLPI])
-    ISIS_METHOD_MACRO="ISIS_METHOD_DLPI"
-    ;;
   *)
     if test "$ac_cv_header_net_bpf_h" = "no"; then
       if test "$ac_cv_header_sys_dlpi_h" = "no"; then
@@ -1521,7 +1497,6 @@ if test "$ac_cv_have_decl_TCP_MD5SIG" = "no"; then
        AC_CHECK_DECLS([TCP_MD5SIG], [], [], MD5_INCLUDES)])
 fi
 
-AC_SUBST([SOLARIS])
 AC_CHECK_LIB([crypt], [crypt], [],
 		    [AC_CHECK_LIB([crypto], [DES_crypt])])
 AC_CHECK_LIB([resolv], [res_init])
@@ -1586,8 +1561,68 @@ dnl --------------------
 dnl Daemon disable check
 dnl --------------------
 
+AS_IF([test "$enable_bgpd" != "no"], [
+  AC_DEFINE([HAVE_BGPD], [1], [bgpd])
+])
+
+AS_IF([test "$enable_ripd" != "no"], [
+  AC_DEFINE([HAVE_RIPD], [1], [ripd])
+])
+
+AS_IF([test "$enable_ripngd" != "no"], [
+  AC_DEFINE([HAVE_RIPNGD], [1], [ripngd])
+])
+
+AS_IF([test "$enable_ospfd" != "no"], [
+  AC_DEFINE([HAVE_OSPFD], [1], [ospfd])
+])
+
+AS_IF([test "$enable_ospf6d" != "no"], [
+  AC_DEFINE([HAVE_OSPF6D], [1], [ospf6d])
+])
+
 AS_IF([test "$enable_ldpd" != "no"], [
   AC_DEFINE([HAVE_LDPD], [1], [ldpd])
+])
+
+AS_IF([test "$enable_nhrpd" != "no"], [
+  AC_DEFINE([HAVE_NHRPD], [1], [nhrpd])
+])
+
+AS_IF([test "$enable_eigrpd" != "no"], [
+  AC_DEFINE([HAVE_EIGRPD], [1], [eigrpd])
+])
+
+AS_IF([test "$enable_babeld" != "no"], [
+  AC_DEFINE([HAVE_BABELD], [1], [babeld])
+])
+
+AS_IF([test "$enable_isisd" != "no"], [
+  AC_DEFINE([HAVE_ISISD], [1], [isisd])
+])
+
+AS_IF([test "$enable_pimd" != "no"], [
+  AC_DEFINE([HAVE_PIMD], [1], [pimd])
+])
+
+AS_IF([test "$enable_pbrd" != "no"], [
+  AC_DEFINE([HAVE_PBRD], [1], [pbrd])
+])
+
+AS_IF([test "$enable_sharpd" = "yes"], [
+  AC_DEFINE([HAVE_SHARPD], [1], [sharpd])
+])
+
+AS_IF([test "$enable_staticd" != "no"], [
+  AC_DEFINE([HAVE_STATICD], [1], [staticd])
+])
+
+AS_IF([test "$enable_fabricd" != "no"], [
+  AC_DEFINE([HAVE_FABRICD], [1], [fabricd])
+])
+
+AS_IF([test "$enable_vrrpd" != "no"], [
+  AC_DEFINE([HAVE_VRRPD], [1], [vrrpd])
 ])
 
 if test "$enable_bfdd" = "no"; then
@@ -1682,6 +1717,10 @@ case "${enable_bmp}" in
     ;;
 esac
 
+if test "$enable_version_build_config" != "no";then
+  AC_DEFINE([ENABLE_VERSION_BUILD_CONFIG], [1], [Report build configs in show version])
+fi
+
 dnl ##########################################################################
 dnl LARGE if block
 if test "$enable_clippy_only" != "yes"; then
@@ -1733,8 +1772,8 @@ AC_SUBST([SNMP_CFLAGS])
 dnl ---------------
 dnl libyang
 dnl ---------------
-PKG_CHECK_MODULES([LIBYANG], [libyang >= 0.16.105], , [
-  AC_MSG_ERROR([libyang (>= 0.16.105) was not found on your system.])
+PKG_CHECK_MODULES([LIBYANG], [libyang >= 1.0.184], , [
+  AC_MSG_ERROR([libyang (>= 1.0.184) was not found on your system.])
 ])
 ac_cflags_save="$CFLAGS"
 CFLAGS="$CFLAGS $LIBYANG_CFLAGS"
@@ -2148,17 +2187,6 @@ if test "$enable_capabilities" != "no"; then
        LIBCAP="-lcap"
        frr_ac_lcaps="yes"]
     )
-  else
-    AC_CHECK_HEADERS([priv.h],
-     [AC_MSG_CHECKING([Solaris style privileges are available])
-      AC_TRY_COMPILE([#include <priv.h>], [getpflags(PRIV_AWARE);],
-    	  [AC_MSG_RESULT([yes])
-    	   AC_DEFINE([HAVE_SOLARIS_CAPABILITIES], [1], [getpflags])
-    	   frr_ac_scaps="yes"],
-    	   AC_MSG_RESULT(no)
-      )
-     ]
-   )
   fi
   if test "$frr_ac_scaps" = "yes" \
        -o "$frr_ac_lcaps" = "yes"; then
@@ -2224,7 +2252,7 @@ dnl check for malloc mallinfo struct and call
 dnl this must try and link using LIBS, in
 dnl order to check no alternative allocator
 dnl has been specified, which might not provide
-dnl mallinfo, e.g. such as Umem on Solaris.
+dnl mallinfo
 dnl -----------------------------------------
 AC_CHECK_HEADERS([malloc.h malloc_np.h malloc/malloc.h],,, [FRR_INCLUDES])
 
@@ -2418,7 +2446,6 @@ AC_CONFIG_FILES([
 	  config.version
 	  changelog-auto
 	  redhat/frr.spec
-	  solaris/Makefile
 	  alpine/APKBUILD
 	  snapcraft/snapcraft.yaml
 	  lib/version.h

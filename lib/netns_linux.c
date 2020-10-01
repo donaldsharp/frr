@@ -43,9 +43,6 @@
 DEFINE_MTYPE_STATIC(LIB, NS, "NetNS Context")
 DEFINE_MTYPE_STATIC(LIB, NS_NAME, "NetNS Name")
 
-/* default NS ID value used when VRF backend is not NETNS */
-#define NS_DEFAULT_INTERNAL 0
-
 static inline int ns_compare(const struct ns *ns, const struct ns *ns2);
 static struct ns *ns_lookup_name_internal(const char *name);
 
@@ -100,9 +97,6 @@ static inline int setns(int fd, int nstype)
 #ifdef HAVE_NETNS
 static int have_netns_enabled = -1;
 #endif /* HAVE_NETNS */
-
-/* default NS ID value used when VRF backend is not NETNS */
-#define NS_DEFAULT_INTERNAL 0
 
 static int have_netns(void)
 {
@@ -603,22 +597,16 @@ ns_id_t ns_id_get_absolute(ns_id_t ns_id_reference, ns_id_t link_nsid)
 	ns = ns_lookup(ns_id_reference);
 	if (!ns)
 		return NS_UNKNOWN;
+
 	if (ns->relative_default_ns != link_nsid)
 		return NS_UNKNOWN;
+
 	ns = ns_get_default();
 	assert(ns);
 	return ns->ns_id;
-}
-
-ns_id_t ns_get_default_id(void)
-{
-	if (default_ns)
-		return default_ns->ns_id;
-	return NS_DEFAULT_INTERNAL;
 }
 
 struct ns *ns_get_default(void)
 {
 	return default_ns;
 }
-

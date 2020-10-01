@@ -23,7 +23,7 @@
 #
 
 """
-test_bfd_topo2.py: Test the FRR/Quagga BFD daemon with multihop and BGP
+test_bfd_topo2.py: Test the FRR BFD daemon with multihop and BGP
 unnumbered.
 """
 
@@ -77,7 +77,7 @@ def setup_module(mod):
     tgen.start_topology()
 
     router_list = tgen.routers()
-    for rname, router in router_list.iteritems():
+    for rname, router in router_list.items():
         router.load_config(
             TopoRouter.RD_ZEBRA, os.path.join(CWD, "{}/zebra.conf".format(rname))
         )

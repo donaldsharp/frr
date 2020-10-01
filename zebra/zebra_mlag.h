@@ -26,15 +26,11 @@
 #include "zclient.h"
 #include "zebra/zserv.h"
 
-#ifdef HAVE_PROTOBUF_VERSION_3
-#include "mlag/mlag.pb-c.h"
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define ZEBRA_MLAG_BUF_LIMIT 2048
+#define ZEBRA_MLAG_BUF_LIMIT 32768
 #define ZEBRA_MLAG_LEN_SIZE 4
 
 DECLARE_HOOK(zebra_mlag_private_write_data,
@@ -46,12 +42,10 @@ DECLARE_HOOK(zebra_mlag_private_cleanup_data, (), ())
 
 extern uint8_t mlag_wr_buffer[ZEBRA_MLAG_BUF_LIMIT];
 extern uint8_t mlag_rd_buffer[ZEBRA_MLAG_BUF_LIMIT];
-extern uint32_t mlag_rd_buf_offset;
 
 static inline void zebra_mlag_reset_read_buffer(void)
 {
 	memset(mlag_wr_buffer, 0, ZEBRA_MLAG_BUF_LIMIT);
-	mlag_rd_buf_offset = 0;
 }
 
 enum zebra_mlag_state {

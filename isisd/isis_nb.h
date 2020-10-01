@@ -168,10 +168,18 @@ int isis_instance_mpls_te_router_address_destroy(
 int lib_interface_isis_create(struct nb_cb_create_args *args);
 int lib_interface_isis_destroy(struct nb_cb_destroy_args *args);
 int lib_interface_isis_area_tag_modify(struct nb_cb_modify_args *args);
+int lib_interface_isis_vrf_modify(struct nb_cb_modify_args *args);
 int lib_interface_isis_ipv4_routing_modify(struct nb_cb_modify_args *args);
 int lib_interface_isis_ipv6_routing_modify(struct nb_cb_modify_args *args);
 int lib_interface_isis_circuit_type_modify(struct nb_cb_modify_args *args);
-int lib_interface_isis_bfd_monitoring_modify(struct nb_cb_modify_args *args);
+void lib_interface_isis_bfd_monitoring_apply_finish(
+	struct nb_cb_apply_finish_args *args);
+int lib_interface_isis_bfd_monitoring_enabled_modify(
+	struct nb_cb_modify_args *args);
+int lib_interface_isis_bfd_monitoring_profile_modify(
+	struct nb_cb_modify_args *args);
+int lib_interface_isis_bfd_monitoring_profile_destroy(
+	struct nb_cb_destroy_args *args);
 int isis_instance_segment_routing_enabled_modify(
 	struct nb_cb_modify_args *args);
 int isis_instance_segment_routing_enabled_modify(
@@ -179,6 +187,10 @@ int isis_instance_segment_routing_enabled_modify(
 int isis_instance_segment_routing_srgb_lower_bound_modify(
 	struct nb_cb_modify_args *args);
 int isis_instance_segment_routing_srgb_upper_bound_modify(
+	struct nb_cb_modify_args *args);
+int isis_instance_segment_routing_srlb_lower_bound_modify(
+	struct nb_cb_modify_args *args);
+int isis_instance_segment_routing_srlb_upper_bound_modify(
 	struct nb_cb_modify_args *args);
 int isis_instance_segment_routing_msd_node_msd_modify(
 	struct nb_cb_modify_args *args);
@@ -194,6 +206,9 @@ int isis_instance_segment_routing_prefix_sid_map_prefix_sid_sid_value_modify(
 	struct nb_cb_modify_args *args);
 int isis_instance_segment_routing_prefix_sid_map_prefix_sid_last_hop_behavior_modify(
 	struct nb_cb_modify_args *args);
+int isis_instance_mpls_ldp_sync_destroy(struct nb_cb_destroy_args *args);
+int isis_instance_mpls_ldp_sync_create(struct nb_cb_create_args *args);
+int isis_instance_mpls_ldp_sync_holddown_modify(struct nb_cb_modify_args *args);
 int lib_interface_isis_csnp_interval_level_1_modify(
 	struct nb_cb_modify_args *args);
 int lib_interface_isis_csnp_interval_level_2_modify(
@@ -238,6 +253,9 @@ int lib_interface_isis_multi_topology_ipv6_management_modify(
 	struct nb_cb_modify_args *args);
 int lib_interface_isis_multi_topology_ipv6_dstsrc_modify(
 	struct nb_cb_modify_args *args);
+int lib_interface_isis_mpls_ldp_sync_modify(struct nb_cb_modify_args *args);
+int lib_interface_isis_mpls_holddown_modify(struct nb_cb_modify_args *args);
+int lib_interface_isis_mpls_holddown_destroy(struct nb_cb_destroy_args *args);
 struct yang_data *
 lib_interface_state_isis_get_elem(struct nb_cb_get_elem_args *args);
 const void *lib_interface_state_isis_adjacencies_adjacency_get_next(
@@ -289,6 +307,10 @@ lib_interface_state_isis_event_counters_authentication_fails_get_elem(
 /* Optional 'pre_validate' callbacks. */
 int isis_instance_segment_routing_prefix_sid_map_prefix_sid_pre_validate(
 	struct nb_cb_pre_validate_args *args);
+int isis_instance_segment_routing_srgb_pre_validate(
+	struct nb_cb_pre_validate_args *args);
+int isis_instance_segment_routing_srlb_pre_validate(
+	struct nb_cb_pre_validate_args *args);
 
 /* Optional 'apply_finish' callbacks. */
 void ietf_backoff_delay_apply_finish(struct nb_cb_apply_finish_args *args);
@@ -303,6 +325,8 @@ void redistribute_apply_finish(const struct lyd_node *dnode, int family);
 void redistribute_ipv4_apply_finish(struct nb_cb_apply_finish_args *args);
 void redistribute_ipv6_apply_finish(struct nb_cb_apply_finish_args *args);
 void isis_instance_segment_routing_srgb_apply_finish(
+	struct nb_cb_apply_finish_args *args);
+void isis_instance_segment_routing_srlb_apply_finish(
 	struct nb_cb_apply_finish_args *args);
 void isis_instance_segment_routing_prefix_sid_map_prefix_sid_apply_finish(
 	struct nb_cb_apply_finish_args *args);
@@ -370,6 +394,8 @@ void cli_show_isis_sr_enabled(struct vty *vty, struct lyd_node *dnode,
 			      bool show_defaults);
 void cli_show_isis_srgb(struct vty *vty, struct lyd_node *dnode,
 			bool show_defaults);
+void cli_show_isis_srlb(struct vty *vty, struct lyd_node *dnode,
+			bool show_defaults);
 void cli_show_isis_node_msd(struct vty *vty, struct lyd_node *dnode,
 			    bool show_defaults);
 void cli_show_isis_prefix_sid(struct vty *vty, struct lyd_node *dnode,
@@ -414,6 +440,16 @@ void cli_show_ip_isis_priority(struct vty *vty, struct lyd_node *dnode,
 			       bool show_defaults);
 void cli_show_isis_log_adjacency(struct vty *vty, struct lyd_node *dnode,
 				 bool show_defaults);
+void cli_show_isis_mpls_ldp_sync(struct vty *vty, struct lyd_node *dnode,
+				 bool show_defaults);
+void cli_show_isis_mpls_ldp_sync_holddown(struct vty *vty,
+					  struct lyd_node *dnode,
+					  bool show_defaults);
+void cli_show_isis_mpls_if_ldp_sync(struct vty *vty, struct lyd_node *dnode,
+				    bool show_defaults);
+void cli_show_isis_mpls_if_ldp_sync_holddown(struct vty *vty,
+					     struct lyd_node *dnode,
+					     bool show_defaults);
 
 /* Notifications. */
 void isis_notif_db_overload(const struct isis_area *area, bool overload);

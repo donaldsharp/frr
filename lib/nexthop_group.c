@@ -41,13 +41,11 @@ struct nexthop_hold {
 	char *nhvrf_name;
 	union sockunion *addr;
 	char *intf;
+	bool onlink;
 	char *labels;
 	uint32_t weight;
-	int backup_idx; /* Index of backup nexthop, if >= 0 */
+	char *backup_str;
 };
-
-/* Invalid/unset value for nexthop_hold's backup_idx */
-#define NHH_BACKUP_IDX_INVALID -1
 
 struct nexthop_group_hooks {
 	void (*new)(const char *name);
@@ -563,6 +561,10 @@ static int nhgl_cmp(struct nexthop_hold *nh1, struct nexthop_hold *nh2)
 	if (ret)
 		return ret;
 
+	ret = ((int)nh2->onlink) - ((int)nh1->onlink);
+	if (ret)
+		return ret;
+
 	return nhgc_cmp_helper(nh1->labels, nh2->labels);
 }
 
@@ -614,6 +616,7 @@ static void nhgc_delete(struct nexthop_group_cmd *nhgc)
 
 	list_delete(&nhgc->nhg_list);
 
+	QOBJ_UNREG(nhgc);
 	XFREE(MTYPE_TMP, nhgc);
 }
 
@@ -675,8 +678,9 @@ DEFPY(no_nexthop_group_backup, no_nexthop_group_backup_cmd,
 static void nexthop_group_save_nhop(struct nexthop_group_cmd *nhgc,
 				    const char *nhvrf_name,
 				    const union sockunion *addr,
-				    const char *intf, const char *labels,
-				    const uint32_t weight, int backup_idx)
+				    const char *intf, bool onlink,
+				    const char *labels, const uint32_t weight,
+				    const char *backup_str)
 {
 	struct nexthop_hold *nh;
 
@@ -691,9 +695,12 @@ static void nexthop_group_save_nhop(struct nexthop_group_cmd *nhgc,
 	if (labels)
 		nh->labels = XSTRDUP(MTYPE_TMP, labels);
 
+	nh->onlink = onlink;
+
 	nh->weight = weight;
 
-	nh->backup_idx = backup_idx;
+	if (backup_str)
+		nh->backup_str = XSTRDUP(MTYPE_TMP, backup_str);
 
 	listnode_add_sort(nhgc->nhg_list, nh);
 }
@@ -738,12 +745,14 @@ static void nexthop_group_unsave_nhop(struct nexthop_group_cmd *nhgc,
  */
 static bool nexthop_group_parse_nexthop(struct nexthop *nhop,
 					const union sockunion *addr,
-					const char *intf, const char *name,
-					const char *labels, int *lbl_ret,
-					uint32_t weight, int backup_idx)
+					const char *intf, bool onlink,
+					const char *name, const char *labels,
+					int *lbl_ret, uint32_t weight,
+					const char *backup_str)
 {
 	int ret = 0;
 	struct vrf *vrf;
+	int num;
 
 	memset(nhop, 0, sizeof(*nhop));
 
@@ -762,6 +771,9 @@ static bool nexthop_group_parse_nexthop(struct nexthop *nhop,
 		if (nhop->ifindex == IFINDEX_INTERNAL)
 			return false;
 	}
+
+	if (onlink)
+		SET_FLAG(nhop->flags, NEXTHOP_FLAG_ONLINK);
 
 	if (addr) {
 		if (addr->sa.sa_family == AF_INET) {
@@ -799,13 +811,15 @@ static bool nexthop_group_parse_nexthop(struct nexthop *nhop,
 
 	nhop->weight = weight;
 
-	if (backup_idx != NHH_BACKUP_IDX_INVALID) {
-		/* Validate index value */
-		if (backup_idx > NEXTHOP_BACKUP_IDX_MAX)
+	if (backup_str) {
+		/* Parse backup indexes */
+		ret = nexthop_str2backups(backup_str,
+					  &num, nhop->backup_idx);
+		if (ret == 0) {
+			SET_FLAG(nhop->flags, NEXTHOP_FLAG_HAS_BACKUP);
+			nhop->backup_num = num;
+		} else
 			return false;
-
-		SET_FLAG(nhop->flags, NEXTHOP_FLAG_HAS_BACKUP);
-		nhop->backup_idx = backup_idx;
 	}
 
 	return true;
@@ -817,28 +831,29 @@ static bool nexthop_group_parse_nexthop(struct nexthop *nhop,
 static bool nexthop_group_parse_nhh(struct nexthop *nhop,
 				    const struct nexthop_hold *nhh)
 {
-	return (nexthop_group_parse_nexthop(nhop, nhh->addr, nhh->intf,
-					    nhh->nhvrf_name, nhh->labels, NULL,
-					    nhh->weight, nhh->backup_idx));
+	return (nexthop_group_parse_nexthop(
+		nhop, nhh->addr, nhh->intf, nhh->onlink, nhh->nhvrf_name,
+		nhh->labels, NULL, nhh->weight, nhh->backup_str));
 }
 
 DEFPY(ecmp_nexthops, ecmp_nexthops_cmd,
       "[no] nexthop\
         <\
-	  <A.B.C.D|X:X::X:X>$addr [INTERFACE$intf]\
+	  <A.B.C.D|X:X::X:X>$addr [INTERFACE$intf [onlink$onlink]]\
 	  |INTERFACE$intf\
 	>\
 	[{ \
 	   nexthop-vrf NAME$vrf_name \
 	   |label WORD \
            |weight (1-255) \
-           |backup-idx$bi_str (0-254)$idx \
+           |backup-idx WORD \
 	}]",
       NO_STR
       "Specify one of the nexthops in this ECMP group\n"
       "v4 Address\n"
       "v6 Address\n"
       "Interface to use\n"
+      "Treat nexthop as directly attached to the interface\n"
       "Interface to use\n"
       "If the nexthop is in a different vrf tell us\n"
       "The nexthop-vrf Name\n"
@@ -846,22 +861,30 @@ DEFPY(ecmp_nexthops, ecmp_nexthops_cmd,
       "One or more labels in the range (16-1048575) separated by '/'\n"
       "Weight to be used by the nexthop for purposes of ECMP\n"
       "Weight value to be used\n"
-      "Backup nexthop index in another group\n"
-      "Nexthop index value\n")
+      "Specify backup nexthop indexes in another group\n"
+      "One or more indexes in the range (0-254) separated by ','\n")
 {
 	VTY_DECLVAR_CONTEXT(nexthop_group_cmd, nhgc);
 	struct nexthop nhop;
 	struct nexthop *nh;
 	int lbl_ret = 0;
 	bool legal;
-	int backup_idx = idx;
+	int num;
+	uint8_t backups[NEXTHOP_MAX_BACKUPS];
 	bool yes = !no;
 
-	if (bi_str == NULL)
-		backup_idx = NHH_BACKUP_IDX_INVALID;
+	/* Pre-parse backup string to validate */
+	if (backup_idx) {
+		lbl_ret = nexthop_str2backups(backup_idx, &num, backups);
+		if (lbl_ret < 0) {
+			vty_out(vty, "%% Invalid backups\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+	}
 
-	legal = nexthop_group_parse_nexthop(&nhop, addr, intf, vrf_name, label,
-					    &lbl_ret, weight, backup_idx);
+	legal = nexthop_group_parse_nexthop(&nhop, addr, intf, !!onlink,
+					    vrf_name, label, &lbl_ret, weight,
+					    backup_idx);
 
 	if (nhop.type == NEXTHOP_TYPE_IPV6
 	    && IN6_IS_ADDR_LINKLOCAL(&nhop.gate.ipv6)) {
@@ -923,13 +946,19 @@ DEFPY(ecmp_nexthops, ecmp_nexthops_cmd,
 		}
 
 		/* Save config always */
-		nexthop_group_save_nhop(nhgc, vrf_name, addr, intf, label,
-					weight, backup_idx);
+		nexthop_group_save_nhop(nhgc, vrf_name, addr, intf, !!onlink,
+					label, weight, backup_idx);
 
 		if (legal && nhg_hooks.add_nexthop)
 			nhg_hooks.add_nexthop(nhgc, nh);
 	}
 
+	if (intf) {
+		struct interface *ifp = if_lookup_by_name_all_vrf(intf);
+
+		if (ifp)
+			ifp->configured = true;
+	}
 	return CMD_SUCCESS;
 }
 
@@ -942,23 +971,29 @@ static struct cmd_node nexthop_group_node = {
 	.config_write = nexthop_group_write,
 };
 
-void nexthop_group_write_nexthop(struct vty *vty, struct nexthop *nh)
+void nexthop_group_write_nexthop_simple(struct vty *vty,
+					const struct nexthop *nh,
+					char *altifname)
 {
 	char buf[100];
-	struct vrf *vrf;
+	char *ifname;
 
 	vty_out(vty, "nexthop ");
 
+	if (altifname)
+		ifname = altifname;
+	else
+		ifname = (char *)ifindex2ifname(nh->ifindex, nh->vrf_id);
+
 	switch (nh->type) {
 	case NEXTHOP_TYPE_IFINDEX:
-		vty_out(vty, "%s", ifindex2ifname(nh->ifindex, nh->vrf_id));
+		vty_out(vty, "%s", ifname);
 		break;
 	case NEXTHOP_TYPE_IPV4:
 		vty_out(vty, "%s", inet_ntoa(nh->gate.ipv4));
 		break;
 	case NEXTHOP_TYPE_IPV4_IFINDEX:
-		vty_out(vty, "%s %s", inet_ntoa(nh->gate.ipv4),
-			ifindex2ifname(nh->ifindex, nh->vrf_id));
+		vty_out(vty, "%s %s", inet_ntoa(nh->gate.ipv4), ifname);
 		break;
 	case NEXTHOP_TYPE_IPV6:
 		vty_out(vty, "%s",
@@ -967,15 +1002,23 @@ void nexthop_group_write_nexthop(struct vty *vty, struct nexthop *nh)
 	case NEXTHOP_TYPE_IPV6_IFINDEX:
 		vty_out(vty, "%s %s",
 			inet_ntop(AF_INET6, &nh->gate.ipv6, buf, sizeof(buf)),
-			ifindex2ifname(nh->ifindex, nh->vrf_id));
+			ifname);
 		break;
 	case NEXTHOP_TYPE_BLACKHOLE:
 		break;
 	}
+}
+
+void nexthop_group_write_nexthop(struct vty *vty, const struct nexthop *nh)
+{
+	struct vrf *vrf;
+	int i;
+
+	nexthop_group_write_nexthop_simple(vty, nh, NULL);
 
 	if (nh->vrf_id != VRF_DEFAULT) {
 		vrf = vrf_lookup_by_id(nh->vrf_id);
-		vty_out(vty, " nexthop-vrf %s", vrf->name);
+		vty_out(vty, " nexthop-vrf %s", VRF_LOGNAME(vrf));
 	}
 
 	if (nh->nh_label && nh->nh_label->num_labels > 0) {
@@ -990,16 +1033,22 @@ void nexthop_group_write_nexthop(struct vty *vty, struct nexthop *nh)
 	if (nh->weight)
 		vty_out(vty, " weight %u", nh->weight);
 
-	if (CHECK_FLAG(nh->flags, NEXTHOP_FLAG_HAS_BACKUP))
-		vty_out(vty, " backup-idx %d", nh->backup_idx);
+	if (CHECK_FLAG(nh->flags, NEXTHOP_FLAG_HAS_BACKUP)) {
+		vty_out(vty, " backup-idx %d", nh->backup_idx[0]);
+
+		for (i = 1; i < nh->backup_num; i++)
+			vty_out(vty, ",%d", nh->backup_idx[i]);
+	}
 
 	vty_out(vty, "\n");
 }
 
-void nexthop_group_json_nexthop(json_object *j, struct nexthop *nh)
+void nexthop_group_json_nexthop(json_object *j, const struct nexthop *nh)
 {
 	char buf[100];
 	struct vrf *vrf;
+	json_object *json_backups = NULL;
+	int i;
 
 	switch (nh->type) {
 	case NEXTHOP_TYPE_IFINDEX:
@@ -1046,12 +1095,19 @@ void nexthop_group_json_nexthop(json_object *j, struct nexthop *nh)
 	if (nh->weight)
 		json_object_int_add(j, "weight", nh->weight);
 
-	if (CHECK_FLAG(nh->flags, NEXTHOP_FLAG_HAS_BACKUP))
-		json_object_int_add(j, "backupIdx", nh->backup_idx);
+	if (CHECK_FLAG(nh->flags, NEXTHOP_FLAG_HAS_BACKUP)) {
+		json_backups = json_object_new_array();
+		for (i = 0; i < nh->backup_num; i++)
+			json_object_array_add(
+				json_backups,
+				json_object_new_int(nh->backup_idx[i]));
+
+		json_object_object_add(j, "backupIdx", json_backups);
+	}
 }
 
 static void nexthop_group_write_nexthop_internal(struct vty *vty,
-						 struct nexthop_hold *nh)
+						 const struct nexthop_hold *nh)
 {
 	char buf[100];
 
@@ -1063,6 +1119,9 @@ static void nexthop_group_write_nexthop_internal(struct vty *vty,
 	if (nh->intf)
 		vty_out(vty, " %s", nh->intf);
 
+	if (nh->onlink)
+		vty_out(vty, " onlink");
+
 	if (nh->nhvrf_name)
 		vty_out(vty, " nexthop-vrf %s", nh->nhvrf_name);
 
@@ -1072,8 +1131,8 @@ static void nexthop_group_write_nexthop_internal(struct vty *vty,
 	if (nh->weight)
 		vty_out(vty, " weight %u", nh->weight);
 
-	if (nh->backup_idx != NHH_BACKUP_IDX_INVALID)
-		vty_out(vty, " backup-idx %d", nh->backup_idx);
+	if (nh->backup_str)
+		vty_out(vty, " backup-idx %s", nh->backup_str);
 
 	vty_out(vty, "\n");
 }
@@ -1205,6 +1264,7 @@ void nexthop_group_interface_state_change(struct interface *ifp,
 				if (ifp->ifindex != nhop.ifindex)
 					continue;
 
+				ifp->configured = true;
 				nh = nexthop_new();
 
 				memcpy(nh, &nhop, sizeof(nhop));

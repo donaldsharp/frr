@@ -25,6 +25,7 @@
 #include <zebra.h>
 #include "qobj.h"
 #include "libospf.h"
+#include "ldp_sync.h"
 
 #include "filter.h"
 #include "log.h"
@@ -249,6 +250,8 @@ struct ospf {
 
 	struct thread *t_write;
 #define OSPF_WRITE_INTERFACE_COUNT_DEFAULT    20
+	struct thread *t_default_routemap_timer;
+
 	int write_oi_count; /* Num of packets sent per thread invocation */
 	struct thread *t_read;
 	int fd;
@@ -310,9 +313,16 @@ struct ospf {
 	 * update to neighbors immediatly */
 	uint8_t inst_shutdown;
 
+	/* Enable or disable sending proactive ARP requests. */
+	bool proactive_arp;
+#define OSPF_PROACTIVE_ARP_DEFAULT true
+
 	/* Redistributed external information. */
 	struct list *external[ZEBRA_ROUTE_MAX + 1];
 #define EXTERNAL_INFO(E)      (E->external_info)
+
+	/* MPLS LDP-IGP Sync */
+	struct ldp_sync_info_cmd ldp_sync_cmd;
 
 	QOBJ_FIELDS
 };
@@ -408,6 +418,12 @@ struct ospf_area {
 
 	/* Shortest Path Tree. */
 	struct vertex *spf;
+	struct list *spf_vertex_list;
+
+	bool spf_dry_run;   /* flag for checking if the SPF calculation is
+			       intended for the local RIB */
+	bool spf_root_node; /* flag for checking if the calculating node is the
+			       root node of the SPF tree */
 
 	/* Threads. */
 	struct thread *t_stub_router;     /* Stub-router timer */

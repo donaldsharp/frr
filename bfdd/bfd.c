@@ -88,6 +88,8 @@ static void bfd_profile_set_default(struct bfd_profile *bp)
 	bp->admin_shutdown = true;
 	bp->detection_multiplier = BFD_DEFDETECTMULT;
 	bp->echo_mode = false;
+	bp->passive = false;
+	bp->minimum_ttl = BFD_DEF_MHOP_TTL;
 	bp->min_echo_rx = BFD_DEF_REQ_MIN_ECHO;
 	bp->min_rx = BFD_DEFREQUIREDMINRX;
 	bp->min_tx = BFD_DEFDESIREDMINTX;
@@ -115,50 +117,13 @@ struct bfd_profile *bfd_profile_new(const char *name)
 void bfd_profile_free(struct bfd_profile *bp)
 {
 	/* Detach from any session. */
-	bfd_profile_detach(bp);
+	if (bglobal.bg_shutdown == false)
+		bfd_profile_detach(bp);
 
 	/* Remove from global list. */
 	TAILQ_REMOVE(&bplist, bp, entry);
-	free(bp);
-}
 
-/**
- * Removes a profile and tests whether it needs to apply the changes or not.
- *
- * \param bs the BFD session.
- * \param apply whether or not to apply configurations immediately.
- */
-static void _bfd_profile_remove(struct bfd_session *bs, bool apply)
-{
-	struct bfd_profile *bp;
-
-	/* No profile applied, nothing to do. */
-	bp = bs->profile;
-	if (bp == NULL)
-		return;
-
-	/* Remove the profile association. */
-	bs->profile = NULL;
-
-	/* Set multiplier to the default. */
-	bs->detect_mult = bs->peer_profile.detection_multiplier;
-
-	/* Set timers back to user configuration. */
-	bs->timers.desired_min_tx = bs->peer_profile.min_tx;
-	bs->timers.required_min_rx = bs->peer_profile.min_rx;
-
-	/* We can only apply echo options on single hop sessions. */
-	if (!CHECK_FLAG(bs->flags, BFD_SESS_FLAG_MH)) {
-		/* Set default echo timer. */
-		bs->timers.required_min_echo = bs->peer_profile.min_echo_rx;
-
-		/* Default is no echo mode. */
-		if (apply)
-			bfd_set_echo(bs, bs->peer_profile.echo_mode);
-	}
-
-	if (apply)
-		bfd_set_shutdown(bs, bs->peer_profile.admin_shutdown);
+	XFREE(MTYPE_BFDD_PROFILE, bp);
 }
 
 void bfd_profile_apply(const char *profname, struct bfd_session *bs)
@@ -167,8 +132,6 @@ void bfd_profile_apply(const char *profname, struct bfd_session *bs)
 
 	/* Remove previous profile if any. */
 	if (bs->profile_name) {
-		_bfd_profile_remove(bs, false);
-
 		/* We are changing profiles. */
 		if (strcmp(bs->profile_name, profname)) {
 			XFREE(MTYPE_BFDD_PROFILE, bs->profile_name);
@@ -180,11 +143,22 @@ void bfd_profile_apply(const char *profname, struct bfd_session *bs)
 
 	/* Look up new profile to apply. */
 	bp = bfd_profile_lookup(profname);
-	if (bp == NULL)
-		return;
 
 	/* Point to profile if it exists. */
 	bs->profile = bp;
+
+	/* Apply configuration. */
+	bfd_session_apply(bs);
+}
+
+void bfd_session_apply(struct bfd_session *bs)
+{
+	struct bfd_profile *bp;
+	uint32_t min_tx = bs->timers.desired_min_tx;
+	uint32_t min_rx = bs->timers.required_min_rx;
+
+	/* Pick the source of configuration. */
+	bp = bs->profile ? bs->profile : &bs->peer_profile;
 
 	/* Set multiplier if not the default. */
 	if (bs->peer_profile.detection_multiplier == BFD_DEFDETECTMULT)
@@ -217,21 +191,40 @@ void bfd_profile_apply(const char *profname, struct bfd_session *bs)
 			bfd_set_echo(bs, bp->echo_mode);
 		else
 			bfd_set_echo(bs, bs->peer_profile.echo_mode);
+	} else {
+		/* Configure the TTL packet filter. */
+		if (bs->peer_profile.minimum_ttl == BFD_DEF_MHOP_TTL)
+			bs->mh_ttl = bp->minimum_ttl;
+		else
+			bs->mh_ttl = bs->peer_profile.minimum_ttl;
 	}
+
+	/* Toggle 'passive-mode' if default value. */
+	if (bs->peer_profile.passive == false)
+		bfd_set_passive_mode(bs, bp->passive);
+	else
+		bfd_set_passive_mode(bs, bs->peer_profile.passive);
 
 	/* Toggle 'no shutdown' if default value. */
 	if (bs->peer_profile.admin_shutdown)
 		bfd_set_shutdown(bs, bp->admin_shutdown);
 	else
 		bfd_set_shutdown(bs, bs->peer_profile.admin_shutdown);
+
+	/* If session interval changed negotiate new timers. */
+	if (bs->ses_state == PTM_BFD_UP
+	    && (bs->timers.desired_min_tx != min_tx
+		|| bs->timers.required_min_rx != min_rx))
+		bfd_set_polling(bs);
 }
 
 void bfd_profile_remove(struct bfd_session *bs)
 {
 	/* Remove any previous set profile name. */
 	XFREE(MTYPE_BFDD_PROFILE, bs->profile_name);
+	bs->profile = NULL;
 
-	_bfd_profile_remove(bs, true);
+	bfd_session_apply(bs);
 }
 
 void gen_bfd_key(struct bfd_key *key, struct sockaddr_any *peer,
@@ -372,8 +365,12 @@ int bfd_session_enable(struct bfd_session *bs)
 	 * protocol.
 	 */
 	bs->sock = psock;
-	bfd_recvtimer_update(bs);
-	ptm_bfd_start_xmt_timer(bs, false);
+
+	/* Only start timers if we are using active mode. */
+	if (CHECK_FLAG(bs->flags, BFD_SESS_FLAG_PASSIVE) == 0) {
+		bfd_recvtimer_update(bs);
+		ptm_bfd_start_xmt_timer(bs, false);
+	}
 
 	return 0;
 }
@@ -533,6 +530,12 @@ void ptm_bfd_sess_dn(struct bfd_session *bfd, uint8_t diag)
 	/* Stop echo packet transmission if they are active */
 	if (CHECK_FLAG(bfd->flags, BFD_SESS_FLAG_ECHO_ACTIVE))
 		ptm_bfd_echo_stop(bfd);
+
+	/* Stop attempting to transmit or expect control packets if passive. */
+	if (CHECK_FLAG(bfd->flags, BFD_SESS_FLAG_PASSIVE)) {
+		bfd_recvtimer_delete(bfd);
+		bfd_xmttimer_delete(bfd);
+	}
 
 	if (old_state != bfd->ses_state) {
 		bfd->stats.session_down++;
@@ -756,6 +759,11 @@ static void _bfd_session_update(struct bfd_session *bs,
 	else
 		UNSET_FLAG(bs->flags, BFD_SESS_FLAG_CBIT);
 
+	if (bpc->bpc_has_minimum_ttl) {
+		bs->mh_ttl = bpc->bpc_minimum_ttl;
+		bs->peer_profile.minimum_ttl = bpc->bpc_minimum_ttl;
+	}
+
 	bs->peer_profile.echo_mode = bpc->bpc_echo;
 	bfd_set_echo(bs, bpc->bpc_echo);
 
@@ -764,7 +772,17 @@ static void _bfd_session_update(struct bfd_session *bs,
 	 * the session is disabled.
 	 */
 	bs->peer_profile.admin_shutdown = bpc->bpc_shutdown;
+	bfd_set_passive_mode(bs, bpc->bpc_passive);
 	bfd_set_shutdown(bs, bpc->bpc_shutdown);
+
+	/*
+	 * Apply profile last: it also calls `bfd_set_shutdown`.
+	 *
+	 * There is no problem calling `shutdown` twice if the value doesn't
+	 * change or if it is overriden by peer specific configuration.
+	 */
+	if (bpc->bpc_has_profile)
+		bfd_profile_apply(bpc->bpc_profile, bs);
 }
 
 static int bfd_session_update(struct bfd_session *bs, struct bfd_peer_cfg *bpc)
@@ -913,8 +931,7 @@ int ptm_bfd_sess_del(struct bfd_peer_cfg *bpc)
 
 	/* This pointer is being referenced, don't let it be deleted. */
 	if (bs->refcount > 0) {
-		zlog_err("session-delete: refcount failure: %" PRIu64
-			 " references",
+		zlog_err("session-delete: refcount failure: %" PRIu64" references",
 			 bs->refcount);
 		return -1;
 	}
@@ -976,6 +993,10 @@ static void bs_down_handler(struct bfd_session *bs, int nstate)
 		 * bring it up.
 		 */
 		bs->ses_state = PTM_BFD_INIT;
+
+		/* Answer peer with INIT immediately in passive mode. */
+		if (CHECK_FLAG(bs->flags, BFD_SESS_FLAG_PASSIVE))
+			ptm_bfd_snd(bs, 0);
 		break;
 
 	case PTM_BFD_INIT:
@@ -1302,9 +1323,39 @@ void bfd_set_shutdown(struct bfd_session *bs, bool shutdown)
 		bs->ses_state = PTM_BFD_DOWN;
 		control_notify(bs, bs->ses_state);
 
-		/* Enable all timers. */
-		bfd_recvtimer_update(bs);
+		/* Enable timers if non passive, otherwise stop them. */
+		if (CHECK_FLAG(bs->flags, BFD_SESS_FLAG_PASSIVE)) {
+			bfd_recvtimer_delete(bs);
+			bfd_xmttimer_delete(bs);
+		} else {
+			bfd_recvtimer_update(bs);
+			bfd_xmttimer_update(bs, bs->xmt_TO);
+		}
+	}
+}
+
+void bfd_set_passive_mode(struct bfd_session *bs, bool passive)
+{
+	if (passive) {
+		SET_FLAG(bs->flags, BFD_SESS_FLAG_PASSIVE);
+
+		/* Session is already up and running, nothing to do now. */
+		if (bs->ses_state != PTM_BFD_DOWN)
+			return;
+
+		/* Lets disable the timers since we are now passive. */
+		bfd_recvtimer_delete(bs);
+		bfd_xmttimer_delete(bs);
+	} else {
+		UNSET_FLAG(bs->flags, BFD_SESS_FLAG_PASSIVE);
+
+		/* Session is already up and running, nothing to do now. */
+		if (bs->ses_state != PTM_BFD_DOWN)
+			return;
+
+		/* Session is down, let it attempt to start the connection. */
 		bfd_xmttimer_update(bs, bs->xmt_TO);
+		bfd_recvtimer_update(bs);
 	}
 }
 
@@ -1682,8 +1733,7 @@ struct bfd_session *bfd_key_lookup(struct bfd_key key)
 				inet_ntop(bs.key.family, &bs.key.local,
 					  addr_buf, sizeof(addr_buf));
 				zlog_debug(
-					" peer %s found, but ifp %s"
-					" and loc-addr %s ignored",
+					" peer %s found, but ifp %s and loc-addr %s ignored",
 					peer_buf, key.ifname, addr_buf);
 			}
 			return bsp;
@@ -1695,19 +1745,19 @@ struct bfd_session *bfd_key_lookup(struct bfd_key key)
 	 * input has no iface nor local-address, but a context may
 	 * exist
 	 */
-	ctx.result = NULL;
-	ctx.given = &bs;
-	hash_walk(bfd_key_hash,
-		  &bfd_key_lookup_ignore_partial_walker,
-		  &ctx);
-	/* change key */
-	if (ctx.result) {
-		bsp = ctx.result;
-		if (bglobal.debug_peer_event)
-			zlog_debug(
-				" peer %s found, but ifp"
-				" and/or loc-addr params ignored",
-				peer_buf);
+	if (!bs.key.mhop) {
+		ctx.result = NULL;
+		ctx.given = &bs;
+		hash_walk(bfd_key_hash, &bfd_key_lookup_ignore_partial_walker,
+			  &ctx);
+		/* change key */
+		if (ctx.result) {
+			bsp = ctx.result;
+			if (bglobal.debug_peer_event)
+				zlog_debug(
+					" peer %s found, but ifp and/or loc-addr params ignored",
+					peer_buf);
+		}
 	}
 	return bsp;
 }
@@ -2003,16 +2053,16 @@ static int bfd_vrf_enable(struct vrf *vrf)
 		if (!bvrf->bg_ev[1])
 			thread_add_read(master, bfd_recv_cb, bvrf, bvrf->bg_mhop,
 					&bvrf->bg_ev[1]);
-		if (!bvrf->bg_ev[2])
+		if (!bvrf->bg_ev[2] && bvrf->bg_shop6 != -1)
 			thread_add_read(master, bfd_recv_cb, bvrf, bvrf->bg_shop6,
 					&bvrf->bg_ev[2]);
-		if (!bvrf->bg_ev[3])
+		if (!bvrf->bg_ev[3] && bvrf->bg_mhop6 != -1)
 			thread_add_read(master, bfd_recv_cb, bvrf, bvrf->bg_mhop6,
 					&bvrf->bg_ev[3]);
 		if (!bvrf->bg_ev[4])
 			thread_add_read(master, bfd_recv_cb, bvrf, bvrf->bg_echo,
 					&bvrf->bg_ev[4]);
-		if (!bvrf->bg_ev[5])
+		if (!bvrf->bg_ev[5] && bvrf->bg_echov6 != -1)
 			thread_add_read(master, bfd_recv_cb, bvrf, bvrf->bg_echov6,
 					&bvrf->bg_ev[5]);
 	}
@@ -2051,10 +2101,13 @@ static int bfd_vrf_disable(struct vrf *vrf)
 	socket_close(&bvrf->bg_echo);
 	socket_close(&bvrf->bg_shop);
 	socket_close(&bvrf->bg_mhop);
-	socket_close(&bvrf->bg_shop6);
-	socket_close(&bvrf->bg_mhop6);
+	if (bvrf->bg_shop6 != -1)
+		socket_close(&bvrf->bg_shop6);
+	if (bvrf->bg_mhop6 != -1)
+		socket_close(&bvrf->bg_mhop6);
 	socket_close(&bvrf->bg_echo);
-	socket_close(&bvrf->bg_echov6);
+	if (bvrf->bg_echov6 != -1)
+		socket_close(&bvrf->bg_echov6);
 
 	/* free context */
 	XFREE(MTYPE_BFDD_VRF, bvrf);
@@ -2106,6 +2159,7 @@ void bfd_session_update_vrf_name(struct bfd_session *bs, struct vrf *vrf)
 	if (yang_module_find("frr-bfdd") && bs->key.vrfname[0]) {
 		struct lyd_node *bfd_dnode;
 		char xpath[XPATH_MAXLEN], xpath_srcaddr[XPATH_MAXLEN + 32];
+		char oldpath[XPATH_MAXLEN], newpath[XPATH_MAXLEN];
 		char addr_buf[INET6_ADDRSTRLEN];
 		int slen;
 
@@ -2126,14 +2180,19 @@ void bfd_session_update_vrf_name(struct bfd_session *bs, struct vrf *vrf)
 					 "[interface='%s']", bs->key.ifname);
 		else
 			slen += snprintf(xpath + slen, sizeof(xpath) - slen,
-					 "[interface='']");
+					 "[interface='*']");
 		snprintf(xpath + slen, sizeof(xpath) - slen, "[vrf='%s']/vrf",
 			 bs->key.vrfname);
 
 		bfd_dnode = yang_dnode_get(running_config->dnode, xpath,
 					   bs->key.vrfname);
 		if (bfd_dnode) {
+			yang_dnode_get_path(bfd_dnode->parent, oldpath,
+					    sizeof(oldpath));
 			yang_dnode_change_leaf(bfd_dnode, vrf->name);
+			yang_dnode_get_path(bfd_dnode->parent, newpath,
+					    sizeof(newpath));
+			nb_running_move_tree(oldpath, newpath);
 			running_config->version++;
 		}
 	}

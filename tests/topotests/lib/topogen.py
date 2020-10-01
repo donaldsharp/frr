@@ -40,6 +40,7 @@ Basic usage instructions:
 
 import os
 import sys
+import io
 import logging
 import json
 
@@ -96,9 +97,8 @@ def set_topogen(tgen):
 tgen_defaults = {
     "verbosity": "info",
     "frrdir": "/usr/lib/frr",
-    "quaggadir": "/usr/lib/quagga",
     "routertype": "frr",
-    "memleak_path": None,
+    "memleak_path": "",
 }
 
 
@@ -173,7 +173,7 @@ class Topogen(object):
         options:
         * `name`: (optional) select the router name
         * `daemondir`: (optional) custom daemon binary directory
-        * `routertype`: (optional) `quagga` or `frr`
+        * `routertype`: (optional) `frr`
         Returns a TopoRouter.
         """
         if name is None:
@@ -182,9 +182,8 @@ class Topogen(object):
             raise KeyError("router already exists")
 
         params["frrdir"] = self.config.get(self.CONFIG_SECTION, "frrdir")
-        params["quaggadir"] = self.config.get(self.CONFIG_SECTION, "quaggadir")
         params["memleak_path"] = self.config.get(self.CONFIG_SECTION, "memleak_path")
-        if not params.has_key("routertype"):
+        if "routertype" not in params:
             params["routertype"] = self.config.get(self.CONFIG_SECTION, "routertype")
 
         self.gears[name] = TopoRouter(self, cls, name, **params)
@@ -254,7 +253,7 @@ class Topogen(object):
         ```py
         tgen = get_topogen()
         router_dict = tgen.get_gears(TopoRouter)
-        for router_name, router in router_dict.iteritems():
+        for router_name, router in router_dict.items():
             # Do stuff
         ```
         * List iteration:
@@ -267,7 +266,7 @@ class Topogen(object):
         """
         return dict(
             (name, gear)
-            for name, gear in self.gears.iteritems()
+            for name, gear in self.gears.items()
             if isinstance(gear, geartype)
         )
 
@@ -316,7 +315,7 @@ class Topogen(object):
         """
         if router is None:
             # pylint: disable=r1704
-            for _, router in self.routers().iteritems():
+            for _, router in self.routers().items():
                 router.start()
         else:
             if isinstance(router, str):
@@ -335,9 +334,7 @@ class Topogen(object):
         logger.info("stopping topology: {}".format(self.modname))
         errors = ""
         for gear in self.gears.values():
-            gear.stop(False, False)
-        for gear in self.gears.values():
-            errors += gear.stop(True, False)
+            errors += gear.stop()
         if len(errors) > 0:
             assert "Errors found post shutdown - details follow:" == 0, errors
 
@@ -364,7 +361,7 @@ class Topogen(object):
         memleak_file = os.environ.get("TOPOTESTS_CHECK_MEMLEAK") or self.config.get(
             self.CONFIG_SECTION, "memleak_path"
         )
-        if memleak_file is None:
+        if memleak_file == "" or memleak_file == None:
             return False
         return True
 
@@ -432,7 +429,7 @@ class TopoGear(object):
 
     def __str__(self):
         links = ""
-        for myif, dest in self.links.iteritems():
+        for myif, dest in self.links.items():
             _, destif = dest
             if links != "":
                 links += ","
@@ -531,12 +528,10 @@ class TopoRouter(TopoGear):
     Router abstraction.
     """
 
-    # The default required directories by Quagga/FRR
+    # The default required directories by FRR
     PRIVATE_DIRS = [
         "/etc/frr",
-        "/etc/quagga",
         "/var/run/frr",
-        "/var/run/quagga",
         "/var/log",
     ]
 
@@ -583,7 +578,7 @@ class TopoRouter(TopoGear):
         * cls: router class that will be used to instantiate
         * name: router name
         * daemondir: daemon binary directory
-        * routertype: 'quagga' or 'frr'
+        * routertype: 'frr'
         """
         super(TopoRouter, self).__init__()
         self.tgen = tgen
@@ -592,7 +587,7 @@ class TopoRouter(TopoGear):
         self.cls = cls
         self.options = {}
         self.routertype = params.get("routertype", "frr")
-        if not params.has_key("privateDirs"):
+        if "privateDirs" not in params:
             params["privateDirs"] = self.PRIVATE_DIRS
 
         self.options["memleak_path"] = params.get("memleak_path", None)
@@ -628,7 +623,7 @@ class TopoRouter(TopoGear):
         except OSError:
             pass
 
-        # Allow unprivileged daemon user (frr/quagga) to create log files
+        # Allow unprivileged daemon user (frr) to create log files
         try:
             # Only allow group, if it exist.
             gid = grp.getgrnam(self.routertype)[2]
@@ -658,7 +653,7 @@ class TopoRouter(TopoGear):
         Possible daemon values are: TopoRouter.RD_ZEBRA, TopoRouter.RD_RIP,
         TopoRouter.RD_RIPNG, TopoRouter.RD_OSPF, TopoRouter.RD_OSPF6,
         TopoRouter.RD_ISIS, TopoRouter.RD_BGP, TopoRouter.RD_LDP,
-        TopoRouter.RD_PIM.
+        TopoRouter.RD_PIM, TopoRouter.RD_PBR.
         """
         daemonstr = self.RD.get(daemon)
         self.logger.info('loading "{}" configuration: {}'.format(daemonstr, source))
@@ -677,7 +672,7 @@ class TopoRouter(TopoGear):
         * Load modules
         * Clean up files
         * Configure interfaces
-        * Start daemons (e.g. FRR/Quagga)
+        * Start daemons (e.g. FRR)
         * Configure daemon logging files
         """
         self.logger.debug("starting")
@@ -686,7 +681,7 @@ class TopoRouter(TopoGear):
 
         # Enable all daemon command logging, logging files
         # and set them to the start dir.
-        for daemon, enabled in nrouter.daemons.iteritems():
+        for daemon, enabled in nrouter.daemons.items():
             if enabled == 0:
                 continue
             self.vtysh_cmd(
@@ -703,18 +698,30 @@ class TopoRouter(TopoGear):
 
         return result
 
-    def stop(self, wait=True, assertOnError=True):
+    def __stop_internal(self, wait=True, assertOnError=True):
         """
-        Stop router:
+        Stop router, private internal version
         * Kill daemons
         """
-        self.logger.debug("stopping")
+        self.logger.debug("stopping: wait {}, assert {}".format(
+            wait, assertOnError))
         return self.tgen.net[self.name].stopRouter(wait, assertOnError)
+
+
+    def stop(self):
+        """
+        Stop router cleanly:
+        * Signal daemons twice, once without waiting, and then a second time
+          with a wait to ensure the daemons exit cleanly
+        """
+        self.logger.debug("stopping")
+        self.__stop_internal(False, False)
+        return self.__stop_internal()
 
     def startDaemons(self, daemons):
         """
         Start Daemons: to start specific daemon(user defined daemon only)
-        * Start daemons (e.g. FRR/Quagga)
+        * Start daemons (e.g. FRR)
         * Configure daemon logging files
         """
         self.logger.debug('starting')
@@ -723,7 +730,7 @@ class TopoRouter(TopoGear):
 
         # Enable all daemon command logging, logging files
         # and set them to the start dir.
-        for daemon, enabled in nrouter.daemons.iteritems():
+        for daemon, enabled in nrouter.daemons.items():
             for d in daemons:
                 if enabled == 0:
                     continue
@@ -816,10 +823,11 @@ class TopoRouter(TopoGear):
         memleak_file = (
             os.environ.get("TOPOTESTS_CHECK_MEMLEAK") or self.options["memleak_path"]
         )
-        if memleak_file is None:
+        if memleak_file == "" or memleak_file == None:
             return
 
         self.stop()
+
         self.logger.info("running memory leak report")
         self.tgen.net[self.name].report_memory_leaks(memleak_file, testname)
 
@@ -1004,7 +1012,7 @@ def diagnose_env_linux():
     logger.info("Running environment diagnostics")
 
     # Load configuration
-    config = configparser.ConfigParser(tgen_defaults)
+    config = configparser.ConfigParser(defaults=tgen_defaults)
     pytestini_path = os.path.join(CWD, "../pytest.ini")
     config.read(pytestini_path)
 
@@ -1030,12 +1038,10 @@ def diagnose_env_linux():
 
     # Assert that FRR utilities exist
     frrdir = config.get("topogen", "frrdir")
-    hasfrr = False
     if not os.path.isdir(frrdir):
         logger.error("could not find {} directory".format(frrdir))
         ret = False
     else:
-        hasfrr = True
         try:
             pwd.getpwnam("frr")[2]
         except KeyError:
@@ -1064,6 +1070,7 @@ def diagnose_env_linux():
             "isisd",
             "pimd",
             "ldpd",
+            "pbrd"
         ]:
             path = os.path.join(frrdir, fname)
             if not os.path.isfile(path):
@@ -1083,55 +1090,6 @@ def diagnose_env_linux():
 
                 os.system("{} -v 2>&1 >/tmp/topotests/frr_zebra.txt".format(path))
 
-    # Assert that Quagga utilities exist
-    quaggadir = config.get("topogen", "quaggadir")
-    if hasfrr:
-        # if we have frr, don't check for quagga
-        pass
-    elif not os.path.isdir(quaggadir):
-        logger.info(
-            "could not find {} directory (quagga tests will not run)".format(quaggadir)
-        )
-    else:
-        ret = True
-        try:
-            pwd.getpwnam("quagga")[2]
-        except KeyError:
-            logger.info('could not find "quagga" user')
-
-        try:
-            grp.getgrnam("quagga")[2]
-        except KeyError:
-            logger.info('could not find "quagga" group')
-
-        try:
-            if "quagga" not in grp.getgrnam("quaggavty").gr_mem:
-                logger.error(
-                    '"quagga" user and group exist, but user is not under "quaggavty"'
-                )
-        except KeyError:
-            logger.warning('could not find "quaggavty" group')
-
-        for fname in [
-            "zebra",
-            "ospfd",
-            "ospf6d",
-            "bgpd",
-            "ripd",
-            "ripngd",
-            "isisd",
-            "pimd",
-        ]:
-            path = os.path.join(quaggadir, fname)
-            if not os.path.isfile(path):
-                logger.warning("could not find {} in {}".format(fname, quaggadir))
-                ret = False
-            else:
-                if fname != "zebra":
-                    continue
-
-                os.system("{} -v 2>&1 >/tmp/topotests/quagga_zebra.txt".format(path))
-
     # Test MPLS availability
     krel = platform.release()
     if topotest.version_cmp(krel, "4.5") < 0:
@@ -1149,10 +1107,10 @@ def diagnose_env_linux():
 
     # TODO remove me when we start supporting exabgp >= 4
     try:
-        output = subprocess.check_output(["exabgp", "-v"])
-        line = output.split("\n")[0]
-        version = line.split(" ")[2]
-        if topotest.version_cmp(version, "4") >= 0:
+        p = os.popen("exabgp -v")
+        line = p.readlines()
+        version = line[0].split()
+        if topotest.version_cmp(version[2], "4") >= 0:
             logger.warning(
                 "BGP topologies are still using exabgp version 3, expect failures"
             )

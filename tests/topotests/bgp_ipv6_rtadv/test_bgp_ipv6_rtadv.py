@@ -22,7 +22,7 @@
 #
 
 """
- test_bgp_ipv6_rtadv.py: Test the FRR/Quagga BGP daemon with BGP IPv6 interface
+ test_bgp_ipv6_rtadv.py: Test the FRR BGP daemon with BGP IPv6 interface
  with route advertisements on a separate netns.
 """
 
@@ -69,7 +69,7 @@ def setup_module(mod):
 
     router_list = tgen.routers()
 
-    for rname, router in router_list.iteritems():
+    for rname, router in router_list.items():
         router.load_config(
             TopoRouter.RD_ZEBRA, os.path.join(CWD, "{}/zebra.conf".format(rname))
         )

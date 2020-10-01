@@ -77,8 +77,7 @@ send_packet(int fd, int af, union ldpd_addr *dst, struct iface_af *ia,
 		if (ia && IN_MULTICAST(ntohl(dst->v4.s_addr))) {
 			/* set outgoing interface for multicast traffic */
 			if (sock_set_ipv4_mcast(ia->iface) == -1) {
-				log_debug("%s: error setting multicast "
-				    "interface, %s", __func__, ia->iface->name);
+				log_debug("%s: error setting multicast interface, %s", __func__, ia->iface->name);
 				return (-1);
 			}
 		}
@@ -87,8 +86,7 @@ send_packet(int fd, int af, union ldpd_addr *dst, struct iface_af *ia,
 		if (ia && IN6_IS_ADDR_MULTICAST(&dst->v6)) {
 			/* set outgoing interface for multicast traffic */
 			if (sock_set_ipv6_mcast(ia->iface) == -1) {
-				log_debug("%s: error setting multicast "
-				    "interface, %s", __func__, ia->iface->name);
+				log_debug("%s: error setting multicast interface, %s", __func__, ia->iface->name);
 				return (-1);
 			}
 		}
@@ -368,8 +366,7 @@ session_accept(struct thread *thread)
 		return (0);
 	}
 	if (nbr->state != NBR_STA_PRESENT) {
-		log_debug("%s: lsr-id %s: rejecting additional transport "
-		    "connection", __func__, inet_ntoa(nbr->id));
+		log_debug("%s: lsr-id %s: rejecting additional transport connection", __func__, inet_ntoa(nbr->id));
 		close(newfd);
 		return (0);
 	}
@@ -685,6 +682,8 @@ session_close(struct nbr *nbr)
 {
 	log_debug("%s: closing session with lsr-id %s", __func__,
 	    inet_ntoa(nbr->id));
+
+	ldp_sync_fsm_nbr_event(nbr, LDP_SYNC_EVT_SESSION_CLOSE);
 
 	tcp_close(nbr->tcp);
 	nbr_stop_ktimer(nbr);

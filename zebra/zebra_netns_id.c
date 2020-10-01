@@ -39,9 +39,6 @@
 #include "zebra/zebra_netns_id.h"
 #include "zebra/zebra_errors.h"
 
-/* default NS ID value used when VRF backend is not NETNS */
-#define NS_DEFAULT_INTERNAL 0
-
 /* in case NEWNSID not available, the NSID will be locally obtained
  */
 #define NS_BASE_NSID 0
@@ -185,7 +182,7 @@ ns_id_t zebra_ns_id_get(const char *netnspath, int fd_param)
 	if (sock < 0) {
 		flog_err_sys(EC_LIB_SOCKET, "netlink( %u) socket() error: %s",
 			     sock, safe_strerror(errno));
-		if (fd_param == -1)
+		if (netnspath)
 			close(fd);
 		return NS_UNKNOWN;
 	}
@@ -199,7 +196,7 @@ ns_id_t zebra_ns_id_get(const char *netnspath, int fd_param)
 			     "netlink( %u) socket() bind error: %s", sock,
 			     safe_strerror(errno));
 		close(sock);
-		if (fd_param == -1)
+		if (netnspath)
 			close(fd);
 		return NS_UNKNOWN;
 	}
@@ -216,13 +213,13 @@ ns_id_t zebra_ns_id_get(const char *netnspath, int fd_param)
 	nlh->nlmsg_len += NETLINK_ALIGN(sizeof(struct rtgenmsg));
 	rt->rtgen_family = AF_UNSPEC;
 
-	addattr32(nlh, NETLINK_SOCKET_BUFFER_SIZE, NETNSA_FD, fd);
-	addattr32(nlh, NETLINK_SOCKET_BUFFER_SIZE, NETNSA_NSID, ns_id);
+	nl_attr_put32(nlh, NETLINK_SOCKET_BUFFER_SIZE, NETNSA_FD, fd);
+	nl_attr_put32(nlh, NETLINK_SOCKET_BUFFER_SIZE, NETNSA_NSID, ns_id);
 
 	ret = send_receive(sock, nlh, seq, buf);
 	if (ret < 0) {
 		close(sock);
-		if (fd_param == -1)
+		if (netnspath)
 			close(fd);
 		return NS_UNKNOWN;
 	}
@@ -267,7 +264,7 @@ ns_id_t zebra_ns_id_get(const char *netnspath, int fd_param)
 				"netlink( %u) recvfrom() error 2 when reading: %s",
 				fd, safe_strerror(errno));
 			close(sock);
-			if (fd_param == -1)
+			if (netnspath)
 				close(fd);
 			if (errno == ENOTSUP) {
 				zlog_debug("NEWNSID locally generated");
@@ -282,13 +279,14 @@ ns_id_t zebra_ns_id_get(const char *netnspath, int fd_param)
 		nlh->nlmsg_len += NETLINK_ALIGN(sizeof(struct rtgenmsg));
 		rt->rtgen_family = AF_UNSPEC;
 
-		addattr32(nlh, NETLINK_SOCKET_BUFFER_SIZE, NETNSA_FD, fd);
-		addattr32(nlh, NETLINK_SOCKET_BUFFER_SIZE, NETNSA_NSID, ns_id);
+		nl_attr_put32(nlh, NETLINK_SOCKET_BUFFER_SIZE, NETNSA_FD, fd);
+		nl_attr_put32(nlh, NETLINK_SOCKET_BUFFER_SIZE, NETNSA_NSID,
+			      ns_id);
 
 		ret = send_receive(sock, nlh, seq, buf);
 		if (ret < 0) {
 			close(sock);
-			if (fd_param == -1)
+			if (netnspath)
 				close(fd);
 			return NS_UNKNOWN;
 		}
@@ -320,7 +318,7 @@ ns_id_t zebra_ns_id_get(const char *netnspath, int fd_param)
 		} while (len != 0 && ret == 0);
 	}
 
-	if (fd_param == -1)
+	if (netnspath)
 		close(fd);
 	close(sock);
 	return return_nsid;
@@ -361,14 +359,14 @@ ns_id_t zebra_ns_id_get_default(void)
 	fd = open(NS_DEFAULT_NAME, O_RDONLY);
 
 	if (fd == -1)
-		return NS_DEFAULT_INTERNAL;
+		return NS_DEFAULT;
 	if (!vrf_is_backend_netns()) {
 		close(fd);
-		return NS_DEFAULT_INTERNAL;
+		return NS_DEFAULT;
 	}
 	close(fd);
 	return zebra_ns_id_get((char *)NS_DEFAULT_NAME, -1);
 #else  /* HAVE_NETNS */
-	return NS_DEFAULT_INTERNAL;
+	return NS_DEFAULT;
 #endif /* !HAVE_NETNS */
 }

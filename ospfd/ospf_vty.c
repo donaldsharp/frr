@@ -52,6 +52,7 @@
 #include "ospfd/ospf_vty.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_bfd.h"
+#include "ospfd/ospf_ldp_sync.h"
 
 FRR_CFG_DEFAULT_BOOL(OSPF_LOG_ADJACENCY_CHANGES,
 	{ .val_bool = true, .match_profile = "datacenter", },
@@ -313,8 +314,7 @@ DEFPY (ospf_router_id,
 	for (ALL_LIST_ELEMENTS_RO(ospf->areas, node, area))
 		if (area->full_nbrs) {
 			vty_out(vty,
-				"For this router-id change to take effect,"
-				" save config and restart ospfd\n");
+				"For this router-id change to take effect, save config and restart ospfd\n");
 			return CMD_SUCCESS;
 		}
 
@@ -347,8 +347,7 @@ DEFUN_HIDDEN (ospf_router_id_old,
 	for (ALL_LIST_ELEMENTS_RO(ospf->areas, node, area))
 		if (area->full_nbrs) {
 			vty_out(vty,
-				"For this router-id change to take effect,"
-				" save config and restart ospfd\n");
+				"For this router-id change to take effect, save config and restart ospfd\n");
 			return CMD_SUCCESS;
 		}
 
@@ -381,8 +380,7 @@ DEFPY (no_ospf_router_id,
 	for (ALL_LIST_ELEMENTS_RO(ospf->areas, node, area))
 		if (area->full_nbrs) {
 			vty_out(vty,
-				"For this router-id change to take effect,"
-				" save config and restart ospfd\n");
+				"For this router-id change to take effect, save config and restart ospfd\n");
 			return CMD_SUCCESS;
 		}
 
@@ -700,6 +698,8 @@ DEFUN (ospf_area_range,
 	str2prefix_ipv4(argv[idx_ipv4_prefixlen]->arg, &p);
 
 	ospf_area_range_set(ospf, area_id, &p, OSPF_AREA_RANGE_ADVERTISE);
+	ospf_area_display_format_set(ospf, ospf_area_get(ospf, area_id),
+				     format);
 	if (argc > 5) {
 		cost = strtoul(argv[idx_cost]->arg, NULL, 10);
 		ospf_area_range_cost_set(ospf, area_id, &p, cost);
@@ -1178,9 +1178,9 @@ DEFUN (no_ospf_area_vlink,
        "no area <A.B.C.D|(0-4294967295)> virtual-link A.B.C.D [authentication [<message-digest|null>]] [<message-digest-key (1-255) md5 KEY|authentication-key AUTH_KEY>]",
        NO_STR
        VLINK_HELPSTR_IPADDR
-       "Enable authentication on this virtual link\n" \
-       "Use message-digest authentication\n" \
-       "Use null authentication\n" \
+       "Enable authentication on this virtual link\n"
+       "Use message-digest authentication\n"
+       "Use null authentication\n"
        VLINK_HELPSTR_AUTH_MD5
        VLINK_HELPSTR_AUTH_SIMPLE)
 {
@@ -1385,8 +1385,7 @@ DEFUN (ospf_area_shortcut,
 
 	if (ospf->abr_type != OSPF_ABR_SHORTCUT)
 		vty_out(vty,
-			"Shortcut area setting will take effect "
-			"only when the router is configured as Shortcut ABR\n");
+			"Shortcut area setting will take effect only when the router is configured as Shortcut ABR\n");
 
 	return CMD_SUCCESS;
 }
@@ -1718,8 +1717,7 @@ DEFUN (ospf_area_default_cost,
 	p.prefixlen = 0;
 	if (IS_DEBUG_OSPF_EVENT)
 		zlog_debug(
-			"ospf_abr_announce_stub_defaults(): "
-			"announcing 0.0.0.0/0 to area %s",
+			"ospf_abr_announce_stub_defaults(): announcing 0.0.0.0/0 to area %s",
 			inet_ntoa(area->area_id));
 	ospf_abr_announce_network_to_area(&p, area->default_cost, area);
 
@@ -1762,8 +1760,7 @@ DEFUN (no_ospf_area_default_cost,
 	p.prefixlen = 0;
 	if (IS_DEBUG_OSPF_EVENT)
 		zlog_debug(
-			"ospf_abr_announce_stub_defaults(): "
-			"announcing 0.0.0.0/0 to area %s",
+			"ospf_abr_announce_stub_defaults(): announcing 0.0.0.0/0 to area %s",
 			inet_ntoa(area->area_id));
 	ospf_abr_announce_network_to_area(&p, area->default_cost, area);
 
@@ -2712,8 +2709,7 @@ static void show_ip_ospf_area(struct vty *vty, struct ospf_area *area,
 				    area->act_ints);
 	} else
 		vty_out(vty,
-			"   Number of interfaces in this area: Total: %d, "
-			"Active: %d\n",
+			"   Number of interfaces in this area: Total: %d, Active: %d\n",
 			listcount(area->oiflist), area->act_ints);
 
 	if (area->external_routing == OSPF_AREA_NSSA) {
@@ -2871,8 +2867,7 @@ static void show_ip_ospf_area(struct vty *vty, struct ospf_area *area,
 	} else {
 		/* Show number of fully adjacent neighbors. */
 		vty_out(vty,
-			"   Number of fully adjacent neighbors in this area:"
-			" %d\n",
+			"   Number of fully adjacent neighbors in this area: %d\n",
 			area->full_nbrs);
 
 		/* Show authentication type. */
@@ -2886,8 +2881,7 @@ static void show_ip_ospf_area(struct vty *vty, struct ospf_area *area,
 
 		if (!OSPF_IS_AREA_BACKBONE(area))
 			vty_out(vty,
-				"   Number of full virtual adjacencies going through"
-				" this area: %d\n",
+				"   Number of full virtual adjacencies going through this area: %d\n",
 				area->full_vls);
 
 		/* Show SPF calculation times. */
@@ -3173,8 +3167,7 @@ static int show_ip_ospf_common(struct vty *vty, struct ospf *ospf,
 				"injectingExternalRoutingInformation");
 		else
 			vty_out(vty,
-				" This router is an ASBR "
-				"(injecting external routing information)\n");
+				" This router is an ASBR (injecting external routing information)\n");
 	}
 
 	/* Show Number of AS-external-LSAs. */
@@ -3230,6 +3223,10 @@ static int show_ip_ospf_common(struct vty *vty, struct ospf *ospf,
 				vty_out(vty, " Adjacency changes are logged\n");
 		}
 	}
+
+	/* show LDP-Sync status */
+	ospf_ldp_sync_show_info(vty, ospf, json_vrf, json ? 1 : 0);
+
 	/* Show each area status. */
 	for (ALL_LIST_ELEMENTS(ospf->areas, node, nnode, area))
 		show_ip_ospf_area(vty, area, json_areas, json ? 1 : 0);
@@ -7313,6 +7310,7 @@ static int ospf_vty_dead_interval_set(struct vty *vty, const char *interval_str,
 
 	SET_IF_PARAM(params, v_wait);
 	params->v_wait = seconds;
+	params->is_v_wait_set = true;
 
 	/* Update timer values in neighbor structure. */
 	if (nbr_str) {
@@ -7422,6 +7420,7 @@ DEFUN (no_ip_ospf_dead_interval,
 
 	UNSET_IF_PARAM(params, v_wait);
 	params->v_wait = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
+	params->is_v_wait_set = false;
 
 	UNSET_IF_PARAM(params, fast_hello);
 	params->fast_hello = OSPF_FAST_HELLO_DEFAULT;
@@ -7498,6 +7497,17 @@ DEFUN (ip_ospf_hello_interval,
 	SET_IF_PARAM(params, v_hello);
 	params->v_hello = seconds;
 
+	if (!params->is_v_wait_set) {
+		SET_IF_PARAM(params, v_wait);
+		/* As per RFC 4062
+		 * The router dead interval should
+		 * be some multiple of the HelloInterval (perhaps 4 times the
+		 * hello interval) and must be the same for all routers
+		 * attached to a common network.
+		 */
+		params->v_wait	= 4 * seconds;
+	}
+
 	return CMD_SUCCESS;
 }
 
@@ -7526,6 +7536,7 @@ DEFUN (no_ip_ospf_hello_interval,
 	int idx = 0;
 	struct in_addr addr;
 	struct ospf_if_params *params;
+	struct route_node *rn;
 
 	params = IF_DEF_PARAMS(ifp);
 
@@ -7543,6 +7554,25 @@ DEFUN (no_ip_ospf_hello_interval,
 
 	UNSET_IF_PARAM(params, v_hello);
 	params->v_hello = OSPF_HELLO_INTERVAL_DEFAULT;
+
+	if (!params->is_v_wait_set) {
+		UNSET_IF_PARAM(params, v_wait);
+		params->v_wait  = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
+	}
+
+	for (rn = route_top(IF_OIFS(ifp)); rn; rn = route_next(rn)) {
+		struct ospf_interface *oi = rn->info;
+
+		if (!oi)
+			continue;
+
+		oi->type = IF_DEF_PARAMS(ifp)->type;
+
+		if (oi->state > ISM_Down) {
+			OSPF_ISM_EVENT_EXECUTE(oi, ISM_InterfaceDown);
+			OSPF_ISM_EVENT_EXECUTE(oi, ISM_InterfaceUp);
+		}
+	}
 
 	if (params != IF_DEF_PARAMS(ifp)) {
 		ospf_free_if_params(ifp, addr);
@@ -8933,6 +8963,31 @@ DEFUN (no_ospf_max_metric_router_lsa_shutdown,
 	return CMD_SUCCESS;
 }
 
+DEFUN (ospf_proactive_arp,
+       ospf_proactive_arp_cmd,
+       "proactive-arp",
+       "Allow sending ARP requests proactively\n")
+{
+	VTY_DECLVAR_INSTANCE_CONTEXT(ospf, ospf);
+
+	ospf->proactive_arp = true;
+
+	return CMD_SUCCESS;
+}
+
+DEFUN (no_ospf_proactive_arp,
+       no_ospf_proactive_arp_cmd,
+       "no proactive-arp",
+	   NO_STR
+       "Disallow sending ARP requests proactively\n")
+{
+	VTY_DECLVAR_INSTANCE_CONTEXT(ospf, ospf);
+
+	ospf->proactive_arp = false;
+
+	return CMD_SUCCESS;
+}
+
 static void config_write_stub_router(struct vty *vty, struct ospf *ospf)
 {
 	struct listnode *ln;
@@ -9958,6 +10013,9 @@ static int config_write_interface_one(struct vty *vty, struct vrf *vrf)
 				vty_out(vty, "\n");
 			}
 
+			/* LDP-Sync print */
+			if (params && params->ldp_sync_info)
+				ospf_ldp_sync_if_write_config(vty, params);
 
 			while (1) {
 				if (rn == NULL)
@@ -10205,8 +10263,7 @@ static int config_write_virtual_link(struct vty *vty, struct ospf *ospf)
 					     ->auth_crypt,
 				     n2, ck))
 				vty_out(vty,
-					" area %s virtual-link %s"
-					" message-digest-key %d md5 %s\n",
+					" area %s virtual-link %s message-digest-key %d md5 %s\n",
 					buf, inet_ntoa(vl_data->vl_peer),
 					ck->key_id, ck->auth_key);
 		}
@@ -10385,8 +10442,7 @@ static int ospf_config_write_one(struct vty *vty, struct ospf *ospf)
 	/* auto-cost reference-bandwidth configuration.  */
 	if (ospf->ref_bandwidth != OSPF_DEFAULT_REF_BANDWIDTH) {
 		vty_out(vty,
-			"! Important: ensure reference bandwidth "
-			"is consistent across all routers\n");
+			"! Important: ensure reference bandwidth is consistent across all routers\n");
 		vty_out(vty, " auto-cost reference-bandwidth %d\n",
 			ospf->ref_bandwidth);
 	}
@@ -10424,6 +10480,14 @@ static int ospf_config_write_one(struct vty *vty, struct ospf *ospf)
 	/* passive-interface print. */
 	if (ospf->passive_interface_default == OSPF_IF_PASSIVE)
 		vty_out(vty, " passive-interface default\n");
+
+	/* proactive-arp print. */
+	if (ospf->proactive_arp != OSPF_PROACTIVE_ARP_DEFAULT) {
+		if (ospf->proactive_arp)
+			vty_out(vty, " proactive-arp\n");
+		else
+			vty_out(vty, " no proactive-arp\n");
+	}
 
 	FOR_ALL_INTERFACES (vrf, ifp)
 		if (OSPF_IF_PARAM_CONFIGURED(IF_DEF_PARAMS(ifp),
@@ -10474,6 +10538,9 @@ static int ospf_config_write_one(struct vty *vty, struct ospf *ospf)
 	config_write_ospf_distance(vty, ospf);
 
 	ospf_opaque_config_write_router(vty, ospf);
+
+	/* LDP-Sync print */
+	ospf_ldp_sync_write_config(vty, ospf);
 
 	write++;
 	return write;
@@ -10880,6 +10947,10 @@ void ospf_vty_init(void)
 	install_element(OSPF_NODE, &write_multiplier_cmd);
 	install_element(OSPF_NODE, &no_ospf_write_multiplier_cmd);
 	install_element(OSPF_NODE, &no_write_multiplier_cmd);
+
+	/* "proactive-arp" commands. */
+	install_element(OSPF_NODE, &ospf_proactive_arp_cmd);
+	install_element(OSPF_NODE, &no_ospf_proactive_arp_cmd);
 
 	/* Init interface related vty commands. */
 	ospf_vty_if_init();

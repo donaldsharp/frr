@@ -125,6 +125,12 @@ struct zebra_router {
 	/* L3-VNI hash table (for EVPN). Only in default instance */
 	struct hash *l3vni_table;
 
+	/* Tables and other global info maintained for EVPN multihoming */
+	struct zebra_evpn_mh_info *mh_info;
+
+	/* EVPN MH broadcast domains indexed by the VID */
+	struct hash *evpn_vlan_table;
+
 	struct hash *rules_hash;
 
 	struct hash *ipset_hash;
@@ -176,6 +182,11 @@ struct zebra_router {
 	 */
 	struct hash *nhgs;
 	struct hash *nhgs_id;
+
+	/*
+	 * Does the underlying system provide an asic offload
+	 */
+	bool asic_offloaded;
 };
 
 #define GRACEFUL_RESTART_TIME 60

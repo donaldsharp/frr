@@ -35,13 +35,21 @@ extern void bgp_zebra_destroy(void);
 extern int bgp_zebra_get_table_range(uint32_t chunk_size,
 				     uint32_t *start, uint32_t *end);
 extern int bgp_if_update_all(void);
-extern void bgp_zebra_announce(struct bgp_node *rn, const struct prefix *p,
+extern void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 			       struct bgp_path_info *path, struct bgp *bgp,
 			       afi_t afi, safi_t safi);
 extern void bgp_zebra_announce_table(struct bgp *, afi_t, safi_t);
 extern void bgp_zebra_withdraw(const struct prefix *p,
 			       struct bgp_path_info *path, struct bgp *bgp,
 			       safi_t safi);
+
+/* Announce routes of any bgp subtype of a table to zebra */
+extern void bgp_zebra_announce_table_all_subtypes(struct bgp *bgp, afi_t afi,
+						  safi_t safi);
+
+/* Withdraw all entries of any subtype in a BGP instances RIB table from Zebra */
+extern void bgp_zebra_withdraw_table_all_subtypes(struct bgp *bgp, afi_t afi,
+						  safi_t safi);
 
 extern void bgp_zebra_initiate_radv(struct bgp *bgp, struct peer *peer);
 extern void bgp_zebra_terminate_radv(struct bgp *bgp, struct peer *peer);

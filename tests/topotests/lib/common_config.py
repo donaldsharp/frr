@@ -30,18 +30,23 @@ from functools import wraps
 from re import search as re_search
 from tempfile import mkdtemp
 
-import StringIO
 import os
+import io
 import sys
-import ConfigParser
 import traceback
 import socket
-import ipaddr
+import ipaddress
+import platform
+
+if sys.version_info[0] > 2:
+    import configparser
+else:
+    import StringIO
+    import ConfigParser as configparser
 
 from lib.topolog import logger, logger_config
-from lib.topogen import TopoRouter
-from lib.topotest import interface_set_status
-
+from lib.topogen import TopoRouter, get_topogen
+from lib.topotest import interface_set_status, version_cmp, frr_unicode
 
 FRRCFG_FILE = "frr_json.conf"
 FRRCFG_BKUP_FILE = "frr_json_initial.conf"
@@ -62,7 +67,7 @@ TMPDIR = None
 
 # NOTE: to save execution logs to log file frrtest_log_dir must be configured
 # in `pytest.ini`.
-config = ConfigParser.ConfigParser()
+config = configparser.ConfigParser()
 config.read(PYTESTINI_PATH)
 
 config_section = "topogen"
@@ -251,6 +256,7 @@ def create_common_configuration(
             "route_maps": "! Route Maps Config\n",
             "bgp": "! BGP Config\n",
             "vrf": "! VRF Config\n",
+            "ospf": "! OSPF Config\n",
         }
     )
 
@@ -347,7 +353,7 @@ def kill_mininet_routers_process(tgen):
     """
 
     router_list = tgen.routers()
-    for rname, router in router_list.iteritems():
+    for rname, router in router_list.items():
         daemon_list = [
             "zebra",
             "ospfd",
@@ -374,7 +380,7 @@ def check_router_status(tgen):
 
     try:
         router_list = tgen.routers()
-        for router, rnode in router_list.iteritems():
+        for router, rnode in router_list.items():
 
             result = rnode.check_router_running()
             if result != "":
@@ -394,6 +400,14 @@ def check_router_status(tgen):
     logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
     return True
 
+def getStrIO():
+    """
+    Return a StringIO object appropriate for the current python version.
+    """
+    if sys.version_info[0] > 2:
+        return io.StringIO()
+    else:
+        return StringIO.StringIO()
 
 def reset_config_on_routers(tgen, routerName=None):
     """
@@ -466,27 +480,41 @@ def reset_config_on_routers(tgen, routerName=None):
             raise InvalidCLIError("Unknown error in %s", output)
 
         f = open(dname, "r")
-        delta = StringIO.StringIO()
+        delta = getStrIO()
         delta.write("configure terminal\n")
         t_delta = f.read()
+
+        # Don't disable debugs
+        check_debug = True
+
         for line in t_delta.split("\n"):
             line = line.strip()
-            if (
-                line == "Lines To Delete"
-                or line == "==============="
-                or line == "Lines To Add"
-                or line == "============"
-                or not line
-            ):
+            if line == "Lines To Delete" or line == "===============" or not line:
                 continue
+
+            if line == "Lines To Add":
+                check_debug = False
+                continue
+
+            if line == "============" or not line:
+                continue
+
+            # Leave debugs and log output alone
+            if check_debug:
+                if "debug" in line or "log file" in line:
+                    continue
+
             delta.write(line)
             delta.write("\n")
 
+        f.close()
+
         delta.write("end\n")
+
         output = router.vtysh_multicmd(delta.getvalue(), pretty_output=False)
 
         delta.close()
-        delta = StringIO.StringIO()
+        delta = getStrIO()
         cfg = router.run("vtysh -c 'show running'")
         for line in cfg.split("\n"):
             line = line.strip()
@@ -582,7 +610,7 @@ def get_frr_ipv6_linklocal(tgen, router, intf=None, vrf=None):
     """
 
     router_list = tgen.routers()
-    for rname, rnode in router_list.iteritems():
+    for rname, rnode in router_list.items():
         if rname != router:
             continue
 
@@ -608,7 +636,7 @@ def get_frr_ipv6_linklocal(tgen, router, intf=None, vrf=None):
                 ll_per_if_count = 0
 
             # Interface ip
-            m1 = re_search("inet6 (fe80[:a-fA-F0-9]+[\/0-9]+)", line)
+            m1 = re_search("inet6 (fe80[:a-fA-F0-9]+[/0-9]+)", line)
             if m1:
                 local = m1.group(1)
                 ll_per_if_count += 1
@@ -628,7 +656,34 @@ def get_frr_ipv6_linklocal(tgen, router, intf=None, vrf=None):
         return errormsg
 
 
-def start_topology(tgen):
+def generate_support_bundle():
+    """
+    API to generate support bundle on any verification ste failure.
+    it runs a python utility, /usr/lib/frr/generate_support_bundle.py,
+    which basically runs defined CLIs and dumps the data to specified location
+    """
+
+    tgen = get_topogen()
+    router_list = tgen.routers()
+    test_name = sys._getframe(2).f_code.co_name
+    TMPDIR = os.path.join(LOGDIR, tgen.modname)
+
+    for rname, rnode in router_list.items():
+        logger.info("Generating support bundle for {}".format(rname))
+        rnode.run("mkdir -p /var/log/frr")
+        bundle_log = rnode.run("python2 /usr/lib/frr/generate_support_bundle.py")
+        logger.info(bundle_log)
+
+        dst_bundle = "{}/{}/support_bundles/{}".format(TMPDIR, rname, test_name)
+        src_bundle = "/var/log/frr"
+        rnode.run("rm -rf {}".format(dst_bundle))
+        rnode.run("mkdir -p {}".format(dst_bundle))
+        rnode.run("mv -f {}/* {}".format(src_bundle, dst_bundle))
+
+    return True
+
+
+def start_topology(tgen, daemon=None):
     """
     Starting topology, create tmp files which are loaded to routers
     to start deamons and then start routers
@@ -643,13 +698,21 @@ def start_topology(tgen):
 
     router_list = tgen.routers()
     ROUTER_LIST = sorted(
-        router_list.keys(), key=lambda x: int(re_search("\d+", x).group(0))
+        router_list.keys(), key=lambda x: int(re_search("[0-9]+", x).group(0))
     )
     TMPDIR = os.path.join(LOGDIR, tgen.modname)
 
+    linux_ver = ''
     router_list = tgen.routers()
     for rname in ROUTER_LIST:
         router = router_list[rname]
+
+        # It will help in debugging the failures, will give more details on which
+        # specific kernel version tests are failing
+        if linux_ver == '':
+            linux_ver = router.run("uname -a")
+            logger.info("Logging platform related details: \n %s \n", linux_ver)
+
         try:
             os.chdir(TMPDIR)
 
@@ -667,16 +730,23 @@ def start_topology(tgen):
                 os.chdir("{}/{}".format(TMPDIR, rname))
                 os.system("touch zebra.conf bgpd.conf")
 
-        except IOError as (errno, strerror):
-            logger.error("I/O error({0}): {1}".format(errno, strerror))
+        except IOError as err:
+            logger.error("I/O error({0}): {1}".format(err.errno, err.strerror))
 
         # Loading empty zebra.conf file to router, to start the zebra deamon
         router.load_config(
             TopoRouter.RD_ZEBRA, "{}/{}/zebra.conf".format(TMPDIR, rname)
         )
+
         # Loading empty bgpd.conf file to router, to start the bgp deamon
         router.load_config(TopoRouter.RD_BGP, "{}/{}/bgpd.conf".format(TMPDIR, rname))
 
+        if daemon and 'ospfd' in daemon:
+            # Loading empty ospf.conf file to router, to start the bgp deamon
+            router.load_config(
+                TopoRouter.RD_OSPF,
+                '{}/{}/ospfd.conf'.format(TMPDIR, rname)
+            )
         # Starting routers
     logger.info("Starting all routers once topology is created")
     tgen.start_router()
@@ -749,6 +819,24 @@ def number_to_column(routerName):
     return ord(routerName[0]) - 97
 
 
+def topo_daemons(tgen, topo):
+    """
+    Returns daemon list required for the suite based on topojson.
+    """
+    daemon_list = []
+
+    router_list = tgen.routers()
+    ROUTER_LIST = sorted(
+        router_list.keys(), key=lambda x: int(re_search("[0-9]+", x).group(0))
+    )
+
+    for rtr in ROUTER_LIST:
+        if 'ospf' in topo['routers'][rtr] and 'ospfd' not in daemon_list:
+            daemon_list.append('ospfd')
+
+    return daemon_list
+
+
 #############################################
 # Common APIs, will be used by all protocols
 #############################################
@@ -816,7 +904,7 @@ def create_vrf_cfg(tgen, topo, input_dict=None, build=False):
         input_dict = deepcopy(input_dict)
 
     try:
-        for c_router, c_data in input_dict.iteritems():
+        for c_router, c_data in input_dict.items():
             rnode = tgen.routers()[c_router]
             if "vrfs" in c_data:
                 for vrf in c_data["vrfs"]:
@@ -861,7 +949,7 @@ def create_vrf_cfg(tgen, topo, input_dict=None, build=False):
 
                             if "links" in c_data:
                                 for destRouterLink, data in sorted(
-                                    c_data["links"].iteritems()
+                                    c_data["links"].items()
                                 ):
                                     # Loopback interfaces
                                     if "type" in data and data["type"] == "loopback":
@@ -886,6 +974,16 @@ def create_vrf_cfg(tgen, topo, input_dict=None, build=False):
                                                 cmd,
                                             )
                                             rnode.run(cmd)
+
+                        if vni:
+                            config_data.append("vrf {}".format(vrf["name"]))
+                            cmd = "vni {}".format(vni)
+                            config_data.append(cmd)
+
+                        if del_vni:
+                            config_data.append("vrf {}".format(vrf["name"]))
+                            cmd = "no vni {}".format(del_vni)
+                            config_data.append(cmd)
 
                         result = create_common_configuration(
                             tgen, c_router, config_data, "vrf", build=build
@@ -936,6 +1034,34 @@ def create_interface_in_kernel(
     if vrf:
         cmd = "ip link set {} master {}".format(name, vrf)
         rnode.run(cmd)
+
+
+def shutdown_bringup_interface_in_kernel(tgen, dut, intf_name, ifaceaction=False):
+    """
+    Cretae interfaces in kernel for ipv4/ipv6
+    Config is done in Linux Kernel:
+
+    Parameters
+    ----------
+    * `tgen` : Topogen object
+    * `dut` : Device for which interfaces to be added
+    * `intf_name` : interface name
+    * `ifaceaction` : False to shutdown and True to bringup the
+                      ineterface
+    """
+
+    rnode = tgen.routers()[dut]
+
+    cmd = "ip link set dev"
+    if ifaceaction:
+        action = "up"
+        cmd = "{} {} {}".format(cmd, intf_name, action)
+    else:
+        action = "down"
+        cmd = "{} {} {}".format(cmd, intf_name, action)
+
+    logger.info("[DUT: %s]: Running command: %s", dut, cmd)
+    rnode.run(cmd)
 
 
 def validate_ip_address(ip_address):
@@ -996,7 +1122,7 @@ def check_address_types(addr_type=None):
         return addr_types
 
     if addr_type not in addr_types:
-        logger.error(
+        logger.debug(
             "{} not in supported/configured address types {}".format(
                 addr_type, addr_types
             )
@@ -1026,10 +1152,10 @@ def generate_ips(network, no_of_ips):
 
         addr_type = validate_ip_address(start_ip)
         if addr_type == "ipv4":
-            start_ip = ipaddr.IPv4Address(unicode(start_ip))
+            start_ip = ipaddress.IPv4Address(frr_unicode(start_ip))
             step = 2 ** (32 - mask)
         if addr_type == "ipv6":
-            start_ip = ipaddr.IPv6Address(unicode(start_ip))
+            start_ip = ipaddress.IPv6Address(frr_unicode(start_ip))
             step = 2 ** (128 - mask)
 
         next_ip = start_ip
@@ -1037,7 +1163,7 @@ def generate_ips(network, no_of_ips):
         while count < no_of_ips:
             ipaddress_list.append("{}/{}".format(next_ip, mask))
             if addr_type == "ipv6":
-                next_ip = ipaddr.IPv6Address(int(next_ip) + step)
+                next_ip = ipaddress.IPv6Address(int(next_ip) + step)
             else:
                 next_ip += step
             count += 1
@@ -1058,7 +1184,7 @@ def find_interface_with_greater_ip(topo, router, loopback=True, interface=True):
     lo_list = []
     interfaces_list = []
     lo_exists = False
-    for destRouterLink, data in sorted(link_data.iteritems()):
+    for destRouterLink, data in sorted(link_data.items()):
         if loopback:
             if "type" in data and data["type"] == "loopback":
                 lo_exists = True
@@ -1140,7 +1266,8 @@ def interface_status(tgen, topo, input_dict):
     return True
 
 
-def retry(attempts=3, wait=2, return_is_str=True, initial_wait=0, return_is_dict=False):
+def retry(attempts=3, wait=2, return_is_str=True, initial_wait=0,
+          return_is_dict=False):
     """
     Retries function execution, if return is an errormsg or exception
 
@@ -1152,11 +1279,13 @@ def retry(attempts=3, wait=2, return_is_str=True, initial_wait=0, return_is_dict
     """
 
     def _retry(func):
+
         @wraps(func)
         def func_retry(*args, **kwargs):
-            _wait = kwargs.pop("wait", wait)
-            _attempts = kwargs.pop("attempts", attempts)
+            _wait = kwargs.pop('wait', wait)
+            _attempts = kwargs.pop('attempts', attempts)
             _attempts = int(_attempts)
+            expected = True
             if _attempts < 0:
                 raise ValueError("attempts must be 0 or greater")
 
@@ -1164,38 +1293,40 @@ def retry(attempts=3, wait=2, return_is_str=True, initial_wait=0, return_is_dict
                 logger.info("Waiting for [%s]s as initial delay", initial_wait)
                 sleep(initial_wait)
 
-            _return_is_str = kwargs.pop("return_is_str", return_is_str)
-            _return_is_dict = kwargs.pop("return_is_str", return_is_dict)
+            _return_is_str = kwargs.pop('return_is_str', return_is_str)
+            _return_is_dict = kwargs.pop('return_is_str', return_is_dict)
             for i in range(1, _attempts + 1):
                 try:
-                    _expected = kwargs.setdefault("expected", True)
-                    kwargs.pop("expected")
+                    _expected = kwargs.setdefault('expected', True)
+                    if _expected is False:
+                        expected = _expected
+                    kwargs.pop('expected')
                     ret = func(*args, **kwargs)
-                    logger.debug("Function returned %s" % ret)
+                    logger.debug("Function returned %s", ret)
                     if _return_is_str and isinstance(ret, bool) and _expected:
                         return ret
-                    if (
-                        isinstance(ret, str) or isinstance(ret, unicode)
-                    ) and _expected is False:
+                    if (isinstance(ret, str) or isinstance(ret, unicode)) and _expected is False:
                         return ret
                     if _return_is_dict and isinstance(ret, dict):
                         return ret
 
-                    if _attempts == i:
+                    if _attempts == i and expected:
+                        generate_support_bundle()
                         return ret
                 except Exception as err:
-                    if _attempts == i:
-                        logger.info("Max number of attempts (%r) reached", _attempts)
+                    if _attempts == i and expected:
+                        generate_support_bundle()
+                        logger.info("Max number of attempts (%r) reached",
+                                    _attempts)
                         raise
                     else:
                         logger.info("Function returned %s", err)
                 if i < _attempts:
-                    logger.info("Retry [#%r] after sleeping for %ss" % (i, _wait))
+                    logger.info("Retry [#%r] after sleeping for %ss"
+                                % (i, _wait))
                     sleep(_wait)
-
         func_retry._original = func
         return func_retry
-
     return _retry
 
 
@@ -1247,16 +1378,25 @@ def create_interfaces_cfg(tgen, topo, build=False):
     topo = deepcopy(topo)
 
     try:
-        for c_router, c_data in topo.iteritems():
+        for c_router, c_data in topo.items():
             interface_data = []
-            for destRouterLink, data in sorted(c_data["links"].iteritems()):
+            for destRouterLink, data in sorted(c_data["links"].items()):
                 # Loopback interfaces
                 if "type" in data and data["type"] == "loopback":
                     interface_name = destRouterLink
                 else:
                     interface_name = data["interface"]
 
-                interface_data.append("interface {}".format(str(interface_name)))
+                # Include vrf if present
+                if "vrf" in data:
+                    interface_data.append(
+                        "interface {} vrf {}".format(
+                            str(interface_name), str(data["vrf"])
+                        )
+                    )
+                else:
+                    interface_data.append("interface {}".format(str(interface_name)))
+
                 if "ipv4" in data:
                     intf_addr = c_data["links"][destRouterLink]["ipv4"]
 
@@ -1280,6 +1420,58 @@ def create_interfaces_cfg(tgen, topo, build=False):
                     else:
                         interface_data.append("ipv6 address {}\n".format(intf_addr))
 
+                if 'ospf' in data:
+                    ospf_data = data['ospf']
+                    if 'area' in ospf_data:
+                        intf_ospf_area = c_data["links"][destRouterLink][
+                            "ospf"]["area"]
+                        if "delete" in data and data["delete"]:
+                            interface_data.append("no ip ospf area")
+                        else:
+                            interface_data.append("ip ospf area {}".format(
+                                intf_ospf_area
+                            ))
+
+                    if "hello_interval"  in ospf_data:
+                        intf_ospf_hello = c_data["links"][destRouterLink][
+                        "ospf"]["hello_interval"]
+                        if "delete" in data and data["delete"]:
+                            interface_data.append("no ip ospf "\
+                            " hello-interval")
+                        else:
+                            interface_data.append("ip ospf "\
+                            " hello-interval {}".format(intf_ospf_hello))
+
+                    if "dead_interval" in ospf_data:
+                        intf_ospf_dead = c_data["links"][destRouterLink][
+                        "ospf"]["dead_interval"]
+                        if "delete" in data and data["delete"]:
+                            interface_data.append("no ip ospf"\
+                            " dead-interval")
+                        else:
+                            interface_data.append("ip ospf "\
+                            " dead-interval {}".format(intf_ospf_dead))
+
+                    if "network" in ospf_data:
+                        intf_ospf_nw = c_data["links"][destRouterLink][
+                        "ospf"]["network"]
+                        if "delete" in data and data["delete"]:
+                            interface_data.append("no ip ospf"\
+                            " network {}".format(intf_ospf_nw))
+                        else:
+                            interface_data.append("ip ospf"\
+                            " network {}".format(intf_ospf_nw))
+
+                    if "priority" in ospf_data:
+                        intf_ospf_nw = c_data["links"][destRouterLink][
+                        "ospf"]["priority"]
+
+                        if "delete" in data and data["delete"]:
+                            interface_data.append("no ip ospf"\
+                            " priority")
+                        else:
+                            interface_data.append("ip ospf"\
+                            " priority {}".format(intf_ospf_nw))
             result = create_common_configuration(
                 tgen, c_router, interface_data, "interface_config", build=build
             )
@@ -1462,11 +1654,11 @@ def create_prefix_lists(tgen, input_dict, build=False):
 
             config_data = []
             prefix_lists = input_dict[router]["prefix_lists"]
-            for addr_type, prefix_data in prefix_lists.iteritems():
+            for addr_type, prefix_data in prefix_lists.items():
                 if not check_address_types(addr_type):
                     continue
 
-                for prefix_name, prefix_list in prefix_data.iteritems():
+                for prefix_name, prefix_list in prefix_data.items():
                     for prefix_dict in prefix_list:
                         if "action" not in prefix_dict or "network" not in prefix_dict:
                             errormsg = "'action' or network' missing in" " input_dict"
@@ -1603,7 +1795,7 @@ def create_route_maps(tgen, input_dict, build=False):
                 logger.debug("route_maps not present in input_dict")
                 continue
             rmap_data = []
-            for rmap_name, rmap_value in input_dict[router]["route_maps"].iteritems():
+            for rmap_name, rmap_value in input_dict[router]["route_maps"].items():
 
                 for rmap_dict in rmap_value:
                     del_action = rmap_dict.setdefault("delete", False)
@@ -1675,6 +1867,7 @@ def create_route_maps(tgen, input_dict, build=False):
                         set_action = set_data.setdefault("set_action", None)
                         nexthop = set_data.setdefault("nexthop", None)
                         origin = set_data.setdefault("origin", None)
+                        ext_comm_list = set_data.setdefault("extcommunity", {})
 
                         # Local Preference
                         if local_preference:
@@ -1737,6 +1930,19 @@ def create_route_maps(tgen, input_dict, build=False):
                                 rmap_data.append(cmd)
                             else:
                                 logger.error("In large_comm_list 'id' not" " provided")
+                                return False
+
+                        if ext_comm_list:
+                            rt = ext_comm_list.setdefault("rt", None)
+                            del_comm = ext_comm_list.setdefault("delete", None)
+                            if rt:
+                                cmd = "set extcommunity rt {}".format(rt)
+                                if del_comm:
+                                    cmd = "{} delete".format(cmd)
+
+                                rmap_data.append(cmd)
+                            else:
+                                logger.debug("In ext_comm_list 'rt' not" " provided")
                                 return False
 
                         # Weight
@@ -2082,7 +2288,7 @@ def addKernelRoute(
             if mask == "32" or mask == "128":
                 grp_addr = ip
 
-        if not re_search(r"{}".format(grp_addr), result) and mask is not "0":
+        if not re_search(r"{}".format(grp_addr), result) and mask != "0":
             errormsg = (
                 "[DUT: {}]: Kernal route is not added for group"
                 " address {} Config output: {}".format(router, grp_addr, output)
@@ -2094,10 +2300,249 @@ def addKernelRoute(
     return True
 
 
+def configure_vxlan(tgen, input_dict):
+    """
+    Add and configure vxlan
+
+    * `tgen`: tgen onject
+    * `input_dict` : data for vxlan config
+
+    Usage:
+    ------
+    input_dict= {
+        "dcg2":{
+            "vxlan":[{
+                "vxlan_name": "vxlan75100",
+                "vxlan_id": "75100",
+                "dstport": 4789,
+                "local_addr": "120.0.0.1",
+                "learning": "no",
+                "delete": True
+            }]
+        }
+    }
+
+    configure_vxlan(tgen, input_dict)
+
+    Returns:
+    -------
+    True or errormsg
+
+    """
+
+    logger.debug("Entering lib API: {}".format(sys._getframe().f_code.co_name))
+
+    router_list = tgen.routers()
+    for dut in input_dict.keys():
+        rnode = tgen.routers()[dut]
+
+        if "vxlan" in input_dict[dut]:
+            for vxlan_dict in input_dict[dut]["vxlan"]:
+                cmd = "ip link "
+
+                del_vxlan = vxlan_dict.setdefault("delete", None)
+                vxlan_names = vxlan_dict.setdefault("vxlan_name", [])
+                vxlan_ids = vxlan_dict.setdefault("vxlan_id", [])
+                dstport = vxlan_dict.setdefault("dstport", None)
+                local_addr = vxlan_dict.setdefault("local_addr", None)
+                learning = vxlan_dict.setdefault("learning", None)
+
+                config_data = []
+                if vxlan_names and vxlan_ids:
+                    for vxlan_name, vxlan_id in zip(vxlan_names, vxlan_ids):
+                        cmd = "ip link"
+
+                        if del_vxlan:
+                            cmd = "{} del {} type vxlan id {}".format(
+                                cmd, vxlan_name, vxlan_id
+                            )
+                        else:
+                            cmd = "{} add {} type vxlan id {}".format(
+                                cmd, vxlan_name, vxlan_id
+                            )
+
+                        if dstport:
+                            cmd = "{} dstport {}".format(cmd, dstport)
+
+                        if local_addr:
+                            ip_cmd = "ip addr add {} dev {}".format(
+                                local_addr, vxlan_name
+                            )
+                            if del_vxlan:
+                                ip_cmd = "ip addr del {} dev {}".format(
+                                    local_addr, vxlan_name
+                                )
+
+                            config_data.append(ip_cmd)
+
+                            cmd = "{} local {}".format(cmd, local_addr)
+
+                        if learning == "no":
+                            cmd = "{} nolearning".format(cmd)
+
+                        elif learning == "yes":
+                            cmd = "{} learning".format(cmd)
+
+                        config_data.append(cmd)
+
+                        try:
+                            for _cmd in config_data:
+                                logger.info("[DUT: %s]: Running command: %s", dut, _cmd)
+                                rnode.run(_cmd)
+
+                        except InvalidCLIError:
+                            # Traceback
+                            errormsg = traceback.format_exc()
+                            logger.error(errormsg)
+                            return errormsg
+
+    logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
+
+    return True
+
+
+def configure_brctl(tgen, topo, input_dict):
+    """
+    Add and configure brctl
+
+    * `tgen`: tgen onject
+    * `input_dict` : data for brctl config
+
+    Usage:
+    ------
+    input_dict= {
+        dut:{
+            "brctl": [{
+                        "brctl_name": "br100",
+                        "addvxlan": "vxlan75100",
+                        "vrf": "RED",
+                        "stp": "off"
+            }]
+        }
+    }
+
+    configure_brctl(tgen, topo, input_dict)
+
+    Returns:
+    -------
+    True or errormsg
+
+    """
+
+    logger.debug("Entering lib API: {}".format(sys._getframe().f_code.co_name))
+
+    router_list = tgen.routers()
+    for dut in input_dict.keys():
+        rnode = tgen.routers()[dut]
+
+        if "brctl" in input_dict[dut]:
+            for brctl_dict in input_dict[dut]["brctl"]:
+
+                brctl_names = brctl_dict.setdefault("brctl_name", [])
+                addvxlans = brctl_dict.setdefault("addvxlan", [])
+                stp_values = brctl_dict.setdefault("stp", [])
+                vrfs = brctl_dict.setdefault("vrf", [])
+
+                ip_cmd = "ip link set"
+                for brctl_name, vxlan, vrf, stp in zip(
+                    brctl_names, addvxlans, vrfs, stp_values
+                ):
+
+                    ip_cmd_list = []
+                    cmd = "ip link add name {} type bridge stp_state {}".format(
+                        brctl_name, stp
+                    )
+
+                    logger.info("[DUT: %s]: Running command: %s", dut, cmd)
+                    rnode.run(cmd)
+
+                    ip_cmd_list.append("{} up dev {}".format(ip_cmd, brctl_name))
+
+                    if vxlan:
+                        cmd = "{} dev {} master {}".format(ip_cmd, vxlan, brctl_name)
+
+                        logger.info("[DUT: %s]: Running command: %s", dut, cmd)
+                        rnode.run(cmd)
+
+                        ip_cmd_list.append("{} up dev {}".format(ip_cmd, vxlan))
+
+                    if vrf:
+                        ip_cmd_list.append(
+                            "{} dev {} master {}".format(ip_cmd, brctl_name, vrf)
+                        )
+
+                        for intf_name, data in topo["routers"][dut]["links"].items():
+                            if "vrf" not in data:
+                                continue
+
+                            if data["vrf"] == vrf:
+                                ip_cmd_list.append(
+                                    "{} up dev {}".format(ip_cmd, data["interface"])
+                                )
+
+                    try:
+                        for _ip_cmd in ip_cmd_list:
+                            logger.info("[DUT: %s]: Running command: %s", dut, _ip_cmd)
+                            rnode.run(_ip_cmd)
+
+                    except InvalidCLIError:
+                        # Traceback
+                        errormsg = traceback.format_exc()
+                        logger.error(errormsg)
+                        return errormsg
+
+    logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
+    return True
+
+
+def configure_interface_mac(tgen, input_dict):
+    """
+    Add and configure brctl
+
+    * `tgen`: tgen onject
+    * `input_dict` : data for mac config
+
+    input_mac= {
+        "edge1":{
+                "br75100": "00:80:48:BA:d1:00,
+                "br75200": "00:80:48:BA:d1:00
+        }
+    }
+
+    configure_interface_mac(tgen, input_mac)
+
+    Returns:
+    -------
+    True or errormsg
+
+    """
+
+    router_list = tgen.routers()
+    for dut in input_dict.keys():
+        rnode = tgen.routers()[dut]
+
+        for intf, mac in input_dict[dut].items():
+            cmd = "ifconfig {} hw ether {}".format(intf, mac)
+            logger.info("[DUT: %s]: Running command: %s", dut, cmd)
+
+            try:
+                result = rnode.run(cmd)
+                if len(result) != 0:
+                    return result
+
+            except InvalidCLIError:
+                # Traceback
+                errormsg = traceback.format_exc()
+                logger.error(errormsg)
+                return errormsg
+
+    return True
+
+
 #############################################
 # Verification APIs
 #############################################
-@retry(attempts=5, wait=2, return_is_str=True, initial_wait=2)
+@retry(attempts=6, wait=2, return_is_str=True)
 def verify_rib(
     tgen,
     addr_type,
@@ -2156,13 +2601,13 @@ def verify_rib(
     errormsg(str) or True
     """
 
-    logger.info("Entering lib API: verify_rib()")
+    logger.debug("Entering lib API: {}".format(sys._getframe().f_code.co_name))
 
     router_list = tgen.routers()
     additional_nexthops_in_required_nhs = []
     found_hops = []
     for routerInput in input_dict.keys():
-        for router, rnode in router_list.iteritems():
+        for router, rnode in router_list.items():
             if router != dut:
                 continue
 
@@ -2222,7 +2667,7 @@ def verify_rib(
                     nh_found = False
 
                     for st_rt in ip_list:
-                        st_rt = str(ipaddr.IPNetwork(unicode(st_rt)))
+                        st_rt = str(ipaddress.ip_network(frr_unicode(st_rt)))
 
                         _addr_type = validate_ip_address(st_rt)
                         if _addr_type != addr_type:
@@ -2418,7 +2863,7 @@ def verify_rib(
                 nh_found = False
 
                 for st_rt in ip_list:
-                    st_rt = str(ipaddr.IPNetwork(unicode(st_rt)))
+                    st_rt = str(ipaddress.ip_network(frr_unicode(st_rt)))
 
                     _addr_type = validate_ip_address(st_rt)
                     if _addr_type != addr_type:
@@ -2471,7 +2916,517 @@ def verify_rib(
                         " routes  are: {}\n".format(addr_type, dut, found_routes)
                     )
 
-    logger.info("Exiting lib API: verify_rib()")
+    logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
+    return True
+
+
+@retry(attempts=5, wait=2, return_is_str=True, initial_wait=2)
+def verify_fib_routes(tgen, addr_type, dut, input_dict, next_hop=None):
+    """
+    Data will be read from input_dict or input JSON file, API will generate
+    same prefixes, which were redistributed by either create_static_routes() or
+    advertise_networks_using_network_command() and will verify next_hop and
+    each prefix/routes is present in "show ip/ipv6 fib json"
+    command o/p.
+
+    Parameters
+    ----------
+    * `tgen` : topogen object
+    * `addr_type` : ip type, ipv4/ipv6
+    * `dut`: Device Under Test, for which user wants to test the data
+    * `input_dict` : input dict, has details of static routes
+    * `next_hop`[optional]: next_hop which needs to be verified,
+                           default: static
+
+    Usage
+    -----
+    input_routes_r1 = {
+        "r1": {
+            "static_routes": [{
+                "network": ["1.1.1.1/32],
+                "next_hop": "Null0",
+                "vrf": "RED"
+            }]
+        }
+    }
+    result = result = verify_fib_routes(tgen, "ipv4, "r1", input_routes_r1)
+
+    Returns
+    -------
+    errormsg(str) or True
+    """
+
+    logger.debug("Entering lib API: {}".format(sys._getframe().f_code.co_name))
+
+    router_list = tgen.routers()
+    for routerInput in input_dict.keys():
+        for router, rnode in router_list.items():
+            if router != dut:
+                continue
+
+            logger.info("Checking router %s FIB routes:", router)
+
+            # Verifying RIB routes
+            if addr_type == "ipv4":
+                command = "show ip fib"
+            else:
+                command = "show ipv6 fib"
+
+            found_routes = []
+            missing_routes = []
+
+            if "static_routes" in input_dict[routerInput]:
+                static_routes = input_dict[routerInput]["static_routes"]
+
+                for static_route in static_routes:
+                    if "vrf" in static_route and static_route["vrf"] is not None:
+
+                        logger.info(
+                            "[DUT: {}]: Verifying routes for VRF:"
+                            " {}".format(router, static_route["vrf"])
+                        )
+
+                        cmd = "{} vrf {}".format(command, static_route["vrf"])
+
+                    else:
+                        cmd = "{}".format(command)
+
+                    cmd = "{} json".format(cmd)
+
+                    rib_routes_json = run_frr_cmd(rnode, cmd, isjson=True)
+
+                    # Verifying output dictionary rib_routes_json is not empty
+                    if bool(rib_routes_json) is False:
+                        errormsg = "[DUT: {}]: No route found in fib".format(router)
+                        return errormsg
+
+                    network = static_route["network"]
+                    if "no_of_ip" in static_route:
+                        no_of_ip = static_route["no_of_ip"]
+                    else:
+                        no_of_ip = 1
+
+                    # Generating IPs for verification
+                    ip_list = generate_ips(network, no_of_ip)
+                    st_found = False
+                    nh_found = False
+
+                    for st_rt in ip_list:
+                        st_rt = str(ipaddress.ip_network(frr_unicode(st_rt)))
+                        #st_rt = str(ipaddr.IPNetwork(unicode(st_rt)))
+
+                        _addr_type = validate_ip_address(st_rt)
+                        if _addr_type != addr_type:
+                            continue
+
+                        if st_rt in rib_routes_json:
+                            st_found = True
+                            found_routes.append(st_rt)
+
+                            if next_hop:
+                                if type(next_hop) is not list:
+                                    next_hop = [next_hop]
+
+                                count = 0
+                                for nh in next_hop:
+                                    for nh_dict in rib_routes_json[st_rt][0][
+                                        "nexthops"
+                                    ]:
+                                        if nh_dict["ip"] != nh:
+                                            continue
+                                        else:
+                                            count += 1
+
+                                if count == len(next_hop):
+                                    nh_found = True
+                                else:
+                                    missing_routes.append(st_rt)
+                                    errormsg = (
+                                        "Nexthop {} is Missing"
+                                        " for route {} in "
+                                        "RIB of router {}\n".format(
+                                            next_hop, st_rt, dut
+                                        )
+                                    )
+                                    return errormsg
+
+                        else:
+                            missing_routes.append(st_rt)
+
+                if len(missing_routes) > 0:
+                    errormsg = "[DUT: {}]: Missing route in FIB:" " {}".format(
+                        dut, missing_routes
+                    )
+                    return errormsg
+
+                if nh_found:
+                    logger.info(
+                        "Found next_hop {} for all routes in RIB"
+                        " of router {}\n".format(next_hop, dut)
+                    )
+
+                if found_routes:
+                    logger.info(
+                        "[DUT: %s]: Verified routes in FIB, found" " routes are: %s\n",
+                        dut,
+                        found_routes,
+                    )
+
+                continue
+
+            if "bgp" in input_dict[routerInput]:
+                if (
+                    "advertise_networks"
+                    not in input_dict[routerInput]["bgp"]["address_family"][addr_type][
+                        "unicast"
+                    ]
+                ):
+                    continue
+
+                found_routes = []
+                missing_routes = []
+                advertise_network = input_dict[routerInput]["bgp"]["address_family"][
+                    addr_type
+                ]["unicast"]["advertise_networks"]
+
+                # Continue if there are no network advertise
+                if len(advertise_network) == 0:
+                    continue
+
+                for advertise_network_dict in advertise_network:
+                    if "vrf" in advertise_network_dict:
+                        cmd = "{} vrf {} json".format(command, static_route["vrf"])
+                    else:
+                        cmd = "{} json".format(command)
+
+                rib_routes_json = run_frr_cmd(rnode, cmd, isjson=True)
+
+                # Verifying output dictionary rib_routes_json is not empty
+                if bool(rib_routes_json) is False:
+                    errormsg = "No route found in rib of router {}..".format(router)
+                    return errormsg
+
+                start_ip = advertise_network_dict["network"]
+                if "no_of_network" in advertise_network_dict:
+                    no_of_network = advertise_network_dict["no_of_network"]
+                else:
+                    no_of_network = 1
+
+                # Generating IPs for verification
+                ip_list = generate_ips(start_ip, no_of_network)
+                st_found = False
+                nh_found = False
+
+                for st_rt in ip_list:
+                    #st_rt = str(ipaddr.IPNetwork(unicode(st_rt)))
+                    st_rt = str(ipaddress.ip_network(frr_unicode(st_rt)))
+
+                    _addr_type = validate_ip_address(st_rt)
+                    if _addr_type != addr_type:
+                        continue
+
+                    if st_rt in rib_routes_json:
+                        st_found = True
+                        found_routes.append(st_rt)
+
+                        if next_hop:
+                            if type(next_hop) is not list:
+                                next_hop = [next_hop]
+
+                            count = 0
+                            for nh in next_hop:
+                                for nh_dict in rib_routes_json[st_rt][0]["nexthops"]:
+                                    if nh_dict["ip"] != nh:
+                                        continue
+                                    else:
+                                        count += 1
+
+                            if count == len(next_hop):
+                                nh_found = True
+                            else:
+                                missing_routes.append(st_rt)
+                                errormsg = (
+                                    "Nexthop {} is Missing"
+                                    " for route {} in "
+                                    "RIB of router {}\n".format(next_hop, st_rt, dut)
+                                )
+                                return errormsg
+                    else:
+                        missing_routes.append(st_rt)
+
+                if len(missing_routes) > 0:
+                    errormsg = "[DUT: {}]: Missing route in FIB: " "{} \n".format(
+                        dut, missing_routes
+                    )
+                    return errormsg
+
+                if nh_found:
+                    logger.info(
+                        "Found next_hop {} for all routes in RIB"
+                        " of router {}\n".format(next_hop, dut)
+                    )
+
+                if found_routes:
+                    logger.info(
+                        "[DUT: {}]: Verified routes FIB"
+                        ", found routes  are: {}\n".format(dut, found_routes)
+                    )
+
+    logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
+    return True
+
+
+@retry(attempts=5, wait=2, return_is_str=True, initial_wait=2)
+def verify_fib_routes(tgen, addr_type, dut, input_dict, next_hop=None):
+    """
+    Data will be read from input_dict or input JSON file, API will generate
+    same prefixes, which were redistributed by either create_static_routes() or
+    advertise_networks_using_network_command() and will verify next_hop and
+    each prefix/routes is present in "show ip/ipv6 fib json"
+    command o/p.
+
+    Parameters
+    ----------
+    * `tgen` : topogen object
+    * `addr_type` : ip type, ipv4/ipv6
+    * `dut`: Device Under Test, for which user wants to test the data
+    * `input_dict` : input dict, has details of static routes
+    * `next_hop`[optional]: next_hop which needs to be verified,
+                           default: static
+
+    Usage
+    -----
+    input_routes_r1 = {
+        "r1": {
+            "static_routes": [{
+                "network": ["1.1.1.1/32],
+                "next_hop": "Null0",
+                "vrf": "RED"
+            }]
+        }
+    }
+    result = result = verify_fib_routes(tgen, "ipv4, "r1", input_routes_r1)
+
+    Returns
+    -------
+    errormsg(str) or True
+    """
+
+    logger.debug("Entering lib API: {}".format(sys._getframe().f_code.co_name))
+
+    router_list = tgen.routers()
+    for routerInput in input_dict.keys():
+        for router, rnode in router_list.items():
+            if router != dut:
+                continue
+
+            logger.info("Checking router %s FIB routes:", router)
+
+            # Verifying RIB routes
+            if addr_type == "ipv4":
+                command = "show ip fib"
+            else:
+                command = "show ipv6 fib"
+
+            found_routes = []
+            missing_routes = []
+
+            if "static_routes" in input_dict[routerInput]:
+                static_routes = input_dict[routerInput]["static_routes"]
+
+                for static_route in static_routes:
+                    if "vrf" in static_route and static_route["vrf"] is not None:
+
+                        logger.info(
+                            "[DUT: {}]: Verifying routes for VRF:"
+                            " {}".format(router, static_route["vrf"])
+                        )
+
+                        cmd = "{} vrf {}".format(command, static_route["vrf"])
+
+                    else:
+                        cmd = "{}".format(command)
+
+                    cmd = "{} json".format(cmd)
+
+                    rib_routes_json = run_frr_cmd(rnode, cmd, isjson=True)
+
+                    # Verifying output dictionary rib_routes_json is not empty
+                    if bool(rib_routes_json) is False:
+                        errormsg = "[DUT: {}]: No route found in fib".format(router)
+                        return errormsg
+
+                    network = static_route["network"]
+                    if "no_of_ip" in static_route:
+                        no_of_ip = static_route["no_of_ip"]
+                    else:
+                        no_of_ip = 1
+
+                    # Generating IPs for verification
+                    ip_list = generate_ips(network, no_of_ip)
+                    st_found = False
+                    nh_found = False
+
+                    for st_rt in ip_list:
+                        st_rt = str(ipaddress.ip_network(frr_unicode(st_rt)))
+
+                        _addr_type = validate_ip_address(st_rt)
+                        if _addr_type != addr_type:
+                            continue
+
+                        if st_rt in rib_routes_json:
+                            st_found = True
+                            found_routes.append(st_rt)
+
+                            if next_hop:
+                                if type(next_hop) is not list:
+                                    next_hop = [next_hop]
+
+                                count = 0
+                                for nh in next_hop:
+                                    for nh_dict in rib_routes_json[st_rt][0][
+                                        "nexthops"
+                                    ]:
+                                        if nh_dict["ip"] != nh:
+                                            continue
+                                        else:
+                                            count += 1
+
+                                if count == len(next_hop):
+                                    nh_found = True
+                                else:
+                                    missing_routes.append(st_rt)
+                                    errormsg = (
+                                        "Nexthop {} is Missing"
+                                        " for route {} in "
+                                        "RIB of router {}\n".format(
+                                            next_hop, st_rt, dut
+                                        )
+                                    )
+                                    return errormsg
+
+                        else:
+                            missing_routes.append(st_rt)
+
+                if len(missing_routes) > 0:
+                    errormsg = "[DUT: {}]: Missing route in FIB:" " {}".format(
+                        dut, missing_routes
+                    )
+                    return errormsg
+
+                if nh_found:
+                    logger.info(
+                        "Found next_hop {} for all routes in RIB"
+                        " of router {}\n".format(next_hop, dut)
+                    )
+
+                if found_routes:
+                    logger.info(
+                        "[DUT: %s]: Verified routes in FIB, found" " routes are: %s\n",
+                        dut,
+                        found_routes,
+                    )
+
+                continue
+
+            if "bgp" in input_dict[routerInput]:
+                if (
+                    "advertise_networks"
+                    not in input_dict[routerInput]["bgp"]["address_family"][addr_type][
+                        "unicast"
+                    ]
+                ):
+                    continue
+
+                found_routes = []
+                missing_routes = []
+                advertise_network = input_dict[routerInput]["bgp"]["address_family"][
+                    addr_type
+                ]["unicast"]["advertise_networks"]
+
+                # Continue if there are no network advertise
+                if len(advertise_network) == 0:
+                    continue
+
+                for advertise_network_dict in advertise_network:
+                    if "vrf" in advertise_network_dict:
+                        cmd = "{} vrf {} json".format(command, static_route["vrf"])
+                    else:
+                        cmd = "{} json".format(command)
+
+                rib_routes_json = run_frr_cmd(rnode, cmd, isjson=True)
+
+                # Verifying output dictionary rib_routes_json is not empty
+                if bool(rib_routes_json) is False:
+                    errormsg = "No route found in rib of router {}..".format(router)
+                    return errormsg
+
+                start_ip = advertise_network_dict["network"]
+                if "no_of_network" in advertise_network_dict:
+                    no_of_network = advertise_network_dict["no_of_network"]
+                else:
+                    no_of_network = 1
+
+                # Generating IPs for verification
+                ip_list = generate_ips(start_ip, no_of_network)
+                st_found = False
+                nh_found = False
+
+                for st_rt in ip_list:
+                    st_rt = str(ipaddress.ip_network(frr_unicode(st_rt)))
+
+                    _addr_type = validate_ip_address(st_rt)
+                    if _addr_type != addr_type:
+                        continue
+
+                    if st_rt in rib_routes_json:
+                        st_found = True
+                        found_routes.append(st_rt)
+
+                        if next_hop:
+                            if type(next_hop) is not list:
+                                next_hop = [next_hop]
+
+                            count = 0
+                            for nh in next_hop:
+                                for nh_dict in rib_routes_json[st_rt][0]["nexthops"]:
+                                    if nh_dict["ip"] != nh:
+                                        continue
+                                    else:
+                                        count += 1
+
+                            if count == len(next_hop):
+                                nh_found = True
+                            else:
+                                missing_routes.append(st_rt)
+                                errormsg = (
+                                    "Nexthop {} is Missing"
+                                    " for route {} in "
+                                    "RIB of router {}\n".format(next_hop, st_rt, dut)
+                                )
+                                return errormsg
+                    else:
+                        missing_routes.append(st_rt)
+
+                if len(missing_routes) > 0:
+                    errormsg = "[DUT: {}]: Missing route in FIB: " "{} \n".format(
+                        dut, missing_routes
+                    )
+                    return errormsg
+
+                if nh_found:
+                    logger.info(
+                        "Found next_hop {} for all routes in RIB"
+                        " of router {}\n".format(next_hop, dut)
+                    )
+
+                if found_routes:
+                    logger.info(
+                        "[DUT: {}]: Verified routes FIB"
+                        ", found routes  are: {}\n".format(dut, found_routes)
+                    )
+
+    logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
     return True
 
 
@@ -2620,7 +3575,7 @@ def verify_prefix_lists(tgen, input_dict):
     return True
 
 
-@retry(attempts=2, wait=4, return_is_str=True, initial_wait=2)
+@retry(attempts=3, wait=4, return_is_str=True)
 def verify_route_maps(tgen, input_dict):
     """
     Running "show route-map" command and verifying given route-map
@@ -2818,3 +3773,310 @@ def verify_create_community_list(tgen, input_dict):
 
             logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
             return True
+
+
+def verify_cli_json(tgen, input_dict):
+    """
+    API to verify if JSON is available for clis
+    command.
+
+    Parameters
+    ----------
+    * `tgen`: topogen object
+    * `input_dict`: CLIs for which JSON needs to be verified
+    Usage
+    -----
+    input_dict = {
+        "edge1":{
+            "cli": ["show evpn vni detail", show evpn rmac vni all]
+        }
+    }
+
+    result = verify_cli_json(tgen, input_dict)
+
+    Returns
+    -------
+    errormsg(str) or True
+    """
+
+    logger.debug("Entering lib API: {}".format(sys._getframe().f_code.co_name))
+    for dut in input_dict.keys():
+        rnode = tgen.routers()[dut]
+
+        for cli in input_dict[dut]["cli"]:
+            logger.info(
+                "[DUT: %s]: Verifying JSON is available for " "CLI %s :", dut, cli
+            )
+
+            test_cli = "{} json".format(cli)
+            ret_json = rnode.vtysh_cmd(test_cli, isjson=True)
+            if not bool(ret_json):
+                errormsg = "CLI: %s, JSON format is not available" % (cli)
+                return errormsg
+            elif "unknown" in ret_json or "Unknown" in ret_json:
+                errormsg = "CLI: %s, JSON format is not available" % (cli)
+                return errormsg
+            else:
+                logger.info(
+                    "CLI : %s JSON format is available: " "\n %s", cli, ret_json
+                )
+
+    logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
+
+    return True
+
+
+@retry(attempts=3, wait=4, return_is_str=True)
+def verify_evpn_vni(tgen, input_dict):
+    """
+    API to verify evpn vni details using "show evpn vni detail json"
+    command.
+
+    Parameters
+    ----------
+    * `tgen`: topogen object
+    * `input_dict`: having details like - for which router, evpn details
+                    needs to be verified
+    Usage
+    -----
+    input_dict = {
+        "edge1":{
+            "vni": [
+                {
+                    "75100":{
+                        "vrf": "RED",
+                        "vxlanIntf": "vxlan75100",
+                        "localVtepIp": "120.1.1.1",
+                        "sviIntf": "br100"
+                    }
+                }
+            ]
+        }
+    }
+
+    result = verify_evpn_vni(tgen, input_dict)
+
+    Returns
+    -------
+    errormsg(str) or True
+    """
+
+    logger.debug("Entering lib API: {}".format(sys._getframe().f_code.co_name))
+    for dut in input_dict.keys():
+        rnode = tgen.routers()[dut]
+
+        logger.info("[DUT: %s]: Verifying evpn vni details :", dut)
+
+        cmd = "show evpn vni detail json"
+        evpn_all_vni_json = run_frr_cmd(rnode, cmd, isjson=True)
+        if not bool(evpn_all_vni_json):
+            errormsg = "No output for '{}' cli".format(cmd)
+            return errormsg
+
+        if "vni" in input_dict[dut]:
+            for vni_dict in input_dict[dut]["vni"]:
+                found = False
+                vni = vni_dict["name"]
+                for evpn_vni_json in evpn_all_vni_json:
+                    if "vni" in evpn_vni_json:
+                        if evpn_vni_json["vni"] != int(vni):
+                            continue
+
+                        for attribute in vni_dict.keys():
+                            if vni_dict[attribute] != evpn_vni_json[attribute]:
+                                errormsg = (
+                                    "[DUT: %s] Verifying "
+                                    "%s for VNI: %s [FAILED]||"
+                                    ", EXPECTED  : %s "
+                                    " FOUND : %s"
+                                    % (
+                                        dut,
+                                        attribute,
+                                        vni,
+                                        vni_dict[attribute],
+                                        evpn_vni_json[attribute],
+                                    )
+                                )
+                                return errormsg
+
+                            else:
+                                found = True
+                                logger.info(
+                                    "[DUT: %s] Verifying"
+                                    " %s for VNI: %s , "
+                                    "Found Expected : %s ",
+                                    dut,
+                                    attribute,
+                                    vni,
+                                    evpn_vni_json[attribute],
+                                )
+
+                        if evpn_vni_json["state"] != "Up":
+                            errormsg = (
+                                "[DUT: %s] Failed: Verifying"
+                                " State for VNI: %s is not Up" % (dut, vni)
+                            )
+                            return errormsg
+
+                    else:
+                        errormsg = (
+                            "[DUT: %s] Failed:"
+                            " VNI: %s is not present in JSON" % (dut, vni)
+                        )
+                        return errormsg
+
+                    if found:
+                        logger.info(
+                            "[DUT %s]: Verifying VNI : %s "
+                            "details and state is Up [PASSED]!!",
+                            dut,
+                            vni,
+                        )
+                        return True
+
+        else:
+            errormsg = (
+                "[DUT: %s] Failed:" " vni details are not present in input data" % (dut)
+            )
+            return errormsg
+
+    logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
+    return False
+
+
+@retry(attempts=3, wait=4, return_is_str=True)
+def verify_vrf_vni(tgen, input_dict):
+    """
+    API to verify vrf vni details using "show vrf vni json"
+    command.
+
+    Parameters
+    ----------
+    * `tgen`: topogen object
+    * `input_dict`: having details like - for which router, evpn details
+                    needs to be verified
+    Usage
+    -----
+    input_dict = {
+        "edge1":{
+            "vrfs": [
+                {
+                    "RED":{
+                        "vni": 75000,
+                        "vxlanIntf": "vxlan75100",
+                        "sviIntf": "br100",
+                        "routerMac": "00:80:48:ba:d1:00",
+                        "state": "Up"
+                    }
+                }
+            ]
+        }
+    }
+
+    result = verify_vrf_vni(tgen, input_dict)
+
+    Returns
+    -------
+    errormsg(str) or True
+    """
+
+    logger.debug("Entering lib API: {}".format(sys._getframe().f_code.co_name))
+    for dut in input_dict.keys():
+        rnode = tgen.routers()[dut]
+
+        logger.info("[DUT: %s]: Verifying vrf vni details :", dut)
+
+        cmd = "show vrf vni json"
+        vrf_all_vni_json = run_frr_cmd(rnode, cmd, isjson=True)
+        if not bool(vrf_all_vni_json):
+            errormsg = "No output for '{}' cli".format(cmd)
+            return errormsg
+
+        if "vrfs" in input_dict[dut]:
+            for vrfs in input_dict[dut]["vrfs"]:
+                for vrf, vrf_dict in vrfs.items():
+                    found = False
+                    for vrf_vni_json in vrf_all_vni_json["vrfs"]:
+                        if "vrf" in vrf_vni_json:
+                            if vrf_vni_json["vrf"] != vrf:
+                                continue
+
+                            for attribute in vrf_dict.keys():
+                                if vrf_dict[attribute] == vrf_vni_json[attribute]:
+                                    found = True
+                                    logger.info(
+                                        "[DUT %s]: VRF: %s, "
+                                        "verifying %s "
+                                        ", Found Expected: %s "
+                                        "[PASSED]!!",
+                                        dut,
+                                        vrf,
+                                        attribute,
+                                        vrf_vni_json[attribute],
+                                    )
+                                else:
+                                    errormsg = (
+                                        "[DUT: %s] VRF: %s, "
+                                        "verifying %s [FAILED!!] "
+                                        ", EXPECTED : %s "
+                                        ", FOUND : %s"
+                                        % (
+                                            dut,
+                                            vrf,
+                                            attribute,
+                                            vrf_dict[attribute],
+                                            vrf_vni_json[attribute],
+                                        )
+                                    )
+                                    return errormsg
+
+                        else:
+                            errormsg = "[DUT: %s] VRF: %s " "is not present in JSON" % (
+                                dut,
+                                vrf,
+                            )
+                            return errormsg
+
+                        if found:
+                            logger.info(
+                                "[DUT %s] Verifying VRF: %s " " details [PASSED]!!",
+                                dut,
+                                vrf,
+                            )
+                            return True
+
+        else:
+            errormsg = (
+                "[DUT: %s] Failed:" " vrf details are not present in input data" % (dut)
+            )
+            return errormsg
+
+    logger.debug("Exiting lib API: {}".format(sys._getframe().f_code.co_name))
+    return False
+
+
+def required_linux_kernel_version(required_version):
+    """
+    This API is used to check linux version compatibility of the test suite.
+    If version mentioned in required_version is higher than the linux kernel
+    of the system, test suite will be skipped. This API returns true or errormsg.
+
+    Parameters
+    ----------
+    * `required_version` : Kernel version required for the suites to run.
+
+    Usage
+    -----
+    result = linux_kernel_version_lowerthan('4.15')
+
+    Returns
+    -------
+    errormsg(str) or True
+    """
+    system_kernel = platform.release()
+    if version_cmp(system_kernel, required_version) < 0:
+        error_msg = ('These tests will not run on kernel "{}", '
+            'they require kernel >= {})'.format(system_kernel,
+                required_version ))
+        return error_msg
+    return True

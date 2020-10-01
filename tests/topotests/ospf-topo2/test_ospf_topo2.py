@@ -76,7 +76,7 @@ def setup_module(mod):
     tgen.start_topology()
 
     router_list = tgen.routers()
-    for rname, router in router_list.iteritems():
+    for rname, router in router_list.items():
         router.load_config(
             TopoRouter.RD_ZEBRA,
             os.path.join(CWD, '{}/zebra.conf'.format(rname))
@@ -86,19 +86,19 @@ def setup_module(mod):
             os.path.join(CWD, '{}/ospfd.conf'.format(rname))
         )
 
-	# What is this?  OSPF Unnumbered depends on the rp_filter
-	# being set appropriately( HA! )
-	# Effectively we are putting different /32's on the interface
-	# the multicast packet delivery is somewhat controlled by
-	# the rp_filter.  Setting it to '0' allows the OS to pass
-	# up the mcast packet not destined for the local routers
-	# network.
-	topotest.set_sysctl(tgen.net['r1'],
-			    'net.ipv4.conf.r1-eth1.rp_filter', 0)
+        # What is this?  OSPF Unnumbered depends on the rp_filter
+        # being set appropriately( HA! )
+        # Effectively we are putting different /32's on the interface
+        # the multicast packet delivery is somewhat controlled by
+        # the rp_filter.  Setting it to '0' allows the OS to pass
+        # up the mcast packet not destined for the local routers
+        # network.
+        topotest.set_sysctl(tgen.net['r1'],
+                            'net.ipv4.conf.r1-eth1.rp_filter', 0)
         topotest.set_sysctl(tgen.net['r1'],
                             'net.ipv4.conf.all.rp_filter', 0)
-	topotest.set_sysctl(tgen.net['r2'],
-			    'net.ipv4.conf.r2-eth1.rp_filter', 0)
+        topotest.set_sysctl(tgen.net['r2'],
+                            'net.ipv4.conf.r2-eth1.rp_filter', 0)
         topotest.set_sysctl(tgen.net['r2'],
                             'net.ipv4.conf.all.rp_filter', 0)
 
@@ -118,7 +118,7 @@ def test_ospf_convergence():
     if tgen.routers_have_failure():
         pytest.skip('skipped because of router(s) failure')
 
-    for router, rnode in tgen.routers().iteritems():
+    for router, rnode in tgen.routers().items():
         logger.info('Waiting for router "%s" convergence', router)
 
         json_file = '{}/{}/ospf-route.json'.format(CWD, router)

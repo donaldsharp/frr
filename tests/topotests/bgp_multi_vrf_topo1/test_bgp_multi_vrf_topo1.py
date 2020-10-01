@@ -132,6 +132,7 @@ from lib.common_config import (
     create_bgp_community_lists,
     check_router_status,
     apply_raw_config,
+    required_linux_kernel_version
 )
 
 from lib.topolog import logger
@@ -209,6 +210,10 @@ def setup_module(mod):
 
     * `mod`: module name
     """
+    # Required linux kernel version for this suite to run.
+    result = required_linux_kernel_version('4.15')
+    if result is not True:
+        pytest.skip("Kernel requirements are not met")
 
     testsuite_run_time = time.asctime(time.localtime(time.time()))
     logger.info("Testsuite start time: {}".format(testsuite_run_time))
@@ -657,10 +662,10 @@ def test_static_routes_associated_to_specific_vrfs_p0(request):
     assert result is True, "Testcase {} : Failed \n Error: {}".format(tc_name, result)
 
     step(
-        "Verify that static routes 1.x.x.x/32 and 1::x/128 appear" "in VRF RED_A table"
+        "Verify that static routes 1.x.x.x/32 and 1::x/128 appear " "in VRF RED_A table"
     )
     step(
-        "Verify that static routes 2.x.x.x/32 and 2::x/128 appear" "in VRF RED_B table"
+        "Verify that static routes 2.x.x.x/32 and 2::x/128 appear " "in VRF RED_B table"
     )
 
     for addr_type in ADDR_TYPES:
@@ -688,10 +693,10 @@ def test_static_routes_associated_to_specific_vrfs_p0(request):
         )
 
     step(
-        "Verify that static routes 1.x.x.x/32 and 1::x/128 appear" "in VRF BLUE_A table"
+        "Verify that static routes 1.x.x.x/32 and 1::x/128 appear " "in VRF BLUE_A table"
     )
     step(
-        "Verify that static routes 2.x.x.x/32 and 2::x/128 appear" "in VRF BLUE_B table"
+        "Verify that static routes 2.x.x.x/32 and 2::x/128 appear " "in VRF BLUE_B table"
     )
 
     for addr_type in ADDR_TYPES:
@@ -1079,7 +1084,7 @@ def test_prefixes_leaking_p0(request):
     assert result is True, "Testcase {} : Failed \n Error: {}".format(tc_name, result)
 
     step(
-        "Verify on R1 that RED_A doesn't receive and static "
+        "Verify on R1 that RED_A doesn't receive any static "
         "route with metric value 123"
     )
 

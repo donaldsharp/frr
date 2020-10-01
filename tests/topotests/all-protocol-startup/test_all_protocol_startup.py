@@ -113,8 +113,8 @@ def setup_module(module):
         net['r%s' % i].loadConf('ospfd', '%s/r%s/ospfd.conf' % (thisDir, i))
         if net['r1'].checkRouterVersion('<', '4.0'):
             net['r%s' % i].loadConf('ospf6d', '%s/r%s/ospf6d.conf-pre-v4' % (thisDir, i))
-	else:
-	    net['r%s' % i].loadConf('ospf6d', '%s/r%s/ospf6d.conf' % (thisDir, i))
+        else:
+            net['r%s' % i].loadConf('ospf6d', '%s/r%s/ospf6d.conf' % (thisDir, i))
         net['r%s' % i].loadConf('isisd', '%s/r%s/isisd.conf' % (thisDir, i))
         net['r%s' % i].loadConf('bgpd', '%s/r%s/bgpd.conf' % (thisDir, i))
         if net['r%s' % i].daemon_available('ldpd'):
@@ -126,7 +126,7 @@ def setup_module(module):
         net['r%s' % i].loadConf('pbrd', '%s/r%s/pbrd.conf' % (thisDir, i))
         net['r%s' % i].startRouter()
 
-    # For debugging after starting Quagga/FRR daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -148,7 +148,7 @@ def test_router_running():
     if (fatal_error != ""):
         pytest.skip(fatal_error)
 
-    print("\n\n** Check if FRR/Quagga is running on each Router node")
+    print("\n\n** Check if FRR is running on each Router node")
     print("******************************************\n")
     sleep(5)
 
@@ -157,7 +157,7 @@ def test_router_running():
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -213,7 +213,7 @@ def test_error_messages_vtysh():
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -263,6 +263,22 @@ def test_error_messages_daemons():
             if log:
                 error_logs += "r%s LDPd StdErr Output:\n" % i
                 error_logs += log
+
+        log = net['r1'].getStdErr('nhrpd')
+        if log:
+            error_logs += "r%s NHRPd StdErr Output:\n" % i
+            error_logs += log
+
+        log = net['r1'].getStdErr('babeld')
+        if log:
+            error_logs += "r%s BABELd StdErr Output:\n" % i
+            error_logs += log
+
+        log = net['r1'].getStdErr('pbrd')
+        if log:
+            error_logs += "r%s PBRd StdErr Output:\n" % i
+            error_logs += log
+
         log = net['r%s' % i].getStdErr('zebra')
         if log:
             error_logs += "r%s Zebra StdErr Output:\n"
@@ -279,7 +295,7 @@ def test_error_messages_daemons():
 
     assert error_logs == "", "Daemons report errors to StdErr"
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -347,7 +363,7 @@ def test_converge_protocols():
 
         assert failures == 0, "IPv6 Routing table failed for r%s\n%s" % (i, diff)
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     ## CLI(net)
 
 def route_get_nhg_id(route_str):
@@ -358,26 +374,36 @@ def route_get_nhg_id(route_str):
     nhg_id = int(match.group(1))
     return nhg_id
 
-def verify_nexthop_group(nhg_id, recursive=False):
+def verify_nexthop_group(nhg_id, recursive=False, ecmp=0):
     # Verify NHG is valid/installed
     output = net["r1"].cmd('vtysh -c "show nexthop-group rib %d"' % nhg_id)
 
     match = re.search(r"Valid", output)
     assert match is not None, "Nexthop Group ID=%d not marked Valid" % nhg_id
 
-    # If recursive, we need to look at its resolved group
-    if recursive:
-        match = re.search(r"Depends: \((\d+)\)", output)
-        resolved_id = int(match.group(1))
-        verify_nexthop_group(resolved_id, False)
+    if ecmp or recursive:
+        match = re.search(r"Depends:.*\n", output)
+        assert match is not None, "Nexthop Group ID=%d has no depends" % nhg_id
+
+        # list of IDs in group
+        depends = re.findall(r"\((\d+)\)", match.group(0))
+
+        if ecmp:
+            assert (len(depends) == ecmp), "Nexthop Group ID=%d doesn't match ecmp size" % nhg_id
+        else:
+            # If recursive, we need to look at its resolved group
+            assert (len(depends) == 1), "Nexthop Group ID=%d should only have one recursive depend" % nhg_id
+            resolved_id = int(depends[0])
+            verify_nexthop_group(resolved_id, False)
+
     else:
         match = re.search(r"Installed", output)
         assert match is not None, "Nexthop Group ID=%d not marked Installed" % nhg_id
 
-def verify_route_nexthop_group(route_str, recursive=False):
+def verify_route_nexthop_group(route_str, recursive=False, ecmp=0):
     # Verify route and that zebra created NHGs for and they are valid/installed
     nhg_id = route_get_nhg_id(route_str)
-    verify_nexthop_group(nhg_id, recursive)
+    verify_nexthop_group(nhg_id, recursive, ecmp)
 
 def test_nexthop_groups():
     global fatal_error
@@ -511,7 +537,7 @@ def test_rip_status():
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -566,7 +592,7 @@ def test_ripng_status():
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -595,10 +621,11 @@ def test_ospfv2_interfaces():
             actual = net['r%s' % i].cmd('vtysh -c "show ip ospf interface" 2> /dev/null').rstrip()
             # Mask out Bandwidth portion. They may change..
             actual = re.sub(r"BW [0-9]+ Mbit", "BW XX Mbit", actual)
-	    actual = re.sub(r"ifindex [0-9]", "ifindex X", actual)
+            actual = re.sub(r"ifindex [0-9]", "ifindex X", actual)
 
             # Drop time in next due 
             actual = re.sub(r"Hello due in [0-9\.]+s", "Hello due in XX.XXXs", actual)
+            actual = re.sub(r"Hello due in [0-9\.]+ usecs", "Hello due in XX.XXXs", actual)
             # Fix 'MTU mismatch detection: enabled' vs 'MTU mismatch detection:enabled' - accept both
             actual = re.sub(r"MTU mismatch detection:([a-z]+.*)", r"MTU mismatch detection: \1", actual)
             # Fix newlines (make them all the same)
@@ -629,7 +656,7 @@ def test_ospfv2_interfaces():
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -684,7 +711,7 @@ def test_isis_interfaces():
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -765,7 +792,7 @@ def test_bgp_summary():
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -847,7 +874,7 @@ def test_bgp_ipv6_summary():
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -865,52 +892,52 @@ def test_bgp_ipv4():
     print("******************************************\n")
     diffresult = {}
     for i in range(1, 2):
-	success = 0
-	for refTableFile in (glob.glob(
-		'%s/r%s/show_bgp_ipv4*.ref' % (thisDir, i))):
-	    if os.path.isfile(refTableFile):
-		# Read expected result from file
-		expected = open(refTableFile).read().rstrip()
-		# Fix newlines (make them all the same)
-		expected = ('\n'.join(expected.splitlines()) + '\n').splitlines(1)
+        success = 0
+        for refTableFile in (glob.glob(
+                '%s/r%s/show_bgp_ipv4*.ref' % (thisDir, i))):
+            if os.path.isfile(refTableFile):
+                # Read expected result from file
+                expected = open(refTableFile).read().rstrip()
+                # Fix newlines (make them all the same)
+                expected = ('\n'.join(expected.splitlines()) + '\n').splitlines(1)
 
-		# Actual output from router
-		actual = net['r%s' % i].cmd('vtysh -c "show bgp ipv4" 2> /dev/null').rstrip()
-		# Remove summary line (changed recently)
-		actual = re.sub(r'Total number.*', '', actual)
-		actual = re.sub(r'Displayed.*', '', actual)
-		actual = actual.rstrip()
-		# Fix newlines (make them all the same)
-		actual = ('\n'.join(actual.splitlines()) + '\n').splitlines(1)
+                # Actual output from router
+                actual = net['r%s' % i].cmd('vtysh -c "show bgp ipv4" 2> /dev/null').rstrip()
+                # Remove summary line (changed recently)
+                actual = re.sub(r'Total number.*', '', actual)
+                actual = re.sub(r'Displayed.*', '', actual)
+                actual = actual.rstrip()
+                # Fix newlines (make them all the same)
+                actual = ('\n'.join(actual.splitlines()) + '\n').splitlines(1)
 
-		# Generate Diff
-		diff = topotest.get_textdiff(actual, expected,
-		    title1="actual SHOW BGP IPv4",
-		    title2="expected SHOW BGP IPv4")
+                # Generate Diff
+                diff = topotest.get_textdiff(actual, expected,
+                    title1="actual SHOW BGP IPv4",
+                    title2="expected SHOW BGP IPv4")
 
-		# Empty string if it matches, otherwise diff contains unified diff
-		if diff:
-		    diffresult[refTableFile] = diff
-		else:
-		    success = 1
-		    print("template %s matched: r%s ok" % (refTableFile, i))
-		    break
+                # Empty string if it matches, otherwise diff contains unified diff
+                if diff:
+                    diffresult[refTableFile] = diff
+                else:
+                    success = 1
+                    print("template %s matched: r%s ok" % (refTableFile, i))
+                    break
 
-	if not success:
-	    resultstr = 'No template matched.\n'
-	    for f in diffresult.iterkeys():
-		resultstr += (
-		    'template %s: r%s failed SHOW BGP IPv4 check:\n%s\n'
-		    % (f, i, diffresult[f]))
-	    raise AssertionError(
-		"SHOW BGP IPv4 failed for router r%s:\n%s" % (i, resultstr))
+        if not success:
+            resultstr = 'No template matched.\n'
+            for f in diffresult.iterkeys():
+                resultstr += (
+                    'template %s: r%s failed SHOW BGP IPv4 check:\n%s\n'
+                    % (f, i, diffresult[f]))
+            raise AssertionError(
+                "SHOW BGP IPv4 failed for router r%s:\n%s" % (i, resultstr))
 
     # Make sure that all daemons are running
     for i in range(1, 2):
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -928,51 +955,51 @@ def test_bgp_ipv6():
     print("******************************************\n")
     diffresult = {}
     for i in range(1, 2):
-	success = 0
-	for refTableFile in (glob.glob(
-		'%s/r%s/show_bgp_ipv6*.ref' % (thisDir, i))):
-	    if os.path.isfile(refTableFile):
-		# Read expected result from file
-		expected = open(refTableFile).read().rstrip()
-		# Fix newlines (make them all the same)
-		expected = ('\n'.join(expected.splitlines()) + '\n').splitlines(1)
+        success = 0
+        for refTableFile in (glob.glob(
+                '%s/r%s/show_bgp_ipv6*.ref' % (thisDir, i))):
+            if os.path.isfile(refTableFile):
+                # Read expected result from file
+                expected = open(refTableFile).read().rstrip()
+                # Fix newlines (make them all the same)
+                expected = ('\n'.join(expected.splitlines()) + '\n').splitlines(1)
 
-		# Actual output from router
-		actual = net['r%s' % i].cmd('vtysh -c "show bgp ipv6" 2> /dev/null').rstrip()
-		# Remove summary line (changed recently)
-		actual = re.sub(r'Total number.*', '', actual)
-		actual = re.sub(r'Displayed.*', '', actual)
-		actual = actual.rstrip()
-		# Fix newlines (make them all the same)
-		actual = ('\n'.join(actual.splitlines()) + '\n').splitlines(1)
+                # Actual output from router
+                actual = net['r%s' % i].cmd('vtysh -c "show bgp ipv6" 2> /dev/null').rstrip()
+                # Remove summary line (changed recently)
+                actual = re.sub(r'Total number.*', '', actual)
+                actual = re.sub(r'Displayed.*', '', actual)
+                actual = actual.rstrip()
+                # Fix newlines (make them all the same)
+                actual = ('\n'.join(actual.splitlines()) + '\n').splitlines(1)
 
-		# Generate Diff
-		diff = topotest.get_textdiff(actual, expected,
-		    title1="actual SHOW BGP IPv6",
-		    title2="expected SHOW BGP IPv6")
+                # Generate Diff
+                diff = topotest.get_textdiff(actual, expected,
+                    title1="actual SHOW BGP IPv6",
+                    title2="expected SHOW BGP IPv6")
 
-		# Empty string if it matches, otherwise diff contains unified diff
-		if diff:
-		    diffresult[refTableFile] = diff
-		else:
-		    success = 1
-		    print("template %s matched: r%s ok" % (refTableFile, i))
+                # Empty string if it matches, otherwise diff contains unified diff
+                if diff:
+                    diffresult[refTableFile] = diff
+                else:
+                    success = 1
+                    print("template %s matched: r%s ok" % (refTableFile, i))
 
-	if not success:
-	    resultstr = 'No template matched.\n'
-	    for f in diffresult.iterkeys():
-		resultstr += (
-		    'template %s: r%s failed SHOW BGP IPv6 check:\n%s\n'
-		    % (f, i, diffresult[f]))
-	    raise AssertionError(
-		"SHOW BGP IPv6 failed for router r%s:\n%s" % (i, resultstr))
+        if not success:
+            resultstr = 'No template matched.\n'
+            for f in diffresult.iterkeys():
+                resultstr += (
+                    'template %s: r%s failed SHOW BGP IPv6 check:\n%s\n'
+                    % (f, i, diffresult[f]))
+            raise AssertionError(
+                "SHOW BGP IPv6 failed for router r%s:\n%s" % (i, resultstr))
 
     # Make sure that all daemons are running
     for i in range(1, 2):
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 def test_route_map():
@@ -1084,6 +1111,34 @@ def test_nexthop_groups_with_route_maps():
     net["r1"].cmd('vtysh -c "c t" -c "no route-map NOPE"')
     net["r1"].cmd('vtysh -c "c t" -c "no ip prefix-list NOPE seq 5 permit %s/32"' % permit_route_str)
 
+def test_nexthop_group_replace():
+    global fatal_error
+    global net
+
+    # Skip if previous fatal error condition is raised
+    if (fatal_error != ""):
+        pytest.skip(fatal_error)
+
+    print("\n\n** Verifying Nexthop Groups")
+    print("******************************************\n")
+
+    ### Nexthop Group Tests
+
+    ## 2-Way ECMP Directly Connected
+
+    net["r1"].cmd('vtysh -c "c t" -c "nexthop-group replace" -c "nexthop 1.1.1.1 r1-eth1 onlink" -c "nexthop 1.1.1.2 r1-eth2 onlink"')
+
+    # Create with sharpd using nexthop-group
+    net["r1"].cmd('vtysh -c "sharp install routes 3.3.3.1 nexthop-group replace 1"')
+
+    verify_route_nexthop_group("3.3.3.1/32")
+
+    # Change the nexthop group
+    net["r1"].cmd('vtysh -c "c t" -c "nexthop-group replace" -c "no nexthop 1.1.1.1 r1-eth1 onlink" -c "nexthop 1.1.1.3 r1-eth1 onlink" -c "nexthop 1.1.1.4 r1-eth4 onlink"')
+
+    # Verify it updated. We can just check install and ecmp count here.
+    verify_route_nexthop_group("3.3.3.1/32", False, 3)
+
 def test_mpls_interfaces():
     global fatal_error
     global net
@@ -1138,7 +1193,7 @@ def test_mpls_interfaces():
         fatal_error = net['r%s' % i].checkRouterRunning()
         assert fatal_error == "", fatal_error
 
-    # For debugging after starting FRR/Quagga daemons, uncomment the next line
+    # For debugging after starting FRR daemons, uncomment the next line
     # CLI(net)
 
 
@@ -1181,6 +1236,19 @@ def test_shutdown_check_stderr():
     log = net['r1'].getStdErr('bgpd')
     if log:
         print("\nBGPd StdErr Log:\n" + log)
+
+    log = net['r1'].getStdErr('nhrpd')
+    if log:
+        print("\nNHRPd StdErr Log:\n" + log)
+
+    log = net['r1'].getStdErr('pbrd')
+    if log:
+        print("\nPBRd StdErr Log:\n" + log)
+
+    log = net['r1'].getStdErr('babeld')
+    if log:
+        print("\nBABELd StdErr Log:\n" + log)
+
     if (net['r1'].daemon_available('ldpd')):
         log = net['r1'].getStdErr('ldpd')
         if log:

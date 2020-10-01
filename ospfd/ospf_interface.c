@@ -32,6 +32,7 @@
 #include "log.h"
 #include "zclient.h"
 #include "bfd.h"
+#include "ldp_sync.h"
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_spf.h"
@@ -46,6 +47,7 @@
 #include "ospfd/ospf_abr.h"
 #include "ospfd/ospf_network.h"
 #include "ospfd/ospf_dump.h"
+#include "ospfd/ospf_ldp_sync.h"
 
 DEFINE_QOBJ_TYPE(ospf_interface)
 DEFINE_HOOK(ospf_vl_add, (struct ospf_vl_data * vd), (vd))
@@ -80,6 +82,12 @@ int ospf_if_get_output_cost(struct ospf_interface *oi)
 	/* If all else fails, use default OSPF cost */
 	uint32_t cost;
 	uint32_t bw, refbw;
+
+	/* if LDP-IGP Sync is running on interface set cost so interface
+	 * is used only as last resort
+	 */
+	if (ldp_sync_if_is_enabled(IF_DEF_PARAMS(oi->ifp)->ldp_sync_info))
+		return (LDP_OSPF_LSINFINITY);
 
 	/* ifp speed and bw can be 0 in some platforms, use ospf default bw
 	   if bw is configured under interface it would be used.
@@ -531,6 +539,7 @@ static struct ospf_if_params *ospf_new_if_params(void)
 	oip->auth_crypt = list_new();
 
 	oip->network_lsa_seqnum = htonl(OSPF_INITIAL_SEQUENCE_NUMBER);
+	oip->is_v_wait_set = false;
 
 	return oip;
 }
@@ -539,6 +548,7 @@ void ospf_del_if_params(struct ospf_if_params *oip)
 {
 	list_delete(&oip->auth_crypt);
 	bfd_info_free(&(oip->bfd_info));
+	ldp_sync_info_free(&(oip->ldp_sync_info));
 	XFREE(MTYPE_OSPF_IF_PARAMS, oip);
 }
 
@@ -839,8 +849,7 @@ struct ospf_interface *ospf_vl_new(struct ospf *ospf,
 	if (vlink_count == OSPF_VL_MAX_COUNT) {
 		if (IS_DEBUG_OSPF_EVENT)
 			zlog_debug(
-				"ospf_vl_new(): Alarm: "
-				"cannot create more than OSPF_MAX_VL_COUNT virtual links");
+				"ospf_vl_new(): Alarm: cannot create more than OSPF_MAX_VL_COUNT virtual links");
 		return NULL;
 	}
 
@@ -996,7 +1005,8 @@ void ospf_vl_delete(struct ospf *ospf, struct ospf_vl_data *vl_data)
 	ospf_vl_data_free(vl_data);
 }
 
-static int ospf_vl_set_params(struct ospf_vl_data *vl_data, struct vertex *v)
+static int ospf_vl_set_params(struct ospf_area *area,
+			      struct ospf_vl_data *vl_data, struct vertex *v)
 {
 	int changed = 0;
 	struct ospf_interface *voi;
@@ -1004,6 +1014,7 @@ static int ospf_vl_set_params(struct ospf_vl_data *vl_data, struct vertex *v)
 	struct vertex_parent *vp = NULL;
 	unsigned int i;
 	struct router_lsa *rl;
+	struct ospf_interface *oi;
 
 	voi = vl_data->vl_oi;
 
@@ -1014,17 +1025,24 @@ static int ospf_vl_set_params(struct ospf_vl_data *vl_data, struct vertex *v)
 	}
 
 	for (ALL_LIST_ELEMENTS_RO(v->parents, node, vp)) {
-		vl_data->nexthop.oi = vp->nexthop->oi;
+		vl_data->nexthop.lsa_pos = vp->nexthop->lsa_pos;
 		vl_data->nexthop.router = vp->nexthop->router;
 
-		if (!IPV4_ADDR_SAME(&voi->address->u.prefix4,
-				    &vl_data->nexthop.oi->address->u.prefix4))
-			changed = 1;
+		/*
+		 * Only deal with interface data when the local
+		 * (calculating) node is the SPF root node
+		 */
+		if (!area->spf_dry_run) {
+			oi = ospf_if_lookup_by_lsa_pos(
+				area, vl_data->nexthop.lsa_pos);
 
-		voi->address->u.prefix4 =
-			vl_data->nexthop.oi->address->u.prefix4;
-		voi->address->prefixlen =
-			vl_data->nexthop.oi->address->prefixlen;
+			if (!IPV4_ADDR_SAME(&voi->address->u.prefix4,
+					    &oi->address->u.prefix4))
+				changed = 1;
+
+			voi->address->u.prefix4 = oi->address->u.prefix4;
+			voi->address->prefixlen = oi->address->prefixlen;
+		}
 
 		break; /* We take the first interface. */
 	}
@@ -1115,11 +1133,10 @@ void ospf_vl_up_check(struct ospf_area *area, struct in_addr rid,
 				OSPF_ISM_EVENT_EXECUTE(oi, ISM_InterfaceUp);
 			}
 
-			if (ospf_vl_set_params(vl_data, v)) {
+			if (ospf_vl_set_params(area, vl_data, v)) {
 				if (IS_DEBUG_OSPF(ism, ISM_EVENTS))
 					zlog_debug(
-						"ospf_vl_up_check: VL cost change,"
-						" scheduling router lsa refresh");
+						"ospf_vl_up_check: VL cost change, scheduling router lsa refresh");
 				if (ospf->backbone)
 					ospf_router_lsa_update_area(
 						ospf->backbone);

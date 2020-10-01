@@ -76,9 +76,7 @@ static int zebra_mlag_read(struct thread *thread)
 {
 	uint32_t *msglen;
 	uint32_t h_msglen;
-	uint32_t tot_len, curr_len = mlag_rd_buf_offset;
-
-	zrouter.mlag_info.t_read = NULL;
+	uint32_t tot_len, curr_len = 0;
 
 	/*
 	 * Received message in sock_stream looks like below
@@ -101,7 +99,6 @@ static int zebra_mlag_read(struct thread *thread)
 			zebra_mlag_handle_process_state(MLAG_DOWN);
 			return -1;
 		}
-		mlag_rd_buf_offset += data_len;
 		if (data_len != (ssize_t)(ZEBRA_MLAG_LEN_SIZE - curr_len)) {
 			/* Try again later */
 			zebra_mlag_sched_read();
@@ -117,6 +114,15 @@ static int zebra_mlag_read(struct thread *thread)
 	/* This will be the actual length of the packet */
 	tot_len = h_msglen + ZEBRA_MLAG_LEN_SIZE;
 
+	/*
+	 * If the buffer read we are about to do is too large
+	 * we are really really really not double plus good
+	 *
+	 * I'm not sure what to do here other than to bail
+	 * We'll need to revisit this in the future.
+	 */
+	assert(tot_len < ZEBRA_MLAG_BUF_LIMIT);
+
 	if (curr_len < tot_len) {
 		ssize_t data_len;
 
@@ -130,7 +136,6 @@ static int zebra_mlag_read(struct thread *thread)
 			zebra_mlag_handle_process_state(MLAG_DOWN);
 			return -1;
 		}
-		mlag_rd_buf_offset += data_len;
 		if (data_len != (ssize_t)(tot_len - curr_len)) {
 			/* Try again later */
 			zebra_mlag_sched_read();

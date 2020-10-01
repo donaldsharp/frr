@@ -82,7 +82,7 @@ class LTemplate():
         router_list = tgen.routers()
 
         # For all registred routers, load the zebra configuration file
-        for rname, router in router_list.iteritems():
+        for rname, router in router_list.items():
             logger.info("Setting up %s" % rname)
             for rd_val in TopoRouter.RD:
                 config = os.path.join(self.testdir, '{}/{}.conf'.format(rname,TopoRouter.RD[rd_val]))
@@ -157,8 +157,8 @@ def ltemplateTest(script, SkipIfFailed=True, CallOnFail=None, CheckFuncStr=None,
     if SkipIfFailed and tgen.routers_have_failure():
         pytest.skip(tgen.errors)
     if numEntry > 0:
-	if not KeepGoing:
-	    pytest.skip("Have %d errors" % numEntry)
+        if not KeepGoing:
+            pytest.skip("Have %d errors" % numEntry)
 
     if CheckFuncStr != None:
         check = eval(CheckFuncStr)
@@ -172,8 +172,8 @@ def ltemplateTest(script, SkipIfFailed=True, CallOnFail=None, CheckFuncStr=None,
     if numFail > 0:
         luShowFail()
         fatal_error = "%d tests failed" % numFail
-	if not KeepGoing:
-	    assert "scripts/cleanup_all.py failed" == "See summary output above", fatal_error
+        if not KeepGoing:
+            assert "scripts/cleanup_all.py failed" == "See summary output above", fatal_error
 
 # Memory leak test template
 def test_memory_leak():

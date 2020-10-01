@@ -18,8 +18,8 @@
  */
 
 
-#if !defined(GNU_LINUX) && (defined(SUNOS_5) || defined(OPEN_BSD))
-/* SUNOS_5 or OPEN_BSD */
+#if !defined(GNU_LINUX) && defined(OPEN_BSD)
+/* OPEN_BSD */
 
 #include <zebra.h>
 #include "ns.h"
@@ -109,13 +109,6 @@ void *ns_info_lookup(ns_id_t ns_id)
 void ns_init(void)
 {
 }
-
-/* API to retrieve default NS */
-ns_id_t ns_get_default_id(void)
-{
-	return NS_UNKNOWN;
-}
-
 
 /* API that can be used to change from NS */
 int ns_switchback_to_initial(void)

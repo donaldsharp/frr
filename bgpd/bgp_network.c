@@ -160,12 +160,26 @@ static int bgp_md5_set_password(struct peer *peer, const char *password)
 	 */
 	frr_with_privs(&bgpd_privs) {
 		for (ALL_LIST_ELEMENTS_RO(bm->listen_sockets, node, listener))
-			if (listener->su.sa.sa_family
-			    == peer->su.sa.sa_family) {
+			if (listener->su.sa.sa_family ==
+			    peer->su.sa.sa_family) {
 				uint16_t prefixlen =
 					peer->su.sa.sa_family == AF_INET
-						? IPV4_MAX_PREFIXLEN
-						: IPV6_MAX_PREFIXLEN;
+					? IPV4_MAX_PREFIXLEN
+					: IPV6_MAX_PREFIXLEN;
+
+				/*
+				 * if we have stored a BGP vrf instance in the
+				 * listener it must match the bgp instance in
+				 * the peer otherwise the peer bgp instance
+				 * must be the default vrf or a view instance
+				 */
+				if (!listener->bgp) {
+					if (peer->bgp->vrf_id != VRF_DEFAULT
+					    && peer->bgp->inst_type
+						       != BGP_INSTANCE_TYPE_VIEW)
+						continue;
+				} else if (listener->bgp != peer->bgp)
+					continue;
 
 				ret = bgp_md5_set_socket(listener->fd,
 							 &peer->su, prefixlen,
@@ -176,7 +190,7 @@ static int bgp_md5_set_password(struct peer *peer, const char *password)
 	return ret;
 }
 
-int bgp_md5_set_prefix(struct prefix *p, const char *password)
+int bgp_md5_set_prefix(struct bgp *bgp, struct prefix *p, const char *password)
 {
 	int ret = 0;
 	union sockunion su;
@@ -186,7 +200,9 @@ int bgp_md5_set_prefix(struct prefix *p, const char *password)
 	/* Set or unset the password on the listen socket(s). */
 	frr_with_privs(&bgpd_privs) {
 		for (ALL_LIST_ELEMENTS_RO(bm->listen_sockets, node, listener))
-			if (listener->su.sa.sa_family == p->family) {
+			if (listener->su.sa.sa_family == p->family
+			    && ((bgp->vrf_id == VRF_DEFAULT)
+				|| (listener->bgp == bgp))) {
 				prefix2sockunion(p, &su);
 				ret = bgp_md5_set_socket(listener->fd, &su,
 							 p->prefixlen,
@@ -198,9 +214,9 @@ int bgp_md5_set_prefix(struct prefix *p, const char *password)
 	return ret;
 }
 
-int bgp_md5_unset_prefix(struct prefix *p)
+int bgp_md5_unset_prefix(struct bgp *bgp, struct prefix *p)
 {
-	return bgp_md5_set_prefix(p, NULL);
+	return bgp_md5_set_prefix(bgp, p, NULL);
 }
 
 int bgp_md5_set(struct peer *peer)
@@ -459,7 +475,8 @@ static int bgp_accept(struct thread *thread)
 		return -1;
 	}
 
-	if (CHECK_FLAG(peer1->flags, PEER_FLAG_SHUTDOWN)) {
+	if (CHECK_FLAG(peer1->flags, PEER_FLAG_SHUTDOWN)
+	    || CHECK_FLAG(peer1->bgp->flags, BGP_FLAG_SHUTDOWN)) {
 		if (bgp_debug_neighbor_events(peer1))
 			zlog_debug(
 				"[Event] connection from %s rejected(%s:%u:%s) due to admin shutdown",
@@ -501,8 +518,7 @@ static int bgp_accept(struct thread *thread)
 	if (BGP_PEER_START_SUPPRESSED(peer1)) {
 		if (bgp_debug_neighbor_events(peer1))
 			zlog_debug(
-				"[Event] Incoming BGP connection rejected from %s "
-				"due to maximum-prefix or shutdown",
+				"[Event] Incoming BGP connection rejected from %s due to maximum-prefix or shutdown",
 				peer1->host);
 		close(bgp_sock);
 		return -1;
@@ -518,8 +534,7 @@ static int bgp_accept(struct thread *thread)
 		*/
 		if (bgp_debug_neighbor_events(peer1))
 			zlog_debug(
-				"[Event] New active connection from peer %s, Killing"
-				" previous active connection",
+				"[Event] New active connection from peer %s, Killing previous active connection",
 				peer1->host);
 		peer_delete(peer1->doppelganger);
 	}
@@ -813,8 +828,9 @@ static int bgp_listener(int sock, struct sockaddr *sa, socklen_t salen,
 	listener->fd = sock;
 	listener->name = XSTRDUP(MTYPE_BGP_LISTENER, bgp->name);
 
-	/* this socket needs a change of ns. record bgp back pointer */
-	if (bgp->vrf_id != VRF_DEFAULT && vrf_is_backend_netns())
+	/* this socket is in a vrf record bgp back pointer */
+	if (bgp->vrf_id != VRF_DEFAULT
+	    && bgp->inst_type != BGP_INSTANCE_TYPE_VIEW)
 		listener->bgp = bgp;
 
 	memcpy(&listener->su, sa, salen);

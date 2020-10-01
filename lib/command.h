@@ -257,6 +257,12 @@ struct cmd_node {
 #define DEFPY_HIDDEN(funcname, cmdname, cmdstr, helpstr)                       \
 	DEFPY_ATTR(funcname, cmdname, cmdstr, helpstr, CMD_ATTR_HIDDEN)
 
+#define DEFPY_YANG(funcname, cmdname, cmdstr, helpstr)                         \
+	DEFPY_ATTR(funcname, cmdname, cmdstr, helpstr, CMD_ATTR_YANG)
+
+#define DEFPY_YANG_NOSH(funcname, cmdname, cmdstr, helpstr)                    \
+	DEFPY_YANG(funcname, cmdname, cmdstr, helpstr)
+
 #define DEFUN(funcname, cmdname, cmdstr, helpstr)                              \
 	DEFUN_CMD_FUNC_DECL(funcname)                                          \
 	DEFUN_CMD_ELEMENT(funcname, cmdname, cmdstr, helpstr, 0, 0)            \
@@ -270,9 +276,15 @@ struct cmd_node {
 #define DEFUN_HIDDEN(funcname, cmdname, cmdstr, helpstr)                       \
 	DEFUN_ATTR(funcname, cmdname, cmdstr, helpstr, CMD_ATTR_HIDDEN)
 
+#define DEFUN_YANG(funcname, cmdname, cmdstr, helpstr)                         \
+	DEFUN_ATTR(funcname, cmdname, cmdstr, helpstr, CMD_ATTR_YANG)
+
 /* DEFUN_NOSH for commands that vtysh should ignore */
 #define DEFUN_NOSH(funcname, cmdname, cmdstr, helpstr)                         \
 	DEFUN(funcname, cmdname, cmdstr, helpstr)
+
+#define DEFUN_YANG_NOSH(funcname, cmdname, cmdstr, helpstr)                    \
+	DEFUN_YANG(funcname, cmdname, cmdstr, helpstr)
 
 /* DEFSH for vtysh. */
 #define DEFSH(daemon, cmdname, cmdstr, helpstr)                                \
@@ -281,6 +293,9 @@ struct cmd_node {
 #define DEFSH_HIDDEN(daemon, cmdname, cmdstr, helpstr)                         \
 	DEFUN_CMD_ELEMENT(NULL, cmdname, cmdstr, helpstr, CMD_ATTR_HIDDEN,     \
 			  daemon)
+
+#define DEFSH_YANG(daemon, cmdname, cmdstr, helpstr)                           \
+	DEFUN_CMD_ELEMENT(NULL, cmdname, cmdstr, helpstr, CMD_ATTR_YANG, daemon)
 
 /* DEFUN + DEFSH */
 #define DEFUNSH(daemon, funcname, cmdname, cmdstr, helpstr)                    \
@@ -302,6 +317,9 @@ struct cmd_node {
 	DEFUNSH_ATTR(daemon, funcname, cmdname, cmdstr, helpstr,               \
 		     CMD_ATTR_DEPRECATED)
 
+#define DEFUNSH_YANG(daemon, funcname, cmdname, cmdstr, helpstr)               \
+	DEFUNSH_ATTR(daemon, funcname, cmdname, cmdstr, helpstr, CMD_ATTR_YANG)
+
 /* ALIAS macro which define existing command's alias. */
 #define ALIAS(funcname, cmdname, cmdstr, helpstr)                              \
 	DEFUN_CMD_ELEMENT(funcname, cmdname, cmdstr, helpstr, 0, 0)
@@ -317,6 +335,9 @@ struct cmd_node {
 	DEFUN_CMD_ELEMENT(funcname, cmdname, cmdstr, helpstr,                  \
 			  CMD_ATTR_DEPRECATED, 0)
 
+#define ALIAS_YANG(funcname, cmdname, cmdstr, helpstr)                         \
+	DEFUN_CMD_ELEMENT(funcname, cmdname, cmdstr, helpstr, CMD_ATTR_YANG, 0)
+
 #define ALIAS_SH(daemon, funcname, cmdname, cmdstr, helpstr)                   \
 	DEFUN_CMD_ELEMENT(funcname, cmdname, cmdstr, helpstr, 0, daemon)
 
@@ -328,18 +349,6 @@ struct cmd_node {
 	DEFUN_CMD_ELEMENT(funcname, cmdname, cmdstr, helpstr,                  \
 			  CMD_ATTR_DEPRECATED, daemon)
 
-#else /* VTYSH_EXTRACT_PL */
-#define DEFPY(funcname, cmdname, cmdstr, helpstr)                              \
-	DEFUN(funcname, cmdname, cmdstr, helpstr)
-
-#define DEFPY_NOSH(funcname, cmdname, cmdstr, helpstr)                         \
-	DEFUN_NOSH(funcname, cmdname, cmdstr, helpstr)
-
-#define DEFPY_ATTR(funcname, cmdname, cmdstr, helpstr, attr)                   \
-	DEFUN_ATTR(funcname, cmdname, cmdstr, helpstr, attr)
-
-#define DEFPY_HIDDEN(funcname, cmdname, cmdstr, helpstr)                       \
-	DEFUN_HIDDEN(funcname, cmdname, cmdstr, helpstr)
 #endif /* VTYSH_EXTRACT_PL */
 
 /* Some macroes */
@@ -358,6 +367,8 @@ struct cmd_node {
 #define SHOW_STR "Show running system information\n"
 #define IP_STR "IP information\n"
 #define IPV6_STR "IPv6 information\n"
+#define SRTE_STR "SR-TE information\n"
+#define SRTE_COLOR_STR "SR-TE Color information\n"
 #define NO_STR "Negate a command or set its defaults\n"
 #define REDIST_STR "Redistribute information from another routing protocol\n"
 #define CLEAR_STR "Reset functions\n"
@@ -406,9 +417,15 @@ struct cmd_node {
 #define FILTER_LOG_STR "Filter Logs\n"
 #define BFD_PROFILE_STR "BFD profile.\n"
 #define BFD_PROFILE_NAME_STR "BFD profile name.\n"
+#define SHARP_STR "Sharp Routing Protocol\n"
 
 #define CMD_VNI_RANGE "(1-16777215)"
 #define CONF_BACKUP_EXT ".sav"
+#define MPLS_LDP_SYNC_STR "Enable MPLS LDP-SYNC\n"
+#define NO_MPLS_LDP_SYNC_STR "Disable MPLS LDP-SYNC\n"
+#define MPLS_LDP_SYNC_HOLDDOWN_STR                                             \
+	"Time to wait for LDP-SYNC to occur before restoring if cost\n"
+#define NO_MPLS_LDP_SYNC_HOLDDOWN_STR "holddown timer disable\n"
 
 /* Command warnings. */
 #define NO_PASSWD_CMD_WARNING                                                  \

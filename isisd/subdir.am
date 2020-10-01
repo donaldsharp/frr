@@ -8,6 +8,7 @@ sbin_PROGRAMS += isisd/isisd
 dist_examples_DATA += isisd/isisd.conf.sample
 vtysh_scan += \
 	isisd/isis_cli.c \
+	isisd/isis_ldp_sync.c \
 	isisd/isis_redist.c \
 	isisd/isis_spf.c \
 	isisd/isis_te.c \
@@ -22,6 +23,18 @@ if FABRICD
 noinst_LIBRARIES += isisd/libfabric.a
 sbin_PROGRAMS += isisd/fabricd
 dist_examples_DATA += isisd/fabricd.conf.sample
+if !ISISD
+vtysh_scan += \
+	isisd/isis_cli.c \
+	isisd/isis_ldp_sync.c \
+	isisd/isis_redist.c \
+	isisd/isis_spf.c \
+	isisd/isis_te.c \
+	isisd/isis_sr.c \
+	isisd/isis_vty_fabricd.c \
+	isisd/isisd.c \
+	# end
+endif
 endif
 
 noinst_HEADERS += \
@@ -36,6 +49,7 @@ noinst_HEADERS += \
 	isisd/isis_errors.h \
 	isisd/isis_events.h \
 	isisd/isis_flags.h \
+	isisd/isis_ldp_sync.h \
 	isisd/isis_lsp.h \
 	isisd/isis_memory.h \
 	isisd/isis_misc.h \
@@ -69,6 +83,7 @@ LIBISIS_SOURCES = \
 	isisd/isis_errors.c \
 	isisd/isis_events.c \
 	isisd/isis_flags.c \
+	isisd/isis_ldp_sync.c \
 	isisd/isis_lsp.c \
 	isisd/isis_memory.c \
 	isisd/isis_misc.c \

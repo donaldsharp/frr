@@ -235,6 +235,9 @@ ldpe_shutdown(void)
 	free(pkt_ptr);
 
 	log_info("ldp engine exiting");
+
+	zlog_fini();
+
 	exit(0);
 }
 
@@ -294,6 +297,7 @@ ldpe_dispatch_main(struct thread *thread)
 #endif
 	int			 n, shut = 0;
 	struct ldp_access       *laccess;
+	struct ldp_igp_sync_if_state_req *ldp_sync_if_state_req;
 	
 	iev->ev_read = NULL;
 
@@ -352,13 +356,11 @@ ldpe_dispatch_main(struct thread *thread)
 			break;
 		case IMSG_SOCKET_IPC:
 			if (iev_lde) {
-				log_warnx("%s: received unexpected imsg fd "
-				    "to lde", __func__);
+				log_warnx("%s: received unexpected imsg fd to lde", __func__);
 				break;
 			}
 			if ((fd = imsg.fd) == -1) {
-				log_warnx("%s: expected to receive imsg fd to "
-				    "lde but didn't receive any", __func__);
+				log_warnx("%s: expected to receive imsg fd to lde but didn't receive any", __func__);
 				break;
 			}
 
@@ -558,6 +560,15 @@ ldpe_dispatch_main(struct thread *thread)
 			ldpe_check_filter_af(AF_INET6, &leconf->ipv6,
 				laccess->name);
 			break;
+		case IMSG_LDP_SYNC_IF_STATE_REQUEST:
+			if (imsg.hdr.len != IMSG_HEADER_SIZE +
+			    sizeof(struct ldp_igp_sync_if_state_req)) {
+				log_warnx("%s: wrong imsg len", __func__);
+				break;
+			}
+			ldp_sync_if_state_req = imsg.data;
+			ldp_sync_fsm_state_req(ldp_sync_if_state_req);
+			break;
 		default:
 			log_debug("ldpe_dispatch_main: error handling imsg %d",
 			    imsg.hdr.type);
@@ -613,11 +624,8 @@ ldpe_dispatch_lde(struct thread *thread)
 			map = imsg.data;
 
 			nbr = nbr_find_peerid(imsg.hdr.peerid);
-			if (nbr == NULL) {
-				log_debug("ldpe_dispatch_lde: cannot find "
-				    "neighbor");
+			if (nbr == NULL)
 				break;
-			}
 			if (nbr->state != NBR_STA_OPER)
 				break;
 
@@ -641,11 +649,8 @@ ldpe_dispatch_lde(struct thread *thread)
 		case IMSG_REQUEST_ADD_END:
 		case IMSG_WITHDRAW_ADD_END:
 			nbr = nbr_find_peerid(imsg.hdr.peerid);
-			if (nbr == NULL) {
-				log_debug("ldpe_dispatch_lde: cannot find "
-				    "neighbor");
+			if (nbr == NULL)
 				break;
-			}
 			if (nbr->state != NBR_STA_OPER)
 				break;
 
@@ -676,8 +681,7 @@ ldpe_dispatch_lde(struct thread *thread)
 
 			nbr = nbr_find_peerid(imsg.hdr.peerid);
 			if (nbr == NULL) {
-				log_debug("ldpe_dispatch_lde: cannot find "
-				    "neighbor");
+				log_debug("ldpe_dispatch_lde: cannot find neighbor");
 				break;
 			}
 			if (nbr->state != NBR_STA_OPER)
@@ -697,8 +701,7 @@ ldpe_dispatch_lde(struct thread *thread)
 		case IMSG_NBR_SHUTDOWN:
 			nbr = nbr_find_peerid(imsg.hdr.peerid);
 			if (nbr == NULL) {
-				log_debug("ldpe_dispatch_lde: cannot find "
-				    "neighbor");
+				log_debug("ldpe_dispatch_lde: cannot find neighbor");
 				break;
 			}
 			if (nbr->state != NBR_STA_OPER)
@@ -977,6 +980,20 @@ ldpe_nbr_ctl(struct ctl_conn *c)
 
 		imsg_compose_event(&c->iev, IMSG_CTL_SHOW_NBR_END, 0, 0, -1,
 		    NULL, 0);
+	}
+	imsg_compose_event(&c->iev, IMSG_CTL_END, 0, 0, -1, NULL, 0);
+}
+
+void
+ldpe_ldp_sync_ctl(struct ctl_conn *c)
+{
+	struct iface		*iface;
+	struct ctl_ldp_sync	*ictl;
+
+	RB_FOREACH(iface, iface_head, &leconf->iface_tree) {
+		ictl = ldp_sync_to_ctl(iface);
+		imsg_compose_event(&c->iev, IMSG_CTL_SHOW_LDP_SYNC,
+			0, 0, -1, ictl, sizeof(struct ctl_ldp_sync));
 	}
 	imsg_compose_event(&c->iev, IMSG_CTL_END, 0, 0, -1, NULL, 0);
 }

@@ -21,6 +21,8 @@
 #include <zebra.h>
 
 #include "filter.h"
+#include "if.h"
+#include "vrf.h"
 
 #include "bfd.h"
 #include "bfdd_nb.h"
@@ -63,6 +65,8 @@ static void sigusr1_handler(void)
 
 static void sigterm_handler(void)
 {
+	bglobal.bg_shutdown = true;
+
 	/* Signalize shutdown. */
 	frr_early_fini();
 
@@ -111,6 +115,7 @@ static struct quagga_signal_t bfd_signals[] = {
 };
 
 static const struct frr_yang_module_info *const bfdd_yang_modules[] = {
+	&frr_filter_info,
 	&frr_interface_info,
 	&frr_bfdd_info,
 	&frr_vrf_info,
