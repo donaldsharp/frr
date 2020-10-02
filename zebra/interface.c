@@ -492,7 +492,7 @@ void if_flags_update(struct interface *ifp, uint64_t newflags)
 		/* inoperative -> operative? */
 		ifp->flags = newflags;
 		if (if_is_operative(ifp))
-			if_up(ifp);
+			if_up(ifp, true);
 	}
 }
 
@@ -1021,7 +1021,7 @@ bool if_nhg_dependents_is_empty(const struct interface *ifp)
 }
 
 /* Interface is up. */
-void if_up(struct interface *ifp)
+void if_up(struct interface *ifp, bool install_connected)
 {
 	struct zebra_if *zif;
 	struct interface *link_if;
@@ -1053,7 +1053,8 @@ void if_up(struct interface *ifp)
 #endif
 
 	/* Install connected routes to the kernel. */
-	if_install_connected(ifp);
+	if (install_connected)
+		if_install_connected(ifp);
 
 	/* Handle interface up for specific types for EVPN. Non-VxLAN interfaces
 	 * are checked to see if (remote) neighbor entries need to be installed
@@ -1857,6 +1858,8 @@ static void zebra_if_dplane_ifp_handling(struct zebra_dplane_ctx *ctx)
 						       rc_bitfield);
 
 			if (if_is_no_ptm_operative(ifp)) {
+				bool is_up = if_is_operative(ifp);
+
 				ifp->flags = flags;
 				if (!if_is_no_ptm_operative(ifp) ||
 				    CHECK_FLAG(zif->flags,
@@ -1878,7 +1881,7 @@ static void zebra_if_dplane_ifp_handling(struct zebra_dplane_ctx *ctx)
 						zlog_debug(
 							"Intf %s(%u) PTM up, notifying clients",
 							name, ifp->ifindex);
-					if_up(ifp);
+					if_up(ifp, !is_up);
 
 					/*
 					 * Update EVPN VNI when SVI MAC change
@@ -1915,7 +1918,7 @@ static void zebra_if_dplane_ifp_handling(struct zebra_dplane_ctx *ctx)
 						zlog_debug(
 							"Intf %s(%u) has come UP",
 							name, ifp->ifindex);
-					if_up(ifp);
+					if_up(ifp, true);
 					if (IS_ZEBRA_IF_BRIDGE(ifp))
 						chgflags =
 							ZEBRA_BRIDGE_MASTER_UP;
@@ -3448,7 +3451,7 @@ int if_linkdetect(struct interface *ifp, bool detect)
 
 		/* Interface may come up after disabling link detection */
 		if (if_is_operative(ifp) && !if_was_operative)
-			if_up(ifp);
+			if_up(ifp, true);
 	}
 	/* FIXME: Will defer status change forwarding if interface
 	   does not come down! */
