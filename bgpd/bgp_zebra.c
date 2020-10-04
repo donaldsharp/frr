@@ -1386,6 +1386,9 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 			}
 			nexthop = bgp_path_info_to_ipv6_nexthop(mpinfo_cp,
 								&ifindex);
+			if (!nexthop)
+				continue;
+
 			nh_updated = update_ipv6nh_for_route_install(
 					nh_othervrf, nh_othervrf ?
 					info->extra->bgp_orig : bgp,
