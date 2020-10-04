@@ -1279,6 +1279,7 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 	for (mpinfo = info; mpinfo; mpinfo = bgp_path_info_mpath_next(mpinfo)) {
 		uint32_t nh_weight;
+		afi_t nh_afi;
 
 		if (valid_nh_count >= multipath_num)
 			break;
@@ -1287,12 +1288,11 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		nh_weight = 0;
 
 		/* Get nexthop address-family */
-		if (p->family == AF_INET
-		    && !BGP_ATTR_NEXTHOP_AFI_IP6(mpinfo_cp->attr))
+		nh_afi = BGP_NEXTHOP_AFI_FROM_NHLEN(
+			mpinfo_cp->attr->mp_nexthop_len);
+		if (nh_afi == AFI_IP)
 			nh_family = AF_INET;
-		else if (p->family == AF_INET6
-			 || (p->family == AF_INET
-			     && BGP_ATTR_NEXTHOP_AFI_IP6(mpinfo_cp->attr)))
+		else if (nh_afi == AFI_IP6)
 			nh_family = AF_INET6;
 		else
 			continue;
