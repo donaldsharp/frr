@@ -2606,12 +2606,10 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest,
 		quagga_timestamp(3, bgp->update_delay_zebra_resume_time,
 				 sizeof(bgp->update_delay_zebra_resume_time));
 
-		bgp->main_zebra_update_hold = 0;
 		FOREACH_AFI_SAFI (afi, safi) {
 			if (bgp_fibupd_safi(safi))
 				bgp_zebra_announce_table(bgp, afi, safi);
 		}
-		bgp->main_peers_update_hold = 0;
 
 		bgp_start_routeadv(bgp);
 		return;

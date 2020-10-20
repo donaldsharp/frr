@@ -737,8 +737,8 @@ void bgp_update_delay_end(struct bgp *bgp)
 	 *     the prefixes should be at its maximum.
 	 */
 	bgp_add_eoiu_mark(bgp);
-	bgp->main_zebra_update_hold = 1;
-	bgp->main_peers_update_hold = 1;
+	bgp->main_zebra_update_hold = 0;
+	bgp->main_peers_update_hold = 0;
 
 	/* Resume the queue processing. This should trigger the event that would
 	   take
@@ -1001,6 +1001,9 @@ static void bgp_update_delay_begin(struct bgp *bgp)
 
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
 		peer->update_delay_over = 0;
+
+	bgp->main_zebra_update_hold = 1;
+	bgp->main_peers_update_hold = 1;
 
 	/* Start the update-delay timer */
 	thread_add_timer(bm->master, bgp_update_delay_timer, bgp,
