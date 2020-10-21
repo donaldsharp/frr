@@ -36,9 +36,13 @@
 
 #define BGP_EVENT_ADD(P, E)                                                    \
 	do {                                                                   \
-		if ((P)->status != Deleted)                                    \
+		if ((P)->status != Deleted) {                                  \
+			zlog_debug("Adding to peer: %s fd: %u to event: %d", (P)->host, (P)->fd,  E); \
+			if ((P)->peer_event) \
+				zlog_debug("Peer: %s fd: %u already has event!", (P)->host, (P)->fd); \
 			thread_add_event(bm->master, bgp_event, (P), (E),      \
-					 NULL);                                \
+					 &(P)->peer_event);                    \
+		} \
 	} while (0)
 
 #define BGP_EVENT_FLUSH(P)                                                     \

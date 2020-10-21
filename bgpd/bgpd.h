@@ -907,6 +907,8 @@ struct peer {
 	/* BGP structure.  */
 	struct bgp *bgp;
 
+	struct thread *peer_event;
+
 	/* reference count, primarily to allow bgp_process'ing of route_node's
 	 * to be done after a struct peer is deleted.
 	 *
