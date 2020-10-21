@@ -472,7 +472,7 @@ static int bgp_start_timer(struct thread *thread)
 	peer = THREAD_ARG(thread);
 
 	if (bgp_debug_neighbor_events(peer))
-		zlog_debug("%s [FSM] Timer (start timer expire).", peer->host);
+		zlog_debug("%s(%d) [FSM] Timer (start timer expire).", peer->host, peer->fd);
 
 	THREAD_VAL(thread) = BGP_Start;
 	bgp_event(thread); /* bgp_event unlocks peer */
@@ -492,7 +492,7 @@ static int bgp_connect_timer(struct thread *thread)
 	assert(!peer->t_read);
 
 	if (bgp_debug_neighbor_events(peer))
-		zlog_debug("%s [FSM] Timer (connect timer expire)", peer->host);
+		zlog_debug("%s(%d) [FSM] Timer (connect timer expire)", peer->host, peer->fd);
 
 	if (CHECK_FLAG(peer->sflags, PEER_STATUS_ACCEPT_PEER)) {
 		bgp_stop(peer);
@@ -1079,7 +1079,7 @@ void bgp_fsm_change_status(struct peer *peer, int status)
 	 */
 	if (status >= Clearing) {
 		bgp_clear_route_all(peer);
-
+		zlog_debug("%s we are clearing?", peer->host);
 		/* If no route was queued for the clear-node processing,
 		 * generate the
 		 * completion event here. This is needed because if there are no
@@ -1139,7 +1139,7 @@ void bgp_fsm_change_status(struct peer *peer, int status)
 		bgp_update_delay_process_status_change(peer);
 
 	if (bgp_debug_neighbor_events(peer))
-		zlog_debug("%s went from %s to %s", peer->host,
+		zlog_debug("%s(%d) went from %s to %s", peer->host, peer->fd,
 			   lookup_msg(bgp_status_msg, peer->ostatus, NULL),
 			   lookup_msg(bgp_status_msg, peer->status, NULL));
 }
@@ -1175,7 +1175,7 @@ int bgp_stop(struct peer *peer)
 	if (peer_dynamic_neighbor(peer)
 	    && !(CHECK_FLAG(peer->flags, PEER_FLAG_DELETE))) {
 		if (bgp_debug_neighbor_events(peer))
-			zlog_debug("%s (dynamic neighbor) deleted", peer->host);
+			zlog_debug("%s(%d) (dynamic neighbor) deleted", peer->host, peer->fd);
 		peer_delete(peer);
 		return -1;
 	}
@@ -1211,8 +1211,8 @@ int bgp_stop(struct peer *peer)
 			BGP_TIMER_OFF(peer->t_gr_stale);
 			if (bgp_debug_neighbor_events(peer))
 				zlog_debug(
-					"%s graceful restart stalepath timer stopped",
-					peer->host);
+					"%s(%d) graceful restart stalepath timer stopped",
+					peer->host, peer->fd);
 		}
 		if (CHECK_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT)) {
 			if (bgp_debug_neighbor_events(peer)) {
@@ -1471,8 +1471,8 @@ static int bgp_connect_check(struct thread *thread)
 		return 1;
 	} else {
 		if (bgp_debug_neighbor_events(peer))
-			zlog_debug("%s [Event] Connect failed %d(%s)",
-				   peer->host, status, safe_strerror(status));
+			zlog_debug("%s(%d) [Event] Connect failed %d(%s)",
+				   peer->host, peer->fd, status, safe_strerror(status));
 		BGP_EVENT_ADD(peer, TCP_connection_open_failed);
 		return 0;
 	}
@@ -1506,8 +1506,8 @@ static int bgp_connect_success(struct peer *peer)
 		char buf1[SU_ADDRSTRLEN];
 
 		if (!CHECK_FLAG(peer->sflags, PEER_STATUS_ACCEPT_PEER))
-			zlog_debug("%s open active, local address %s",
-				   peer->host,
+			zlog_debug("%s(%d) open active, local address %s",
+				   peer->host, peer->fd,
 				   sockunion2str(peer->su_local, buf1,
 						 SU_ADDRSTRLEN));
 		else
@@ -1524,7 +1524,7 @@ static int bgp_connect_fail(struct peer *peer)
 {
 	if (peer_dynamic_neighbor(peer)) {
 		if (bgp_debug_neighbor_events(peer))
-			zlog_debug("%s (dynamic neighbor) deleted", peer->host);
+			zlog_debug("%s(%d) (dynamic neighbor) deleted", peer->host, peer->fd);
 		peer_delete(peer);
 		return -1;
 	}
@@ -1623,7 +1623,7 @@ int bgp_start(struct peer *peer)
 	switch (status) {
 	case connect_error:
 		if (bgp_debug_neighbor_events(peer))
-			zlog_debug("%s [FSM] Connect error", peer->host);
+			zlog_debug("%s(%d) [FSM] Connect error", peer->host, peer->fd);
 		BGP_EVENT_ADD(peer, TCP_connection_open_failed);
 		break;
 	case connect_success:
@@ -1702,7 +1702,7 @@ static int bgp_fsm_event_error(struct peer *peer)
 static int bgp_fsm_holdtime_expire(struct peer *peer)
 {
 	if (bgp_debug_neighbor_events(peer))
-		zlog_debug("%s [FSM] Hold timer expire", peer->host);
+		zlog_debug("%s(%d) [FSM] Hold timer expire", peer->host, peer->fd);
 
 	return bgp_stop_with_notify(peer, BGP_NOTIFY_HOLD_ERR, 0);
 }
@@ -1977,8 +1977,8 @@ static int bgp_establish(struct peer *peer)
 	if (peer->doppelganger && (peer->doppelganger->status != Deleted)) {
 		if (bgp_debug_neighbor_events(peer))
 			zlog_debug(
-				"[Event] Deleting stub connection for peer %s",
-				peer->host);
+				"[Event] Deleting stub connection for peer %s(%d)",
+				peer->host, peer->fd);
 
 		if (peer->doppelganger->status > Active)
 			bgp_notify_send(peer->doppelganger, BGP_NOTIFY_CEASE,

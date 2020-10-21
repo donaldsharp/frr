@@ -4611,7 +4611,7 @@ static void bgp_clear_route_table(struct peer *peer, afi_t afi, safi_t safi,
 				bgp_path_info_reap(dest, pi);
 			else {
 				struct bgp_clear_node_queue *cnq;
-
+				zlog_backtrace(LOG_DEBUG);
 				/* both unlocked in bgp_clear_node_queue_del */
 				bgp_table_lock(bgp_dest_table(dest));
 				bgp_dest_lock_node(dest);
