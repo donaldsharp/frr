@@ -168,6 +168,17 @@ struct bgp_master {
 #define BM_FLAG_GRACEFUL_RESTART	 (1 << 6)
 #define BM_FLAG_GR_COMPLETE (1 << 7)
 #define BM_FLAG_IPV6_NO_AUTO_RA		 (1 << 8)
+#define BM_FLAG_GR_RESTARTER		 (1 << 9)
+#define BM_FLAG_GR_DISABLED		 (1 << 10)
+#define BM_FLAG_GR_PRESERVE_FWD		 (1 << 11)
+
+#define BM_FLAG_GR_CONFIGURED (BM_FLAG_GR_RESTARTER | BM_FLAG_GR_DISABLED)
+
+	/* BGP-wide graceful restart config params */
+	uint32_t restart_time;
+	uint32_t stalepath_time;
+	uint32_t select_defer_time;
+	uint32_t rib_stale_time;
 
 	bool terminating;	/* global flag that sigint terminate seen */
 
