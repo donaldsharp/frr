@@ -842,7 +842,10 @@ int bgp_vty_return(struct vty *vty, enum bgp_create_error_code ret)
 	case BGP_SUCCESS:
 	case BGP_CREATED:
 	case BGP_INSTANCE_EXISTS:
+		break;
 	case BGP_GR_NO_OPERATION:
+		str = "The Graceful Restart No Operation was executed as cmd same as previous one.";
+		/* A NO-OP is silently ignored and treated as a success. */
 		break;
 	case BGP_ERR_INVALID_VALUE:
 		str = "Invalid value";
@@ -2911,18 +2914,10 @@ DEFUN (bgp_graceful_restart,
 		return bgp_global_gr_config_vty(vty, true);
 
 	int ret = BGP_GR_FAILURE;
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug("[BGP_GR] bgp_graceful_restart_cmd : START ");
-
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 
 	ret = bgp_inst_gr_config_vty(vty, bgp, true);
 
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug("[BGP_GR] bgp_graceful_restart_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset all peers to take effect\n");
 	return bgp_vty_return(vty, ret);
 }
 
@@ -2938,18 +2933,9 @@ DEFUN (no_bgp_graceful_restart,
 		return bgp_global_gr_config_vty(vty, false);
 
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug("[BGP_GR] no_bgp_graceful_restart_cmd : START ");
-
 	int ret = BGP_GR_FAILURE;
 
 	ret = bgp_inst_gr_config_vty(vty, bgp, false);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug("[BGP_GR] no_bgp_graceful_restart_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset all peers to take effect\n");
 
 	return bgp_vty_return(vty, ret);
 }
@@ -3276,20 +3262,9 @@ DEFUN (bgp_graceful_restart_disable,
 		return bgp_global_gr_disable_config_vty(vty, true);
 
 	int ret = BGP_GR_FAILURE;
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] bgp_graceful_restart_disable_cmd : START ");
-
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 
 	ret = bgp_inst_gr_disable_config_vty(vty, bgp, true);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] bgp_graceful_restart_disable_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset all peers to take effect\n");
 
 	return bgp_vty_return(vty, ret);
 }
@@ -3306,20 +3281,9 @@ DEFUN (no_bgp_graceful_restart_disable,
 		return bgp_global_gr_disable_config_vty(vty, false);
 
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] no_bgp_graceful_restart_disable_cmd : START ");
-
 	int ret = BGP_GR_FAILURE;
 
 	ret = bgp_inst_gr_disable_config_vty(vty, bgp, false);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] no_bgp_graceful_restart_disable_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset all peers to take effect\n");
 
 	return bgp_vty_return(vty, ret);
 }
@@ -3338,24 +3302,19 @@ DEFUN (bgp_neighbor_graceful_restart_set,
 
 	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
 
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] bgp_neighbor_graceful_restart_set_cmd : START ");
-
 	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
 	if (!peer)
 		return CMD_WARNING_CONFIG_FAILED;
+	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
+		vty_out(vty,
+			"Per peer-group graceful-restart configuration is not yet supported\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
 
 	ret = bgp_neighbor_graceful_restart(peer, PEER_GR_CMD);
 
 	VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
 	VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] bgp_neighbor_graceful_restart_set_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset this peer to take effect\n");
 
 	return bgp_vty_return(vty, ret);
 }
@@ -3378,21 +3337,16 @@ DEFUN (no_bgp_neighbor_graceful_restart,
 	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
 	if (!peer)
 		return CMD_WARNING_CONFIG_FAILED;
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] no_bgp_neighbor_graceful_restart_set_cmd : START ");
+	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
+		vty_out(vty,
+			"Per peer-group graceful-restart configuration is not yet supported\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
 
 	ret = bgp_neighbor_graceful_restart(peer, NO_PEER_GR_CMD);
 
 	VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
 	VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] no_bgp_neighbor_graceful_restart_set_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset this peer to take effect\n");
 
 	return bgp_vty_return(vty, ret);
 }
@@ -3411,26 +3365,19 @@ DEFUN (bgp_neighbor_graceful_restart_helper_set,
 
 	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
 
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] bgp_neighbor_graceful_restart_helper_set_cmd : START ");
-
 	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-
 	if (!peer)
 		return CMD_WARNING_CONFIG_FAILED;
-
+	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
+		vty_out(vty,
+			"Per peer-group graceful-restart configuration is not yet supported\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
 
 	ret = bgp_neighbor_graceful_restart(peer, PEER_HELPER_CMD);
 
 	VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
 	VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] bgp_neighbor_graceful_restart_helper_set_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset this peer to take effect\n");
 
 	return bgp_vty_return(vty, ret);
 }
@@ -3453,21 +3400,16 @@ DEFUN (no_bgp_neighbor_graceful_restart_helper,
 	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
 	if (!peer)
 		return CMD_WARNING_CONFIG_FAILED;
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] no_bgp_neighbor_graceful_restart_helper_set_cmd : START ");
+	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
+		vty_out(vty,
+			"Per peer-group graceful-restart configuration is not yet supported\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
 
 	ret = bgp_neighbor_graceful_restart(peer, NO_PEER_HELPER_CMD);
 
 	VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
 	VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] no_bgp_neighbor_graceful_restart_helper_set_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset this peer to take effect\n");
 
 	return bgp_vty_return(vty, ret);
 }
@@ -3486,27 +3428,19 @@ DEFUN (bgp_neighbor_graceful_restart_disable_set,
 
 	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
 
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] bgp_neighbor_graceful_restart_disable_set_cmd : START ");
-
 	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
 	if (!peer)
 		return CMD_WARNING_CONFIG_FAILED;
+	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
+		vty_out(vty,
+			"Per peer-group graceful-restart configuration is not yet supported\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
 
 	ret = bgp_neighbor_graceful_restart(peer, PEER_DISABLE_CMD);
 
-	if (peer->bgp->t_startup)
-		bgp_peer_gr_flags_update(peer);
-
 	VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
 	VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR]bgp_neighbor_graceful_restart_disable_set_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset this peer to take effect\n");
 
 	return bgp_vty_return(vty, ret);
 }
@@ -3529,21 +3463,16 @@ DEFUN (no_bgp_neighbor_graceful_restart_disable,
 	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
 	if (!peer)
 		return CMD_WARNING_CONFIG_FAILED;
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] no_bgp_neighbor_graceful_restart_disable_set_cmd : START ");
+	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
+		vty_out(vty,
+			"Per peer-group graceful-restart configuration is not yet supported\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
 
 	ret = bgp_neighbor_graceful_restart(peer, NO_PEER_DISABLE_CMD);
 
 	VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
 	VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug(
-			"[BGP_GR] no_bgp_neighbor_graceful_restart_disable_set_cmd : END ");
-	vty_out(vty,
-		"Graceful restart configuration changed, reset this peer to take effect\n");
 
 	return bgp_vty_return(vty, ret);
 }

@@ -81,8 +81,6 @@ struct bgp;
 
 #define VTY_BGP_GR_ROUTER_DETECT(_bgp, _peer, _peer_list)                      \
 	do {                                                                   \
-		if (_peer->bgp->t_startup)                                     \
-			bgp_peer_gr_flags_update(_peer);                       \
 		for (ALL_LIST_ELEMENTS(_peer_list, node, nnode, peer_loop)) {  \
 			if (CHECK_FLAG(peer_loop->flags,                       \
 				       PEER_FLAG_GRACEFUL_RESTART))            \
@@ -113,8 +111,6 @@ struct bgp;
 		struct listnode *node = {0};                                   \
 		struct listnode *nnode = {0};                                  \
 		for (ALL_LIST_ELEMENTS(_peer_list, node, nnode, peer_loop)) {  \
-			if (peer_loop->bgp->t_startup)                         \
-				bgp_peer_gr_flags_update(peer_loop);           \
 			if (CHECK_FLAG(peer_loop->flags,                       \
 				       PEER_FLAG_GRACEFUL_RESTART))            \
 				gr_router_detected = true;                     \
