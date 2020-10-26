@@ -501,6 +501,7 @@ int main(int argc, char **argv)
 
 	/* BGP master init. */
 	bgp_master_init(frr_init(), buffer_size, addresses);
+	bm->startup_time = monotime(NULL);
 
 	/* Setup config read callbacks */
 	cmd_init_config_callbacks(bgp_start_configuration,

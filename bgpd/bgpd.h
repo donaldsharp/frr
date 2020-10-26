@@ -188,6 +188,8 @@ struct bgp_master {
 	uint32_t select_defer_time;
 	uint32_t rib_stale_time;
 
+	time_t startup_time;
+
 	bool terminating;	/* global flag that sigint terminate seen */
 
 	/* DSCP value for TCP sessions */
@@ -303,9 +305,9 @@ struct graceful_restart_info {
 	/* Best route select */
 	struct thread *t_route_select;
 	/* AFI, SAFI enabled */
-	bool af_enabled[AFI_MAX][SAFI_MAX];
+	bool af_enabled;
 	/* Route update completed */
-	bool route_sync[AFI_MAX][SAFI_MAX];
+	bool route_sync;
 };
 
 enum global_mode {
@@ -428,9 +430,6 @@ struct bgp {
 	as_t confed_id;
 	as_t *confed_peers;
 	int confed_peers_cnt;
-
-	struct thread
-		*t_startup; /* start-up timer on only once at the beginning */
 
 	uint32_t v_maxmed_onstartup; /* Duration of max-med on start-up */
 #define BGP_MAXMED_ONSTARTUP_UNCONFIGURED  0 /* 0 means off, its the default */
@@ -2586,6 +2585,27 @@ static inline bool bgp_in_graceful_shutdown(struct bgp *bgp)
 	        !!CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE));
 }
 
+static inline bool bgp_in_graceful_restart(void)
+{
+	/* True if BGP has (re)started gracefully (based on flags
+	 * noted at startup) and GR is not complete.
+	 */
+	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) &&
+	    !CHECK_FLAG(bm->flags, BM_FLAG_GR_COMPLETE))
+		return true;
+	return false;
+}
+
+static inline bool bgp_is_graceful_restart_complete(void)
+{
+	/* True if BGP has (re)started gracefully (based on flags
+	 * noted at startup) and GR is marked as complete.
+	 */
+	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) &&
+	    CHECK_FLAG(bm->flags, BM_FLAG_GR_COMPLETE))
+		return true;
+	return false;
+}
 static inline void bgp_update_gr_completion(void)
 {
 	struct listnode *node, *nnode;
@@ -2608,6 +2628,19 @@ static inline void bgp_update_gr_completion(void)
 
 	SET_FLAG(bm->flags, BM_FLAG_GR_COMPLETE);
 	bm->gr_completion_time = monotime(NULL);
+}
+
+static inline bool bgp_gr_is_forwarding_preserved(struct bgp *bgp)
+{
+	/*
+	 * Is forwarding state preserved? Based either on config
+	 * or if BGP restarted gracefully.
+	 * TBD: Additional AFI/SAFI based checks etc.
+	 */
+	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) ||
+	    CHECK_FLAG(bgp->flags, BGP_FLAG_GR_PRESERVE_FWD))
+		return true;
+	return false;
 }
 
 /* For benefit of rfapi */

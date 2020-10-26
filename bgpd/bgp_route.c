@@ -3302,10 +3302,13 @@ void bgp_best_path_select_defer(struct bgp *bgp, afi_t afi, safi_t safi)
 		THREAD_OFF(bgp->gr_info[afi][safi].t_route_select);
 	}
 
-	if (BGP_DEBUG(update, UPDATE_OUT)) {
-		zlog_debug("%s: processing route for %s : cnt %d", __func__,
-			   get_afi_safi_str(afi, safi, false),
-			   bgp->gr_info[afi][safi].gr_deferred);
+	if (bgp->gr_info[afi][safi].gr_deferred) {
+		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+			zlog_debug(
+				"%s: Performing deferred path selection for %s, #routes %d",
+				bgp->name_pretty,
+				get_afi_safi_str(afi, safi, false),
+				bgp->gr_info[afi][safi].gr_deferred);
 	}
 
 	/* Process the route list */
