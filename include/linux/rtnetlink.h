@@ -257,12 +257,12 @@ enum {
 
 /* rtm_protocol */
 
-#define RTPROT_UNSPEC		0
-#define RTPROT_REDIRECT		1	/* Route installed by ICMP redirects;
-					   not used by current IPv4 */
-#define RTPROT_KERNEL		2	/* Route installed by kernel		*/
-#define RTPROT_BOOT		3	/* Route installed during boot		*/
-#define RTPROT_STATIC		4	/* Route installed by administrator	*/
+#define RTPROT_UNSPEC	0
+#define RTPROT_REDIRECT	1	/* Route installed by ICMP redirects;
+				   not used by current IPv4 */
+#define RTPROT_KERNEL	2	/* Route installed by kernel		*/
+#define RTPROT_BOOT	3	/* Route installed during boot		*/
+#define RTPROT_STATIC	4	/* Route installed by administrator	*/
 
 /* Values of protocol >= RTPROT_STATIC are not interpreted by kernel;
    they are just passed from user and back as is.
@@ -271,23 +271,22 @@ enum {
    avoid conflicts.
  */
 
-#define RTPROT_GATED		8	/* Apparently, GateD */
-#define RTPROT_RA		9	/* RDISC/ND router advertisements */
-#define RTPROT_MRT		10	/* Merit MRT */
-#define RTPROT_ZEBRA		11	/* Zebra */
-#define RTPROT_BIRD		12	/* BIRD */
-#define RTPROT_DNROUTED		13	/* DECnet routing daemon */
-#define RTPROT_XORP		14	/* XORP */
-#define RTPROT_NTK		15	/* Netsukuku */
-#define RTPROT_DHCP		16	/* DHCP client */
-#define RTPROT_MROUTED		17	/* Multicast daemon */
-#define RTPROT_KEEPALIVED	18	/* Keepalived daemon */
-#define RTPROT_BABEL		42	/* Babel daemon */
-#define RTPROT_BGP		186	/* BGP Routes */
-#define RTPROT_ISIS		187	/* ISIS Routes */
-#define RTPROT_OSPF		188	/* OSPF Routes */
-#define RTPROT_RIP		189	/* RIP Routes */
-#define RTPROT_EIGRP		192	/* EIGRP Routes */
+#define RTPROT_GATED	8	/* Apparently, GateD */
+#define RTPROT_RA	9	/* RDISC/ND router advertisements */
+#define RTPROT_MRT	10	/* Merit MRT */
+#define RTPROT_ZEBRA	11	/* Zebra */
+#define RTPROT_BIRD	12	/* BIRD */
+#define RTPROT_DNROUTED	13	/* DECnet routing daemon */
+#define RTPROT_XORP	14	/* XORP */
+#define RTPROT_NTK	15	/* Netsukuku */
+#define RTPROT_DHCP	16      /* DHCP client */
+#define RTPROT_MROUTED	17      /* Multicast daemon */
+#define RTPROT_BABEL	42      /* Babel daemon */
+#define RTPROT_BGP	186     /* BGP Routes */
+#define RTPROT_ISIS	187     /* ISIS Routes */
+#define RTPROT_OSPF	188     /* OSPF Routes */
+#define RTPROT_RIP	189     /* RIP Routes */
+#define RTPROT_EIGRP	192     /* EIGRP Routes */
 
 /* rtm_scope
 
@@ -319,6 +318,7 @@ enum rt_scope_t {
 #define RTM_F_FIB_MATCH	        0x2000	/* return full fib lookup match */
 #define RTM_F_OFFLOAD		0x4000	/* route is offloaded */
 #define RTM_F_TRAP		0x8000	/* route is trapping packets */
+#define RTM_F_OFFLOAD_FAILED	0x10000	/* route offload failed */
 
 /* Reserved table identifiers */
 
@@ -610,16 +610,10 @@ enum {
 	TCA_HW_OFFLOAD,
 	TCA_INGRESS_BLOCK,
 	TCA_EGRESS_BLOCK,
-	TCA_DUMP_FLAGS,
 	__TCA_MAX
 };
 
 #define TCA_MAX (__TCA_MAX - 1)
-
-#define TCA_DUMP_FLAGS_TERSE (1 << 0) /* Means that in dump user gets only basic
-				       * data necessary to identify the objects
-				       * (handle, cookie, etc.) and stats.
-				       */
 
 #define TCA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct tcmsg))))
 #define TCA_PAYLOAD(n) NLMSG_PAYLOAD(n,sizeof(struct tcmsg))
@@ -778,7 +772,6 @@ enum {
 #define RTEXT_FILTER_BRVLAN	(1 << 1)
 #define RTEXT_FILTER_BRVLAN_COMPRESSED	(1 << 2)
 #define	RTEXT_FILTER_SKIP_STATS	(1 << 3)
-#define RTEXT_FILTER_MRP	(1 << 4)
 
 /* End of information exported to user level */
 
