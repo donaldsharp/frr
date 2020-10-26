@@ -117,7 +117,6 @@ struct bgp_master {
 
 	/* BGP start time.  */
 	time_t start_time;
-	time_t gr_completion_time;
 
 	/* Various BGP global configuration.  */
 	uint8_t options;
@@ -166,7 +165,7 @@ struct bgp_master {
 #define BM_FLAG_FAST_SHUTDOWN		 (1 << 4)
 #define BM_FLAG_UPGRADE			 (1 << 5)
 #define BM_FLAG_GRACEFUL_RESTART	 (1 << 6)
-#define BM_FLAG_GR_COMPLETE (1 << 7)
+#define BM_FLAG_GR_COMPLETE              (1 << 7)
 #define BM_FLAG_IPV6_NO_AUTO_RA		 (1 << 8)
 #define BM_FLAG_GR_RESTARTER		 (1 << 9)
 #define BM_FLAG_GR_DISABLED		 (1 << 10)
@@ -179,6 +178,9 @@ struct bgp_master {
 	uint32_t stalepath_time;
 	uint32_t select_defer_time;
 	uint32_t rib_stale_time;
+
+	time_t startup_time;
+	time_t gr_completion_time;
 
 	bool terminating;	/* global flag that sigint terminate seen */
 
@@ -304,9 +306,9 @@ struct graceful_restart_info {
 	/* Best route select */
 	struct event *t_route_select;
 	/* AFI, SAFI enabled */
-	bool af_enabled[AFI_MAX][SAFI_MAX];
+	bool af_enabled;
 	/* Route update completed */
-	bool route_sync[AFI_MAX][SAFI_MAX];
+	bool route_sync;
 };
 
 enum global_mode {
@@ -2765,6 +2767,35 @@ static inline void bgp_update_gr_completion(void)
 
 	SET_FLAG(bm->flags, BM_FLAG_GR_COMPLETE);
 	bm->gr_completion_time = monotime(NULL);
+}
+
+static inline bool bgp_in_graceful_restart(void)
+{
+	/* True if BGP has (re)started gracefully (based on flags
+	 * noted at startup) and GR is not complete.
+	 */
+	return (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) &&
+		!CHECK_FLAG(bm->flags, BM_FLAG_GR_COMPLETE));
+}
+
+static inline bool bgp_is_graceful_restart_complete(void)
+{
+	/* True if BGP has (re)started gracefully (based on flags
+	 * noted at startup) and GR is marked as complete.
+	 */
+	return (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) &&
+		CHECK_FLAG(bm->flags, BM_FLAG_GR_COMPLETE));
+}
+
+static inline bool bgp_gr_is_forwarding_preserved(struct bgp *bgp)
+{
+	/*
+	 * Is forwarding state preserved? Based either on config
+	 * or if BGP restarted gracefully.
+	 * TBD: Additional AFI/SAFI based checks etc.
+	 */
+	return (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) ||
+		CHECK_FLAG(bgp->flags, BGP_FLAG_GR_PRESERVE_FWD));
 }
 
 /* For benefit of rfapi */
