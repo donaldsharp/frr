@@ -262,6 +262,8 @@ void zebra_router_terminate(void)
 	hash_clean(zrouter.iptable_hash, zebra_pbr_iptable_free);
 	hash_free(zrouter.iptable_hash);
 
+	THREAD_OFF(zrouter.t_rib_sweep);
+
 #ifdef HAVE_SCRIPTING
 	zebra_script_destroy();
 #endif

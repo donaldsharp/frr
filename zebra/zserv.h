@@ -82,8 +82,10 @@ struct client_gr_info {
 
 	/* Book keeping */
 	struct prefix *current_prefix;
+	void *client_ptr;
 	void *stale_client_ptr;
 	struct thread *t_stale_removal;
+	time_t route_sync_done_time;
 
 	TAILQ_ENTRY(client_gr_info) gr_info;
 };

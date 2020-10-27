@@ -77,8 +77,6 @@ struct thread_master *master;
 /* Route retain mode flag. */
 int retain_mode = 0;
 
-int graceful_restart;
-
 bool v6_rr_semantics = true;
 
 /* Receive buffer size for kernel control sockets */
@@ -99,7 +97,6 @@ const struct option longopts[] = {
 	{"socket", required_argument, NULL, 'z'},
 	{"ecmp", required_argument, NULL, 'e'},
 	{"retain", no_argument, NULL, 'r'},
-	{"graceful_restart", required_argument, NULL, 'K'},
 	{"asic-offload", optional_argument, NULL, OPTION_ASIC_OFFLOAD},
 #ifdef HAVE_NETLINK
 	{"vrfwnetns", no_argument, NULL, 'n'},
@@ -319,7 +316,6 @@ int main(int argc, char **argv)
 	bool asic_offload = false;
 	bool notify_on_ack = true;
 
-	graceful_restart = 0;
 	vrf_configure_backend(VRF_BACKEND_VRF_LITE);
 
 	frr_preinit(&zebra_di, argc, argv);
@@ -336,7 +332,6 @@ int main(int argc, char **argv)
 		"  -z, --socket             Set path of zebra socket\n"
 		"  -e, --ecmp               Specify ECMP to use.\n"
 		"  -r, --retain             When program terminates, retain added route by zebra.\n"
-		"  -K, --graceful_restart   Graceful restart at the kernel level, timer in seconds for expiration\n"
 		"  -A, --asic-offload       FRR is interacting with an asic underneath the linux kernel\n"
 #ifdef HAVE_NETLINK
 		"  -s, --nl-bufsize         Set netlink receive buffer size\n"
@@ -388,9 +383,6 @@ int main(int argc, char **argv)
 			break;
 		case 'r':
 			retain_mode = 1;
-			break;
-		case 'K':
-			graceful_restart = atoi(optarg);
 			break;
 		case 's':
 			rcvbufsize = atoi(optarg);
@@ -475,16 +467,33 @@ int main(int argc, char **argv)
 	 * immediately, so originating PID in notifications from kernel
 	 * will be equal to the current getpid(). To know about such routes,
 	 * we have to have route_read() called before.
+	 * If FRR is gracefully restarting , we either wait for clients
+	 * (e.g., BGP) to signal GR is complete else we wait for specfified
+	 * duration.
 	 */
 	zrouter.startup_time = monotime(NULL);
-	thread_add_timer(zrouter.master, rib_sweep_route, NULL,
-			 graceful_restart, &zrouter.sweeper);
+	zrouter.rib_sweep_time = 0;
+	zrouter.graceful_restart = zebra_di.graceful_restart;
+
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 	if (zrouter.frr_csm_smode == FAST_START ||
 	    zrouter.frr_csm_smode == WARM_START)
 		zrouter.graceful_restart = true;
 	zrouter.maint_mode = (zrouter.frr_csm_smode == MAINT);
 #endif
+
+	if (!zrouter.graceful_restart)
+		thread_add_timer(zrouter.master, rib_sweep_route, NULL, 0,
+				 NULL);
+	else {
+		int gr_cleanup_time;
+
+		gr_cleanup_time = zebra_di.gr_cleanup_time
+					  ? zebra_di.gr_cleanup_time
+					  : ZEBRA_GR_DEFAULT_RIB_SWEEP_TIME;
+		thread_add_timer(zrouter.master, rib_sweep_route, NULL,
+				 gr_cleanup_time, &zrouter.t_rib_sweep);
+	}
 
 	/* Needed for BSD routing socket. */
 	pid = getpid();

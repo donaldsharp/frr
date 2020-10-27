@@ -118,6 +118,7 @@ static const struct option lo_always[] = {
 	{"profile", required_argument, NULL, 'F'},
 	{"pathspace", required_argument, NULL, 'N'},
 	{"vrfdefaultname", required_argument, NULL, 'o'},
+	{"graceful_restart", optional_argument, NULL, 'K'},
 	{"vty_socket", required_argument, NULL, OPTION_VTYSOCK},
 	{"moduledir", required_argument, NULL, OPTION_MODULEDIR},
 	{"scriptdir", required_argument, NULL, OPTION_SCRIPTDIR},
@@ -127,7 +128,7 @@ static const struct option lo_always[] = {
 	{"limit-fds", required_argument, NULL, OPTION_LIMIT_FDS},
 	{NULL}};
 static const struct optspec os_always = {
-	"hvdM:F:N:o:",
+	"hvdM:F:N:o:K::",
 	"  -h, --help         Display this help and exit\n"
 	"  -v, --version      Print program version\n"
 	"  -d, --daemon       Runs in daemon mode\n"
@@ -135,6 +136,7 @@ static const struct optspec os_always = {
 	"  -F, --profile      Use specified configuration profile\n"
 	"  -N, --pathspace    Insert prefix into config & socket paths\n"
 	"  -o, --vrfdefaultname     Set default VRF name.\n"
+	"  -K, --graceful_restart   FRR starting in Graceful Restart mode, with optional route-cleanup timer\n"
 	"      --vty_socket   Override vty socket path\n"
 	"      --moduledir    Override modules directory\n"
 	"      --scriptdir    Override scripts directory\n"
@@ -367,6 +369,8 @@ void frr_preinit(struct frr_daemon_info *daemon, int argc, char **argv)
 	strlcpy(frr_protonameinst, di->logname, sizeof(frr_protonameinst));
 
 	di->cli_mode = FRR_CLI_CLASSIC;
+	di->graceful_restart = false;
+	di->gr_cleanup_time = 0;
 
 	/* we may be starting with extra FDs open for whatever purpose,
 	 * e.g. logging, some module, etc.  Recording them here allows later
@@ -527,6 +531,11 @@ static int frr_opt(int opt)
 		di->db_file = optarg;
 		break;
 #endif
+	case 'K':
+		di->graceful_restart = true;
+		if (optarg)
+			di->gr_cleanup_time = atoi(optarg);
+		break;
 	case 'C':
 		if (di->flags & FRR_NO_SPLIT_CONFIG)
 			return 1;

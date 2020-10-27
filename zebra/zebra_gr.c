@@ -114,6 +114,7 @@ static struct client_gr_info *zebra_gr_client_info_create(struct zserv *client)
 	info = XCALLOC(MTYPE_TMP, sizeof(struct client_gr_info));
 
 	TAILQ_INSERT_TAIL(&(client->gr_info_queue), info, gr_info);
+	info->client_ptr = client;
 	return info;
 }
 
@@ -452,7 +453,10 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread)
 
 	info = THREAD_ARG(thread);
 	info->t_stale_removal = NULL;
-	client = (struct zserv *)info->stale_client_ptr;
+	if (zrouter.graceful_restart)
+		client = (struct zserv *)info->client_ptr;
+	else
+		client = (struct zserv *)info->stale_client_ptr;
 
 	/* Set the flag to indicate all stale route deletion */
 	if (thread->u.val == 1)
@@ -485,19 +489,25 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread)
  * Function to process to check if route entry is stale
  * or has been updated.
  */
-static void zebra_gr_process_route_entry(struct zserv *client,
-					 struct route_node *rn,
-					 struct route_entry *re)
+static void zebra_gr_process_route_entry(struct route_node *rn,
+					 struct route_entry *re,
+					 time_t compare_time, uint8_t proto)
 {
-	if ((client == NULL) || (rn == NULL) || (re == NULL))
+	struct nexthop *nexthop;
+
+	if ((rn == NULL) || (re == NULL))
 		return;
 
 	/* If the route is not refreshed after restart, delete the entry */
-	if (re->uptime < client->restart_time) {
-		if (IS_ZEBRA_DEBUG_RIB)
+	if (re->uptime < compare_time) {
+		if (IS_ZEBRA_DEBUG_RIB) {
 			zlog_debug("%s: Client %s stale route %pFX is deleted",
-				   __func__, zebra_route_string(client->proto),
-				   &rn->p);
+				   __func__, zebra_route_string(proto), &rn->p);
+		}
+		SET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
+		for (ALL_NEXTHOPS(re->nhe->nhg, nexthop))
+			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_FIB);
+
 		rib_delnode(rn, re);
 	}
 }
@@ -519,18 +529,32 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 	uint8_t proto;
 	uint16_t instance;
 	struct zserv *s_client;
+	struct zserv *client;
+	time_t restart_time = time(NULL);
 
 	if ((info == NULL) || (zvrf == NULL))
 		return -1;
 
-	s_client = info->stale_client_ptr;
-	if (s_client == NULL) {
-		LOG_GR("%s: Stale client not present", __func__);
-		return -1;
+	if (zrouter.graceful_restart) {
+		client = info->client_ptr;
+		if (client == NULL) {
+			LOG_GR("%s: client not present", __func__);
+			return -1;
+		}
+		proto = client->proto;
+		instance = client->instance;
+		restart_time = zrouter.startup_time;
+	} else {
+		s_client = info->stale_client_ptr;
+		if (s_client == NULL) {
+			LOG_GR("%s: Stale client not present", __func__);
+			return -1;
+		}
+		proto = s_client->proto;
+		instance = s_client->instance;
+		restart_time = s_client->restart_time;
 	}
 
-	proto = s_client->proto;
-	instance = s_client->instance;
 	curr_afi = info->current_afi;
 
 	LOG_GR("%s: Client %s stale routes are being deleted", __func__,
@@ -567,7 +591,8 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 					if (re->type == proto
 					    && re->instance == instance) {
 						zebra_gr_process_route_entry(
-							s_client, rn, re);
+							rn, re, restart_time,
+							proto);
 						n++;
 					}
 
@@ -662,10 +687,11 @@ static void zebra_gr_process_client_stale_routes(struct zserv *client,
 
 	/*
 	 * Route update completed for all AFI, SAFI
-	 * Cancel the stale timer and process the routes
+	 * Also perform the cleanup if FRR itself is gracefully restarting.
 	 */
-	if (info->t_stale_removal) {
-		LOG_GR("%s: Client %s canceled stale delete timer vrf %d",
+	info->route_sync_done_time = monotime(NULL);
+	if (info->t_stale_removal || zrouter.graceful_restart) {
+		LOG_GR("%s: Client %s route update complete for all AFI/SAFI in vrf %d",
 		       __func__, zebra_route_string(client->proto),
 		       info->vrf_id);
 		THREAD_OFF(info->t_stale_removal);

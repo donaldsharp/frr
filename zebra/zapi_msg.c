@@ -2399,7 +2399,7 @@ static void zsend_capabilities(struct zserv *client, struct zebra_vrf *zvrf)
 	stream_putc(s, mpls_enabled);
 	stream_putl(s, zrouter.multipath_num);
 	stream_putc(s, zebra_mlag_get_role());
-	// stream_putc(s, zrouter.graceful_restart);
+	stream_putc(s, zrouter.graceful_restart);
 	stream_putc(s, zrouter.maint_mode);
 
 	zlog_notice(

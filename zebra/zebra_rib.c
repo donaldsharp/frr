@@ -4483,6 +4483,10 @@ void rib_sweep_route(struct thread *t)
 	struct vrf *vrf;
 	struct zebra_vrf *zvrf;
 
+	zrouter.rib_sweep_time = monotime(NULL);
+	/* TODO: Change to debug */
+	zlog_info("Sweeping the RIB for stale routes...");
+
 	RB_FOREACH (vrf, vrf_id_head, &vrfs_by_id) {
 		if ((zvrf = vrf->info) == NULL)
 			continue;
