@@ -385,9 +385,10 @@ static int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete)
 			if (!CHECK_FLAG(dest->flags, BGP_NODE_SELECT_DEFER))
 				bgp->gr_info[afi][safi].gr_deferred++;
 			SET_FLAG(dest->flags, BGP_NODE_SELECT_DEFER);
-			if (BGP_DEBUG(update, UPDATE_OUT))
-				zlog_debug("DEFER route %pBD, dest %p", dest,
-					   dest);
+			if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+				zlog_debug(
+					"%s: Defer route %pRN, dest %p",
+					bgp->name_pretty, dest, dest);
 			return 0;
 		}
 	}
@@ -3457,12 +3458,8 @@ void bgp_process(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, safi_t safi)
 	/* If the flag BGP_NODE_SELECT_DEFER is set, do not add route to
 	 * the workqueue
 	 */
-	if (CHECK_FLAG(dest->flags, BGP_NODE_SELECT_DEFER)) {
-		if (BGP_DEBUG(update, UPDATE_OUT))
-			zlog_debug("BGP_NODE_SELECT_DEFER set for route %p",
-				   dest);
+	if (CHECK_FLAG(dest->flags, BGP_NODE_SELECT_DEFER))
 		return;
-	}
 
 	if (CHECK_FLAG(dest->flags, BGP_NODE_SOFT_RECONFIG)) {
 		if (BGP_DEBUG(update, UPDATE_OUT))
