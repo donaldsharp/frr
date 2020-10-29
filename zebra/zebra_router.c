@@ -312,7 +312,17 @@ void zebra_router_init(bool asic_offload, bool notify_on_ack)
 		hash_create_size(8, zebra_nhg_id_key, zebra_nhg_hash_id_equal,
 				 "Zebra Router Nexthop Groups ID index");
 
-	zrouter.asic_offloaded = asic_offload;
+	/*
+	 * Cumulus does this by default
+	 */
+	if (system("ls /usr/bin/platform-detect") == 0) {
+		if (system("/usr/bin/platform-detect | grep vx") == 0)
+			zrouter.asic_offloaded = false;
+		else
+			zrouter.asic_offloaded = true;
+	} else
+		zrouter.asic_offloaded = asic_offload;
+
 	zrouter.notify_on_ack = notify_on_ack;
 
 #ifdef HAVE_SCRIPTING
