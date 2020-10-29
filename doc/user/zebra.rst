@@ -72,6 +72,16 @@ Besides the common invocation options (:ref:`common-invocation-options`), the
    option and we will use Route Replace Semantics instead of delete
    than add.
 
+.. option:: --asic-offload
+
+   The linux kernel has the ability to use asic-offload ( see switchdev
+   development ).  When the operator knows that FRR will be working in
+   this way, allow them to specify this with FRR.  At this point this
+   code only supports asynchronous notification of the offload state.
+   In other words the initial ACK received for linux kernel installation
+   does not give zebra any data about what the state of the offload
+   is.
+
 .. _interface-commands:
 
 Configuration Addresses behaviour
