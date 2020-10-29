@@ -831,6 +831,12 @@ static void zread_route_notify_request(ZAPI_HANDLER_ARGS)
 
 	STREAM_GETC(msg, notify);
 	client->notify_owner = notify;
+
+	/*
+	 * Since bgp is the only one who does this, turn on/off notification
+	 * on acks as a cumulus only patch
+	 */
+	zrouter.notify_on_ack = !!!notify;
 stream_failure:
 	return;
 }
