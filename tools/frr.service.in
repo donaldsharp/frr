@@ -17,6 +17,7 @@ WatchdogSec=60s
 RestartSec=5
 Restart=on-abnormal
 LimitNOFILE=1024
+LimitCORE=536870912
 PIDFile=@CFG_STATE@/watchfrr.pid
 ExecStart=@CFG_SBIN@/frrinit.sh start
 ExecStop=@CFG_SBIN@/frrinit.sh stop
