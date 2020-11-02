@@ -1006,7 +1006,7 @@ void ospf6_receive_lsa(struct ospf6_neighbor *from,
 					if (is_debug)
 						zlog_debug(
 							"%s: Current copy of LSA %s is MAXAGE, but new has recent age, flooding/installing.",
-							old->name, __PRETTY_FUNCTION__);
+							old->name, __func__);
 					ospf6_lsa_purge(old);
 					ospf6_flood(from, new);
 					ospf6_install_lsa(new);
@@ -1014,7 +1014,7 @@ void ospf6_receive_lsa(struct ospf6_neighbor *from,
 					if (is_debug)
 						zlog_debug(
 							"%s: Current copy of self-originated LSA %s is MAXAGE, but new has recent age, ignoring new.",
-							old->name, __PRETTY_FUNCTION__);
+							old->name, __func__);
 					ospf6_lsa_delete(new);
 				}
 				return;
