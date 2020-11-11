@@ -113,6 +113,7 @@ zebra_zebra_SOURCES = \
 	zebra/zebra_neigh.c \
 	zebra/zebra_evpn_arp_nd.c \
 	zebra/zserv.c \
+	zebra/zebra_csm.c \
 	# end
 
 clippy_scan += \
@@ -153,6 +154,7 @@ noinst_HEADERS += \
 	zebra/tc_netlink.h \
 	zebra/zapi_msg.h \
 	zebra/zebra_affinitymap.h \
+	zebra/zebra_csm.h \
 	zebra/zebra_dplane.h \
 	zebra/zebra_errors.h \
 	zebra/zebra_evpn.h \
