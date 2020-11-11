@@ -60,6 +60,11 @@
 #include "zebra/zebra_srv6.h"
 #include "zebra/zebra_srv6_vty.h"
 
+#if defined(HAVE_CUMULUS)
+#include <cumulus/cs_mgr_intf.h>
+#include "zebra/zebra_csm.h"
+#endif
+
 #define ZEBRA_PTM_SUPPORT
 
 /* process id. */
@@ -170,6 +175,10 @@ static void sigint(void)
 
 	zserv_close();
 	list_delete_all_node(zrouter.client_list);
+
+#if defined(HAVE_CUMULUS)
+	frr_csm_unregister();
+#endif
 
 	/* Once all the zclients are cleaned up, clean up the opaque module */
 	zebra_opaque_finish();
@@ -436,6 +445,10 @@ int main(int argc, char **argv)
 	*/
 	frr_config_fork();
 
+#if defined(HAVE_CUMULUS)
+	frr_csm_register();
+#endif
+
 	/* After we have successfully acquired the pidfile, we can be sure
 	*  about being the only copy of zebra process, which is submitting
 	*  changes to the FIB.
@@ -471,6 +484,23 @@ int main(int argc, char **argv)
 
 	/* Error init */
 	zebra_error_init();
+
+#if defined(HANDLE_ZAPI_FUZZING)
+	if (zapi_fuzzing) {
+		zserv_read_file(zapi_fuzzing);
+		exit(0);
+	}
+#endif /* HANDLE_ZAPI_FUZZING */
+#if defined(HANDLE_NETLINK_FUZZING)
+	if (netlink_fuzzing) {
+		netlink_read_init(netlink_fuzzing);
+		exit(0);
+	}
+#endif /* HANDLE_NETLINK_FUZZING */
+
+#if defined(HAVE_CUMULUS)
+	frr_csm_send_init_complete();
+#endif
 
 	frr_run(zrouter.master);
 

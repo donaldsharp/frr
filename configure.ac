@@ -819,6 +819,11 @@ fi
 
 if test "$enable_cumulus" = "yes" ; then
   AC_DEFINE([HAVE_CUMULUS], [1], [Compile Special Cumulus Code in])
+  AC_CHECK_LIB([csmgr], [csmgr_register_cb], [LIBS="$LIBS -lcsmgr"])
+  if test "$ac_cv_lib_csmgr_csmgr_register_cb" = "no"; then
+    AC_MSG_ERROR([libcsmgr is needed to compile])
+  fi
+  AC_CHECK_HEADER([cumulus/cs_mgr_intf.h])
 fi
 
 AC_SUBST([DFLT_NAME])
