@@ -112,53 +112,6 @@ static int frr_csm_send_keep_rsp(int seq)
 }
 
 /*
- * Callback handler to process messages from CSM
- */
-static int frr_csm_cb(int len, void *buf)
-{
-	msg_pkg *m = (msg_pkg *)buf;
-	msg *entry;
-	int nbytes;
-	keepalive_request *kr;
-
-	/* Set RCU information in the pthread */
-	if (!csm_rcu_set) {
-		rcu_thread_start(csm_rcu_thread);
-		csm_rcu_set = true;
-	}
-
-	nbytes = len;
-	if (nbytes != m->total_len) {
-		zlog_err("FRRCSM: Invalid length in received message, len %d msg_len %d",
-			 nbytes, m->total_len);
-		return -1;
-	}
-
-	zlog_debug("FRRCSM: Received message, total len %d", len);
-	nbytes -= sizeof(*m);
-	entry = m->entry;
-	while (nbytes && nbytes >= entry->len) {
-		switch (entry->type) {
-		case KEEP_ALIVE_REQ:
-			kr = (keepalive_request *)entry->data;
-			zlog_debug("... Received Keepalive Req, seq %d",
-				   kr->seq);
-			frr_csm_send_keep_rsp(kr->seq);
-			break;
-		default:
-			/* Right now, we don't care about anything else */
-			zlog_debug("... Received unhandled message %d",
-				   entry->type);
-			break;
-		}
-		nbytes -= entry->len;
-		entry = (msg *)((uint8_t *)entry + entry->len);
-	}
-
-	return 0;
-}
-
-/*
  * Right after initial registration, handshake with CSM to get our
  * start mode.
  */
@@ -212,9 +165,9 @@ static int frr_csm_get_start_mode(enum frr_csm_smode *smode)
 		switch (entry->type) {
 		case MODE_INFO:
 			mod_mode = (module_mode *)entry->data;
-			zlog_debug("... Received start mode %s state 0x%x",
+			zlog_debug("... Received start mode %s state %s",
 				   mode_to_str(mod_mode->mode),
-				   mod_mode->state);
+				   mod_state_to_str(mod_mode->state));
 			convert_mode(mod_mode->mode, smode);
 			break;
 		default:
@@ -225,6 +178,173 @@ static int frr_csm_get_start_mode(enum frr_csm_smode *smode)
 		entry = (msg *)((uint8_t *)entry + entry->len);
 	}
 
+	return 0;
+}
+
+/*
+ * Handle enter or exit maintenance mode.
+ * This function executes in zebra's main thread. It is a placeholder for now.
+ */
+static int zebra_csm_maintenance_mode(struct thread *t)
+{
+	bool enter = THREAD_VAL(t);
+
+	/* Respond back to CSM */
+	if (enter) {
+		frr_csm_send_down_complete();
+	} else {
+		int rc;
+		enum frr_csm_smode smode;
+
+		rc = frr_csm_get_start_mode(&smode);
+		if (rc)
+			zlog_err("FRRCSM: Failed to send load complete");
+		frr_csm_send_init_complete();
+	}
+
+	return 0;
+}
+
+/*
+ * We're told to exit maintenance mode. Post event to main thread
+ * for handling.
+ */
+static void frr_csm_enter_maintenance_mode()
+{
+	thread_add_event(zrouter.master, zebra_csm_maintenance_mode,
+			 NULL, true, NULL);
+}
+
+/*
+ * We're told to exit maintenance mode. Post event to main thread
+ * for handling.
+ */
+static void frr_csm_exit_maintenance_mode()
+{
+	thread_add_event(zrouter.master, zebra_csm_maintenance_mode,
+			 NULL, false, NULL);
+}
+
+/*
+ * Callback handler to process messages from CSM
+ */
+static int frr_csm_cb(int len, void *buf)
+{
+	msg_pkg *m = (msg_pkg *)buf;
+	msg *entry;
+	int nbytes;
+	keepalive_request *kr;
+	module_mode *mod_mode;
+	module_status *mod_status;
+
+	/* Set RCU information in the pthread */
+	if (!csm_rcu_set) {
+		rcu_thread_start(csm_rcu_thread);
+		csm_rcu_set = true;
+	}
+
+	nbytes = len;
+	if (nbytes != m->total_len) {
+		zlog_err("FRRCSM: Invalid length in received message, len %d msg_len %d",
+			 nbytes, m->total_len);
+		return -1;
+	}
+
+	zlog_debug("FRRCSM: Received message, total len %d", len);
+	nbytes -= sizeof(*m);
+	entry = m->entry;
+	while (nbytes && nbytes >= entry->len) {
+		switch (entry->type) {
+		case COME_UP:
+			mod_mode = (module_mode *)entry->data;
+			zlog_debug("... Received ComeUp, mode %s state %s",
+				   mode_to_str(mod_mode->mode),
+				   mod_state_to_str(mod_mode->state));
+			/* We only care about maintenance mode. Post event to the
+			 * main thread to signal to clients.
+			 */
+			if (mod_mode->mode == MAINTENANCE)
+				frr_csm_exit_maintenance_mode();
+			break;
+		case GO_DOWN:
+			mod_mode = (module_mode *)entry->data;
+			zlog_debug("... Received GoDown, mode %s state %s",
+				   mode_to_str(mod_mode->mode),
+				   mod_state_to_str(mod_mode->state));
+			if (mod_mode->mode == MAINTENANCE)
+				frr_csm_enter_maintenance_mode();
+			break;
+		case UP:
+			mod_status = (module_status *)entry->data;
+			zlog_debug("... Received Up, mod %s mode %s State %s fr %d",
+				   mod_id_to_str(mod_status->mode.mod),
+				   mode_to_str(mod_status->mode.mode),
+				   mod_state_to_str(mod_status->mode.state),
+				   mod_status->failure_reason);
+			break;
+		case DOWN:
+			mod_mode = (module_mode *)entry->data;
+			zlog_debug("... Received Down, mod %s mode %s state %s",
+				   mod_id_to_str(mod_mode->mod),
+				   mode_to_str(mod_mode->mode),
+				   mod_state_to_str(mod_mode->state));
+			break;
+		case KEEP_ALIVE_REQ:
+			kr = (keepalive_request *)entry->data;
+			zlog_debug("... Received Keepalive Req, seq %d",
+				   kr->seq);
+			frr_csm_send_keep_rsp(kr->seq);
+			break;
+		default:
+			/* Right now, we don't care about anything else */
+			zlog_debug("... Received unhandled message %d",
+				   entry->type);
+			break;
+		}
+		nbytes -= entry->len;
+		entry = (msg *)((uint8_t *)entry + entry->len);
+	}
+
+	return 0;
+}
+
+/*
+ * Send down action complete to CSM.
+ * Called in zebra's main thread
+ */
+int frr_csm_send_down_complete()
+{
+	uint8_t req[MAX_MSG_LEN];
+	uint8_t rsp[MAX_MSG_LEN];
+	msg_pkg *m = (msg_pkg *)req;
+	msg *entry = (msg *)m->entry;
+	module_down_status *ms;
+	int nbytes;
+
+	/* Send down_complete */
+	if (!zrouter.frr_csm_regd)
+		return 0;
+
+	entry->type = GO_DOWN;
+	entry->len = sizeof(*entry) + sizeof(*ms);
+	ms = (module_down_status *)entry->data;
+	ms->mod = zrouter.frr_csm_modid;
+	ms->mode.mod = zrouter.frr_csm_modid;
+	ms->mode.state = SUCCESS;
+	ms->failure_reason = NO_ERROR;
+	m->total_len = sizeof(*m) + entry->len;
+
+	zlog_debug("FRRCSM: Sending down complete");
+
+	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m,
+			    MAX_MSG_LEN, rsp);
+	if (nbytes == -1) {
+		zlog_err("FRRCSM: Failed to send down complete, error %s",
+			 safe_strerror(errno));
+		return -1;
+	}
+
+	/* We don't care about the response */
 	return 0;
 }
 

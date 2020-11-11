@@ -36,6 +36,7 @@ enum frr_csm_smode {
 
 extern const char *frr_csm_smode_str[];
 
+extern int frr_csm_send_down_complete(void);
 extern int frr_csm_send_init_complete(void);
 extern void frr_csm_unregister(void);
 extern void frr_csm_register(void);
