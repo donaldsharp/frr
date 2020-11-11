@@ -6,9 +6,15 @@
 #ifndef __ZEBRA_ROUTER_H__
 #define __ZEBRA_ROUTER_H__
 
+#include <config.h>
 #include "lib/mlag.h"
 
 #include "zebra/zebra_ns.h"
+
+#if defined(HAVE_CSMGR)
+#include <cumulus/cs_mgr_intf.h>
+#include "zebra/zebra_csm.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -195,6 +201,12 @@ struct zebra_router {
 	 */
 	time_t startup_time;
 	struct event *sweeper;
+
+#if defined(HAVE_CSMGR)
+	bool frr_csm_regd;
+	enum frr_csm_smode frr_csm_smode;
+	Module frr_csm_modid;
+#endif
 
 	/*
 	 * The hash of nexthop groups associated with this router

@@ -3951,6 +3951,13 @@ DEFUN (show_zebra,
 			vty_out(vty, "Asic Offload notification is available but not being used\n");
 	} else
 		vty_out(vty, "There is no Asic offload\n");
+
+#if defined(HAVE_CSMGR)
+	vty_out(vty, "%s with CSM, start mode %s\n",
+		zrouter.frr_csm_regd ? "Registered" : "Not registered",
+		frr_csm_smode2str(zrouter.frr_csm_smode));
+#endif
+
 	vty_out(vty,
 		"                            Route      Route      Neighbor   LSP        LSP\n");
 	vty_out(vty,
