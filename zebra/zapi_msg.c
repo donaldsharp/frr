@@ -66,6 +66,10 @@ DEFINE_MTYPE_STATIC(ZEBRA, RE_OPAQUE, "Route Opaque Data");
 
 static int zapi_nhg_decode(struct stream *s, int cmd, struct zapi_nhg *api_nhg);
 
+#if defined(HAVE_CUMULUS)
+#include "zebra/zebra_csm.h"
+#endif
+
 /* Encoding helpers -------------------------------------------------------- */
 
 static void zserv_encode_interface(struct stream *s, struct interface *ifp)
@@ -3715,6 +3719,33 @@ static void zserv_error_invalid_msg_type(ZAPI_HANDLER_ARGS)
 	zsend_error_msg(client, ZEBRA_INVALID_MSG_TYPE, hdr);
 }
 
+static void zebra_handle_cmd_ack(ZAPI_HANDLER_ARGS)
+{
+	struct stream *s;
+	uint16_t cmd;
+
+	s = msg;
+	STREAM_GETW(s, cmd);
+
+	switch (cmd) {
+	case ZEBRA_MAINTENANCE_MODE:
+		{
+			bool enter_maint;
+
+			STREAM_GETC(s, enter_maint);
+#if defined(HAVE_CUMULUS)
+			zebra_csm_maint_mode_client_ack(client, enter_maint);
+#endif
+		}
+		break;
+	default:
+		break;
+	}
+
+stream_failure:
+	return;
+}
+
 void (*const zserv_handlers[])(ZAPI_HANDLER_ARGS) = {
 	[ZEBRA_ROUTER_ID_ADD] = zread_router_id_add,
 	[ZEBRA_ROUTER_ID_DELETE] = zread_router_id_delete,
@@ -3793,6 +3824,7 @@ void (*const zserv_handlers[])(ZAPI_HANDLER_ARGS) = {
 	[ZEBRA_NHG_ADD] = zread_nhg_add,
 	[ZEBRA_NHG_DEL] = zread_nhg_del,
 	[ZEBRA_ROUTE_NOTIFY_REQUEST] = zread_route_notify_request,
+	[ZEBRA_COMMAND_ACK] = zebra_handle_cmd_ack,
 	[ZEBRA_EVPN_REMOTE_NH_ADD] = zebra_evpn_proc_remote_nh,
 	[ZEBRA_EVPN_REMOTE_NH_DEL] = zebra_evpn_proc_remote_nh,
 	[ZEBRA_NEIGH_IP_ADD] = zebra_neigh_ip_add,

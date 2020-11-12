@@ -188,4 +188,7 @@ extern int bgp_show_summary_vty(struct vty *vty, const char *name, afi_t afi,
 				safi_t safi, const char *neighbor, int as_type,
 				as_t as, uint16_t show_flags);
 
+extern void bgp_initiate_graceful_shut_unshut(struct vty *vty,
+					      struct bgp *bgp);
+
 #endif /* _QUAGGA_BGP_VTY_H */

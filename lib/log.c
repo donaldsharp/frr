@@ -462,6 +462,9 @@ static const struct zebra_desc_table command_types[] = {
 	DESC_ENTRY(ZEBRA_GRE_GET),
 	DESC_ENTRY(ZEBRA_GRE_UPDATE),
 	DESC_ENTRY(ZEBRA_GRE_SOURCE_SET)};
+	DESC_ENTRY(ZEBRA_MAINTENANCE_MODE),
+	DESC_ENTRY(ZEBRA_COMMAND_ACK)
+};
 #undef DESC_ENTRY
 
 static const struct zebra_desc_table unknown = {0, "unknown", '?'};

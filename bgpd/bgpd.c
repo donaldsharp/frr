@@ -8239,6 +8239,34 @@ struct peer *peer_lookup_in_view(struct vty *vty, struct bgp *bgp,
 	return peer;
 }
 
+void bgp_process_maintenance_mode(struct vty *vty, bool enter)
+{
+	struct listnode *node, *nnode;
+	struct bgp *bgp;
+
+	if (enter) {
+
+		if (CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE))
+			return;
+		/* Set flag globally */
+		SET_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE);
+
+	} else {
+
+		if (!CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE))
+			return;
+		/* Unset flag globally */
+		UNSET_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE);
+
+	}
+
+	/* When we enter or exit maintenance mode, the BGP action is to
+	 * initiate or stop graceful shutdown respectively.
+	 */
+	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
+		bgp_initiate_graceful_shut_unshut(vty, bgp);
+}
+
 void bgp_gr_apply_running_config(void)
 {
 	struct peer *peer = NULL;

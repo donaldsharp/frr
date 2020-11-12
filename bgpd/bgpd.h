@@ -2282,6 +2282,7 @@ extern void bgp_shutdown_disable(struct bgp *bgp);
 extern void bgp_close(void);
 extern void bgp_free(struct bgp *);
 void bgp_gr_apply_running_config(void);
+extern void bgp_process_maintenance_mode(struct vty *vty, bool enter);
 
 /* BGP GR */
 int bgp_global_gr_init(struct bgp *bgp);

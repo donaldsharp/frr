@@ -183,23 +183,30 @@ static int frr_csm_get_start_mode(enum frr_csm_smode *smode)
 
 /*
  * Handle enter or exit maintenance mode.
- * This function executes in zebra's main thread. It is a placeholder for now.
+ * This function executes in zebra's main thread. It informs clients
+ * (currently, only BGP) and takes any local action (currently, none).
+ * An ack needs to go back to CSM after we get an ack from client.
+ * TODO: When handling multiple clients, we need to track acks also
+ * from each one.
  */
-static int zebra_csm_maintenance_mode(struct thread *t)
+static int zebra_csm_maint_mode(struct thread *t)
 {
 	bool enter = THREAD_VAL(t);
+	struct zserv *client;
+	struct stream *s;
 
-	/* Respond back to CSM */
-	if (enter) {
-		frr_csm_send_down_complete();
-	} else {
-		int rc;
-		enum frr_csm_smode smode;
+	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
+	if (client) {
+		s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+		zclient_create_header(s, ZEBRA_MAINTENANCE_MODE, VRF_DEFAULT);
+		stream_putc(s, enter);
+		/* Write packet size. */
+		stream_putw_at(s, 0, stream_get_endp(s));
 
-		rc = frr_csm_get_start_mode(&smode);
-		if (rc)
-			zlog_err("FRRCSM: Failed to send load complete");
-		frr_csm_send_init_complete();
+		zlog_debug("... Send %s maintenance mode to %s",
+			   enter ? "Enter" : "Exit",
+			   zebra_route_string(client->proto));
+		zserv_send_message(client, s);
 	}
 
 	return 0;
@@ -211,7 +218,7 @@ static int zebra_csm_maintenance_mode(struct thread *t)
  */
 static void frr_csm_enter_maintenance_mode()
 {
-	thread_add_event(zrouter.master, zebra_csm_maintenance_mode,
+	thread_add_event(zrouter.master, zebra_csm_maint_mode,
 			 NULL, true, NULL);
 }
 
@@ -221,7 +228,7 @@ static void frr_csm_enter_maintenance_mode()
  */
 static void frr_csm_exit_maintenance_mode()
 {
-	thread_add_event(zrouter.master, zebra_csm_maintenance_mode,
+	thread_add_event(zrouter.master, zebra_csm_maint_mode,
 			 NULL, false, NULL);
 }
 
@@ -306,6 +313,26 @@ static int frr_csm_cb(int len, void *buf)
 	}
 
 	return 0;
+}
+
+void zebra_csm_maint_mode_client_ack(struct zserv *client, bool enter)
+{
+	zlog_debug("Ack for %s maintenance mode from %s",
+		   enter ? "Enter" : "Exit",
+		   zebra_route_string(client->proto));
+
+	/* Respond back to CSM */
+	if (enter) {
+		frr_csm_send_down_complete();
+	} else {
+		int rc;
+		enum frr_csm_smode smode;
+
+		rc = frr_csm_get_start_mode(&smode);
+		if (rc)
+			zlog_err("FRRCSM: Failed to send load complete");
+		frr_csm_send_init_complete();
+	}
 }
 
 /*
