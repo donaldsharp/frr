@@ -20,10 +20,10 @@
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-
-
 #ifndef _ZEBRA_CSM_H
 #define _ZEBRA_CSM_H
+
+#include "zserv.h"
 
 /*
  * FRR start mode as per CSM

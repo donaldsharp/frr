@@ -235,6 +235,8 @@ typedef enum {
 	ZEBRA_TC_FILTER_ADD,
 	ZEBRA_TC_FILTER_DELETE,
 	ZEBRA_OPAQUE_NOTIFY,
+	ZEBRA_MAINTENANCE_MODE,
+	ZEBRA_COMMAND_ACK,
 } zebra_message_types_t;
 /* Zebra message types. Please update the corresponding
  * command_types array with any changes!
@@ -382,6 +384,11 @@ struct zclient {
 
 	zclient_handler *const *handlers;
 	size_t n_handlers;
+	int (*opaque_msg_handler)(ZAPI_CALLBACK_ARGS);
+	int (*opaque_register_handler)(ZAPI_CALLBACK_ARGS);
+	int (*opaque_unregister_handler)(ZAPI_CALLBACK_ARGS);
+	int (*handle_maint_mode)(ZAPI_CALLBACK_ARGS);
+	int (*handle_cmd_ack)(ZAPI_CALLBACK_ARGS);
 };
 
 /* lib handlers added in bfd.c */
