@@ -239,6 +239,8 @@ typedef enum {
 	ZEBRA_GRE_GET,
 	ZEBRA_GRE_UPDATE,
 	ZEBRA_GRE_SOURCE_SET,
+	ZEBRA_MAINTENANCE_MODE,
+	ZEBRA_COMMAND_ACK,
 } zebra_message_types_t;
 
 enum zebra_error_types {
@@ -365,6 +367,11 @@ struct zclient {
 
 	zclient_handler *const *handlers;
 	size_t n_handlers;
+	int (*opaque_msg_handler)(ZAPI_CALLBACK_ARGS);
+	int (*opaque_register_handler)(ZAPI_CALLBACK_ARGS);
+	int (*opaque_unregister_handler)(ZAPI_CALLBACK_ARGS);
+	int (*handle_maint_mode)(ZAPI_CALLBACK_ARGS);
+	int (*handle_cmd_ack)(ZAPI_CALLBACK_ARGS);
 };
 
 /* lib handlers added in bfd.c */
