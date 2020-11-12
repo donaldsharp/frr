@@ -174,4 +174,7 @@ extern bool peergroup_flag_check(struct peer *peer, uint64_t flag);
 extern bool peergroup_af_flag_check(struct peer *peer, afi_t afi, safi_t safi,
 				    uint64_t flag);
 
+extern void bgp_initiate_graceful_shut_unshut(struct vty *vty,
+					      struct bgp *bgp);
+
 #endif /* _QUAGGA_BGP_VTY_H */

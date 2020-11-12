@@ -6,15 +6,14 @@
 #ifndef __ZEBRA_ROUTER_H__
 #define __ZEBRA_ROUTER_H__
 
-#include <config.h>
 #include "lib/mlag.h"
 
 #include "zebra/zebra_ns.h"
 
 #if defined(HAVE_CSMGR)
 #include <cumulus/cs_mgr_intf.h>
-#include "zebra/zebra_csm.h"
 #endif
+#include "zebra/zebra_csm.h"
 
 #ifdef __cplusplus
 extern "C" {
