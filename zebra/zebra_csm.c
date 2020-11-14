@@ -51,6 +51,7 @@ const char *frr_csm_smode_str[] = {
 };
 
 extern struct zebra_privs_t zserv_privs;
+pthread_t csm_pthread;
 static struct rcu_thread *csm_rcu_thread;
 static bool csm_rcu_set = false;
 
@@ -246,6 +247,7 @@ static int frr_csm_cb(int len, void *buf)
 
 	/* Set RCU information in the pthread */
 	if (!csm_rcu_set) {
+		csm_pthread = pthread_self();
 		rcu_thread_start(csm_rcu_thread);
 		csm_rcu_set = true;
 	}
@@ -422,7 +424,17 @@ void frr_csm_unregister()
 	if (zrouter.frr_csm_regd) {
 		zlog_debug("FRRCSM: Unregistering");
 		frr_with_privs(&zserv_privs) {
+			/* unregister */
 			csmgr_unregister(zrouter.frr_csm_modid);
+
+			/* Join the CSM pthread to wait for it to exit. We
+			 * do this to ensure the data destructor functions
+			 * are called before the main thread exits.
+			 */
+			if (csm_rcu_set)
+				pthread_join(csm_pthread, NULL);
+			else
+				rcu_thread_unprepare(csm_rcu_thread);
 		}
 	}
 }
@@ -453,6 +465,8 @@ void frr_csm_register()
 			 safe_strerror(errno));
 		zrouter.frr_csm_regd = false;
 		zrouter.frr_csm_smode = COLD_START;
+		rcu_thread_unprepare(csm_rcu_thread);
+		csm_rcu_thread = NULL;
 		return;
 	}
 
