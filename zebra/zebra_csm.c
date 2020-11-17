@@ -35,14 +35,17 @@
 #include "sigevent.h"
 #include "libfrr.h"
 #include "frrcu.h"
+
+#include "zebra/zserv.h"
+#include "zebra/zebra_csm.h"
+
+#if defined(HAVE_CSMGR)
 #include <cumulus/cs_mgr_intf.h>
 
 #include "zebra/zebra_router.h"
 #include "zebra/zebra_errors.h"
-#include "zebra/zserv.h"
 #include "zebra/debug.h"
 #include "zebra/zebra_ns.h"
-#include "zebra/zebra_csm.h"
 
 const char *frr_csm_smode_str[] = {
 	"cold start",
@@ -483,3 +486,9 @@ void frr_csm_register()
 		zrouter.frr_csm_smode = smode;
 	}
 }
+#else
+void zebra_csm_maint_mode_client_ack(struct zserv *client, bool enter)
+{
+	zlog_warn("Maintenance Mode Not Written for this platform yet");
+}
+#endif

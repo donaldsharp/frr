@@ -20,8 +20,6 @@
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  */
-
-
 #ifndef _ZEBRA_CSM_H
 #define _ZEBRA_CSM_H
 
@@ -38,7 +36,7 @@ enum frr_csm_smode {
 
 extern const char *frr_csm_smode_str[];
 
-extern void zebra_csm_maint_mode_client_ack(struct zserv *, bool enter);
+extern void zebra_csm_maint_mode_client_ack(struct zserv *client, bool enter);
 extern int frr_csm_send_down_complete(void);
 extern int frr_csm_send_init_complete(void);
 extern void frr_csm_unregister(void);

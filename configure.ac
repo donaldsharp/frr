@@ -716,6 +716,8 @@ AC_ARG_ENABLE([werror],
   AS_HELP_STRING([--enable-werror], [enable -Werror (recommended for developers only)]))
 AC_ARG_ENABLE([cumulus],
   AS_HELP_STRING([--enable-cumulus], [enable Cumulus Switch Special Extensions]))
+AC_ARG_ENABLE([csmgr],
+  AS_HELP_STRING([--enable-csmgr], [enable Cumulus Switch Manager Integration]))
 AC_ARG_ENABLE([datacenter],
   AS_HELP_STRING([--enable-datacenter], [enable Compilation for Data Center Extensions]))
 AC_ARG_ENABLE([rr-semantics],
@@ -819,11 +821,15 @@ fi
 
 if test "$enable_cumulus" = "yes" ; then
   AC_DEFINE([HAVE_CUMULUS], [1], [Compile Special Cumulus Code in])
+fi
+
+if test "$enable_csmgr" = "yes" ; then
   AC_CHECK_LIB([csmgr], [csmgr_register_cb], [LIBS="$LIBS -lcsmgr"])
   if test "$ac_cv_lib_csmgr_csmgr_register_cb" = "no"; then
     AC_MSG_ERROR([libcsmgr is needed to compile])
   fi
   AC_CHECK_HEADER([cumulus/cs_mgr_intf.h])
+  AC_DEFINE([HAVE_CSMGR], [1], [Compile Cumulus Switch Manager Code in])
 fi
 
 AC_SUBST([DFLT_NAME])

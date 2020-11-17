@@ -60,7 +60,7 @@
 #include "zebra/zebra_srv6.h"
 #include "zebra/zebra_srv6_vty.h"
 
-#if defined(HAVE_CUMULUS)
+#if defined(HAVE_CSMGR)
 #include <cumulus/cs_mgr_intf.h>
 #include "zebra/zebra_csm.h"
 #endif
@@ -176,7 +176,7 @@ static void sigint(void)
 	zserv_close();
 	list_delete_all_node(zrouter.client_list);
 
-#if defined(HAVE_CUMULUS)
+#if defined(HAVE_CSMGR)
 	frr_csm_unregister();
 #endif
 
@@ -445,7 +445,7 @@ int main(int argc, char **argv)
 	*/
 	frr_config_fork();
 
-#if defined(HAVE_CUMULUS)
+#if defined(HAVE_CSMGR)
 	frr_csm_register();
 #endif
 
@@ -498,7 +498,7 @@ int main(int argc, char **argv)
 	}
 #endif /* HANDLE_NETLINK_FUZZING */
 
-#if defined(HAVE_CUMULUS)
+#if defined(HAVE_CSMGR)
 	frr_csm_send_init_complete();
 #endif
 

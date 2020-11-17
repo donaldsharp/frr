@@ -3958,7 +3958,7 @@ DEFUN (show_zebra,
 	vty_out(vty, "%s\n", out);
 	XFREE(MTYPE_TMP, out);
 
-#if defined(HAVE_CUMULUS)
+#if defined(HAVE_CSMGR)
 	vty_out(vty, "%s with CSM, start mode %s\n",
 		zrouter.frr_csm_regd ? "Registered" : "Not registered",
 		frr_csm_smode2str(zrouter.frr_csm_smode));
