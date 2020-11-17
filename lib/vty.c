@@ -1942,7 +1942,7 @@ static void vty_accept(struct event *thread)
 		zlog_info("can't set sockopt to vty_sock : %s",
 			  safe_strerror(errno));
 
-	zlog_info("Vty connection from %pSU", &su);
+	zlog_debug("Vty connection from %pSU", &su);
 
 	vty_create(vty_sock, &su);
 }
