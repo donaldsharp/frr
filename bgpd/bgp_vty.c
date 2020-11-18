@@ -9990,6 +9990,33 @@ DEFUN (show_bgp_vrfs,
 	return CMD_SUCCESS;
 }
 
+DEFUN (show_bgp_router,
+       show_bgp_router_cmd,
+       "show bgp router",
+       SHOW_STR
+       BGP_STR
+       "Overall BGP information\n")
+{
+	char timebuf[MONOTIME_STRLEN];
+
+	time_to_string(bm->startup_time, timebuf);
+	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART)) {
+		vty_out(vty, "BGP started gracefully at %s", timebuf);
+		if (CHECK_FLAG(bm->flags, BM_FLAG_GR_COMPLETE)) {
+			time_to_string(bm->gr_completion_time, timebuf);
+			vty_out(vty,
+				"Graceful restart completed at %s", timebuf);
+		} else
+			vty_out(vty, "Graceful restart is in progress\n");
+	} else
+		vty_out(vty, "BGP started at %s", timebuf);
+
+	vty_out(vty, "Number of BGP instances (including default): %d\n",
+		listcount(bm->bgp));
+
+	return CMD_SUCCESS;
+}
+
 DEFUN (show_bgp_mac_hash,
        show_bgp_mac_hash_cmd,
        "show bgp mac hash",
