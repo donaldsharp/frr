@@ -159,6 +159,9 @@ void sighup(void)
 __attribute__((__noreturn__)) void sigint(void)
 {
 	zlog_notice("Terminating on signal");
+	if (CHECK_FLAG(bm->flags, BM_FLAG_FAST_SHUTDOWN))
+		exit(0);
+
 	assert(bm->terminating == false);
 	bm->terminating = true;	/* global flag that shutting down */
 
