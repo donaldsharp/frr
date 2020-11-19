@@ -162,6 +162,8 @@ struct bgp_master {
 #define BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA (1 << 1)
 #define BM_FLAG_MAINTENANCE_MODE         (1 << 2)
 #define BM_FLAG_CONFIG_LOADED		 (1 << 3)
+#define BM_FLAG_FAST_SHUTDOWN		 (1 << 4)
+#define BM_FLAG_UPGRADE			 (1 << 5)
 #define BM_FLAG_IPV6_NO_AUTO_RA		 (1 << 8)
 
 	bool terminating;	/* global flag that sigint terminate seen */
@@ -2482,6 +2484,7 @@ extern void bgp_close(void);
 extern void bgp_free(struct bgp *);
 void bgp_gr_apply_running_config(void);
 extern void bgp_process_maintenance_mode(struct vty *vty, bool enter);
+extern void bgp_process_fast_down(bool upgrade);
 
 /* BGP GR */
 int bgp_global_gr_init(struct bgp *bgp);

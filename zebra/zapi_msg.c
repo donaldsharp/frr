@@ -2367,6 +2367,11 @@ static void zsend_capabilities(struct zserv *client, struct zebra_vrf *zvrf)
 	stream_putl(s, zrouter.multipath_num);
 	stream_putc(s, zebra_mlag_get_role());
 	stream_putc(s, zrouter.v6_with_v4_nexthop);
+
+	zlog_notice("Sending capabilities to client %s: MPLS %s numMultipath %d MlagRole %d",
+		    zebra_route_string(client->proto), mpls_enabled ? "enabled" : "disabled",
+		    zrouter.multipath_num, zebra_mlag_get_role());
+
 	stream_putw_at(s, 0, stream_get_endp(s));
 	zserv_send_message(client, s);
 }
@@ -3905,6 +3910,12 @@ static void zebra_handle_cmd_ack(ZAPI_HANDLER_ARGS)
 #endif
 		}
 		break;
+		case ZEBRA_FAST_SHUTDOWN: {
+			bool upgrade;
+
+			STREAM_GETC(s, upgrade);
+			zebra_csm_fast_restart_client_ack(client, upgrade);
+		} break;
 	default:
 		break;
 	}

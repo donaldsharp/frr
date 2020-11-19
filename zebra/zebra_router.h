@@ -131,6 +131,8 @@ struct zebra_mlag_info {
 struct zebra_router {
 	atomic_bool in_shutdown;
 
+	bool fast_shutdown;
+
 	/* Thread master */
 	struct event_loop *master;
 
@@ -204,6 +206,9 @@ struct zebra_router {
 #if defined(HAVE_CSMGR)
 	bool frr_csm_regd;
 	enum frr_csm_smode frr_csm_smode;
+	Mode csm_smode;
+	Mode csm_cmode;
+	State csm_cstate;
 	Module frr_csm_modid;
 #endif
 

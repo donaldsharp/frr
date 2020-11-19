@@ -3987,6 +3987,7 @@ static int zclient_capability_decode(ZAPI_CALLBACK_ARGS)
 	struct stream *s = zclient->ibuf;
 	int vrf_backend;
 	uint8_t mpls_enabled;
+	uint8_t gr;
 
 	STREAM_GETL(s, vrf_backend);
 
@@ -4004,6 +4005,8 @@ static int zclient_capability_decode(ZAPI_CALLBACK_ARGS)
 	STREAM_GETL(s, cap.ecmp);
 	STREAM_GETC(s, cap.role);
 	STREAM_GETC(s, cap.v6_with_v4_nexthop);
+	STREAM_GETC(s, gr);
+	cap.graceful_restart = !!gr;
 
 	if (zclient->zebra_capabilities)
 		(*zclient->zebra_capabilities)(&cap);
@@ -4428,7 +4431,6 @@ static void zclient_read(struct event *thread)
 		lib_handlers[command](command, zclient, length, vrf_id);
 	if (command < zclient->n_handlers && zclient->handlers[command])
 		zclient->handlers[command](command, zclient, length, vrf_id);
-
 	if (zclient->sock < 0)
 		/* Connection was closed during packet processing. */
 		return;
