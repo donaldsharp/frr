@@ -145,6 +145,9 @@ static void sigint(void)
 	struct zserv *client;
 	static bool sigint_done;
 
+	if (zrouter.fast_shutdown)
+		exit(0);
+
 	if (sigint_done)
 		return;
 
@@ -458,8 +461,23 @@ int main(int argc, char **argv)
 	* we have to have route_read() called before.
 	*/
 	zrouter.startup_time = monotime(NULL);
-	thread_add_timer(zrouter.master, rib_sweep_route, NULL,
-			 graceful_restart, &zrouter.sweeper);
+	zrouter.rib_sweep_time = 0;
+	zrouter.graceful_restart = zebra_di.graceful_restart;
+#if defined(HAVE_CUMULUS)
+	zrouter.graceful_restart = (zrouter.frr_csm_smode == FAST_START);
+#endif
+	if (!zrouter.graceful_restart)
+		thread_add_timer(zrouter.master, rib_sweep_route,
+				 NULL, 0, NULL);
+	else {
+		int gr_cleanup_time;
+
+		gr_cleanup_time = zebra_di.gr_cleanup_time ?
+				  zebra_di.gr_cleanup_time :
+				  ZEBRA_GR_DEFAULT_RIB_SWEEP_TIME;
+		thread_add_timer(zrouter.master, rib_sweep_route,
+				 NULL, gr_cleanup_time, &zrouter.t_rib_sweep);
+	}
 
 	/* Needed for BSD routing socket. */
 	pid = getpid();

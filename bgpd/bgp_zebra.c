@@ -3161,6 +3161,42 @@ static int bgp_zebra_handle_maint_mode(ZAPI_CALLBACK_ARGS)
 	return zclient_send_message(zclient);
 }
 
+static int bgp_zebra_handle_fast_down(ZAPI_CALLBACK_ARGS)
+{
+	struct stream *s;
+	bool upgrade;
+
+	s = zclient->ibuf;
+	upgrade = stream_getc(s);
+
+	if (BGP_DEBUG(zebra, ZEBRA))
+		zlog_debug("Rx Fast shutdown%s initiated",
+			   upgrade ? " (upgrade)" : "");
+
+	/* Process fast down */
+	bgp_process_fast_down(upgrade);
+
+	/* Ack the command handling to zebra */
+	s = zclient->obuf;
+	stream_reset(s);
+
+	zclient_create_header(s, ZEBRA_COMMAND_ACK, vrf_id);
+	stream_putw(s, cmd);
+	stream_putc(s, upgrade);
+	stream_putw_at(s, 0, stream_get_endp(s));
+
+	return zclient_send_message(zclient);
+}
+
+static void bgp_zebra_capabilities(struct zclient_capabilities *cap)
+{
+	bool gr;
+
+	gr = cap->graceful_restart;
+	if (gr)
+		SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART);
+}
+
 extern struct zebra_privs_t bgpd_privs;
 
 static int bgp_ifp_create(struct interface *ifp)
@@ -3372,6 +3408,8 @@ void bgp_zebra_init(struct thread_master *master, unsigned short instance)
 	zclient->iptable_notify_owner = iptable_notify_owner;
 	zclient->route_notify_owner = bgp_zebra_route_notify_owner;
 	zclient->handle_maint_mode = bgp_zebra_handle_maint_mode;
+	zclient->handle_fast_down = bgp_zebra_handle_fast_down;
+	zclient->zebra_capabilities = bgp_zebra_capabilities;
 	zclient->instance = instance;
 }
 

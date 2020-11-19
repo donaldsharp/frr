@@ -8267,6 +8267,13 @@ void bgp_process_maintenance_mode(struct vty *vty, bool enter)
 		bgp_initiate_graceful_shut_unshut(vty, bgp);
 }
 
+void bgp_process_fast_down(bool upgrade)
+{
+	SET_FLAG(bm->flags, BM_FLAG_FAST_SHUTDOWN);
+	if (upgrade)
+		SET_FLAG(bm->flags, BM_FLAG_UPGRADE);
+}
+
 void bgp_gr_apply_running_config(void)
 {
 	struct peer *peer = NULL;

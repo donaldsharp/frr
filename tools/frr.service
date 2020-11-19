@@ -1,7 +1,7 @@
 [Unit]
 Description=FRRouting
 Documentation=https://frrouting.readthedocs.io/en/latest/setup.html
-After=networking.service
+After=networking.service csmgrd.service
 
 [Service]
 Nice=-5

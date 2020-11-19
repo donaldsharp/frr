@@ -66,6 +66,11 @@
 #include "zebra/zebra_script.h"
 #include "zebra/rtadv.h"
 
+#if defined(HAVE_CUMULUS)
+#include <cumulus/cs_mgr_intf.h>
+#include "zebra/zebra_csm.h"
+#endif
+
 extern int allow_delete;
 
 /* context to manage dumps in multiple tables or vrfs */
@@ -3959,9 +3964,11 @@ DEFUN (show_zebra,
 	XFREE(MTYPE_TMP, out);
 
 #if defined(HAVE_CSMGR)
-	vty_out(vty, "%s with CSM, start mode %s\n",
+	vty_out(vty, "%s with CSM, CSM start mode %s (mapped to %s), current mode %s\n",
 		zrouter.frr_csm_regd ? "Registered" : "Not registered",
-		frr_csm_smode2str(zrouter.frr_csm_smode));
+		mode_to_str(zrouter.csm_smode),
+		frr_csm_smode2str(zrouter.frr_csm_smode),
+		mode_to_str(zrouter.csm_cmode));
 #endif
 
 	vty_out(vty,
