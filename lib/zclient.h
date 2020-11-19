@@ -237,6 +237,7 @@ typedef enum {
 	ZEBRA_OPAQUE_NOTIFY,
 	ZEBRA_MAINTENANCE_MODE,
 	ZEBRA_COMMAND_ACK,
+	ZEBRA_FAST_SHUTDOWN,
 } zebra_message_types_t;
 /* Zebra message types. Please update the corresponding
  * command_types array with any changes!
@@ -275,6 +276,7 @@ struct redist_proto {
 struct zclient_capabilities {
 	uint32_t ecmp;
 	bool mpls_enabled;
+	bool graceful_restart;
 	enum mlag_role role;
 	bool v6_with_v4_nexthop;
 };
@@ -389,6 +391,7 @@ struct zclient {
 	int (*opaque_unregister_handler)(ZAPI_CALLBACK_ARGS);
 	int (*handle_maint_mode)(ZAPI_CALLBACK_ARGS);
 	int (*handle_cmd_ack)(ZAPI_CALLBACK_ARGS);
+	int (*handle_fast_down)(ZAPI_CALLBACK_ARGS);
 };
 
 /* lib handlers added in bfd.c */

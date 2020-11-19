@@ -54,6 +54,11 @@
 #include "zebra/zebra_neigh.h"
 #include "zebra/zebra_ptm.h"
 
+#if defined(HAVE_CSMGR)
+#include <cumulus/cs_mgr_intf.h>
+#include "zebra/zebra_csm.h"
+#endif
+
 /* context to manage dumps in multiple tables or vrfs */
 struct route_show_ctx {
 	bool multi;       /* dump multiple tables or vrf */
@@ -3953,9 +3958,13 @@ DEFUN (show_zebra,
 		vty_out(vty, "There is no Asic offload\n");
 
 #if defined(HAVE_CSMGR)
-	vty_out(vty, "%s with CSM, start mode %s\n",
+	char buf1[256];
+	char buf2[256];
+
+	vty_out(vty, "%s with CSM, CSM start mode %s (mapped to %s), current mode %s\n",
 		zrouter.frr_csm_regd ? "Registered" : "Not registered",
-		frr_csm_smode2str(zrouter.frr_csm_smode));
+		mode_to_str(zrouter.csm_smode, buf1), frr_csm_smode2str(zrouter.frr_csm_smode),
+		mode_to_str(zrouter.csm_cmode, buf2));
 #endif
 
 	vty_out(vty,

@@ -104,123 +104,7 @@ static int frr_csm_send_keep_rsp(int seq)
 }
 
 /*
- * Right after initial registration, handshake with CSM to get our
- * start mode.
- */
-static int frr_csm_get_start_mode(enum frr_csm_smode *smode)
-{
-	uint8_t req[MAX_MSG_LEN];
-	uint8_t rsp[MAX_MSG_LEN];
-	msg_pkg *m = (msg_pkg *)req;
-	msg *entry = (msg *)m->entry;
-	module_status *mod_status;
-	module_mode *mod_mode;
-	int nbytes;
-
-	*smode = COLD_START; /* Init */
-
-	/* Send load_complete */
-	entry->type = LOAD_COMPLETE;
-	entry->len = sizeof(*entry) + sizeof(*mod_status);
-	mod_status = (module_status *)entry->data;
-	mod_status->mode.mod = zrouter.frr_csm_modid;
-	mod_status->mode.state = LOAD_COMPLETE;
-	mod_status->failure_reason = NO_ERROR;
-	m->total_len = sizeof(*m) + entry->len;
-
-	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m,
-			    MAX_MSG_LEN, rsp);
-	if (nbytes == -1) {
-		zlog_err("FRRCSM: Failed to send load complete, error %s",
-			 safe_strerror(errno));
-		return -1;
-	}
-
-	zlog_debug("FRRCSM: Sent load complete, response length %d", nbytes);
-
-	/* Process the response, which should have our start mode */
-	if (!nbytes)
-		return 0;
-
-	m = (msg_pkg *)rsp;
-	if (nbytes != m->total_len) {
-		zlog_err("FRRCSM: Invalid length in load complete response, len %d msg_len %d",
-			 nbytes, m->total_len);
-		return -1;
-	}
-
-	nbytes -= sizeof(*m);
-	entry = m->entry;
-	while (nbytes && nbytes >= entry->len) {
-		zlog_debug("FRRCSM: Received message type 0x%x len %d in load complete response",
-			   entry->type, entry->len);
-		switch (entry->type) {
-		case MODE_INFO:
-			mod_mode = (module_mode *)entry->data;
-			zlog_debug("... Received start mode %s state %s",
-				   mode_to_str(mod_mode->mode),
-				   mod_state_to_str(mod_mode->state));
-			convert_mode(mod_mode->mode, smode);
-			break;
-		default:
-			/* Right now, we don't care about anything else */
-			break;
-		}
-		nbytes -= entry->len;
-		entry = (msg *)((uint8_t *)entry + entry->len);
-	}
-
-	return 0;
-}
-
-/*
- * Handle enter or exit maintenance mode.
- * This function executes in zebra's main thread. It informs clients
- * (currently, only BGP) and takes any local action (currently, none).
- * An ack needs to go back to CSM after we get an ack from client.
- * TODO: When handling multiple clients, we need to track acks also
- * from each one.
- */
-static int zebra_csm_maintenance_mode(struct event *t)
-{
-	bool enter = EVENT_VAL(t);
-	struct zserv *client;
-	struct stream *s;
-
-	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
-	if (client) {
-		s = stream_new(ZEBRA_MAX_PACKET_SIZ);
-		zclient_create_header(s, ZEBRA_MAINTENANCE_MODE, VRF_DEFAULT);
-		stream_putc(s, enter);
-		/* Write packet size. */
-		stream_putw_at(s, 0, stream_get_endp(s));
-
-		zlog_debug("... Send %s maintenance mode to %s",
-			   enter ? "Enter" : "Exit",
-			   zebra_route_string(client->proto));
-		zserv_send_message(client, s);
-	}
-}
-
-/*
- * We're told to exit maintenance mode. Post event to main thread
- * for handling.
- */
-static void frr_csm_enter_maintenance_mode()
-{
-	event_add_event(zrouter.master, zebra_csm_maint_mode, NULL, true, NULL);
-}
-
-/*
- * We're told to exit maintenance mode. Post event to main thread
- * for handling.
- */
-static void frr_csm_exit_maintenance_mode()
-{
-	event_add_event(zrouter.master, zebra_csm_maint_mode, NULL, false, NULL);
-}
-
-/*
+<<<<<<< HEAD
  * Send down action complete to CSM.
  */
 static int frr_csm_send_down_complete(Module mod)
@@ -283,7 +167,7 @@ static int frr_csm_get_start_mode(Mode *mode, State *state)
 	ms = (module_down_status *)entry->data;
 	ms->mod = zrouter.frr_csm_modid;
 	ms->mode.mod = zrouter.frr_csm_modid;
-	ms->mode.state = SUCCESS;
+	ms->mode.state = LOAD_COMPLETE;
 	ms->failure_reason = NO_ERROR;
 	m->total_len = sizeof(*m) + entry->len;
 
