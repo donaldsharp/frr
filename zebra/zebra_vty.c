@@ -66,7 +66,7 @@
 #include "zebra/zebra_script.h"
 #include "zebra/rtadv.h"
 
-#if defined(HAVE_CUMULUS)
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 #include <cumulus/cs_mgr_intf.h>
 #include "zebra/zebra_csm.h"
 #endif
