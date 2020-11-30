@@ -428,6 +428,30 @@ def start_router_daemons(tgen, router, daemons):
     return res
 
 
+def kill_mininet_routers_process(tgen):
+    """
+    Kill all mininet stale router' processes
+    * `tgen`  : topogen object
+    """
+
+    router_list = tgen.routers()
+    for rname, router in router_list.iteritems():
+        daemon_list = [
+            "zebra",
+            "ospfd",
+            "ospf6d",
+            "bgpd",
+            "ripd",
+            "ripngd",
+            "isisd",
+            "pimd",
+            "ldpd",
+            "staticd",
+        ]
+        for daemon in daemon_list:
+            router.run("killall -9 {}".format(daemon))
+
+
 def check_router_status(tgen):
     """
     Check if all daemons are running for all routers in topology
@@ -1775,7 +1799,7 @@ def generate_ips(network, no_of_ips):
             start_ip = ipaddress.IPv6Address(frr_unicode(start_ip))
             step = 2 ** (128 - mask)
         else:
-            return []
+            return false
 
         next_ip = start_ip
         count = 0
