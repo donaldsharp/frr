@@ -173,6 +173,7 @@ struct bgp_master {
 #define BM_FLAG_CONFIG_LOADED            (1 << 3)
 #define BM_FLAG_FAST_SHUTDOWN (1 << 4)
 #define BM_FLAG_UPGRADE (1 << 5)
+#define BM_FLAG_GRACEFUL_RESTART         (1 << 6)
 
 	bool terminating;	/* global flag that sigint terminate seen */
 
@@ -1464,6 +1465,7 @@ struct peer {
 /* LLGR aware peer */
 #define PEER_STATUS_LLGR_WAIT (1U << 11)
 #define PEER_STATUS_REFRESH_PENDING (1U << 12) /* refresh request from peer */
+#define PEER_STATUS_GR_WAIT_EOR (1U << 13)
 
 	/* Configured timer values. */
 	_Atomic uint32_t holdtime;
