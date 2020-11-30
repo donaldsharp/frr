@@ -1979,6 +1979,16 @@ void update_group_adjust_peer(struct peer_af *paf)
 	old_subgrp = paf->subgroup;
 
 	if (old_subgrp) {
+		/*
+		 * If we need to announce immediately, put peer in its
+		 * own group and set its coalsece timer to 0.
+		 */
+		if (peer_immediate_announce(peer, paf->afi, paf->safi)) {
+			update_subgroup_split_peer(paf, updgrp);
+			subgrp = paf->subgroup;
+			subgrp->v_coalesce = 0;
+			return;
+		}
 
 		/*
 		 * If the update group of the peer is unchanged, the peer can
@@ -1996,9 +2006,19 @@ void update_group_adjust_peer(struct peer_af *paf)
 		return;
 	}
 
-	subgrp = update_subgroup_find(updgrp, paf);
-	if (!subgrp)
+	/*
+	 * If we need to announce immediately, put peer in its
+	 * own group and set its coalsece timer to 0.
+	 */
+	if (peer_immediate_announce(peer, paf->afi, paf->safi)) {
 		subgrp = update_subgroup_create(updgrp);
+		subgrp->v_coalesce = 0;
+	} else {
+		subgrp = update_subgroup_find(updgrp, paf);
+		if (!subgrp) {
+			subgrp = update_subgroup_create(updgrp);
+		}
+	}
 
 	update_subgroup_add_peer(subgrp, paf, 1);
 	if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
