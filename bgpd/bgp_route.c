@@ -2489,9 +2489,12 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 				continue;
 			if (BGP_PATH_HOLDDOWN(pi1))
 				continue;
-			if (pi1->peer != bgp->peer_self)
-				if (!peer_established(pi1->peer))
+			if (pi1->peer != bgp->peer_self
+			    && !CHECK_FLAG(pi1->peer->sflags,
+					   PEER_STATUS_NSF_WAIT)) {
+				if (pi1->peer->status != Established)
 					continue;
+			}
 
 			new_select = pi1;
 			if (pi1->next) {
