@@ -612,13 +612,11 @@ void frr_csm_unregister()
 			/* unregister */
 			csmgr_unregister(zrouter.frr_csm_modid);
 
-			/* Join the CSM pthread to wait for it to exit. We
-			 * do this to ensure the data destructor functions
-			 * are called before the main thread exits.
+			/* Clean up the thread-specific data (RCU) if we
+			 * never attached it to the thread. If we did,
+			 * the thread termination would handle the cleanup.
 			 */
-			if (csm_rcu_set)
-				pthread_join(csm_pthread, NULL);
-			else
+			if (!csm_rcu_set)
 				rcu_thread_unprepare(csm_rcu_thread);
 		}
 	}
