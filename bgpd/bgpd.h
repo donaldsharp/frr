@@ -169,7 +169,8 @@ struct bgp_master {
 	uint32_t flags;
 #define BM_FLAG_GRACEFUL_SHUTDOWN        (1 << 0)
 #define BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA (1 << 1)
-#define BM_FLAG_MAINTENANCE_MODE         (1 << 1)
+#define BM_FLAG_MAINTENANCE_MODE         (1 << 2)
+#define BM_FLAG_CONFIG_LOADED            (1 << 3)
 
 	bool terminating;	/* global flag that sigint terminate seen */
 
