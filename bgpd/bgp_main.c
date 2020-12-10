@@ -365,6 +365,17 @@ static void bgp_vrf_terminate(void)
 	vrf_terminate();
 }
 
+static void bgp_start_configuration(void)
+{
+	zlog_debug("Configuration has started to be read");
+}
+
+static void bgp_end_configuration(void)
+{
+	zlog_debug("Configuration has finished being read");
+	SET_FLAG(bm->flags, BM_FLAG_CONFIG_LOADED);
+}
+
 static const struct frr_yang_module_info *const bgpd_yang_modules[] = {
 	&frr_filter_info,
 	&frr_interface_info,
@@ -486,6 +497,12 @@ int main(int argc, char **argv)
 
 	/* BGP master init. */
 	bgp_master_init(frr_init(), buffer_size, addresses);
+
+	/* Setup config read callbacks */
+	cmd_init_config_callbacks(bgp_start_configuration,
+				  bgp_end_configuration);
+
+	bm->startup_time = monotime(NULL);
 	bm->port = bgp_port;
 	if (bgp_port == 0)
 		bgp_option_set(BGP_OPT_NO_LISTEN);

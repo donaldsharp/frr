@@ -177,6 +177,7 @@ struct bgp_master {
 #define BM_FLAG_GR_COMPLETE              (1 << 6)
 #define BM_FLAG_FAST_SHUTDOWN            (1 << 7)
 #define BM_FLAG_UPGRADE                  (1 << 8)
+#define BM_FLAG_CONFIG_LOADED            (1 << 9)
 
 #define BM_FLAG_GR_CONFIGURED \
 	(BM_FLAG_GR_RESTARTER | BM_FLAG_GR_DISABLED)
