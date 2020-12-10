@@ -19778,6 +19778,8 @@ static void bgp_config_end(void)
 		return;
 
 	SET_FLAG(bm->flags, BM_FLAG_CONFIG_LOADED);
+	if (bgp_in_graceful_restart())
+		bgp_gr_start_peers();
 
 	EVENT_OFF(t_bgp_cfg);
 

@@ -1904,7 +1904,9 @@ DECLARE_QOBJ_TYPE(peer);
 	(CHECK_FLAG((P)->flags, PEER_FLAG_SHUTDOWN) ||                         \
 	 CHECK_FLAG((P)->sflags, PEER_STATUS_PREFIX_OVERFLOW) ||               \
 	 CHECK_FLAG((P)->bgp->flags, BGP_FLAG_SHUTDOWN) ||                     \
-	 (P)->shut_during_cfg)
+	 (P)->shut_during_cfg ||                                               \
+	 (bgp_in_graceful_restart() &&                                         \
+	  !CHECK_FLAG(bm->flags, BM_FLAG_CONFIG_LOADED)))
 
 #define PEER_ROUTE_ADV_DELAY(peer)					       \
 	(CHECK_FLAG(peer->thread_flags, PEER_THREAD_SUBGRP_ADV_DELAY))
@@ -2504,6 +2506,7 @@ extern void bgp_shutdown_disable(struct bgp *bgp);
 extern void bgp_close(void);
 extern void bgp_free(struct bgp *);
 void bgp_gr_apply_running_config(void);
+extern void bgp_gr_start_peers(void);
 extern void bgp_process_maintenance_mode(struct vty *vty, bool enter);
 extern void bgp_process_fast_down(bool upgrade);
 
