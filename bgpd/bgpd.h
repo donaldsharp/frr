@@ -161,6 +161,7 @@ struct bgp_master {
 #define BM_FLAG_GRACEFUL_SHUTDOWN        (1 << 0)
 #define BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA (1 << 1)
 #define BM_FLAG_MAINTENANCE_MODE         (1 << 2)
+#define BM_FLAG_CONFIG_LOADED		 (1 << 3)
 #define BM_FLAG_IPV6_NO_AUTO_RA		 (1 << 8)
 
 	bool terminating;	/* global flag that sigint terminate seen */
