@@ -2553,6 +2553,12 @@ static void bgp_route_select_timer_expire(struct thread *thread)
 	XFREE(MTYPE_TMP, info);
 
 	/* Best path selection */
+	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+		zlog_debug(
+			"%s: Continuing deferred path selection for %s, #routes %d",
+			bgp->name_pretty, get_afi_safi_str(afi, safi, false),
+			bgp->gr_info[afi][safi].gr_deferred);
+
 	bgp_do_deferred_path_selection(bgp, afi, safi);
 }
 
@@ -3301,15 +3307,6 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 		thread_info = THREAD_ARG(t);
 		XFREE(MTYPE_TMP, thread_info);
 		THREAD_OFF(bgp->gr_info[afi][safi].t_route_select);
-	}
-
-	if (bgp->gr_info[afi][safi].gr_deferred) {
-		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-			zlog_debug(
-				"%s: Performing deferred path selection for %s, #routes %d",
-				bgp->name_pretty,
-				get_afi_safi_str(afi, safi, false),
-				bgp->gr_info[afi][safi].gr_deferred);
 	}
 
 	/* Process the route list */
