@@ -377,8 +377,10 @@ static void bgp_start_configuration(void)
 
 static void bgp_end_configuration(void)
 {
-	zlog_debug("Configuration has finished being read");
+	zlog_debug("Configuration has finished being read, processing GR info");
 	SET_FLAG(bm->flags, BM_FLAG_CONFIG_LOADED);
+	if (bgp_in_graceful_restart())
+		bgp_gr_start_peers();
 }
 
 static const struct frr_yang_module_info *const bgpd_yang_modules[] = {
