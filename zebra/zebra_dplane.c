@@ -3385,6 +3385,7 @@ int dplane_ctx_route_init_basic(struct zebra_dplane_ctx *ctx,
 	ctx->u.rinfo.zd_old_metric = re->metric;
 	ctx->zd_vrf_id = re->vrf_id;
 	ctx->u.rinfo.zd_mtu = re->mtu;
+	ctx->u.rinfo.zd_flags = re->flags;
 	ctx->u.rinfo.zd_nexthop_mtu = re->nexthop_mtu;
 	ctx->u.rinfo.zd_instance = re->instance;
 	ctx->u.rinfo.zd_tag = re->tag;
@@ -4228,6 +4229,7 @@ dplane_route_update_internal(struct route_node *rn,
 	enum zebra_dplane_result result = ZEBRA_DPLANE_REQUEST_FAILURE;
 	int ret = EINVAL;
 	struct zebra_dplane_ctx *ctx = NULL;
+	uint32_t flags;
 
 	/* Obtain context block */
 	ctx = dplane_ctx_alloc();
@@ -4279,16 +4281,24 @@ dplane_route_update_internal(struct route_node *rn,
 		 * or an upper level protocol has sent us the exact
 		 * same route again.
 		 */
-		if ((dplane_ctx_get_type(ctx) == dplane_ctx_get_old_type(ctx))
-		    && (dplane_ctx_get_nhe_id(ctx)
-			== dplane_ctx_get_old_nhe_id(ctx))
-		    && (dplane_ctx_get_nhe_id(ctx) >= ZEBRA_NHG_PROTO_LOWER)) {
+		flags = dplane_ctx_get_flags(ctx);
+		if ((dplane_ctx_get_type(ctx) == dplane_ctx_get_old_type(ctx)) &&
+		    (((dplane_ctx_get_nhe_id(ctx) == dplane_ctx_get_old_nhe_id(ctx)) &&
+		      (dplane_ctx_get_nhe_id(ctx) >= ZEBRA_NHG_PROTO_LOWER)) ||
+		     (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE &&
+		      (CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOADED) ||
+		       CHECK_FLAG(flags, ZEBRA_FLAG_TRAPPED) ||
+		       CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOAD_FAILED))))) {
 			struct nexthop *nexthop;
 
-			if (IS_ZEBRA_DEBUG_DPLANE)
-				zlog_debug(
-					"%s: Ignoring Route exactly the same",
-					__func__);
+			if (IS_ZEBRA_DEBUG_DPLANE_DETAIL) {
+				if (CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOADED) ||
+				    CHECK_FLAG(flags, ZEBRA_FLAG_TRAPPED) ||
+				    CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOAD_FAILED))
+					zlog_debug("%pRN: Already in ASIC no work to do", rn);
+				else
+					zlog_debug("%pRN: Ignoring Route exactly the same", rn);
+			}
 
 			for (ALL_NEXTHOPS_PTR(dplane_ctx_get_ng(ctx),
 					      nexthop)) {
