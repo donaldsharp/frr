@@ -307,7 +307,8 @@ void zebra_router_init(bool asic_offload, bool notify_on_ack)
 	/*
 	 * Cumulus does this by default
 	 */
-	if (system("ls /usr/bin/platform-detect") == 0) {
+	struct stat pfile;
+	if (stat("/usr/bin/platform-detect", &pfile) >= 0) {
 		if (system("/usr/bin/platform-detect | grep vx") == 0)
 			zrouter.asic_offloaded = false;
 		else

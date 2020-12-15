@@ -3963,6 +3963,14 @@ DEFUN (show_zebra,
 	vty_out(vty, "%s\n", out);
 	XFREE(MTYPE_TMP, out);
 
+	if (zrouter.asic_offloaded) {
+		if (!zrouter.notify_on_ack)
+			vty_out(vty, "Asic Offload is being used\n");
+		else
+			vty_out(vty, "Asic Offload notification is available but not being used\n");
+	} else
+		vty_out(vty, "There is no Asic offload\n");
+
 #if defined(HAVE_CSMGR)
 	vty_out(vty, "%s with CSM, CSM start mode %s (mapped to %s), current mode %s\n",
 		zrouter.frr_csm_regd ? "Registered" : "Not registered",

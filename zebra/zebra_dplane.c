@@ -133,6 +133,8 @@ struct dplane_route_info {
 	uint32_t zd_mtu;
 	uint32_t zd_nexthop_mtu;
 
+	uint32_t zd_flags;
+
 	/* Nexthop hash entry info */
 	struct dplane_nexthop_info nhe;
 
@@ -1376,6 +1378,13 @@ uint32_t dplane_ctx_get_old_metric(const struct zebra_dplane_ctx *ctx)
 	return ctx->u.rinfo.zd_old_metric;
 }
 
+uint32_t dplane_ctx_get_flags(const struct zebra_dplane_ctx *ctx)
+{
+	DPLANE_CTX_VALID(ctx);
+
+	return ctx->u.rinfo.zd_flags;
+}
+
 uint32_t dplane_ctx_get_mtu(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
@@ -2510,6 +2519,7 @@ int dplane_ctx_route_init(struct zebra_dplane_ctx *ctx, enum dplane_op_e op,
 	ctx->u.rinfo.zd_old_metric = re->metric;
 	ctx->zd_vrf_id = re->vrf_id;
 	ctx->u.rinfo.zd_mtu = re->mtu;
+	ctx->u.rinfo.zd_flags = re->flags;
 	ctx->u.rinfo.zd_nexthop_mtu = re->nexthop_mtu;
 	ctx->u.rinfo.zd_instance = re->instance;
 	ctx->u.rinfo.zd_tag = re->tag;
@@ -5377,6 +5387,18 @@ static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 			   dplane_ctx_get_ifname(ctx),
 			   dplane_ctx_get_ifindex(ctx), ctx);
 		break;
+/*
+ * Handler for kernel route updates
+ */
+static enum zebra_dplane_result
+kernel_dplane_route_update(struct zebra_dplane_ctx *ctx)
+{
+	uint32_t flags = dplane_ctx_get_flags(ctx);
+	char dest_str[PREFIX_STRLEN];
+
+	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL) {
+		prefix2str(dplane_ctx_get_dest(ctx),
+			   dest_str, sizeof(dest_str));
 
 	case DPLANE_OP_SYS_ROUTE_ADD:
 	case DPLANE_OP_SYS_ROUTE_DELETE:
@@ -5427,6 +5449,33 @@ static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 			   dplane_ctx_get_ifname(ctx),
 			   ctx->u.gre.link_ifindex);
 		break;
+	/*
+	 * If the old and new context type, and nexthop group id
+	 * are the same there is no need to send down a route replace
+	 * as that we know we have sent a nexthop group replace
+	 * or an upper level protocol has sent us the exact
+	 * same route again.
+	 */
+	if ((dplane_ctx_get_type(ctx) == dplane_ctx_get_old_type(ctx))
+	    && (((dplane_ctx_get_nhe_id(ctx) == dplane_ctx_get_old_nhe_id(ctx))
+		 && (dplane_ctx_get_nhe_id(ctx) >= ZEBRA_NHG_PROTO_LOWER))
+		|| (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE &&
+		    (CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOADED)
+		     || CHECK_FLAG(flags, ZEBRA_FLAG_TRAPPED)
+		     || CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOAD_FAILED))))) {
+		struct nexthop *nexthop;
+
+		if (IS_ZEBRA_DEBUG_DPLANE_DETAIL) {
+			if (CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOADED)
+			    || CHECK_FLAG(flags, ZEBRA_FLAG_TRAPPED)
+			    || CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOAD_FAILED))
+				zlog_debug("%s: Already in ASIC no work to do",
+					   dest_str);
+			else
+				zlog_debug(
+					"%s: Ignoring Route exactly the same",
+					dest_str);
+		}
 
 	case DPLANE_OP_INTF_ADDR_ADD:
 	case DPLANE_OP_INTF_ADDR_DEL:
