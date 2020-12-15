@@ -2046,14 +2046,8 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 					VRF_LOGNAME(vrf),
 					dplane_ctx_get_vrf(ctx), rn, re);
 		} else {
-			if (!zrouter.asic_offloaded ||
-			    (CHECK_FLAG(re->flags, ZEBRA_FLAG_OFFLOADED) ||
-			     CHECK_FLAG(re->flags,
-					ZEBRA_FLAG_OFFLOAD_FAILED))) {
-				UNSET_FLAG(re->status,
-					   ROUTE_ENTRY_ROUTE_REPLACING);
-				UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
-			}
+			UNSET_FLAG(re->status, ROUTE_ENTRY_ROUTE_REPLACING);
+			UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
 		}
 	}
 
