@@ -4048,6 +4048,13 @@ DEFUN (show_zebra,
 	XFREE(MTYPE_TMP, out);
 
 	ttable_del(table);
+	if (zrouter.asic_offloaded) {
+		if (!zrouter.notify_on_ack)
+			vty_out(vty, "Asic Offload is being used\n");
+		else
+			vty_out(vty, "Asic Offload notification is available but not being used\n");
+	} else
+		vty_out(vty, "There is no Asic offload\n");
 	vty_out(vty,
 		"                            Route      Route      Neighbor   LSP        LSP\n");
 	vty_out(vty,
