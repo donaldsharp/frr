@@ -66,6 +66,8 @@ extern "C" {
 #define ZEBRA_DEBUG_NHG             0x01
 #define ZEBRA_DEBUG_NHG_DETAILED    0x02
 
+#define ZEBRA_DEBUG_CSM 0x01
+
 #define ZEBRA_DEBUG_EVPN_MH_ES 0x01
 #define ZEBRA_DEBUG_EVPN_MH_NH 0x02
 #define ZEBRA_DEBUG_EVPN_MH_MAC 0x04
@@ -119,7 +121,9 @@ extern "C" {
 
 #define IS_ZEBRA_DEBUG_NHG (zebra_debug_nexthop & ZEBRA_DEBUG_NHG)
 
-#define IS_ZEBRA_DEBUG_NHG_DETAIL \
+#define IS_ZEBRA_DEBUG_CSM (zebra_debug_csm & ZEBRA_DEBUG_CSM)
+
+#define IS_ZEBRA_DEBUG_NHG_DETAIL                                              \
 	(zebra_debug_nexthop & ZEBRA_DEBUG_NHG_DETAILED)
 
 #define IS_ZEBRA_DEBUG_EVPN_MH_ES \
@@ -155,6 +159,7 @@ extern unsigned long zebra_debug_nexthop;
 extern unsigned long zebra_debug_evpn_mh;
 extern unsigned long zebra_debug_pbr;
 extern unsigned long zebra_debug_neigh;
+extern unsigned long zebra_debug_csm;
 
 extern void zebra_debug_init(void);
 
