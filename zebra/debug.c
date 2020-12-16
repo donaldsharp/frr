@@ -42,6 +42,7 @@ unsigned long zebra_debug_mlag;
 unsigned long zebra_debug_nexthop;
 unsigned long zebra_debug_evpn_mh;
 unsigned long zebra_debug_pbr;
+unsigned long zebra_debug_csm;
 
 DEFINE_HOOK(zebra_debug_show_debugging, (struct vty *vty), (vty));
 
@@ -134,6 +135,9 @@ DEFUN_NOSH (show_debugging_zebra,
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_ARP_ND_PKT)
 		vty_out(vty, "  Zebra EVPN-MH ARP-ND packet debugging is on\n");
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		vty_out(vty, "  Zebra CSM debugging is on\n");
 
 	hook_call(zebra_debug_show_debugging, vty);
 	return CMD_SUCCESS;
@@ -589,6 +593,21 @@ DEFPY (debug_zebra_nexthop,
 	return CMD_SUCCESS;
 }
 
+DEFPY (debug_zebra_csm, debug_zebra_csm_cmd,
+       "[no$no] debug zebra csm",
+       NO_STR
+       DEBUG_STR
+       "Zebra configuration\n"
+       "Debug zebra CSM\n")
+{
+	if (no)
+		zebra_debug_csm = 0;
+	else
+		SET_FLAG(zebra_debug_csm, ZEBRA_DEBUG_CSM);
+
+	return CMD_SUCCESS;
+}
+
 /* Debug node. */
 static int config_write_debug(struct vty *vty);
 struct cmd_node debug_node = {
@@ -705,6 +724,11 @@ static int config_write_debug(struct vty *vty)
 		write++;
 	}
 
+	if (IS_ZEBRA_DEBUG_CSM) {
+		vty_out(vty, "debug zebra csm\n");
+		write++;
+	}
+
 	if (CHECK_FLAG(zebra_debug_dplane, ZEBRA_DEBUG_DPLANE_DETAILED)) {
 		vty_out(vty, "debug zebra dplane detailed\n");
 		write++;
@@ -745,6 +769,7 @@ void zebra_debug_init(void)
 	zebra_debug_nht = 0;
 	zebra_debug_nexthop = 0;
 	zebra_debug_pbr = 0;
+	zebra_debug_csm = 0;
 
 	install_node(&debug_node);
 
@@ -796,6 +821,7 @@ void zebra_debug_init(void)
 	install_element(CONFIG_NODE, &debug_zebra_dplane_cmd);
 	install_element(CONFIG_NODE, &debug_zebra_nexthop_cmd);
 	install_element(CONFIG_NODE, &debug_zebra_pbr_cmd);
+	install_element(CONFIG_NODE, &debug_zebra_csm_cmd);
 
 	install_element(CONFIG_NODE, &no_debug_zebra_events_cmd);
 	install_element(CONFIG_NODE, &no_debug_zebra_nht_cmd);
