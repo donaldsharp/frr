@@ -128,6 +128,25 @@ static int nb_cli_schedule_command(struct vty *vty)
 
 	/* Schedule the commit operation. */
 	vty->pending_commit = 1;
+	THREAD_TIMER_OFF(vty->t_pending_commit);
+
+	/*
+	 * If we reached the maximum command batch size then apply all
+	 * commands and reset the batch size. No timers are needed in
+	 * this case because we might not receive commands anymore.
+	 *
+	 * Otherwise schedule a timer to flush the command list. We
+	 * must reschedule the timer every time we enter here to delay
+	 * their execution until the command stream stops or reaches
+	 * the maximum amount.
+	 */
+	vty->backoff_cmd_count++;
+	if (vty->backoff_cmd_count >= NB_CMD_BATCH_SIZE) {
+		(void)nb_cli_classic_commit(vty);
+		nb_cli_pending_commit_clear(vty);
+	} else
+		thread_add_timer_msec(master, nb_cli_pending_commit_cb, vty,
+				      100, &vty->t_pending_commit);
 
 	return CMD_SUCCESS;
 }
@@ -241,13 +260,7 @@ static int nb_cli_apply_changes_internal(struct vty *vty,
 	 * faster.
 	 */
 	if (frr_get_cli_mode() == FRR_CLI_CLASSIC) {
-		if (clear_pending) {
-			if (vty->pending_commit)
-				return nb_cli_pending_commit_check(vty);
-		} else if (vty->pending_allowed)
-			return nb_cli_schedule_command(vty);
-		assert(!vty->pending_commit);
-		return nb_cli_classic_commit(vty);
+		return nb_cli_schedule_command(vty);
 	}
 
 	return CMD_SUCCESS;
