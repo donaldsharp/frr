@@ -38,7 +38,7 @@ pathd=no
 # Check /etc/pam.d/frr if you intend to use "vtysh"!
 #
 vtysh_enable=yes
-zebra_options="  -A 127.0.0.1 -s 90000000"
+zebra_options="  -M dplane_dpdk -A 127.0.0.1 -s 90000000"
 bgpd_options="   -A 127.0.0.1"
 ospfd_options="  -A 127.0.0.1"
 ospf6d_options=" -A ::1"

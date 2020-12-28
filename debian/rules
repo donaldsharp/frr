@@ -71,6 +71,7 @@ override_dh_auto_configure:
 		--enable-vty-group=frrvty \
 		--enable-configfile-mask=0640 \
 		--enable-logfile-mask=0640 \
+		--enable-dp-dpdk=yes \
 		# end
 
 override_dh_auto_install:

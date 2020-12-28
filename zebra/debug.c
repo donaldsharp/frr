@@ -38,6 +38,7 @@ unsigned long zebra_debug_mpls;
 unsigned long zebra_debug_vxlan;
 unsigned long zebra_debug_pw;
 unsigned long zebra_debug_dplane;
+unsigned long zebra_debug_dplane_dpdk;
 unsigned long zebra_debug_mlag;
 unsigned long zebra_debug_nexthop;
 unsigned long zebra_debug_evpn_mh;
@@ -338,6 +339,29 @@ DEFUN (debug_zebra_pbr,
        "Debug zebra pbr events\n")
 {
 	SET_FLAG(zebra_debug_pbr, ZEBRA_DEBUG_PBR);
+	return CMD_SUCCESS;
+}
+
+DEFPY(debug_zebra_dplane_dpdk, debug_zebra_dplane_dpdk_cmd,
+      "[no$no] debug zebra dplane dpdk [detailed$detail]",
+      NO_STR DEBUG_STR
+      "Zebra configuration\n"
+      "Debug zebra dataplane events\n"
+      "Debug zebra DPDK offload events\n"
+      "Detailed debug information\n")
+{
+	if (no) {
+		UNSET_FLAG(zebra_debug_dplane_dpdk, ZEBRA_DEBUG_DPLANE_DPDK);
+		UNSET_FLAG(zebra_debug_dplane_dpdk,
+			   ZEBRA_DEBUG_DPLANE_DPDK_DETAIL);
+	} else {
+		SET_FLAG(zebra_debug_dplane_dpdk, ZEBRA_DEBUG_DPLANE_DPDK);
+
+		if (detail)
+			SET_FLAG(zebra_debug_dplane,
+				 ZEBRA_DEBUG_DPLANE_DPDK_DETAIL);
+	}
+
 	return CMD_SUCCESS;
 }
 
@@ -682,6 +706,14 @@ static int config_write_debug(struct vty *vty)
 		write++;
 	}
 
+	if (CHECK_FLAG(zebra_debug_dplane, ZEBRA_DEBUG_DPLANE_DPDK_DETAIL)) {
+		vty_out(vty, "debug zebra dplane dpdk detailed\n");
+		write++;
+	} else if (CHECK_FLAG(zebra_debug_dplane, ZEBRA_DEBUG_DPLANE_DPDK)) {
+		vty_out(vty, "debug zebra dplane dpdk\n");
+		write++;
+	}
+
 	if (CHECK_FLAG(zebra_debug_nexthop, ZEBRA_DEBUG_NHG_DETAILED)) {
 		vty_out(vty, "debug zebra nexthop detail\n");
 		write++;
@@ -709,6 +741,7 @@ void zebra_debug_init(void)
 	zebra_debug_vxlan = 0;
 	zebra_debug_pw = 0;
 	zebra_debug_dplane = 0;
+	zebra_debug_dplane_dpdk = 0;
 	zebra_debug_mlag = 0;
 	zebra_debug_evpn_mh = 0;
 	zebra_debug_nht = 0;
