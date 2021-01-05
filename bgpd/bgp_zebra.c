@@ -3490,7 +3490,17 @@ static bool bgp_zebra_label_manager_connect(void)
 
 static void bgp_zebra_capabilities(struct zclient_capabilities *cap)
 {
+	bool maint;
+	// bool gr;
+
 	bm->v6_with_v4_nexthops = cap->v6_with_v4_nexthop;
+	// gr = cap->graceful_restart;
+	maint = cap->maint_mode;
+	// if (gr)
+	//	SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART);
+
+	if (maint)
+		bgp_process_maintenance_mode(NULL, true);
 }
 
 void bgp_zebra_init(struct event_loop *master, unsigned short instance)
