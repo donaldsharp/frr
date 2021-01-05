@@ -3273,11 +3273,16 @@ static int bgp_zebra_handle_fast_down(ZAPI_CALLBACK_ARGS)
 
 static void bgp_zebra_capabilities(struct zclient_capabilities *cap)
 {
+	bool maint;
 	// bool gr;
 
 	// gr = cap->graceful_restart;
+	maint = cap->maint_mode;
 	// if (gr)
 	//	SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART);
+
+	if (maint)
+		bgp_process_maintenance_mode(NULL, true);
 }
 
 extern struct zebra_privs_t bgpd_privs;
