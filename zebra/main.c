@@ -511,8 +511,9 @@ int main(int argc, char **argv)
 	zrouter.startup_time = monotime(NULL);
 	event_add_timer(zrouter.master, rib_sweep_route, NULL, graceful_restart,
 			&zrouter.sweeper);
-#if defined(HAVE_CUMULUS)
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 	// zrouter.graceful_restart = (zrouter.frr_csm_smode == FAST_START);
+	zrouter.maint_mode = (zrouter.frr_csm_smode == MAINT);
 #endif
 
 	/* Needed for BSD routing socket. */

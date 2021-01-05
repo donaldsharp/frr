@@ -197,11 +197,16 @@ struct zebra_router {
 	/* RPF Lookup behavior */
 	enum multicast_mode ipv4_multicast_mode;
 
+	/* FRR fast/graceful restart info */
+	bool graceful_restart;
+
 	/*
 	 * Time for when we sweep the rib from old routes
 	 */
 	time_t startup_time;
 	struct event *sweeper;
+
+	bool maint_mode;
 
 #if defined(HAVE_CSMGR)
 	bool frr_csm_regd;

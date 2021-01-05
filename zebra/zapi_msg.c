@@ -2367,10 +2367,12 @@ static void zsend_capabilities(struct zserv *client, struct zebra_vrf *zvrf)
 	stream_putl(s, zrouter.multipath_num);
 	stream_putc(s, zebra_mlag_get_role());
 	stream_putc(s, zrouter.v6_with_v4_nexthop);
+	stream_putc(s, zrouter.graceful_restart);
+	stream_putc(s, zrouter.maint_mode);
 
-	zlog_notice("Sending capabilities to client %s: MPLS %s numMultipath %d MlagRole %d",
+	zlog_notice("Sending capabilities to client %s: MPLS %s numMultipath %d MaintMode %s MlagRole %d",
 		    zebra_route_string(client->proto), mpls_enabled ? "enabled" : "disabled",
-		    zrouter.multipath_num, zebra_mlag_get_role());
+		    zrouter.multipath_num, zrouter.maint_mode ? "on" : "off", zebra_mlag_get_role());
 
 	stream_putw_at(s, 0, stream_get_endp(s));
 	zserv_send_message(client, s);
