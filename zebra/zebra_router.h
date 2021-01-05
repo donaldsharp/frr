@@ -213,6 +213,8 @@ struct zebra_router {
 	time_t startup_time;
 	struct thread *sweeper;
 
+	bool maint_mode;
+
 #if defined(HAVE_CSMGR)
 	bool frr_csm_regd;
 	enum frr_csm_smode frr_csm_smode;

@@ -31,7 +31,8 @@
 enum frr_csm_smode {
 	COLD_START,        /* Cold start */
 	FAST_START,        /* Fast start, some forwarding info preserved */
-	WARM_START         /* Warm start, forwarding plane unaffected */
+	WARM_START,        /* Warm start, forwarding plane unaffected */
+	MAINT              /* Maintenance mode */
 };
 
 extern const char *frr_csm_smode_str[];

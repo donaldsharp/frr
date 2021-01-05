@@ -44,7 +44,8 @@
 #include "zebra/debug.h"
 #include "zebra/zebra_ns.h"
 
-const char *frr_csm_smode_str[] = {"cold start", "fast start", "warm start"};
+const char *frr_csm_smode_str[] = {"cold start", "fast start", "warm start",
+				   "maintenance"};
 
 extern struct zebra_privs_t zserv_privs;
 pthread_t csm_pthread;
@@ -62,6 +63,10 @@ static void convert_mode(Mode mode, enum frr_csm_smode *smode)
 	case REBOOT_WARM:
 	case SYS_UPGRADE_REBOOT_WARM:
 		*smode = WARM_START;
+		break;
+
+	case MAINTENANCE:
+		*smode = MAINT;
 		break;
 
 	default:

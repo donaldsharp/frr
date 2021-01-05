@@ -278,6 +278,7 @@ struct zclient_capabilities {
 	uint32_t ecmp;
 	bool mpls_enabled;
 	bool graceful_restart;
+	bool maint_mode;
 	enum mlag_role role;
 };
 
