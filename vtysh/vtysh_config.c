@@ -597,8 +597,17 @@ static int vtysh_read_file(FILE *confp, bool dry_run)
 	/* Execute configuration file. */
 	ret = vtysh_config_from_file(vty, confp);
 
-	if (!dry_run)
+	if (!dry_run) {
+		/*
+		 * XFRR_end_configuration is only accepted in config mode;
+		 * after reading a config file, we might not be in that node,
+		 * so switch back to it
+		 */
+		vtysh_execute_no_pager("end");
+		vtysh_execute_no_pager("configure terminal");
+
 		vtysh_execute_no_pager("XFRR_end_configuration");
+	}
 
 	vtysh_execute_no_pager("end");
 	vtysh_execute_no_pager("disable");
