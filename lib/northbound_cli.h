@@ -34,7 +34,7 @@ enum nb_cfg_format {
 };
 
 /** Amount of commands to batch. */
-#define NB_CMD_BATCH_SIZE 100
+#define NB_CMD_BATCH_SIZE 5000
 
 extern struct nb_config *vty_shared_candidate_config;
 

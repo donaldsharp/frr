@@ -97,7 +97,11 @@ static void nb_cli_pending_commit_clear(struct vty *vty)
 
 int nb_cli_pending_commit_check(struct vty *vty)
 {
-	int ret = CMD_SUCCESS;
+	fprintf(stderr, "timeout exceeded\n");
+	struct vty *vty = THREAD_ARG(thread);
+
+	(void)nb_cli_classic_commit(vty);
+	nb_cli_pending_commit_clear(vty);
 
 	if (vty->pending_commit) {
 		ret = nb_cli_classic_commit(vty);
@@ -142,11 +146,12 @@ static int nb_cli_schedule_command(struct vty *vty)
 	 */
 	vty->backoff_cmd_count++;
 	if (vty->backoff_cmd_count >= vty->backoff_cmd_max) {
+		fprintf(stderr, "backoff exceeded\n");
 		(void)nb_cli_classic_commit(vty);
 		nb_cli_pending_commit_clear(vty);
 	} else
 		thread_add_timer_msec(master, nb_cli_pending_commit_cb, vty,
-				      100, &vty->t_pending_commit);
+				      1000, &vty->t_pending_commit);
 
 	return CMD_SUCCESS;
 }
