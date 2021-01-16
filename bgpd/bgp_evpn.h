@@ -20,7 +20,7 @@ static inline int is_evpn_enabled(void)
 	struct bgp *bgp = NULL;
 
 	bgp = bgp_get_evpn();
-	return bgp ? EVPN_ENABLED(bgp) : 0;
+	return bgp ? bgp->advertise_all_vni : 0;
 }
 
 static inline int advertise_type5_routes(struct bgp *bgp_vrf,
