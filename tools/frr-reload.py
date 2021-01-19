@@ -226,6 +226,16 @@ def get_normalized_es_id(line):
     return line
 
 
+def get_normalized_bgp_default(line):
+    """
+    If 'router bgp <ASN> vrf default' is entered, we need to remove the
+    explicit "vrf default" so that the context information is created
+    correctly and configurations are matched appropriately.
+    """
+    new_line = line.replace("vrf default", "").strip()
+
+    return new_line
+
 def get_normalized_mac_ip_line(line):
     if line.startswith("evpn mh es"):
         return get_normalized_es_id(line)
@@ -263,6 +273,10 @@ class Config(object):
 
             # Compress duplicate whitespaces
             line = " ".join(line.split())
+
+            # remove 'vrf default' from 'router bgp x vrf default'
+            if line.startswith('router bgp') and "vrf default" in line:
+                line = get_normalized_bgp_default(line)
 
             if ":" in line:
                 line = get_normalized_mac_ip_line(line)
