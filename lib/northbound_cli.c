@@ -96,6 +96,16 @@ int nb_cli_pending_commit_check(struct vty *vty)
 
 static int nb_cli_schedule_command(struct vty *vty)
 {
+	/*
+	 * If we receive a `no ...` form of any command
+	 * we need to stop what we are doing and run that command
+	 * immediately.
+	 */
+	if (strstr(vty->buf, "no ")) {
+		(void)nb_cli_classic_commit(vty);
+		nb_cli_pending_commit_clear(vty);
+	}
+
 	/* Append command to dynamically sized buffer of scheduled commands. */
 	if (!vty->pending_cmds_buf) {
 		vty->pending_cmds_buflen = 4096;
