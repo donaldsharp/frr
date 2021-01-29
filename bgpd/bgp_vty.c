@@ -4964,10 +4964,10 @@ DEFUN_YANG (neighbor_set_peer_group,
 	int idx_word = 3;
 	char base_xpath[XPATH_MAXLEN];
 
-	if (peer_and_group_lookup_nb(vty, argv[idx_peer]->arg, base_xpath,
-				     sizeof(base_xpath), NULL)
-	    < 0)
-		return CMD_WARNING_CONFIG_FAILED;
+	snprintf(base_xpath, sizeof(base_xpath), FRR_BGP_NEIGHBOR_NUM_XPATH,
+		 argv[idx_peer]->arg, "");
+
+	nb_cli_enqueue_change(vty, ".", NB_OP_CREATE, NULL);
 
 	nb_cli_enqueue_change(vty, "./peer-group", NB_OP_MODIFY,
 			      argv[idx_word]->arg);
