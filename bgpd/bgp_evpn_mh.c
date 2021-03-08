@@ -4732,15 +4732,6 @@ static void bgp_evpn_path_nh_link(struct bgp *bgp_vrf, struct bgp_path_info *pi)
 			  ? pi->extra->mh_info->nh_info
 			  : NULL;
 
-	/* if NHG is not being used for this path we don't need to manage the
-	 * nexthops in bgp (they are managed by zebra instead)
-	 */
-	if (!(pi->attr->es_flags & ATTR_ES_L3_NHG_USE)) {
-		if (nh_info)
-			bgp_evpn_path_nh_unlink(nh_info);
-		return;
-	}
-
 	/* setup nh_info against the path if it doesn't aleady exist */
 	if (!nh_info)
 		nh_info = bgp_evpn_path_nh_info_new(pi);
