@@ -1313,6 +1313,8 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	mpls_label_t label;
 	struct bgp_sid_info *sid_info;
 	int nh_othervrf = 0;
+	bool is_evpn;
+	int has_valid_label = 0;
 	bool nh_updated = false;
 	bool do_wt_ecmp;
 	uint64_t cum_bw = 0;
@@ -1362,6 +1364,13 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	}
 
 	tag = info->attr->tag;
+
+	/* If the route's source is EVPN, flag as such. */
+	is_evpn = is_route_parent_evpn(info);
+#if 0
+	if (is_evpn)
+		SET_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE);
+#endif
 
 	if (peer->sort == BGP_PEER_IBGP || peer->sort == BGP_PEER_CONFED
 	    || info->sub_type == BGP_ROUTE_AGGREGATE) {
@@ -1511,9 +1520,11 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 		if (mpinfo->extra &&
 		    bgp_is_valid_label(&mpinfo->extra->label[0]) &&
+		    !is_evpn &&
 		    !CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN)) {
 			mpls_lse_decode(mpinfo->extra->label[0], &label, &ttl,
 					&exp, &bos);
+			has_valid_label = 1;
 
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_LABEL);
 
@@ -1613,8 +1624,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 	if (bgp_debug_zebra(p)) {
 		char nh_buf[INET6_ADDRSTRLEN];
-		char eth_buf[ETHER_ADDR_STRLEN + 7] = {'\0'};
-		char buf1[ETHER_ADDR_STRLEN];
 		char label_buf[20];
 		char sid_buf[20];
 		char segs_buf[256];
@@ -1655,7 +1664,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 			}
 
 			label_buf[0] = '\0';
-			eth_buf[0] = '\0';
 			segs_buf[0] = '\0';
 			if (CHECK_FLAG(api_nh->flags,
 				       ZAPI_NEXTHOP_FLAG_LABEL) &&
@@ -1670,15 +1678,20 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 				snprintf(segs_buf, sizeof(segs_buf), "segs %s",
 					 sid_buf);
 			}
+#if 0
 			if (CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN) &&
 			    !is_zero_mac(&api_nh->rmac))
 				snprintf(eth_buf, sizeof(eth_buf), " RMAC %s",
 					 prefix_mac2str(&api_nh->rmac,
 							buf1, sizeof(buf1)));
-			zlog_debug("  nhop [%d]: %s if %u VRF %u wt %u %s %s %s",
+#endif
+			zlog_debug("  nhop [%d]: %s if %u VRF %u wt %u %s %s",
 				   i + 1, nh_buf, api_nh->ifindex,
 				   api_nh->vrf_id, api_nh->weight,
-				   label_buf, segs_buf, eth_buf);
+				   label_buf, segs_buf);
+			if (has_valid_label)
+				snprintf(label_buf, sizeof(label_buf),
+					"label %u", api_nh->labels[0]);
 		}
 
 		int recursion_flag = 0;
@@ -1775,6 +1788,12 @@ void bgp_zebra_withdraw(const struct prefix *p, struct bgp_path_info *info,
 		SET_FLAG(api.message, ZAPI_MESSAGE_TABLEID);
 		api.tableid = info->attr->rmap_table_id;
 	}
+
+#if 0
+	/* If the route's source is EVPN, flag as such. */
+	if (is_route_parent_evpn(info))
+		SET_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE);
+#endif
 
 	if (bgp_debug_zebra(p))
 		zlog_debug("Tx route delete VRF %u %pFX", bgp->vrf_id,
