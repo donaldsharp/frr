@@ -1318,8 +1318,10 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 	/* If the route's source is EVPN, flag as such. */
 	is_evpn = is_route_parent_evpn(info);
+#if 0
 	if (is_evpn)
 		SET_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE);
+#endif
 
 	if (peer->sort == BGP_PEER_IBGP || peer->sort == BGP_PEER_CONFED
 	    || info->sub_type == BGP_ROUTE_AGGREGATE) {
@@ -1465,6 +1467,8 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		if (mpinfo->extra
 		    && bgp_is_valid_label(&mpinfo->extra->label[0])
 		    && !CHECK_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE)) {
+		    && !is_evpn) {
+			has_valid_label = 1;
 			label = label_pton(&mpinfo->extra->label[0]);
 
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_LABEL);
@@ -1564,8 +1568,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 	if (bgp_debug_zebra(p)) {
 		char nh_buf[INET6_ADDRSTRLEN];
-		char eth_buf[ETHER_ADDR_STRLEN + 7] = {'\0'};
-		char buf1[ETHER_ADDR_STRLEN];
 		char label_buf[20];
 		char sid_buf[20];
 		char segs_buf[256];
@@ -1619,6 +1621,9 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 				snprintf(segs_buf, sizeof(segs_buf), "segs %s",
 					 sid_buf);
 			}
+			if (has_valid_label)
+				snprintf(label_buf, sizeof(label_buf),
+					"label %u", api_nh->labels[0]);
 			if (CHECK_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE)
 			    && !is_zero_mac(&api_nh->rmac))
 				snprintf(eth_buf, sizeof(eth_buf), " RMAC %s",
@@ -1725,9 +1730,11 @@ void bgp_zebra_withdraw(const struct prefix *p, struct bgp_path_info *info,
 		api.tableid = info->attr->rmap_table_id;
 	}
 
+#if 0
 	/* If the route's source is EVPN, flag as such. */
 	if (is_route_parent_evpn(info))
 		SET_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE);
+#endif
 
 	if (bgp_debug_zebra(p))
 		zlog_debug("Tx route delete VRF %u %pFX", bgp->vrf_id,
