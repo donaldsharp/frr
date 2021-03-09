@@ -3457,14 +3457,6 @@ int rib_add_multipath_nhe(afi_t afi, safi_t safi, struct prefix *p,
 	if (src_p)
 		apply_mask_ipv6(src_p);
 
-	/* Set default distance by route type. */
-	if (re->distance == 0) {
-		if (same && zebra_router_notify_on_ack())
-			re->distance = same->distance;
-		else
-			re->distance = route_distance(re->type);
-	}
-
 	/* Lookup route node.*/
 	rn = srcdest_rnode_get(table, p, src_p);
 
@@ -3508,6 +3500,14 @@ int rib_add_multipath_nhe(afi_t afi, safi_t safi, struct prefix *p,
 			XFREE(MTYPE_RE, re);
 			return ret;
 		}
+	}
+
+	/* Set default distance by route type. */
+	if (re->distance == 0) {
+		if (same && !zebra_router_notify_on_ack())
+			re->distance = same->distance;
+		else
+			re->distance = route_distance(re->type);
 	}
 
 	/* If this route is kernel/connected route, notify the dataplane. */
