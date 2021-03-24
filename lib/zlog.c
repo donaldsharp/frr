@@ -79,6 +79,11 @@ static gid_t zlog_gid = -1;
 DECLARE_ATOMLIST(zlog_targets, struct zlog_target, head);
 static struct zlog_targets_head zlog_targets;
 
+/* Global setting for buffered vs immediate output. The default is
+ * per-pthread buffering.
+ */
+static bool default_immediate;
+
 /* cf. zlog.h for additional comments on this struct.
  *
  * Note: you MUST NOT pass the format string + va_list to non-FRR format
@@ -386,7 +391,7 @@ static void vzlog_tls(struct zlog_tls *zlog_tls, int prio,
 	struct zlog_msg *msg;
 	char *buf;
 	bool ignoremsg = true;
-	bool immediate = false;
+	bool immediate = default_immediate;
 
 	/* avoid further processing cost if no target wants this message */
 	rcu_read_lock();
@@ -638,6 +643,14 @@ struct zlog_target *zlog_target_replace(struct zlog_target *oldzt,
 	return oldzt;
 }
 
+/*
+ * Enable or disable 'immediate' output - default is to buffer
+ * each pthread's messages.
+ */
+void zlog_set_immediate(bool set_p)
+{
+	default_immediate = set_p;
+}
 
 /* common init */
 
