@@ -155,16 +155,18 @@ static inline int vrf_is_user_cfged(struct vrf *vrf)
 	return vrf && CHECK_FLAG(vrf->status, VRF_CONFIGURED);
 }
 
-/* Mark that VRF has user configuration */
-static inline void vrf_set_user_cfged(struct vrf *vrf)
+static inline uint32_t vrf_interface_count(struct vrf *vrf)
 {
-	SET_FLAG(vrf->status, VRF_CONFIGURED);
-}
+	uint32_t count = 0;
+	struct interface *ifp;
 
-/* Mark that VRF no longer has any user configuration */
-static inline void vrf_reset_user_cfged(struct vrf *vrf)
-{
-	UNSET_FLAG(vrf->status, VRF_CONFIGURED);
+	RB_FOREACH (ifp, if_name_head, &vrf->ifaces_by_name) {
+		/* skip the l3mdev */
+		if (strncmp(ifp->name, vrf->name, VRF_NAMSIZ) == 0)
+			continue;
+		count++;
+	}
+	return count;
 }
 
 /*

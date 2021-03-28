@@ -193,29 +193,6 @@ static int static_vrf_config_write(struct vty *vty)
 	return 0;
 }
 
-int static_vrf_has_config(struct static_vrf *svrf)
-{
-	struct route_table *table;
-	safi_t safi;
-	afi_t afi;
-
-	/*
-	 * NOTE: This is a don't care for the default VRF, but we go through
-	 * the motions to keep things consistent.
-	 */
-	for (afi = AFI_IP; afi < AFI_MAX; afi++) {
-		for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++) {
-			table = svrf->stable[afi][safi];
-			if (!table)
-				continue;
-			if (route_table_count(table))
-				return 1;
-		}
-	}
-
-	return 0;
-}
-
 void static_vrf_init(void)
 {
 	vrf_init(static_vrf_new, static_vrf_enable,
@@ -246,7 +223,7 @@ struct static_vrf *static_vty_get_unknown_vrf(const char *vrf_name)
 	if (!svrf)
 		return NULL;
 	/* Mark as having FRR configuration */
-	vrf_set_user_cfged(vrf);
+	SET_FLAG(vrf->status, VRF_CONFIGURED);
 
 	return svrf;
 }
