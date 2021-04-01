@@ -1175,7 +1175,9 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	struct bgp_path_info local_info;
 	struct bgp_path_info *mpinfo_cp = &local_info;
 	route_tag_t tag;
-	mpls_label_t label;
+	mpls_label_t *labels;
+	uint32_t num_labels = 0;
+	mpls_label_t nh_label;
 	int nh_othervrf = 0;
 	char buf_prefix[PREFIX_STRLEN];	/* filled in if we are debugging */
 	bool is_evpn;
@@ -1386,17 +1388,34 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		if (!nh_updated)
 			continue;
 
-		if (mpinfo->extra
-		    && bgp_is_valid_label(&mpinfo->extra->label[0])
-		    && !is_evpn) {
+		if (mpinfo->extra) {
+			labels = mpinfo->extra->label;
+			num_labels = mpinfo->extra->num_labels;
+		}
+
+		if (labels && (num_labels > 0)
+		    && (is_evpn || bgp_is_valid_label(&labels[0]))) {
+			enum lsp_types_t nh_label_type = ZEBRA_LSP_NONE;
+
+			if (is_evpn) {
+				/*
+				 * L3VNI is always last label. Type5 will only
+				 * have one label, Type2 will have two.
+				 */
+				nh_label = labels[num_labels - 1];
+				nh_label_type = ZEBRA_LSP_EVPN;
+
+			} else if (bgp_is_valid_label(&mpinfo->extra->label[0]))
+				nh_label = label_pton(&labels[0]);
+
 			has_valid_label = 1;
-			label = label_pton(&mpinfo->extra->label[0]);
 
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_LABEL);
-
 			api_nh->label_num = 1;
-			api_nh->labels[0] = label;
+			api_nh->label_type = nh_label_type;
+			api_nh->labels[0] = nh_label;
 		}
+
 		memcpy(&api_nh->rmac, &(mpinfo->attr->rmac),
 		       sizeof(struct ethaddr));
 		api_nh->weight = nh_weight;
