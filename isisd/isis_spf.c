@@ -2255,7 +2255,8 @@ static void isis_print_route(struct ttable *tt, const struct prefix *prefix,
 
 					label2str(
 						nexthop->label_stack->label[i],
-						buf_label, sizeof(buf_label));
+						0, buf_label,
+						sizeof(buf_label));
 					if (i != 0)
 						strlcat(buf_labels, "/",
 							sizeof(buf_labels));
@@ -2263,7 +2264,7 @@ static void isis_print_route(struct ttable *tt, const struct prefix *prefix,
 						sizeof(buf_labels));
 				}
 			} else if (nexthop->sr.present)
-				label2str(nexthop->sr.label, buf_labels,
+				label2str(nexthop->sr.label, 0, buf_labels,
 					  sizeof(buf_labels));
 			else
 				strlcpy(buf_labels, "-", sizeof(buf_labels));
