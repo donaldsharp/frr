@@ -80,6 +80,10 @@ struct zebra_l3vni_t_ {
 	struct hash *nh_table;
 };
 
+#define IS_ZL3VNI_SVD_BACKED(zl3vni)                                           \
+	(zl3vni->vxlan_if && zl3vni->vxlan_if->info                            \
+	 && IS_ZEBRA_VXLAN_IF_SVD((struct zebra_if *)zl3vni->vxlan_if->info))
+
 /* get the vx-intf name for l3vni */
 static inline const char *zl3vni_vxlan_if_name(zebra_l3vni_t *zl3vni)
 {

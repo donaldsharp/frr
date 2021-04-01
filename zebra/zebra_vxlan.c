@@ -69,6 +69,9 @@ DEFINE_MTYPE_STATIC(ZEBRA, ZVXLAN_SG, "zebra VxLAN multicast group");
 DEFINE_HOOK(zebra_rmac_update, (zebra_mac_t *rmac, zebra_l3vni_t *zl3vni,
 	    bool delete, const char *reason), (rmac, zl3vni, delete, reason))
 
+/* Single VXlan Device Global Neigh Table */
+struct hash *svd_nh_table;
+
 /* static function declarations */
 static void zevpn_print_neigh_hash_all_evpn(struct hash_bucket *bucket,
 					    void **args);
@@ -88,6 +91,11 @@ static zebra_neigh_t *zl3vni_nh_add(zebra_l3vni_t *zl3vni,
 static int zl3vni_nh_del(zebra_l3vni_t *zl3vni, zebra_neigh_t *n);
 static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n);
 static int zl3vni_nh_uninstall(zebra_l3vni_t *zl3vni, zebra_neigh_t *n);
+static zebra_neigh_t *svd_nh_add(const struct ipaddr *vtep_ip,
+				 const struct ethaddr *rmac);
+static int svd_nh_del(zebra_neigh_t *n);
+static int svd_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n);
+static int svd_nh_uninstall(zebra_l3vni_t *zl3vni, zebra_neigh_t *n);
 
 /* l3-vni rmac related APIs */
 static void zl3vni_print_rmac_hash(struct hash_bucket *, void *);
@@ -1324,21 +1332,40 @@ static void zl3vni_remote_rmac_del(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac,
 }
 
 /*
- * Look up nh hash entry on a l3-vni.
+ * Common code for look up of nh hash entry.
  */
-static zebra_neigh_t *zl3vni_nh_lookup(zebra_l3vni_t *zl3vni,
-				       const struct ipaddr *ip)
+static zebra_neigh_t *_nh_lookup(zebra_l3vni_t *zl3vni, const struct ipaddr *ip)
 {
 	zebra_neigh_t tmp;
 	zebra_neigh_t *n;
 
 	memset(&tmp, 0, sizeof(tmp));
 	memcpy(&tmp.ip, ip, sizeof(struct ipaddr));
-	n = hash_lookup(zl3vni->nh_table, &tmp);
+
+	if (zl3vni)
+		n = hash_lookup(zl3vni->nh_table, &tmp);
+	else
+		n = hash_lookup(svd_nh_table, &tmp);
 
 	return n;
 }
 
+/*
+ * Look up nh hash entry on a l3-vni.
+ */
+static zebra_neigh_t *zl3vni_nh_lookup(zebra_l3vni_t *zl3vni,
+				       const struct ipaddr *ip)
+{
+	return _nh_lookup(zl3vni, ip);
+}
+
+/*
+ * Look up nh hash entry on a SVD.
+ */
+static zebra_neigh_t *svd_nh_lookup(const struct ipaddr *ip)
+{
+	return _nh_lookup(NULL, ip);
+}
 
 /*
  * Callback to allocate NH hash entry on L3-VNI.
@@ -1355,18 +1382,22 @@ static void *zl3vni_nh_alloc(void *p)
 }
 
 /*
- * Add neighbor entry.
+ * Common code for neigh add.
  */
-static zebra_neigh_t *zl3vni_nh_add(zebra_l3vni_t *zl3vni,
-				    const struct ipaddr *ip,
-				    const struct ethaddr *mac)
+static zebra_neigh_t *_nh_add(zebra_l3vni_t *zl3vni, const struct ipaddr *ip,
+			      const struct ethaddr *mac)
 {
 	zebra_neigh_t tmp_n;
 	zebra_neigh_t *n = NULL;
 
 	memset(&tmp_n, 0, sizeof(zebra_neigh_t));
 	memcpy(&tmp_n.ip, ip, sizeof(struct ipaddr));
-	n = hash_get(zl3vni->nh_table, &tmp_n, zl3vni_nh_alloc);
+
+	if (zl3vni)
+		n = hash_get(zl3vni->nh_table, &tmp_n, zl3vni_nh_alloc);
+	else
+		n = hash_get(svd_nh_table, &tmp_n, zl3vni_nh_alloc);
+
 	assert(n);
 
 	RB_INIT(host_rb_tree_entry, &n->host_rb);
@@ -1376,6 +1407,16 @@ static zebra_neigh_t *zl3vni_nh_add(zebra_l3vni_t *zl3vni,
 	SET_FLAG(n->flags, ZEBRA_NEIGH_REMOTE_NH);
 
 	return n;
+}
+
+/*
+ * Add neighbor entry.
+ */
+static zebra_neigh_t *zl3vni_nh_add(zebra_l3vni_t *zl3vni,
+				    const struct ipaddr *ip,
+				    const struct ethaddr *mac)
+{
+	return _nh_add(zl3vni, ip, mac);
 }
 
 /*
@@ -1400,14 +1441,38 @@ static int zl3vni_nh_del(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 }
 
 /*
- * Install remote nh as neigh into the kernel.
+ * Add Single VXlan Device neighbor entry.
  */
-static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
+static zebra_neigh_t *svd_nh_add(const struct ipaddr *ip,
+				 const struct ethaddr *mac)
+{
+	return _nh_add(NULL, ip, mac);
+}
+
+/*
+ * Del Single VXlan Device neighbor entry.
+ */
+static int svd_nh_del(zebra_neigh_t *n)
+{
+	if (n->refcnt > 0)
+		return -1;
+
+	hash_release(svd_nh_table, n);
+	XFREE(MTYPE_L3NEIGH, n);
+
+	return 0;
+}
+
+/*
+ * Common code to install remote nh as neigh into the kernel.
+ */
+static int _nh_install(zebra_l3vni_t *zl3vni, struct interface *ifp,
+		       zebra_neigh_t *n)
 {
 	uint8_t flags;
 	int ret = 0;
 
-	if (!is_l3vni_oper_up(zl3vni))
+	if (zl3vni && !is_l3vni_oper_up(zl3vni))
 		return -1;
 
 	if (!(n->flags & ZEBRA_NEIGH_REMOTE)
@@ -1418,10 +1483,35 @@ static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 	if (n->flags & ZEBRA_NEIGH_ROUTER_FLAG)
 		flags |= DPLANE_NTF_ROUTER;
 
-	dplane_rem_neigh_add(zl3vni->svi_if, &n->ip, &n->emac, flags,
-			false /*was_static*/);
+	dplane_rem_neigh_add(ifp, &n->ip, &n->emac, flags,
+			     false /*was_static*/);
 
 	return ret;
+}
+
+/*
+ * Common code to uninstall remote nh from the kernel.
+ */
+static int _nh_uninstall(struct interface *ifp, zebra_neigh_t *n)
+{
+	if (!(n->flags & ZEBRA_NEIGH_REMOTE)
+	    || !(n->flags & ZEBRA_NEIGH_REMOTE_NH))
+		return 0;
+
+	if (!ifp || !if_is_operative(ifp))
+		return 0;
+
+	dplane_rem_neigh_delete(ifp, &n->ip);
+
+	return 0;
+}
+
+/*
+ * Install remote nh as neigh into the kernel.
+ */
+static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
+{
+	return _nh_install(zl3vni, zl3vni->svi_if, n);
 }
 
 /*
@@ -1429,19 +1519,26 @@ static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
  */
 static int zl3vni_nh_uninstall(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 {
-	if (!(n->flags & ZEBRA_NEIGH_REMOTE)
-	    || !(n->flags & ZEBRA_NEIGH_REMOTE_NH))
-		return 0;
-
-	if (!zl3vni->svi_if || !if_is_operative(zl3vni->svi_if))
-		return 0;
-
-	dplane_rem_neigh_delete(zl3vni->svi_if, &n->ip);
-
-	return 0;
+	return _nh_uninstall(zl3vni->svi_if, n);
 }
 
-/* add remote vtep as a neigh entry */
+/*
+ * Install SVD remote nh as neigh into the kernel.
+ */
+static int svd_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
+{
+	return _nh_install(zl3vni, zl3vni->vxlan_if, n);
+}
+
+/*
+ * Uninstall SVD remote nh from the kernel.
+ */
+static int svd_nh_uninstall(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
+{
+	return _nh_uninstall(zl3vni->vxlan_if, n);
+}
+
+/* Add remote vtep as a neigh entry */
 static int zl3vni_remote_nh_add(zebra_l3vni_t *zl3vni,
 				const struct ipaddr *vtep_ip,
 				const struct ethaddr *rmac,
@@ -1487,7 +1584,7 @@ static int zl3vni_remote_nh_add(zebra_l3vni_t *zl3vni,
 	return 0;
 }
 
-/* handle nh neigh delete */
+/* Del remote vtep as a neigh entry */
 static void zl3vni_remote_nh_del(zebra_l3vni_t *zl3vni, zebra_neigh_t *nh,
 				 struct prefix *host_prefix)
 {
@@ -1500,6 +1597,101 @@ static void zl3vni_remote_nh_del(zebra_l3vni_t *zl3vni, zebra_neigh_t *nh,
 		/* delete the nh entry */
 		zl3vni_nh_del(zl3vni, nh);
 	}
+}
+
+/* Add remote vtep as a SVD neigh entry */
+static int svd_remote_nh_add(zebra_l3vni_t *zl3vni,
+			     const struct ipaddr *vtep_ip,
+			     const struct ethaddr *rmac,
+			     const struct prefix *host_prefix)
+{
+	char buf[ETHER_ADDR_STRLEN];
+	char buf1[ETHER_ADDR_STRLEN];
+	char buf2[INET6_ADDRSTRLEN];
+	zebra_neigh_t *nh = NULL;
+
+	/* SVD backed VNI check */
+	if (!IS_ZL3VNI_SVD_BACKED(zl3vni))
+		return 0;
+
+	/* Create the SVD next hop entry, or update its mac, if necessary. */
+	nh = svd_nh_lookup(vtep_ip);
+	if (!nh) {
+		nh = svd_nh_add(vtep_ip, rmac);
+		if (!nh) {
+			zlog_debug(
+				"Failed to add NH %s as SVD Neigh (RMAC %s prefix %pFX)",
+				ipaddr2str(vtep_ip, buf1, sizeof(buf2)),
+				prefix_mac2str(rmac, buf, sizeof(buf)),
+				host_prefix);
+			return -1;
+		}
+
+	} else if (memcmp(&nh->emac, rmac, ETH_ALEN) != 0) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"SVD RMAC change(%s --> %s) for nexthop %s, prefix %pFX",
+				prefix_mac2str(&nh->emac, buf, sizeof(buf)),
+				prefix_mac2str(rmac, buf1, sizeof(buf1)),
+				ipaddr2str(vtep_ip, buf2, sizeof(buf2)),
+				host_prefix);
+
+		memcpy(&nh->emac, rmac, ETH_ALEN);
+		/* install (update) the nh neigh in kernel */
+		svd_nh_install(zl3vni, nh);
+
+		/* Don't increment refcnt change */
+		return 0;
+	}
+
+	nh->refcnt++;
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug("SVD NH ADD refcnt (%u) for nexthop %s", nh->refcnt,
+			   ipaddr2str(vtep_ip, buf, sizeof(buf2)));
+
+	/*
+	 * Install the nh neigh in kernel if this is the first time we
+	 * have seen it.
+	 */
+	if (nh->refcnt == 1)
+		svd_nh_install(zl3vni, nh);
+
+	return 0;
+}
+
+/* Del remote vtep as a SVD neigh entry */
+static int svd_remote_nh_del(zebra_l3vni_t *zl3vni,
+			     const struct ipaddr *vtep_ip)
+{
+	char buf[INET6_ADDRSTRLEN];
+	zebra_neigh_t *nh;
+
+	/* SVD backed VNI check */
+	if (!IS_ZL3VNI_SVD_BACKED(zl3vni))
+		return 0;
+
+	nh = svd_nh_lookup(vtep_ip);
+	if (!nh) {
+		zlog_debug("Failed to del NH %s as SVD Neigh",
+			   ipaddr2str(vtep_ip, buf, sizeof(buf)));
+
+		return -1;
+	}
+
+	nh->refcnt--;
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug("SVD NH Del refcnt (%u) for nexthop %s", nh->refcnt,
+			   ipaddr2str(vtep_ip, buf, sizeof(buf)));
+
+	/* Last refcnt on NH, remove it completely. */
+	if (nh->refcnt == 0) {
+		svd_nh_uninstall(zl3vni, nh);
+		svd_nh_del(nh);
+	}
+
+	return 0;
 }
 
 /* handle neigh update from kernel - the only thing of interest is to
@@ -2134,6 +2326,9 @@ void zebra_vxlan_evpn_vrf_route_add(vrf_id_t vrf_id, const struct ethaddr *rmac,
 	 */
 	zl3vni_remote_nh_add(zl3vni, vtep_ip, rmac, host_prefix);
 
+	/* Add SVD next hop neighbor */
+	svd_remote_nh_add(zl3vni, vtep_ip, rmac, host_prefix);
+
 	/*
 	 * if the remote vtep is a ipv4 mapped ipv6 address convert it to ipv4
 	 * address. Rmac is programmed against the ipv4 vtep because we only
@@ -2176,6 +2371,9 @@ void zebra_vxlan_evpn_vrf_route_del(vrf_id_t vrf_id,
 
 	/* delete the next hop entry */
 	zl3vni_remote_nh_del(zl3vni, nh, host_prefix);
+
+	/* Delete SVD next hop entry */
+	svd_remote_nh_del(zl3vni, vtep_ip);
 
 	/* delete the rmac entry */
 	if (zrmac)
@@ -5290,6 +5488,9 @@ void zebra_vxlan_init(void)
 {
 	zrouter.l3vni_table = hash_create(l3vni_hash_keymake, l3vni_hash_cmp,
 					  "Zebra VRF L3 VNI table");
+
+	svd_nh_table = zebra_neigh_db_create("Zebra SVD next-hop table");
+
 	zrouter.evpn_vrf = NULL;
 	zebra_evpn_mh_init();
 }
@@ -5311,6 +5512,42 @@ ifindex_t get_l3vni_svi_ifindex(vrf_id_t vrf_id)
 		return 0;
 
 	return zl3vni->svi_if->ifindex;
+}
+
+/* get the l3vni vxlan ifindex */
+ifindex_t get_l3vni_vxlan_ifindex(vrf_id_t vrf_id)
+{
+	zebra_l3vni_t *zl3vni = NULL;
+
+	zl3vni = zl3vni_from_vrf(vrf_id);
+	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+		return 0;
+
+	return zl3vni->vxlan_if->ifindex;
+}
+
+/* get the l3vni vni */
+vni_t get_l3vni_vni(vrf_id_t vrf_id)
+{
+	zebra_l3vni_t *zl3vni = NULL;
+
+	zl3vni = zl3vni_from_vrf(vrf_id);
+	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+		return 0;
+
+	return zl3vni->vni;
+}
+
+/* is the vrf l3vni SVD backed? */
+bool is_vrf_l3vni_svd_backed(vrf_id_t vrf_id)
+{
+	zebra_l3vni_t *zl3vni = NULL;
+
+	zl3vni = zl3vni_from_vrf(vrf_id);
+	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+		return false;
+
+	return IS_ZL3VNI_SVD_BACKED(zl3vni);
 }
 
 /************************** vxlan SG cache management ************************/

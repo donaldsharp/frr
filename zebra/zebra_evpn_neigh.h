@@ -65,6 +65,9 @@ struct zebra_neigh_t_ {
 
 	zebra_evpn_t *zevpn;
 
+	/* Refcnt - Only used by SVD neighs currently */
+	uint32_t refcnt;
+
 	uint32_t flags;
 #define ZEBRA_NEIGH_LOCAL 0x01
 #define ZEBRA_NEIGH_REMOTE 0x02
