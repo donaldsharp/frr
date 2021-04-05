@@ -2211,8 +2211,11 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 
 	if ((!fpm && kernel_nexthops_supported()
 	     && (!proto_nexthops_only()
-		 || is_proto_nhg(dplane_ctx_get_nhe_id(ctx), 0)))
+		 || is_proto_nhg(dplane_ctx_get_nhe_id(ctx), 0))
+	     && /* CUMULUS ONLY */ !nexthop_group_has_label(
+		     dplane_ctx_get_ng(ctx)))
 	    || (fpm && force_nhg)) {
+
 		/* Kernel supports nexthop objects */
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug("%s: %pFX nhg_id is %u", __func__, p,
@@ -2573,6 +2576,15 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 		if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_NHG)
 			zlog_debug(
 				"%s: nhg_id %u (%s): proto-based nexthops only, ignoring",
+				__func__, id, zebra_route_string(type));
+		return 0;
+	}
+
+	/* Cumulus only */
+	if (nexthop_group_has_label(dplane_ctx_get_nhe_ng(ctx))) {
+		if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_NHG)
+			zlog_debug(
+				"%s: nhg_id %u (%s): labeled NHGs not supported, ignoring",
 				__func__, id, zebra_route_string(type));
 		return 0;
 	}
