@@ -192,6 +192,7 @@ int lib_interface_gmp_address_family_static_group_create(
 		struct nb_cb_create_args *args);
 int lib_interface_gmp_address_family_static_group_destroy(
 		struct nb_cb_destroy_args *args);
+int pim_cmd_interface_add(struct interface *ifp);
 
 /*
  * Callback registered with routing_nb lib to validate only
