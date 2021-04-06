@@ -552,12 +552,12 @@ static int zebra_vxlan_if_vni_entry_up_callback(struct zebra_if *zif,
 
 static void zebra_vxlan_if_vni_clean(struct hash_bucket *bucket, void *arg)
 {
-	struct interface *ifp;
+	struct zebra_if *zif;
 	struct zebra_vxlan_vni *vni;
 
-	ifp = (struct interface *)arg;
+	zif = (struct zebra_if *)arg;
 	vni = (struct zebra_vxlan_vni *)bucket->data;
-	zebra_vxlan_if_vni_del(ifp, vni->vni);
+	zebra_vxlan_if_vni_entry_del(zif, vni);
 }
 
 void zebra_vxlan_vni_free(void *arg)
@@ -727,7 +727,7 @@ int zebra_vxlan_if_vni_table_add_update(struct interface *ifp, struct hash *vni_
 	/* release kernel deleted vnis */
 	if (old_vni_table) {
 		if (hashcount(old_vni_table))
-			hash_iterate(old_vni_table, zebra_vxlan_if_vni_clean, ifp);
+			hash_iterate(old_vni_table, zebra_vxlan_if_vni_clean, zif);
 		zebra_vxlan_vni_table_destroy(old_vni_table);
 	}
 
