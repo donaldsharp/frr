@@ -195,4 +195,10 @@ extern void bgp_evpn_init(struct bgp *bgp);
 extern int bgp_evpn_get_type5_prefixlen(const struct prefix *pfx);
 extern bool bgp_evpn_is_prefix_nht_supported(const struct prefix *pfx);
 extern void update_advertise_vrf_routes(struct bgp *bgp_vrf);
+extern mpls_label_t *bgp_evpn_path_info_labels_get_l3vni(mpls_label_t *labels,
+							 uint32_t num_labels);
+extern vni_t bgp_evpn_path_info_get_l3vni(const struct bgp_path_info *pi);
+extern bool bgp_evpn_mpath_has_dvni(const struct bgp *bgp_vrf,
+				    struct bgp_path_info *mpinfo);
+
 #endif /* _QUAGGA_BGP_EVPN_H */
