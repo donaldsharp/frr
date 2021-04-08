@@ -1793,8 +1793,7 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 				zebra_evpn_arp_nd_if_update(ifp->info, false);
 		}
 
-		if (!IS_ZEBRA_IF_VRF(ifp))
-			if_delete_update(ifp);
+		if_delete_update(ifp);
 	}
 
 	return 0;
