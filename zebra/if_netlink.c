@@ -1611,6 +1611,16 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 				zebra_l2if_update_bond_slave(ifp, bond_ifindex,
 							     bypass);
 
+
+			/* TEMPORARY, for debugging */
+			if (IS_ZEBRA_IF_BRIDGE(ifp)) {
+				zif = ifp->info;
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"RTM_NEWLINK ADD for %s(%u), vlan-aware %d",
+						name, ifp->ifindex,
+						IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(zif));
+			}
 			if (tb[IFLA_PROTO_DOWN]) {
 				uint8_t protodown;
 
@@ -1736,6 +1746,15 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			else if (IS_ZEBRA_IF_BOND_SLAVE(ifp) || was_bond_slave)
 				zebra_l2if_update_bond_slave(ifp, bond_ifindex,
 							     bypass);
+
+			/* TEMPORARY, for debugging */
+			if (IS_ZEBRA_IF_BRIDGE(ifp)) {
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"RTM_NEWLINK update for %s(%u), vlan-aware %d",
+						name, ifp->ifindex,
+						IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(zif));
+			}
 		}
 
 		zif = ifp->info;
