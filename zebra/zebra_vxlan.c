@@ -1789,8 +1789,9 @@ static zebra_l3vni_t *zl3vni_from_svi(struct interface *ifp,
 			if (zif->brslave_info.br_if != br_if)
 				continue;
 
-			vni_id = zebra_vxlan_if_access_vlan_vni_find(zif, vid, br_if);
-			found = 1;
+			vni_id = zebra_vxlan_if_access_vlan_vni_find(zif, br_if);
+			if (vni_id)
+				found = 1;
 			break;
 		}
 	}
