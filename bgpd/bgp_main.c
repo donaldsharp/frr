@@ -66,6 +66,7 @@
 #include "bgpd/bgp_evpn_mh.h"
 #include "bgpd/bgp_nht.h"
 #include "bgpd/bgp_routemap_nb.h"
+#include "bgpd/bgp_community_alias.h"
 
 #ifdef ENABLE_BGP_VNC
 #include "bgpd/rfapi/rfapi_backend.h"
@@ -249,6 +250,8 @@ static __attribute__((__noreturn__)) void bgp_exit(int status)
 
 	/* reverse community_list_init */
 	community_list_terminate(bgp_clist);
+
+	bgp_community_alias_list_free();
 
 	bgp_vrf_terminate();
 #ifdef ENABLE_BGP_VNC

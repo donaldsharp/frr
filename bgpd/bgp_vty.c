@@ -45,6 +45,7 @@
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_community.h"
+#include "bgpd/bgp_community_alias.h"
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_lcommunity.h"
 #include "bgpd/bgp_damp.h"
@@ -1497,6 +1498,27 @@ void cli_show_router_bgp_router_id(struct vty *vty, struct lyd_node *dnode,
 				   bool show_defaults)
 {
 	vty_out(vty, " bgp router-id %s\n", yang_dnode_get_string(dnode, NULL));
+}
+
+DEFPY(bgp_community_alias, bgp_community_alias_cmd,
+      "[no$no] bgp community alias WORD$community WORD$alias",
+      NO_STR BGP_STR
+      "Add community specific parameters\n"
+      "Create an alias for a community\n"
+      "Community (AA:BB or AA:BB:CC)\n"
+      "Alias name\n")
+{
+	if (!bgp_community_alias_list)
+		bgp_community_alias_list = list_new();
+
+	if (no) {
+		bgp_community_alias_list_remove_entry(community);
+	} else {
+		if (!bgp_community_alias_list_has_entry(community, alias))
+			bgp_community_alias_list_add_entry(community, alias);
+	}
+
+	return CMD_SUCCESS;
 }
 
 DEFPY (bgp_global_suppress_fib_pending,
@@ -17363,6 +17385,8 @@ int bgp_config_write(struct vty *vty)
 		vty_out(vty, "\n");
 	}
 
+	bgp_community_alias_list_write(vty);
+
 	if (bm->wait_for_fib)
 		vty_out(vty, "bgp suppress-fib-pending\n");
 
@@ -17918,6 +17942,9 @@ void bgp_vty_init(void)
 	/* bgp route-map delay-timer commands. */
 	install_element(CONFIG_NODE, &bgp_set_route_map_delay_timer_cmd);
 	install_element(CONFIG_NODE, &no_bgp_set_route_map_delay_timer_cmd);
+
+	/* bgp community alias */
+	install_element(CONFIG_NODE, &bgp_community_alias_cmd);
 
 	/* global bgp update-delay command */
 	install_element(CONFIG_NODE, &bgp_global_update_delay_cmd);
