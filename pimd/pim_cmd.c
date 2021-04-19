@@ -6997,7 +6997,7 @@ DEFUN (no_ip_pim_rp_keep_alive,
        "Seconds\n")
 {
 	PIM_DECLVAR_CONTEXT(vrf, pim);
-	pim->rp_keep_alive_time = PIM_KEEPALIVE_PERIOD;
+	pim->rp_keep_alive_time = PIM_RP_KEEPALIVE_PERIOD;
 	return CMD_SUCCESS;
 }
 
@@ -11115,9 +11115,7 @@ void pim_cmd_init(void)
 	install_element(CONFIG_NODE, &ip_pim_ssm_prefix_list_cmd);
 	install_element(VRF_NODE, &ip_pim_ssm_prefix_list_cmd);
 	install_element(CONFIG_NODE, &ip_pim_register_suppress_cmd);
-	install_element(VRF_NODE, &ip_pim_register_suppress_cmd);
 	install_element(CONFIG_NODE, &no_ip_pim_register_suppress_cmd);
-	install_element(VRF_NODE, &no_ip_pim_register_suppress_cmd);
 	install_element(CONFIG_NODE, &ip_pim_spt_switchover_infinity_cmd);
 	install_element(VRF_NODE, &ip_pim_spt_switchover_infinity_cmd);
 	install_element(CONFIG_NODE, &ip_pim_spt_switchover_infinity_plist_cmd);
@@ -11130,9 +11128,7 @@ void pim_cmd_init(void)
 	install_element(CONFIG_NODE, &pim_register_accept_list_cmd);
 	install_element(VRF_NODE, &pim_register_accept_list_cmd);
 	install_element(CONFIG_NODE, &ip_pim_joinprune_time_cmd);
-	install_element(VRF_NODE, &ip_pim_joinprune_time_cmd);
 	install_element(CONFIG_NODE, &no_ip_pim_joinprune_time_cmd);
-	install_element(VRF_NODE, &no_ip_pim_joinprune_time_cmd);
 	install_element(CONFIG_NODE, &ip_pim_keep_alive_cmd);
 	install_element(VRF_NODE, &ip_pim_keep_alive_cmd);
 	install_element(CONFIG_NODE, &ip_pim_rp_keep_alive_cmd);
@@ -11142,9 +11138,7 @@ void pim_cmd_init(void)
 	install_element(CONFIG_NODE, &no_ip_pim_rp_keep_alive_cmd);
 	install_element(VRF_NODE, &no_ip_pim_rp_keep_alive_cmd);
 	install_element(CONFIG_NODE, &ip_pim_packets_cmd);
-	install_element(VRF_NODE, &ip_pim_packets_cmd);
 	install_element(CONFIG_NODE, &no_ip_pim_packets_cmd);
-	install_element(VRF_NODE, &no_ip_pim_packets_cmd);
 	install_element(CONFIG_NODE, &ip_pim_v6_secondary_cmd);
 	install_element(VRF_NODE, &ip_pim_v6_secondary_cmd);
 	install_element(CONFIG_NODE, &no_ip_pim_v6_secondary_cmd);
