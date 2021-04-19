@@ -19,105 +19,81 @@
  */
 
 #include "memory.h"
-#include "linklist.h"
+#include "lib/jhash.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_community_alias.h"
 
-struct list *bgp_community_alias_list = NULL;
+static struct hash *bgp_community_alias_hash;
 
-static void bgp_community_alias_free(struct community_alias *ca)
+static unsigned int bgp_community_alias_hash_alloc(const void *p)
 {
-	listnode_delete(bgp_community_alias_list, ca);
-	XFREE(MTYPE_COMMUNITY_ALIAS_STR, ca->community);
-	XFREE(MTYPE_COMMUNITY_ALIAS_STR, ca->alias);
-	XFREE(MTYPE_COMMUNITY_ALIAS, ca);
+	const struct community_alias *ca = p;
+
+	return jhash(ca->community, sizeof(ca->community), 0);
 }
 
-void bgp_community_alias_list_free(void)
+static bool bgp_community_alias_hash_cmp(const void *p1, const void *p2)
 {
-	struct community_alias *ca;
-	struct listnode *node, *nnode;
+	const struct community_alias *ca1 = p1;
+	const struct community_alias *ca2 = p2;
 
-	for (ALL_LIST_ELEMENTS(bgp_community_alias_list, node, nnode, ca))
-		bgp_community_alias_free(ca);
+	return (strncmp(ca1->alias, ca2->alias, sizeof(ca2->alias)) == 0);
 }
 
-void bgp_community_alias_list_add_entry(const char *community,
-					const char *alias)
+void bgp_community_alias_init(void)
 {
-	struct community_alias *ca;
-
-	ca = XCALLOC(MTYPE_COMMUNITY_ALIAS, sizeof(struct community_alias));
-
-	if (community && alias) {
-		ca->community = XSTRDUP(MTYPE_COMMUNITY_ALIAS_STR, community);
-		ca->alias = XSTRDUP(MTYPE_COMMUNITY_ALIAS_STR, alias);
-	}
-
-	listnode_add(bgp_community_alias_list, ca);
+	bgp_community_alias_hash = hash_create(bgp_community_alias_hash_alloc,
+					       bgp_community_alias_hash_cmp,
+					       "BGP community alias");
 }
 
-void bgp_community_alias_list_remove_entry(const char *community)
+void bgp_community_alias_finish(void)
 {
-	struct community_alias *ca;
-	struct listnode *node, *nnode;
-
-	for (ALL_LIST_ELEMENTS(bgp_community_alias_list, node, nnode, ca))
-		if (strncmp(ca->community, community, strlen(community)) == 0)
-			bgp_community_alias_free(ca);
+	hash_free(bgp_community_alias_hash);
 }
 
-bool bgp_community_alias_list_has_entry(const char *community,
-					const char *alias)
+static void bgp_community_alias_show_iterator(struct hash_bucket *hb,
+					      struct vty *vty)
 {
-	struct community_alias *ca;
-	struct listnode *node, *nnode;
+	struct community_alias *ca = hb->data;
 
-	for (ALL_LIST_ELEMENTS(bgp_community_alias_list, node, nnode, ca)) {
-		/* Comparing strlen in addition to make sure we don't
-		 * hit a trap between community and large communities. E.g:
-		 * community       65001:1
-		 * large-community 65001:1:1
-		 */
-		if (strlen(ca->community) == strlen(community)
-		    && strncmp(ca->community, community, strlen(community)) == 0
-		    && strncmp(ca->alias, alias, strlen(community)) == 0)
-			return true;
+	vty_out(vty, "bgp community alias %s %s\n", ca->community, ca->alias);
+}
 
-		/* Community found, but alias name is different */
-		if (strlen(ca->community) == strlen(community)
-		    && strncmp(ca->community, community, strlen(community))
-			       == 0) {
-			bgp_community_alias_list_remove_entry(ca->community);
-			return false;
-		}
-	}
+void bgp_community_alias_write(struct vty *vty)
+{
+	hash_iterate(bgp_community_alias_hash,
+		     (void (*)(struct hash_bucket *,
+			       void *))bgp_community_alias_show_iterator,
+		     vty);
+}
 
-	return false;
+void bgp_community_alias_insert(struct community_alias *ca)
+{
+	hash_get(bgp_community_alias_hash, ca, hash_alloc_intern);
+}
+
+void bgp_community_alias_delete(struct community_alias *ca)
+{
+	hash_release(bgp_community_alias_hash, ca);
+}
+
+struct community_alias *bgp_community_alias_lookup(struct community_alias *ca)
+{
+	return hash_lookup(bgp_community_alias_hash, ca);
 }
 
 const char *bgp_community2alias(char *community)
 {
-	struct community_alias *ca;
-	struct listnode *node, *nnode;
+	struct community_alias ca = {0};
+	struct community_alias *find;
 
-	for (ALL_LIST_ELEMENTS(bgp_community_alias_list, node, nnode, ca)) {
-		if (strlen(ca->community) == strlen(community)
-		    && strncmp(ca->community, community, strlen(community))
-			       == 0)
-			return ca->alias;
-	}
+	strlcpy(ca.community, community, sizeof(ca.community));
+
+	find = bgp_community_alias_lookup(&ca);
+	if (find)
+		return find->alias;
 
 	return community;
-}
-
-void bgp_community_alias_list_write(struct vty *vty)
-{
-	struct community_alias *ca;
-	struct listnode *node, *nnode;
-
-	for (ALL_LIST_ELEMENTS(bgp_community_alias_list, node, nnode, ca))
-		vty_out(vty, "bgp community alias %s %s\n", ca->community,
-			ca->alias);
 }

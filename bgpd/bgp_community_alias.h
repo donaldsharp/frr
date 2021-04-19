@@ -18,26 +18,26 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "bgpd/bgp_lcommunity.h"
+
 #ifndef _QUAGGA_BGP_COMMUNITY_ALIAS_H
 #define _QUAGGA_BGP_COMMUNITY_ALIAS_H
 
 struct community_alias {
 	/* Human readable community string */
-	char *community;
+	char community[LCOMMUNITY_SIZE * 3];
 
 	/* Human readable community alias */
-	char *alias;
+	char alias[BUFSIZ];
 };
 
-extern struct list *bgp_community_alias_list;
-
-extern void bgp_community_alias_list_free(void);
-extern void bgp_community_alias_list_add_entry(const char *community,
-					       const char *alias);
-extern void bgp_community_alias_list_remove_entry(const char *community);
-extern bool bgp_community_alias_list_has_entry(const char *community,
-					       const char *alias);
+extern void bgp_community_alias_init(void);
+extern void bgp_community_alias_finish(void);
+extern struct community_alias *
+bgp_community_alias_lookup(struct community_alias *ca);
+extern void bgp_community_alias_insert(struct community_alias *ca);
+extern void bgp_community_alias_delete(struct community_alias *ca);
+extern void bgp_community_alias_write(struct vty *vty);
 extern const char *bgp_community2alias(char *community);
-extern void bgp_community_alias_list_write(struct vty *vty);
 
 #endif /* _QUAGGA_BGP_COMMUNITY_ALIAS_H */

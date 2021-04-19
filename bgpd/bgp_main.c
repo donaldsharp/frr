@@ -221,6 +221,9 @@ static __attribute__((__noreturn__)) void bgp_exit(int status)
 	/* reverse bgp_dump_init */
 	bgp_dump_finish();
 
+	/* BGP community aliases */
+	bgp_community_alias_finish();
+
 	/* reverse bgp_route_init */
 	bgp_route_finish();
 
@@ -250,8 +253,6 @@ static __attribute__((__noreturn__)) void bgp_exit(int status)
 
 	/* reverse community_list_init */
 	community_list_terminate(bgp_clist);
-
-	bgp_community_alias_list_free();
 
 	bgp_vrf_terminate();
 #ifdef ENABLE_BGP_VNC

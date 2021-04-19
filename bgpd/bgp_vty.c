@@ -1508,15 +1508,15 @@ DEFPY(bgp_community_alias, bgp_community_alias_cmd,
       "Community (AA:BB or AA:BB:CC)\n"
       "Alias name\n")
 {
-	if (!bgp_community_alias_list)
-		bgp_community_alias_list = list_new();
+	struct community_alias ca = {0};
 
-	if (no) {
-		bgp_community_alias_list_remove_entry(community);
-	} else {
-		if (!bgp_community_alias_list_has_entry(community, alias))
-			bgp_community_alias_list_add_entry(community, alias);
-	}
+	strlcpy(ca.community, community, sizeof(ca.community));
+	strlcpy(ca.alias, alias, sizeof(ca.alias));
+
+	if (no)
+		bgp_community_alias_delete(&ca);
+	else
+		bgp_community_alias_insert(&ca);
 
 	return CMD_SUCCESS;
 }
@@ -17385,7 +17385,7 @@ int bgp_config_write(struct vty *vty)
 		vty_out(vty, "\n");
 	}
 
-	bgp_community_alias_list_write(vty);
+	bgp_community_alias_write(vty);
 
 	if (bm->wait_for_fib)
 		vty_out(vty, "bgp suppress-fib-pending\n");
