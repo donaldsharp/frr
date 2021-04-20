@@ -524,17 +524,18 @@ void pbr_nht_set_seq_nhg(struct pbr_map_sequence *pbrms,
 
 	pbrms->nhgrp_name = XSTRDUP(MTYPE_TMP, nhgc->name);
 
-	switch (nhg->nexthop->type) {
-	case NEXTHOP_TYPE_IPV6:
-	case NEXTHOP_TYPE_IPV6_IFINDEX:
-		pbrms->family = AF_INET6;
-		break;
-	case NEXTHOP_TYPE_IPV4:
-	case NEXTHOP_TYPE_IPV4_IFINDEX:
-		pbrms->family = AF_INET;
-	default:
-		break;
-	}
+	if (nhg->nexthop)
+		switch (nhg->nexthop->type) {
+		case NEXTHOP_TYPE_IPV6:
+		case NEXTHOP_TYPE_IPV6_IFINDEX:
+			pbrms->family = AF_INET6;
+			break;
+		case NEXTHOP_TYPE_IPV4:
+		case NEXTHOP_TYPE_IPV4_IFINDEX:
+			pbrms->family = AF_INET;
+		default:
+			break;
+		}
 }
 
 void pbr_nht_add_individual_nexthop(struct pbr_map_sequence *pbrms,
