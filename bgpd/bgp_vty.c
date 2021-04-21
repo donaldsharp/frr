@@ -1508,16 +1508,23 @@ DEFPY(bgp_community_alias, bgp_community_alias_cmd,
       "Community (AA:BB or AA:BB:CC)\n"
       "Alias name\n")
 {
-	struct community_alias ca = {0};
+	struct community_alias ca = {0}, *lookup;
 
 	strlcpy(ca.community, community, sizeof(ca.community));
 	strlcpy(ca.alias, alias, sizeof(ca.alias));
 
-	if (no)
-		bgp_community_alias_delete(&ca);
-	else
-		bgp_community_alias_insert(&ca);
+	lookup = bgp_community_alias_lookup(&ca);
+	if (no) {
+		if (lookup)
+			bgp_community_alias_delete(lookup);
+		else
+			vty_out(vty, "shit happens\n");
+	} else {
+		if (lookup)
+			bgp_community_alias_delete(lookup);
 
+		bgp_community_alias_insert(&ca);
+	}
 	return CMD_SUCCESS;
 }
 

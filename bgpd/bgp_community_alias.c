@@ -26,11 +26,11 @@
 
 static struct hash *bgp_community_alias_hash;
 
-static unsigned int bgp_community_alias_hash_alloc(const void *p)
+static unsigned int bgp_community_alias_hash_key(const void *p)
 {
 	const struct community_alias *ca = p;
 
-	return jhash(ca->community, sizeof(ca->community), 0);
+	return jhash(ca->alias, sizeof(ca->alias), 0);
 }
 
 static bool bgp_community_alias_hash_cmp(const void *p1, const void *p2)
@@ -43,7 +43,7 @@ static bool bgp_community_alias_hash_cmp(const void *p1, const void *p2)
 
 void bgp_community_alias_init(void)
 {
-	bgp_community_alias_hash = hash_create(bgp_community_alias_hash_alloc,
+	bgp_community_alias_hash = hash_create(bgp_community_alias_hash_key,
 					       bgp_community_alias_hash_cmp,
 					       "BGP community alias");
 }
@@ -69,14 +69,26 @@ void bgp_community_alias_write(struct vty *vty)
 		     vty);
 }
 
+static void *bgp_community_alias_alloc(void *d)
+{
+	const struct community_alias *data = d;
+	struct communtiy_alias *new;
+
+	new = XCALLOC(MTYPE_TMP, sizeof(struct community_alias));
+	memcpy(new, data, sizeof(struct community_alias));
+	return new;
+}
+
 void bgp_community_alias_insert(struct community_alias *ca)
 {
-	hash_get(bgp_community_alias_hash, ca, hash_alloc_intern);
+	hash_get(bgp_community_alias_hash, ca, bgp_community_alias_alloc);
 }
 
 void bgp_community_alias_delete(struct community_alias *ca)
 {
-	hash_release(bgp_community_alias_hash, ca);
+	struct community_alias *data = 	hash_release(bgp_community_alias_hash, ca);
+
+	XFREE(MTYPE_TMP, data);
 }
 
 struct community_alias *bgp_community_alias_lookup(struct community_alias *ca)
