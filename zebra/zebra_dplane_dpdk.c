@@ -48,6 +48,13 @@
 #include "zebra/rt_netlink.h"
 #include "zebra/debug.h"
 
+#include <rte_memory.h>
+#include <rte_launch.h>
+#include <rte_eal.h>
+#include <rte_per_lcore.h>
+#include <rte_lcore.h>
+#include <rte_debug.h>
+
 static const char *plugin_name = "zebra_dplane_dpdk";
 
 static struct zd_dpdk_ctx dpdk_ctx_buf, *dpdk_ctx = &dpdk_ctx_buf;
@@ -216,6 +223,9 @@ static int zd_dpdk_finish(struct zebra_dplane_provider *prov, bool early)
 static void zd_dpdk_init(void)
 {
 	install_element(VIEW_NODE, &zd_dpdk_show_counters_cmd);
+
+	/* XXX - fixup */
+	rte_eal_init(0, NULL);
 }
 
 static int zd_dpdk_plugin_init(struct thread_master *tm)
