@@ -62,48 +62,6 @@ static struct zd_dpdk_ctx dpdk_ctx_buf, *dpdk_ctx = &dpdk_ctx_buf;
 
 #define ZD_STR "Zebra dataplane information\n"
 #define ZD_DPDK_STR "DPDK offload information\n"
-#ifndef VTYSH_EXTRACT_PL
-#include "zebra/zebra_dplane_dpdk_clippy.c"
-#endif
-
-DEFPY (zd_dpdk_show_counters,
-       zd_dpdk_show_counters_cmd,
-       "show dplane dpdk counters",
-       SHOW_STR ZD_STR ZD_DPDK_STR
-       "show counters\n")
-{
-	uint32_t tmp_cnt;
-
-	vty_out(vty, "%30s\n%30s\n", "Dataplane DPDK counters", "============");
-
-#define ZD_DPDK_SHOW_COUNTER(label, counter)                                   \
-	do {                                                                   \
-		tmp_cnt =                                                      \
-			atomic_load_explicit(&counter, memory_order_relaxed);  \
-		vty_out(vty, "%28s: %u\n", (label), (tmp_cnt));                \
-	} while (0);
-
-	ZD_DPDK_SHOW_COUNTER("Ignored updates", dpdk_stat->ignored_updates);
-
-	ZD_DPDK_SHOW_COUNTER("Access port adds", dpdk_stat->access_port_adds);
-	ZD_DPDK_SHOW_COUNTER("Access port dels", dpdk_stat->access_port_dels);
-	ZD_DPDK_SHOW_COUNTER("Access port errors",
-			     dpdk_stat->access_port_errors);
-
-	ZD_DPDK_SHOW_COUNTER("Uplink adds", dpdk_stat->uplink_adds);
-	ZD_DPDK_SHOW_COUNTER("Uplink dels", dpdk_stat->uplink_dels);
-	ZD_DPDK_SHOW_COUNTER("Uplink errors", dpdk_stat->uplink_errors);
-
-	ZD_DPDK_SHOW_COUNTER("Local mac adds", dpdk_stat->local_mac_adds);
-	ZD_DPDK_SHOW_COUNTER("Local mac dels", dpdk_stat->local_mac_dels);
-	ZD_DPDK_SHOW_COUNTER("Local mac errors", dpdk_stat->local_mac_errors);
-
-	ZD_DPDK_SHOW_COUNTER("Remote mac adds", dpdk_stat->rem_mac_adds);
-	ZD_DPDK_SHOW_COUNTER("Remote mac dels", dpdk_stat->rem_mac_dels);
-	ZD_DPDK_SHOW_COUNTER("Remote mac errors", dpdk_stat->rem_mac_errors);
-
-	return CMD_SUCCESS;
-}
 
 static void zd_dpdk_mac_update(struct zebra_dplane_ctx *ctx)
 {
@@ -220,19 +178,11 @@ static int zd_dpdk_finish(struct zebra_dplane_provider *prov, bool early)
 	return 0;
 }
 
-static void zd_dpdk_init(void)
-{
-	install_element(VIEW_NODE, &zd_dpdk_show_counters_cmd);
-
-	/* XXX - fixup */
-	rte_eal_init(0, NULL);
-}
-
 static int zd_dpdk_plugin_init(struct thread_master *tm)
 {
 	int ret;
 
-	zd_dpdk_init();
+	rte_eal_init(0, NULL);
 
 	/* XXX - use DPLANE_PRIO_PRE_KERNEL/DPLANE_PROV_FLAG_THREADED
 	 * later (if needed)

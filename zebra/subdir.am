@@ -18,6 +18,7 @@ vtysh_scan += \
 	zebra/zebra_routemap.c \
 	zebra/zebra_vty.c \
 	zebra/zserv.c \
+	zebra/zebra_dplane_dpdk_vty.c \
 	# end
 
 # can be loaded as DSO - always include for vtysh
@@ -128,6 +129,7 @@ clippy_scan += \
 	zebra/zebra_mlag_vty.c \
 	zebra/zebra_routemap.c \
 	zebra/zebra_vty.c \
+	zebra/zebra_dplane_vty.c \
 	# end
 
 noinst_HEADERS += \
@@ -248,5 +250,3 @@ endif
 zebra_zebra_dplane_dpdk_la_SOURCES = zebra/zebra_dplane_dpdk.c
 zebra_zebra_dplane_dpdk_la_LDFLAGS = -avoid-version -module -shared -export-dynamic
 zebra_zebra_dplane_dpdk_la_LIBADD  =
-vtysh_scan += $(top_srcdir)/zebra/zebra_dplane_dpdk.c
-clippy_scan += $(top_srcdir)/zebra/zebra_dplane_dpdk.c
