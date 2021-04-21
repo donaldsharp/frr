@@ -247,6 +247,7 @@ if DP_DPDK
 module_LTLIBRARIES += zebra/zebra_dplane_dpdk.la
 endif
 
+zebra_zebra_dplane_dpdk_la_CFLAGS = -I/usr/local/include/dpdk -L/usr/local/lib/dpdk
 zebra_zebra_dplane_dpdk_la_SOURCES = zebra/zebra_dplane_dpdk.c
 zebra_zebra_dplane_dpdk_la_LDFLAGS = -avoid-version -module -shared -export-dynamic
 zebra_zebra_dplane_dpdk_la_LIBADD  =
