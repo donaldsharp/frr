@@ -823,8 +823,8 @@ def check_for_exit_vrf(lines_to_add, lines_to_del):
                 lines_to_add.insert(index, ((insert_key, "exit-vrf")))
                 add_exit_vrf = False
 
-        if ctx_keys[0].startswith('vrf') and line:
-            if line is not "exit-vrf":
+        if ctx_keys[0].startswith("vrf") and line:
+            if line != "exit-vrf":
                 add_exit_vrf = True
                 prior_ctx_key = (ctx_keys[0])
             else:
