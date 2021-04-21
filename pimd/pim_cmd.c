@@ -6954,7 +6954,7 @@ DEFUN (ip_pim_register_suppress,
        "Seconds\n")
 {
 	PIM_DECLVAR_CONTEXT(vrf, pim);
-	router->register_suppress_time = atoi(argv[3]->arg);
+	pim_update_suppress_timers(atoi(argv[3]->arg));
 	return CMD_SUCCESS;
 }
 
@@ -6968,7 +6968,7 @@ DEFUN (no_ip_pim_register_suppress,
        "Seconds\n")
 {
 	PIM_DECLVAR_CONTEXT(vrf, pim);
-	router->register_suppress_time = PIM_REGISTER_SUPPRESSION_TIME_DEFAULT;
+	pim_update_suppress_timers(PIM_REGISTER_SUPPRESSION_TIME_DEFAULT);
 	return CMD_SUCCESS;
 }
 
