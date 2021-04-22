@@ -2393,7 +2393,7 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re)
 	struct nhg_hash_entry *curr_nhe;
 	uint32_t curr_active = 0, backup_active = 0;
 
-	if (re->nhe->id >= ZEBRA_NHG_PROTO_LOWER)
+	if (PROTO_OWNED(re->nhe))
 		return proto_nhg_nexthop_active_update(&re->nhe->nhg);
 
 	afi_t rt_afi = family2afi(rn->p.family);
@@ -2976,7 +2976,7 @@ static void zebra_nhg_score_proto_entry(struct hash_bucket *bucket, void *arg)
 	iter = arg;
 
 	/* Needs to match type and outside zebra ID space */
-	if (nhe->type == iter->type && nhe->id >= ZEBRA_NHG_PROTO_LOWER) {
+	if (nhe->type == iter->type && PROTO_OWNED(nhe)) {
 		if (IS_ZEBRA_DEBUG_NHG_DETAIL)
 			zlog_debug(
 				"%s: found nhe %p (%u), vrf %d, type %s after client disconnect",
