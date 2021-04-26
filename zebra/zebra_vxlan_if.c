@@ -154,11 +154,11 @@ static int zebra_vxlan_if_del_vni(struct interface *ifp, struct zebra_vxlan_vni 
 		zebra_evpn_send_del_to_client(zevpn);
 
 		/* Free up all neighbors and MAC, if any. */
-		zebra_evpn_neigh_del_all(zevpn, 0, 0, DEL_ALL_NEIGH);
-		zebra_evpn_mac_del_all(zevpn, 0, 0, DEL_ALL_MAC);
+		zebra_evpn_neigh_del_all(zevpn, 1, 0, DEL_ALL_NEIGH);
+		zebra_evpn_mac_del_all(zevpn, 1, 0, DEL_ALL_MAC);
 
 		/* Free up all remote VTEPs, if any. */
-		zebra_evpn_vtep_del_all(zevpn, 0);
+		zebra_evpn_vtep_del_all(zevpn, 1);
 
 		/* Delete the hash entry. */
 		if (zebra_evpn_vxlan_del(zevpn)) {
@@ -732,8 +732,14 @@ int zebra_vxlan_if_vni_table_add_update(struct interface *ifp, struct hash *vni_
 
 	/* release kernel deleted vnis */
 	if (old_vni_table) {
-		if (hashcount(old_vni_table))
+		if (hashcount(old_vni_table)) {
+			/* UGLY HACK: Put back the old table so that delete of
+			 * MACs goes through and then flip back.
+			 */
+			vni_info->vni_table = old_vni_table;
 			hash_iterate(old_vni_table, zebra_vxlan_if_vni_clean, zif);
+			vni_info->vni_table = vni_table;
+		}
 		zebra_vxlan_vni_table_destroy(old_vni_table);
 	}
 
