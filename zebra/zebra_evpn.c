@@ -849,6 +849,10 @@ void zebra_evpn_read_mac_neigh(zebra_evpn_t *zevpn, struct interface *ifp)
 			zif->brslave_info.bridge_ifindex);
 
 	macfdb_read_for_bridge(zns, ifp, zif->brslave_info.br_if, vni->access_vlan);
+	/* We need to specifically read and retrieve the entry for BUM handling
+	 * via multicast, if any.
+	 */
+	macfdb_read_mcast_entry_for_vni(zns, ifp, zevpn->vni);
 	vlan_if = zvni_map_to_svi(vni->access_vlan, zif->brslave_info.br_if);
 	if (vlan_if) {
 		/* Add SVI MAC */
