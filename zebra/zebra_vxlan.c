@@ -5508,11 +5508,14 @@ void zebra_vxlan_init_tables(struct zebra_vrf *zvrf)
 {
 	if (!zvrf)
 		return;
+
 	zvrf->evpn_table =
-		hash_create(zebra_evpn_hash_keymake, zebra_evpn_hash_cmp,
-			    "Zebra VRF EVPN Table");
-	zvrf->vxlan_sg_table = hash_create(zebra_vxlan_sg_hash_key_make,
-			zebra_vxlan_sg_hash_eq, "Zebra VxLAN SG Table");
+		hash_create_size(8, zebra_evpn_hash_keymake,
+				 zebra_evpn_hash_cmp, "Zebra VRF EVPN Table");
+
+	zvrf->vxlan_sg_table = hash_create_size(8, zebra_vxlan_sg_hash_key_make,
+						zebra_vxlan_sg_hash_eq,
+						"Zebra VxLAN SG Table");
 }
 
 /* Cleanup EVPN info, but don't free the table. */
