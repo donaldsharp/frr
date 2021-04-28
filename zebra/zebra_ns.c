@@ -126,6 +126,8 @@ int zebra_ns_enable(ns_id_t ns_id, void **info)
 	zebra_dplane_ns_enable(zns, true);
 	interface_list(zns);
 	route_read(zns);
+
+	vlan_read(zns);
 	kernel_read_pbr_rules(zns);
 
 	return 0;
