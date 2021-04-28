@@ -102,6 +102,8 @@ extern int kernel_upd_mac_nhg(uint32_t nhg_id, uint32_t nh_cnt,
 		struct nh_grp *nh_ids);
 extern int kernel_del_mac_nhg(uint32_t nhg_id);
 
+extern void vlan_read(struct zebra_ns *zns);
+
 #ifdef __cplusplus
 }
 #endif

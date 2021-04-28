@@ -115,4 +115,8 @@ void kernel_read_pbr_rules(struct zebra_ns *zns)
 {
 }
 
+void vlan_read(struct zebra_ns *zns)
+{
+}
+
 #endif /* !defined(GNU_LINUX) && !defined(SUNOS_5) */

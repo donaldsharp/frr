@@ -49,6 +49,8 @@ extern void zebra_vxlan_vni_table_destroy(struct hash *vni_table);
 extern int zebra_vxlan_if_vni_table_create(struct zebra_if *zif);
 extern int zebra_vxlan_if_vni_table_destroy(struct zebra_if *zif);
 extern struct zebra_vxlan_vni * zebra_vxlan_if_vni_find(const struct zebra_if *zif, vni_t vni);
+extern struct zebra_vxlan_vni *
+zebra_vxlan_if_vlanid_vni_find(struct zebra_if *zif, vlanid_t vni);
 extern void zebra_vxlan_if_vni_iterate(struct zebra_if *zif,
 	int (*func)(struct zebra_if *zif, struct zebra_vxlan_vni *, void *), void *arg);
 extern void zebra_vxlan_if_vni_walk(struct zebra_if *zif,

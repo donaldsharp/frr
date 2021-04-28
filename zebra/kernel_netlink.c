@@ -103,6 +103,9 @@ static const struct message nlmsg_str[] = {{RTM_NEWROUTE, "RTM_NEWROUTE"},
 					   {RTM_NEWNEXTHOP, "RTM_NEWNEXTHOP"},
 					   {RTM_DELNEXTHOP, "RTM_DELNEXTHOP"},
 					   {RTM_GETNEXTHOP, "RTM_GETNEXTHOP"},
+					   {RTM_NEWVLAN, "RTM_NEWVLAN"},
+					   {RTM_DELVLAN, "RTM_DELVLAN"},
+					   {RTM_GETVLAN, "RTM_GETVLAN"},
 					   {0}};
 
 static const struct message rtproto_str[] = {
@@ -311,6 +314,10 @@ static int netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 		return netlink_nexthop_change(h, ns_id, startup);
 	case RTM_DELNEXTHOP:
 		return netlink_nexthop_change(h, ns_id, startup);
+	case RTM_NEWVLAN:
+		return netlink_vlan_change(h, ns_id, startup);
+	case RTM_DELVLAN:
+		return netlink_vlan_change(h, ns_id, startup);
 	default:
 		/*
 		 * If we have received this message then

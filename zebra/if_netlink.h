@@ -32,6 +32,9 @@ extern int netlink_interface_addr(struct nlmsghdr *h, ns_id_t ns_id,
 extern int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup);
 extern int interface_lookup_netlink(struct zebra_ns *zns);
 
+extern int netlink_vlan_change(struct nlmsghdr *h, ns_id_t ns_id, int startup);
+extern int netlink_vlan_read(struct zebra_ns *zns);
+
 /*
  * Set protodown status of interface.
  *
