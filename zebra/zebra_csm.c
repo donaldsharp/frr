@@ -372,12 +372,24 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 
 	zrouter.csm_cmode = mode;
 	zrouter.csm_cstate = state;
-	if (mode == MAINTENANCE)
-		frr_csm_enter_maintenance_mode();
-	else if (mode == REBOOT_FAST)
+	switch (mode) {
+	case REBOOT_FAST:
+	case REBOOT_WARM:
 		frr_csm_fast_restart_triggered();
-	else if (mode == SYS_UPGRADE_REBOOT_FAST)
+		break;
+
+	case SYS_UPGRADE_REBOOT_FAST:
+	case SYS_UPGRADE_REBOOT_WARM:
 		frr_csm_fast_upgrade_triggered();
+		break;
+
+	case MAINTENANCE:
+		frr_csm_enter_maintenance_mode();
+		break;
+
+	default:
+		break;
+	}
 }
 
 /*
