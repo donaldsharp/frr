@@ -1,0 +1,732 @@
+/*
+ * Zebra code for interfacing with System Manager
+ * Copyright (C) 2020 NVIDIA Corporation
+ *                    Vivek Venkatraman
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; see the file COPYING; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+#include <zebra.h>
+
+#include <lib/version.h>
+#include "getopt.h"
+#include "command.h"
+#include "thread.h"
+#include "filter.h"
+#include "memory.h"
+#include "zebra_memory.h"
+#include "log.h"
+#include "privs.h"
+#include "sigevent.h"
+#include "libfrr.h"
+#include "frrcu.h"
+
+#include "zebra/zserv.h"
+#include "zebra/zebra_csm.h"
+
+#if defined(HAVE_CSMGR)
+#include <cumulus/cs_mgr_intf.h>
+
+#include "zebra/zebra_router.h"
+#include "zebra/zebra_errors.h"
+#include "zebra/debug.h"
+#include "zebra/zebra_ns.h"
+
+const char *frr_csm_smode_str[] = {"cold start", "fast start", "warm start",
+				   "maintenance"};
+
+extern struct zebra_privs_t zserv_privs;
+pthread_t csm_pthread;
+static struct rcu_thread *csm_rcu_thread;
+static bool csm_rcu_set = false;
+
+static void convert_mode(Mode mode, enum frr_csm_smode *smode)
+{
+	switch (mode) {
+	case REBOOT_FAST:
+	case SYS_UPGRADE_REBOOT_FAST:
+		*smode = FAST_START;
+		break;
+
+	case REBOOT_WARM:
+	case SYS_UPGRADE_REBOOT_WARM:
+		*smode = WARM_START;
+		break;
+
+	case MAINTENANCE:
+		*smode = MAINT;
+		break;
+
+	default:
+		*smode = COLD_START;
+		break;
+	}
+}
+
+/*
+ * Respond to keepalive
+ */
+static int frr_csm_send_keep_rsp(int seq)
+{
+	uint8_t rsp[MAX_MSG_LEN];
+	uint8_t ack[MAX_MSG_LEN];
+	msg_pkg *m = (msg_pkg *)rsp;
+	msg *entry = (msg *)m->entry;
+	keepalive_response *kr;
+	module_status *mod_status;
+	int nbytes;
+
+	/* Send load_complete */
+	entry->type = KEEP_ALIVE_RESP;
+	entry->len = sizeof(*entry) + sizeof(*kr);
+	kr = (keepalive_response *)entry->data;
+	kr->seq = seq;
+	mod_status = &(kr->mod_status);
+	mod_status->mode.mod = zrouter.frr_csm_modid;
+	mod_status->mode.state = SUCCESS;
+	mod_status->failure_reason = NO_ERROR;
+	m->total_len = sizeof(*m) + entry->len;
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("FRRCSM: Sending Keepalive seq %d", seq);
+
+	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
+			    ack);
+	if (nbytes == -1) {
+		zlog_err("FRRCSM: Failed to send keepalive, error %s",
+			 safe_strerror(errno));
+		return -1;
+	}
+
+	/* We don't care about the response */
+	return 0;
+}
+
+/*
+ * Send down action complete to CSM.
+ */
+static int frr_csm_send_down_complete(Module mod)
+{
+	uint8_t req[MAX_MSG_LEN];
+	uint8_t rsp[MAX_MSG_LEN];
+	msg_pkg *m = (msg_pkg *)req;
+	msg *entry = (msg *)m->entry;
+	module_down_status *ms;
+	int nbytes;
+
+	/* Send down_complete */
+	if (!zrouter.frr_csm_regd)
+		return 0;
+
+	entry->type = GO_DOWN;
+	entry->len = sizeof(*entry) + sizeof(*ms);
+	ms = (module_down_status *)entry->data;
+	ms->mod = mod;
+	ms->mode.mod = zrouter.frr_csm_modid;
+	ms->mode.state = SUCCESS; /* Don't care */
+	ms->failure_reason = NO_ERROR;
+	m->total_len = sizeof(*m) + entry->len;
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("FRRCSM: Sending down complete for %s",
+			   mod_id_to_str(mod));
+
+	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
+			    rsp);
+	if (nbytes == -1) {
+		zlog_err("FRRCSM: Failed to send down complete, error %s",
+			 safe_strerror(errno));
+		return -1;
+	}
+
+	/* We don't care about the response */
+	return 0;
+}
+
+/*
+ * Right after initial registration, handshake with CSM to get our
+ * start mode.
+ */
+static int frr_csm_get_start_mode(Mode *mode, State *state)
+{
+	uint8_t req[MAX_MSG_LEN];
+	uint8_t rsp[MAX_MSG_LEN];
+	msg_pkg *m = (msg_pkg *)req;
+	msg *entry = (msg *)m->entry;
+	module_status *mod_status;
+	module_mode *mod_mode;
+	int nbytes;
+
+	*mode = REBOOT_COLD;
+	*state = UP;
+
+	/* Send load_complete */
+	entry->type = LOAD_COMPLETE;
+	entry->len = sizeof(*entry) + sizeof(*mod_status);
+	mod_status = (module_status *)entry->data;
+	mod_status->mode.mod = zrouter.frr_csm_modid;
+	mod_status->mode.state = LOAD_COMPLETE;
+	mod_status->failure_reason = NO_ERROR;
+	m->total_len = sizeof(*m) + entry->len;
+
+	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
+			    rsp);
+	if (nbytes == -1) {
+		zlog_err("FRRCSM: Failed to send load complete, error %s",
+			 safe_strerror(errno));
+		return -1;
+	}
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("FRRCSM: Sent load complete, response length %d",
+			   nbytes);
+
+	/* Process the response, which should have our start mode */
+	if (!nbytes)
+		return 0;
+
+	m = (msg_pkg *)rsp;
+	if (nbytes != m->total_len) {
+		zlog_err(
+			"FRRCSM: Invalid length in load complete response, len %d msg_len %d",
+			nbytes, m->total_len);
+		return -1;
+	}
+
+	nbytes -= sizeof(*m);
+	entry = m->entry;
+	while (nbytes && nbytes >= entry->len) {
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug(
+				"FRRCSM: Received message type 0x%x len %d in load complete response",
+				entry->type, entry->len);
+		switch (entry->type) {
+		case MODE_INFO:
+			mod_mode = (module_mode *)entry->data;
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug(
+					"... Received start mode %s state %s",
+					mode_to_str(mod_mode->mode),
+					mod_state_to_str(mod_mode->state));
+			*mode = mod_mode->mode;
+			*state = mod_mode->state;
+			break;
+		default:
+			/* Right now, we don't care about anything else */
+			break;
+		}
+		nbytes -= entry->len;
+		entry = (msg *)((uint8_t *)entry + entry->len);
+	}
+
+	return 0;
+}
+
+/*
+ * Handle enter or exit maintenance mode.
+ * This function executes in zebra's main thread. It informs clients
+ * (currently, only BGP) and takes any local action (currently, none).
+ * An ack needs to go back to CSM after we get an ack from client.
+ * TODO: When handling multiple clients, we need to track acks also
+ * from each one.
+ */
+static int zebra_csm_maint_mode(struct thread *t)
+{
+	bool enter = THREAD_VAL(t);
+	struct zserv *client;
+	struct stream *s;
+
+	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
+	if (client) {
+		s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+		zclient_create_header(s, ZEBRA_MAINTENANCE_MODE, VRF_DEFAULT);
+		stream_putc(s, enter);
+		/* Write packet size. */
+		stream_putw_at(s, 0, stream_get_endp(s));
+
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug("... Send %s maintenance mode to %s",
+				   enter ? "Enter" : "Exit",
+				   zebra_route_string(client->proto));
+		zserv_send_message(client, s);
+	}
+
+	return 0;
+}
+
+/*
+ * Handle event indicating fast restart or fast upgrade is about to
+ * be initiated.
+ * This function executes in zebra's main thread. It informs clients
+ * (currently, only BGP) and takes any local action.
+ * An ack needs to go back to CSM after we get an ack from client.
+ * TODO: When handling multiple clients, we need to track acks also
+ * from each one.
+ */
+static int zebra_csm_fast_restart(struct thread *t)
+{
+	bool upgrade = THREAD_VAL(t);
+	struct zserv *client;
+	struct stream *s;
+
+	zrouter.fast_shutdown = true;
+	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
+	if (client) {
+		s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+		zclient_create_header(s, ZEBRA_FAST_SHUTDOWN, VRF_DEFAULT);
+		stream_putc(s, upgrade);
+		/* Write packet size. */
+		stream_putw_at(s, 0, stream_get_endp(s));
+
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug("... Send fast shutdown%s to %s",
+				   upgrade ? " (upgrade)" : "",
+				   zebra_route_string(client->proto));
+		zserv_send_message(client, s);
+	}
+
+	return 0;
+}
+
+/*
+ * We're told to exit maintenance mode. Post event to main thread
+ * for handling.
+ */
+static void frr_csm_enter_maintenance_mode()
+{
+	thread_add_event(zrouter.master, zebra_csm_maint_mode, NULL, true,
+			 NULL);
+}
+
+/*
+ * We're told to exit maintenance mode. Post event to main thread
+ * for handling.
+ */
+static void frr_csm_exit_maintenance_mode()
+{
+	thread_add_event(zrouter.master, zebra_csm_maint_mode, NULL, false,
+			 NULL);
+}
+
+/*
+ * We're told to initiate a fast restart. Post event to main thread
+ * for handling.
+ */
+static void frr_csm_fast_restart_triggered()
+{
+	thread_add_event(zrouter.master, zebra_csm_fast_restart, NULL, false,
+			 NULL);
+}
+
+/*
+ * We're told to initiate a fast upgrade. Post event to main thread
+ * for handling.
+ */
+static void frr_csm_fast_upgrade_triggered()
+{
+	thread_add_event(zrouter.master, zebra_csm_fast_restart, NULL, true,
+			 NULL);
+}
+
+/*
+ * Handle trigger from CSM to 'go down' or 'come up'.
+ */
+static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
+					   bool up)
+{
+	if (up) {
+		/* We expect 'come up' only in the case of coming out of
+		 * 'maintenance' mode.
+		 */
+		if (mode != MAINTENANCE)
+			return;
+
+		zrouter.csm_cmode = mode;
+		zrouter.csm_cstate = state;
+		frr_csm_exit_maintenance_mode();
+		return;
+	}
+
+	/* The 'go down' event can be to tell us to enter 'maintenance' mode
+	 * or it could signal the start of a reboot or upgrade. In addition,
+	 * we can receive this event targeted to other components also; in
+	 * such a case, we only send back a response, otherwise (i.e., meant
+	 * for FRR), we'll take further action.
+	 */
+	if (mod != zrouter.frr_csm_modid) {
+		frr_csm_send_down_complete(mod);
+		return;
+	}
+
+	zrouter.csm_cmode = mode;
+	zrouter.csm_cstate = state;
+	switch (mode) {
+	case REBOOT_FAST:
+	case REBOOT_WARM:
+		frr_csm_fast_restart_triggered();
+		break;
+
+	case SYS_UPGRADE_REBOOT_FAST:
+	case SYS_UPGRADE_REBOOT_WARM:
+		frr_csm_fast_upgrade_triggered();
+		break;
+
+	case MAINTENANCE:
+		frr_csm_enter_maintenance_mode();
+		break;
+
+	default:
+		break;
+	}
+}
+
+/*
+ * Update our state, if appropriate.
+ */
+static void frr_csm_update_state(Module mod, Mode mode, State state)
+{
+	if (mod != zrouter.frr_csm_modid)
+		return;
+
+	zrouter.csm_cmode = mode;
+	zrouter.csm_cstate = state;
+}
+
+/*
+ * Inform our current state.
+ */
+static int frr_csm_send_state()
+{
+	uint8_t rsp[MAX_MSG_LEN];
+	uint8_t ack[MAX_MSG_LEN];
+	msg_pkg *m = (msg_pkg *)rsp;
+	msg *entry = (msg *)m->entry;
+	module_status_response *msr;
+	int nbytes;
+
+	/* Send module status */
+	entry->type = MODULE_STATUS_RESP;
+	entry->len = sizeof(*entry) + sizeof(*msr);
+	msr = (module_status_response *)entry->data;
+	msr->mode.mod = zrouter.frr_csm_modid;
+	msr->mode.mode = zrouter.csm_cmode;
+	msr->mode.state = zrouter.csm_cstate;
+	msr->failure_reason = NO_ERROR;
+	m->total_len = sizeof(*m) + entry->len;
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("FRRCSM: Sending module status, mode %s state %s",
+			   mode_to_str(msr->mode.mode),
+			   mod_state_to_str(msr->mode.state));
+
+	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
+			    ack);
+	if (nbytes == -1) {
+		zlog_err("FRRCSM: Failed to send module status, error %s",
+			 safe_strerror(errno));
+		return -1;
+	}
+
+	/* We don't care about the response */
+	return 0;
+}
+
+/*
+ * Callback handler to process messages from CSM
+ */
+static int frr_csm_cb(int len, void *buf)
+{
+	msg_pkg *m = (msg_pkg *)buf;
+	msg *entry;
+	int nbytes;
+	keepalive_request *kr;
+	module_mode *mod_mode;
+	module_status *mod_status;
+
+	/* Set RCU information in the pthread */
+	if (!csm_rcu_set) {
+		csm_pthread = pthread_self();
+		rcu_thread_start(csm_rcu_thread);
+		csm_rcu_set = true;
+	}
+
+	nbytes = len;
+	if (nbytes != m->total_len) {
+		zlog_err(
+			"FRRCSM: Invalid length in received message, len %d msg_len %d",
+			nbytes, m->total_len);
+		return -1;
+	}
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("FRRCSM: Received message, total len %d", len);
+	nbytes -= sizeof(*m);
+	entry = m->entry;
+	while (nbytes && nbytes >= entry->len) {
+		switch (entry->type) {
+		case COME_UP:
+			mod_mode = (module_mode *)entry->data;
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug(
+					"... Received ComeUp for %s, mode %s state %s",
+					mod_id_to_str(mod_mode->mod),
+					mode_to_str(mod_mode->mode),
+					mod_state_to_str(mod_mode->state));
+			frr_csm_handle_up_down_trigger(mod_mode->mod,
+						       mod_mode->mode,
+						       mod_mode->state, true);
+			break;
+		case GO_DOWN:
+			mod_mode = (module_mode *)entry->data;
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug(
+					"... Received GoDown for %s, mode %s state %s",
+					mod_id_to_str(mod_mode->mod),
+					mode_to_str(mod_mode->mode),
+					mod_state_to_str(mod_mode->state));
+			frr_csm_handle_up_down_trigger(mod_mode->mod,
+						       mod_mode->mode,
+						       mod_mode->state, false);
+			break;
+		case UP:
+			mod_status = (module_status *)entry->data;
+			mod_mode = &mod_status->mode;
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug(
+					"... Received Up for %s, mode %s State %s fr %d",
+					mod_id_to_str(mod_mode->mod),
+					mode_to_str(mod_mode->mode),
+					mod_state_to_str(mod_mode->state),
+					mod_status->failure_reason);
+			frr_csm_update_state(mod_mode->mod, mod_mode->mode,
+					     mod_mode->state);
+			break;
+		case DOWN:
+			mod_mode = (module_mode *)entry->data;
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug(
+					"... Received Down for %s, mode %s state %s",
+					mod_id_to_str(mod_mode->mod),
+					mode_to_str(mod_mode->mode),
+					mod_state_to_str(mod_mode->state));
+			frr_csm_update_state(mod_mode->mod, mod_mode->mode,
+					     mod_mode->state);
+			break;
+		case KEEP_ALIVE_REQ:
+			kr = (keepalive_request *)entry->data;
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug("... Received Keepalive Req, seq %d",
+					   kr->seq);
+			frr_csm_send_keep_rsp(kr->seq);
+			break;
+		case NETWORK_LAYER_INFO:
+			mod_status = (module_status *)entry->data;
+			mod_mode = &mod_status->mode;
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug(
+					"... NL Info for %s, mode %s State %s fr %d",
+					mod_id_to_str(mod_mode->mod),
+					mode_to_str(mod_mode->mode),
+					mod_state_to_str(mod_mode->state),
+					mod_status->failure_reason);
+			/* TBD: Should we do anything with this? */
+			break;
+		case MODULE_STATUS_REQ:
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug("... Received ModStatus Req");
+			frr_csm_send_state();
+			break;
+		default:
+			/* Right now, we don't care about anything else */
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug("... Received unhandled message %d",
+					   entry->type);
+			break;
+		}
+		nbytes -= entry->len;
+		entry = (msg *)((uint8_t *)entry + entry->len);
+	}
+
+	return 0;
+}
+
+void zebra_csm_fast_restart_client_ack(struct zserv *client, bool upgrade)
+{
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("Ack for entering fast shutdown%s from %s",
+			   upgrade ? " (upgrade)" : "",
+			   zebra_route_string(client->proto));
+
+	/* Respond back to CSM */
+	frr_csm_send_down_complete(zrouter.frr_csm_modid);
+}
+
+void zebra_csm_maint_mode_client_ack(struct zserv *client, bool enter)
+{
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("Ack for %s maintenance mode from %s",
+			   enter ? "Enter" : "Exit",
+			   zebra_route_string(client->proto));
+
+	/* Respond back to CSM */
+	if (enter) {
+		frr_csm_send_down_complete(zrouter.frr_csm_modid);
+	} else {
+		int rc;
+		Mode mode;
+		State state;
+		enum frr_csm_smode smode;
+
+		rc = frr_csm_get_start_mode(&mode, &state);
+		if (rc)
+			zlog_err("FRRCSM: Failed to send load complete");
+		convert_mode(mode, &smode);
+		zlog_err(
+			"....... Got start mode %s (converted to %s), state %s",
+			mode_to_str(mode), frr_csm_smode_str[smode],
+			mod_state_to_str(state));
+		zrouter.csm_smode = zrouter.csm_cmode = mode;
+		zrouter.csm_cstate = state;
+		zrouter.frr_csm_smode = smode;
+		frr_csm_send_init_complete();
+	}
+}
+
+/*
+ * Send initialization complete to CSM.
+ * Called in zebra's main thread
+ */
+int frr_csm_send_init_complete()
+{
+	uint8_t req[MAX_MSG_LEN];
+	uint8_t rsp[MAX_MSG_LEN];
+	msg_pkg *m = (msg_pkg *)req;
+	msg *entry = (msg *)m->entry;
+	module_status *mod_status;
+	int nbytes;
+
+	/* Send init_complete */
+	if (!zrouter.frr_csm_regd)
+		return 0;
+
+	entry->type = INIT_COMPLETE;
+	entry->len = sizeof(*entry) + sizeof(*mod_status);
+	mod_status = (module_status *)entry->data;
+	mod_status->mode.mod = zrouter.frr_csm_modid;
+	mod_status->mode.state = INIT_COMPLETE;
+	mod_status->failure_reason = NO_ERROR;
+	m->total_len = sizeof(*m) + entry->len;
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("FRRCSM: Sending init complete");
+
+	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
+			    rsp);
+	if (nbytes == -1) {
+		zlog_err("FRRCSM: Failed to send init complete, error %s",
+			 safe_strerror(errno));
+		return -1;
+	}
+
+	/* We don't care about the response */
+	return 0;
+}
+
+/*
+ * Unregister from CSM
+ */
+void frr_csm_unregister()
+{
+	if (zrouter.frr_csm_regd) {
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug("FRRCSM: Unregistering");
+		frr_with_privs (&zserv_privs) {
+			/* unregister */
+			csmgr_unregister(zrouter.frr_csm_modid);
+
+			/* Clean up the thread-specific data (RCU) if we
+			 * never attached it to the thread. If we did,
+			 * the thread termination would handle the cleanup.
+			 */
+			if (!csm_rcu_set)
+				rcu_thread_unprepare(csm_rcu_thread);
+		}
+	}
+}
+
+/*
+ * Register with CSM and get our starting state.
+ */
+void frr_csm_register()
+{
+	int rc;
+	Mode mode;
+	State state;
+	enum frr_csm_smode smode;
+
+	/* Init our CSM module id */
+	zrouter.frr_csm_modid = FRR;
+
+	/* CSM register creates a pthread, we have to do prep to
+	 * associate RCU with it, since we get a callback in that
+	 * thread's context.
+	 */
+	csm_rcu_thread = rcu_thread_prepare();
+	frr_with_privs (&zserv_privs) {
+		rc = csmgr_register_cb(zrouter.frr_csm_modid, 1,
+				       &zrouter.frr_csm_modid, frr_csm_cb);
+	}
+	if (!rc) {
+		zlog_err("FRRCSM: Register failed, error %s",
+			 safe_strerror(errno));
+		zrouter.frr_csm_regd = false;
+		zrouter.frr_csm_smode = COLD_START;
+		zrouter.csm_smode = zrouter.csm_cmode = REBOOT_COLD;
+		rcu_thread_unprepare(csm_rcu_thread);
+		csm_rcu_thread = NULL;
+		return;
+	}
+
+	zlog_info("FRRCSM: Register succeeded");
+	zrouter.frr_csm_regd = true;
+
+	rc = frr_csm_get_start_mode(&mode, &state);
+	convert_mode(mode, &smode);
+	if (rc) {
+		zlog_err(
+			"FRRCSM: Failed to get start mode, assuming cold start");
+		zrouter.csm_smode = zrouter.csm_cmode = REBOOT_COLD;
+		zrouter.csm_cstate = UP;
+		zrouter.frr_csm_smode = COLD_START;
+	} else {
+		zlog_err("FRRCSM: Start mode is %s (converted to %s), state %s",
+			 mode_to_str(mode), frr_csm_smode_str[smode],
+			 mod_state_to_str(state));
+		zrouter.csm_smode = zrouter.csm_cmode = mode;
+		zrouter.csm_cstate = state;
+		zrouter.frr_csm_smode = smode;
+	}
+}
+#else
+void zebra_csm_maint_mode_client_ack(struct zserv *client, bool enter)
+{
+	zlog_warn("Maintenance Mode Not Written for this platform yet");
+}
+
+void zebra_csm_fast_restart_client_ack(struct zserv *client, bool enter)
+{
+	zlog_warn("Fast Restart handling Not Written for this platform yet");
+}
+#endif
