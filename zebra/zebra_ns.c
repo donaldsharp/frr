@@ -29,6 +29,7 @@
 #include "zebra_ns.h"
 #include "zebra_vrf.h"
 #include "rt.h"
+#include "netconf_netlink.h"
 #include "zebra_vxlan.h"
 #include "debug.h"
 #include "zebra_netns_notify.h"
@@ -124,6 +125,7 @@ int zebra_ns_enable(ns_id_t ns_id, void **info)
 
 	kernel_init(zns);
 	interface_list(zns);
+	netconf_lookup_netlink(zns);
 	route_read(zns);
 	kernel_read_pbr_rules(zns);
 

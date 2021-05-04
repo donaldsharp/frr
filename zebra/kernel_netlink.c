@@ -47,6 +47,7 @@
 #include "zebra/rt_netlink.h"
 #include "zebra/if_netlink.h"
 #include "zebra/rule_netlink.h"
+#include "zebra/netconf_netlink.h"
 #include "zebra/zebra_errors.h"
 
 #ifndef SO_RCVBUFFORCE
@@ -361,6 +362,9 @@ static int netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 		return netlink_nexthop_change(h, ns_id, startup);
 	case RTM_DELNEXTHOP:
 		return netlink_nexthop_change(h, ns_id, startup);
+	case RTM_NEWNETCONF:
+	case RTM_DELNETCONF:
+		return netlink_netconf_change(h, ns_id, startup);
 	default:
 		/*
 		 * If we have received this message then
@@ -1435,7 +1439,9 @@ void kernel_init(struct zebra_ns *zns)
 		RTMGRP_NEIGH                   |
 		((uint32_t) 1 << (RTNLGRP_IPV4_RULE - 1)) |
 		((uint32_t) 1 << (RTNLGRP_IPV6_RULE - 1)) |
-		((uint32_t) 1 << (RTNLGRP_NEXTHOP - 1));
+		((uint32_t) 1 << (RTNLGRP_NEXTHOP - 1)) |
+		((uint32_t) 1 << (RTNLGRP_IPV4_NETCONF - 1)) |
+		((uint32_t) 1 << (RTNLGRP_MPLS_NETCONF -1));
 
 	snprintf(zns->netlink.name, sizeof(zns->netlink.name),
 		 "netlink-listen (NS %u)", zns->ns_id);
