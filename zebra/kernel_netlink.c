@@ -324,6 +324,62 @@ static int netlink_socket(struct nlsock *nl, unsigned long groups,
 	return ret;
 }
 
+#include "linux/netconf.h"
+
+static struct rtattr *netconf_rta(struct netconfmsg *ncm)
+{
+	return (struct rtattr *)((char *)ncm
+				 + NLMSG_ALIGN(sizeof(struct netconfmsg)));
+}
+
+static int netlink_netconf_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
+{
+	struct netconfmsg *ncm;
+	struct rtattr *tb[NETCONFA_MAX + 1];
+	size_t len;
+	int family;
+	ifindex_t ifindex;
+	bool mpls_on = false;
+
+	if (h->nlmsg_type != RTM_NEWNETCONF &&
+	    h->nlmsg_type != RTM_DELNETCONF)
+		return 0;
+
+	len = h->nlmsg_len - NLMSG_LENGTH(sizeof(struct netconfmsg));
+	if (len < 0) {
+		zlog_err("%s: Message received from netlink is of a broken size: %d %zu",
+			 __func__, h->nlmsg_len, (size_t)NLMSG_LENGTH(sizeof(struct netconfmsg)));
+		return -1;
+	}
+
+	ncm = NLMSG_DATA(h);
+
+	family = ncm->ncm_family;
+
+	netlink_parse_rtattr(tb, NETCONFA_MAX, netconf_rta(ncm), len);
+
+	if (!tb[NETCONFA_IFINDEX]) {
+		zlog_debug("We need an interface");
+		return 0;
+	}
+
+	ifindex = *(ifindex_t *)RTA_DATA(tb[NETCONFA_IFINDEX]);
+
+	switch (ifindex) {
+	case NETCONFA_IFINDEX_ALL:
+	case NETCONFA_IFINDEX_DEFAULT:
+		zlog_debug("need to handle all cases");
+		return 0;
+	default:
+		break;
+	}
+	if (tb[NETCONFA_INPUT])
+		mpls_on = *(bool *)RTA_DATA(tb[NETCONFA_INPUT]);
+
+	zlog_debug("Interface %u is %d", ifindex, mpls_on);
+	return 0;
+}
+
 static int netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 				     int startup)
 {
@@ -373,6 +429,9 @@ static int netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 		return netlink_nexthop_change(h, ns_id, startup);
 	case RTM_DELNEXTHOP:
 		return netlink_nexthop_change(h, ns_id, startup);
+	case RTM_NEWNETCONF:
+	case RTM_DELNETCONF:
+		return netlink_netconf_change(h, ns_id, startup);
 	default:
 		/*
 		 * If we have received this message then
@@ -1436,7 +1495,8 @@ void kernel_init(struct zebra_ns *zns)
 		RTMGRP_NEIGH                   |
 		((uint32_t) 1 << (RTNLGRP_IPV4_RULE - 1)) |
 		((uint32_t) 1 << (RTNLGRP_IPV6_RULE - 1)) |
-		((uint32_t) 1 << (RTNLGRP_NEXTHOP - 1));
+		((uint32_t) 1 << (RTNLGRP_NEXTHOP - 1)) |
+		((uint32_t) 1 << (RTNLGRP_MPLS_NETCONF -1));
 
 	snprintf(zns->netlink.name, sizeof(zns->netlink.name),
 		 "netlink-listen (NS %u)", zns->ns_id);
