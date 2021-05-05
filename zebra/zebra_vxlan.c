@@ -4791,7 +4791,9 @@ int zebra_vxlan_svi_down(struct interface *ifp, struct interface *link_if)
 			zevpn->vrf_id = VRF_DEFAULT;
 
 			/* update the tenant vrf in BGP */
-			zebra_evpn_send_add_to_client(zevpn);
+			if (if_is_operative(zevpn->vxlan_if)
+			    && zevpn->bridge_if)
+				zebra_evpn_send_add_to_client(zevpn);
 		}
 	}
 	return 0;
@@ -4843,7 +4845,9 @@ int zebra_vxlan_svi_up(struct interface *ifp, struct interface *link_if)
 
 		/* update the vrf information for l2-vni and inform bgp */
 		zevpn->vrf_id = ifp->vrf_id;
-		zebra_evpn_send_add_to_client(zevpn);
+
+		if (if_is_operative(zevpn->vxlan_if) && zevpn->bridge_if)
+			zebra_evpn_send_add_to_client(zevpn);
 
 		/* Install any remote neighbors for this VNI. */
 		memset(&n_wctx, 0, sizeof(struct neigh_walk_ctx));
