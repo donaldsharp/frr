@@ -402,18 +402,22 @@ class Config(object):
             legestr = re_key_rt.group(5)
             re_lege = re.search(r'(.*)le\s+(\d+)\s+ge\s+(\d+)(.*)', legestr)
             if re_lege:
-                legestr = '%sge %s le %s%s' % (re_lege.group(1),
-                                               re_lege.group(3),
-                                               re_lege.group(2),
-                                               re_lege.group(4))
+                legestr = "%sge %s le %s%s" % (
+                    re_lege.group(1),
+                    re_lege.group(3),
+                    re_lege.group(2),
+                    re_lege.group(4),
+                )
 
-            key[0] = '%s prefix-list%s%s %s%s' % (re_key_rt.group(1),
-                                                  re_key_rt.group(2),
-                                                  re_key_rt.group(3),
-                                                  newaddr,
-                                                  legestr)
+            key[0] = "%s prefix-list%s%s %s%s" % (
+                re_key_rt.group(1),
+                re_key_rt.group(2),
+                re_key_rt.group(3),
+                newaddr,
+                legestr,
+            )
 
-        if lines and key[0].startswith('router bgp'):
+        if lines and key[0].startswith("router bgp"):
             newlines = []
             for line in lines:
                 re_net = re.match(r'network\s+([A-Fa-f:.0-9/]+)(.*)$', line)
