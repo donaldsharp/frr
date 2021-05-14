@@ -714,6 +714,7 @@ struct bgp {
 	enum bgp_link_bw_handling lb_handling;
 
 	/* BGP Conditional advertisement */
+	uint32_t condition_check_period;
 	uint32_t condition_filter_count;
 	struct thread *t_condition_check;
 
