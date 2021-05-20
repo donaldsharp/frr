@@ -3071,6 +3071,7 @@ peer_init:
 	bgp->dynamic_neighbors_count = 0;
 	bgp->lb_ref_bw = BGP_LINK_BW_REF_BW;
 	bgp->lb_handling = BGP_LINK_BW_ECMP;
+	bgp->condition_check_period = DEFAULT_CONDITIONAL_ROUTES_POLL_TIME;
 	bgp->reject_as_sets = false;
 	bgp_addpath_init_bgp_data(&bgp->tx_addpath);
 
