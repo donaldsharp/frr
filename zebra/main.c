@@ -112,6 +112,12 @@ zebra_capabilities_t _caps_p[] = {
 	ZCAP_NET_ADMIN, ZCAP_SYS_ADMIN, ZCAP_NET_RAW,
 };
 
+zebra_capabilities_t _caps_i[] = {
+	ZCAP_NET_ADMIN,
+	ZCAP_SYS_ADMIN,
+	ZCAP_NET_RAW,
+};
+
 /* zebra privileges to run with */
 struct zebra_privs_t zserv_privs = {
 #if defined(FRR_USER) && defined(FRR_GROUP)
@@ -123,7 +129,8 @@ struct zebra_privs_t zserv_privs = {
 #endif
 	.caps_p = _caps_p,
 	.cap_num_p = array_size(_caps_p),
-	.cap_num_i = 0};
+	.caps_i = _caps_i,
+	.cap_num_i = array_size(_caps_i)};
 
 /* SIGHUP handler. */
 static void sighup(void)
