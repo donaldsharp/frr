@@ -89,16 +89,19 @@ enum zebra_if_flags {
 	 */
 	ZIF_FLAG_LACP_BYPASS = (1 << 3),
 
-	/* Interface has been configured to enable or disable the neighbor
-	 * throttling feature.
-	 */
-	ZIF_FLAG_NEIGH_THROTTLE = (1 << 6),
-	ZIF_FLAG_NEIGH_THROTTLE_DISABLE = (1 << 7),
-
 	/* On local ESs ARP ND snooping is enabling if fast-failover is
 	 * needed with arp-suppression on
 	 */
-	ZIF_FLAG_ARP_ND_SNOOP = (1 << 8)
+	ZIF_FLAG_ARP_ND_SNOOP = (1 << 6),
+
+	/* TC has been initialized */
+	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 7),
+
+	/* Interface has been configured to enable or disable the neighbor
+	 * throttling feature.
+	 */
+	ZIF_FLAG_NEIGH_THROTTLE = (1 << 8),
+	ZIF_FLAG_NEIGH_THROTTLE_DISABLE = (1 << 9),
 };
 
 /* We snoop on ARP replies and NAs rxed on bridge ports if MH is

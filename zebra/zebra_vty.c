@@ -2659,6 +2659,18 @@ DEFPY (evpn_mh_startup_delay,
 	return zebra_evpn_mh_startup_delay_update(vty, duration,
 			no ? true : false);
 }
+DEFPY(evpn_mh_tc_off, evpn_mh_tc_off_cmd, "[no$no] evpn mh tc-off",
+      NO_STR "EVPN\n"
+	     "Multihoming\n"
+	     "Disable SPH/DF TC programming\n")
+{
+	bool tc_off;
+
+	tc_off = no ? false : true;
+
+	return zebra_evpn_mh_tc_off(vty, tc_off);
+}
+
 
 DEFPY(evpn_mh_redirect_off, evpn_mh_redirect_off_cmd,
       "[no$no] evpn mh redirect-off",
@@ -2912,6 +2924,15 @@ DEFPY(neigh_throttle_del, neigh_throttle_del_cmd,
 		zebra_neigh_throttle_delete(vrf_id, &addr);
 	} else
 		zebra_neigh_throttle_delete_all();
+	return CMD_SUCCESS;
+}
+DEFPY(show_evpn_es_peer, show_evpn_es_peer_cmd, "show evpn es-peer [json$json]",
+      SHOW_STR "EVPN\n"
+	       "Ethernet Segment peer\n" JSON_STR)
+{
+	bool uj = !!json;
+
+	zebra_evpn_mh_vtep_show(vty, uj);
 
 	return CMD_SUCCESS;
 }
@@ -4567,6 +4588,7 @@ void zebra_vty_init(void)
 	install_element(VIEW_NODE, &show_evpn_vni_vni_cmd);
 	install_element(VIEW_NODE, &show_evpn_l2_nh_cmd);
 	install_element(VIEW_NODE, &show_evpn_es_cmd);
+	install_element(VIEW_NODE, &show_evpn_es_peer_cmd);
 	install_element(VIEW_NODE, &show_evpn_es_evi_cmd);
 	install_element(VIEW_NODE, &show_evpn_access_vlan_cmd);
 	install_element(VIEW_NODE, &show_evpn_rmac_vni_mac_cmd);
@@ -4607,6 +4629,7 @@ void zebra_vty_init(void)
 
 	install_element(CONFIG_NODE, &evpn_mh_mac_holdtime_cmd);
 	install_element(CONFIG_NODE, &evpn_mh_neigh_holdtime_cmd);
+	install_element(CONFIG_NODE, &evpn_mh_tc_off_cmd);
 	install_element(CONFIG_NODE, &evpn_mh_startup_delay_cmd);
 	install_element(CONFIG_NODE, &evpn_mh_redirect_off_cmd);
 
