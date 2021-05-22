@@ -30,6 +30,7 @@
 #include "zebra_nhg.h"
 
 #define EVPN_MH_VTY_STR "Multihoming\n"
+#define TC_CMD_STR_LEN 512
 
 /* Ethernet Segment entry -
  * - Local and remote ESs are maintained in a global RB tree,
@@ -148,6 +149,22 @@ struct zebra_evpn_l2_nh {
 	uint32_t ref_cnt;
 };
 
+#define EVPN_MH_SKB_MARK_BASE 100
+#define EVPN_MH_SKB_MARK_MCAST EVPN_MH_SKB_MARK_BASE
+
+/* Local ES peers */
+struct zebra_evpn_mh_vtep {
+	struct in_addr vtep_ip;
+
+	/* List of VTEPs (zebra_evpn_es_vtep) */
+	struct list *es_vtep_list;
+
+	/* memory used for adding the entry to zmh_info->vtep_list */
+	struct listnode listnode;
+
+	uint32_t sph_offset;
+};
+
 /* PE attached to an ES */
 struct zebra_evpn_es_vtep {
 	struct zebra_evpn_es *es; /* parent ES */
@@ -157,12 +174,20 @@ struct zebra_evpn_es_vtep {
 	/* Rxed Type-4 route from this VTEP */
 #define ZEBRA_EVPNES_VTEP_RXED_ESR (1 << 0)
 #define ZEBRA_EVPNES_VTEP_DEL_IN_PROG (1 << 1)
+	/* ES VTEP is associated with a local ES */
+#define ZEBRA_EVPNES_VTEP_LOCAL (1 << 2)
+	/* SPH filter has been stup for this ES */
+#define ZEBRA_EVPNES_VTEP_SPH_SET (1 << 3)
 
 	/* MAC nexthop info */
 	struct zebra_evpn_l2_nh *nh;
 
 	/* memory used for adding the entry to es->es_vtep_list */
 	struct listnode es_listnode;
+
+	/* memory used for adding the entry to zebra_mh_vtep->es_vtep_list */
+	struct zebra_evpn_mh_vtep *mh_vtep;
+	struct listnode vtep_listnode;
 
 	/* Parameters for DF election */
 	uint8_t df_alg;
@@ -214,6 +239,8 @@ struct zebra_evpn_mh_info {
  * flooding of ARP replies rxed from the multi-homed host
  */
 #define ZEBRA_EVPN_MH_ADV_SVI_MAC (1 << 3)
+/* Disable TC programming for DF and SPH filters */
+#define ZEBRA_EVPN_MH_TC_OFF (1 << 4)
 
 	/* RB tree of Ethernet segments (used for EVPN-MH)  */
 	struct zebra_es_rb_head es_rb_tree;
@@ -238,6 +265,7 @@ struct zebra_evpn_mh_info {
 	bitfield_t nh_id_bitmap;
 #define EVPN_NH_ID_MAX       (16*1024)
 #define EVPN_NH_ID_VAL_MASK  0xffffff
+
 /* The purpose of using different types for NHG and NH is NOT to manage the
  * id space separately. It is simply to make debugging easier.
  */
@@ -247,6 +275,12 @@ struct zebra_evpn_mh_info {
 	struct hash *nhg_table;
 	/* L2-NH table - key: vtep_up, data: zebra_evpn_nh */
 	struct hash *nh_ip_table;
+
+	bitfield_t sph_id_bitmap;
+#define EVPN_SPH_ID_MAX (16)
+
+	/* List of ES peer VTEPs (zebra_evpn_mh_vtep) */
+	struct list *mh_vtep_list;
 
 	/* XXX - re-visit the default hold timer value */
 	int mac_hold_time;
@@ -390,5 +424,7 @@ extern void zebra_evpn_es_bypass_update(struct zebra_evpn_es *es,
 extern void zebra_evpn_proc_remote_nh(ZAPI_HANDLER_ARGS);
 extern struct zebra_evpn_es_evi *
 zebra_evpn_es_evi_find(struct zebra_evpn_es *es, struct zebra_evpn *zevpn);
+extern void zebra_evpn_mh_vtep_show(struct vty *vty, bool uj);
+extern int zebra_evpn_mh_tc_off(struct vty *vty, bool tc_off);
 
 #endif /* _ZEBRA_EVPN_MH_H */
