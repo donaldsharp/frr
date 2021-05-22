@@ -58,6 +58,7 @@ DEFINE_MTYPE_STATIC(ZEBRA, ZES, "Ethernet Segment");
 DEFINE_MTYPE_STATIC(ZEBRA, ZES_EVI, "ES info per-EVI");
 DEFINE_MTYPE_STATIC(ZEBRA, ZMH_INFO, "MH global info");
 DEFINE_MTYPE_STATIC(ZEBRA, ZES_VTEP, "VTEP attached to the ES");
+DEFINE_MTYPE_STATIC(ZEBRA, MH_VTEP, "ES PEER VTEP");
 DEFINE_MTYPE_STATIC(ZEBRA, L2_NH, "L2 nexthop");
 
 static void zebra_evpn_es_get_one_base_evpn(void);
@@ -74,6 +75,31 @@ static void zebra_evpn_mh_clear_protodown_es(struct zebra_evpn_es *es);
 static void zebra_evpn_mh_startup_delay_timer_start(const char *rc);
 
 esi_t zero_esi_buf, *zero_esi = &zero_esi_buf;
+
+#define TC_SUDO_STR ""
+#define TC_BIN_STR "/usr/sbin/tc"
+
+extern struct zebra_privs_t zserv_privs;
+static void zebra_evpn_mh_tc_program(char *cmd)
+{
+	int rc = 0;
+
+	if (zmh_info->flags & ZEBRA_EVPN_MH_TC_OFF) {
+		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+			zlog_debug("%s:%s", "skip", cmd);
+		return;
+	}
+
+	frr_with_privs (&zserv_privs) {
+		rc = system(cmd);
+	}
+	if (rc) {
+		zlog_warn("%d:%s", rc, cmd);
+	} else {
+		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+			zlog_debug("%d:%s", rc, cmd);
+	}
+}
 
 /*****************************************************************************/
 /* Ethernet Segment to EVI association -
@@ -1153,6 +1179,17 @@ void zebra_evpn_if_cleanup(struct zebra_if *zif)
 {
 	vlanid_t vid;
 	struct zebra_evpn_es *es;
+	char cmd[TC_CMD_STR_LEN];
+
+	if (zif->flags & ZIF_FLAG_EVPN_MH_TC_INIT) {
+		snprintf(cmd, sizeof(cmd), "%s%s filter del dev %s ingress",
+			 TC_SUDO_STR, TC_BIN_STR, zif->ifp->name);
+		zebra_evpn_mh_tc_program(cmd);
+		snprintf(cmd, sizeof(cmd), "%s%s filter del dev %s egress",
+			 TC_SUDO_STR, TC_BIN_STR, zif->ifp->name);
+		zebra_evpn_mh_tc_program(cmd);
+		zif->flags &= ~ZIF_FLAG_EVPN_MH_TC_INIT;
+	}
 
 	if (bf_is_inited(zif->vlan_bitmap)) {
 		bf_for_each_set_bit(zif->vlan_bitmap, vid, IF_VLAN_BITMAP_MAX)
@@ -1546,6 +1583,355 @@ static void zebra_evpn_l2_nh_es_vtep_deref(struct zebra_evpn_es_vtep *es_vtep)
  * 2. VTEPs that have an "active" ES-EVI VTEP i.e. EAD-per-ES and EAD-per-EVI
  *    have been imported into one or more EVPNs
  */
+static int zebra_evpn_mh_vtep_cmp(void *p1, void *p2)
+{
+	const struct zebra_evpn_mh_vtep *vtep1 = p1;
+	const struct zebra_evpn_mh_vtep *vtep2 = p2;
+
+	return vtep1->vtep_ip.s_addr - vtep2->vtep_ip.s_addr;
+}
+
+/* XXX - non-DF code needs some more thought */
+void zebra_evpn_mh_vtep_uplink_df_ingress_tc_setup(struct zebra_if *zif,
+						   bool add)
+{
+	char cmd[TC_CMD_STR_LEN];
+	uint32_t handle;
+
+	zlog_debug("mh uplink %s df ingress tc %s", zif->ifp->name,
+		   add ? "add" : "del");
+	if (add) {
+		/* If this is the first attempt to add a TC filter on an uplink
+		 * we need to init the ingress clsact
+		 */
+		if (!(zif->flags & ZIF_FLAG_EVPN_MH_TC_INIT)) {
+			zif->flags |= ZIF_FLAG_EVPN_MH_TC_INIT;
+
+			snprintf(cmd, sizeof(cmd),
+				 "%s%s qdisc replace dev %s clsact",
+				 TC_SUDO_STR, TC_BIN_STR, zif->ifp->name);
+			zebra_evpn_mh_tc_program(cmd);
+
+			/* del all existing ingress rules on the device */
+			snprintf(cmd, sizeof(cmd),
+				 "%s%s filter del dev %s ingress", TC_SUDO_STR,
+				 TC_BIN_STR, zif->ifp->name);
+			zebra_evpn_mh_tc_program(cmd);
+		}
+
+		handle = EVPN_MH_SKB_MARK_BASE;
+		snprintf(
+			cmd, sizeof(cmd),
+			"%s%s filter replace dev %s ingress prot ip pref %u flower ip_proto udp dst_ip 224.0.0.0/4 dst_port 4789 skip_hw action skbedit mark %u",
+			TC_SUDO_STR, TC_BIN_STR, zif->ifp->name, handle,
+			handle);
+		zebra_evpn_mh_tc_program(cmd);
+	} else {
+		handle = EVPN_MH_SKB_MARK_BASE;
+		snprintf(cmd, sizeof(cmd),
+			 "%s%s filter del dev %s ingress pref %u", TC_SUDO_STR,
+			 TC_BIN_STR, zif->ifp->name, handle);
+		zebra_evpn_mh_tc_program(cmd);
+	}
+}
+
+static void zebra_evpn_mh_vtep_uplink_sph_ingress_tc_setup(
+	struct zebra_evpn_mh_vtep *mh_vtep, struct zebra_if *zif, bool add)
+{
+	char cmd[TC_CMD_STR_LEN];
+	uint32_t handle;
+	char buf1[INET_ADDRSTRLEN];
+
+	if (add) {
+		/* If this is the first attempt to add a TC filter on an uplink
+		 * we need to init the ingress clsact
+		 */
+		if (!(zif->flags & ZIF_FLAG_EVPN_MH_TC_INIT)) {
+			zif->flags |= ZIF_FLAG_EVPN_MH_TC_INIT;
+
+			snprintf(cmd, sizeof(cmd),
+				 "%s%s qdisc replace dev %s clsact",
+				 TC_SUDO_STR, TC_BIN_STR, zif->ifp->name);
+			zebra_evpn_mh_tc_program(cmd);
+
+			/* del all existing ingress rules on the device */
+			snprintf(cmd, sizeof(cmd),
+				 "%s%s filter del dev %s ingress", TC_SUDO_STR,
+				 TC_BIN_STR, zif->ifp->name);
+			zebra_evpn_mh_tc_program(cmd);
+		}
+
+		handle = EVPN_MH_SKB_MARK_BASE + mh_vtep->sph_offset;
+		inet_ntop(AF_INET, &mh_vtep->vtep_ip, buf1, sizeof(buf1));
+		snprintf(
+			cmd, sizeof(cmd),
+			"%s%s filter replace dev %s ingress prot ip pref %u flower ip_proto udp src_ip %s dst_port 4789 skip_hw action skbedit mark %u",
+			TC_SUDO_STR, TC_BIN_STR, zif->ifp->name, handle, buf1,
+			handle);
+		zebra_evpn_mh_tc_program(cmd);
+	} else {
+		handle = EVPN_MH_SKB_MARK_BASE + mh_vtep->sph_offset;
+		snprintf(cmd, sizeof(cmd),
+			 "%s%s filter del dev %s ingress pref %u", TC_SUDO_STR,
+			 TC_BIN_STR, zif->ifp->name, handle);
+		zebra_evpn_mh_tc_program(cmd);
+	}
+}
+
+/* On MH uplink add/del update the SPH marking for all ES peers */
+static void zebra_evpn_mh_uplink_setup(struct zebra_if *zif, bool add)
+{
+	struct listnode *node = NULL;
+	struct zebra_evpn_mh_vtep *mh_vtep;
+	char cmd[TC_CMD_STR_LEN];
+
+	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+		zlog_debug("mh vtep setup for uplink %s %s", zif->ifp->name,
+			   add ? "add" : "del");
+
+	for (ALL_LIST_ELEMENTS_RO(zmh_info->mh_vtep_list, node, mh_vtep)) {
+		zebra_evpn_mh_vtep_uplink_sph_ingress_tc_setup(mh_vtep, zif,
+							       add);
+	}
+
+	if (!add) {
+		/* additionally del all ingress rules on the device */
+		snprintf(cmd, sizeof(cmd), "%s%s filter del dev %s ingress",
+			 TC_SUDO_STR, TC_BIN_STR, zif->ifp->name);
+		zebra_evpn_mh_tc_program(cmd);
+		zif->flags &= ~ZIF_FLAG_EVPN_MH_TC_INIT;
+	}
+}
+
+static void zebra_evpn_mh_vtep_uplink_setup(struct zebra_evpn_mh_vtep *mh_vtep,
+					    bool add)
+{
+	struct zebra_vrf *zvrf;
+	struct interface *ifp;
+	struct zebra_if *zif;
+
+	zvrf = zebra_vrf_get_evpn();
+	FOR_ALL_INTERFACES (zvrf->vrf, ifp) {
+		if (ifp->ifindex == IFINDEX_INTERNAL || !ifp->info)
+			continue;
+		zif = ifp->info;
+		if (!(zif->flags & ZIF_FLAG_EVPN_MH_UPLINK))
+			continue;
+		zebra_evpn_mh_vtep_uplink_sph_ingress_tc_setup(mh_vtep, zif,
+							       add);
+	}
+}
+
+static struct zebra_evpn_mh_vtep *zebra_evpn_mh_vtep_new(struct in_addr vtep_ip)
+{
+	struct zebra_evpn_mh_vtep *mh_vtep;
+
+	mh_vtep = XCALLOC(MTYPE_MH_VTEP, sizeof(*mh_vtep));
+
+	mh_vtep->vtep_ip.s_addr = vtep_ip.s_addr;
+	listnode_init(&mh_vtep->listnode, mh_vtep);
+	listnode_add_sort(zmh_info->mh_vtep_list, &mh_vtep->listnode);
+
+	mh_vtep->es_vtep_list = list_new();
+	listset_app_node_mem(mh_vtep->es_vtep_list);
+
+	/* allocate SPH offset */
+	bf_assign_index(zmh_info->sph_id_bitmap, mh_vtep->sph_offset);
+
+	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+		zlog_debug("mh vtep %pI4 add; sph %u", &mh_vtep->vtep_ip,
+			   mh_vtep->sph_offset);
+
+	/* traverse all uplinks and program ingress SPH filter */
+	zebra_evpn_mh_vtep_uplink_setup(mh_vtep, true);
+
+	return mh_vtep;
+}
+
+static void zebra_evpn_mh_vtep_free(struct zebra_evpn_mh_vtep *mh_vtep)
+{
+	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+		zlog_debug("mh vtep %pI4 del; sph %u", &mh_vtep->vtep_ip,
+			   mh_vtep->sph_offset);
+
+	/* traverse all uplinks and remove ingress SPH filter */
+	zebra_evpn_mh_vtep_uplink_setup(mh_vtep, false);
+
+	/* free SPH offset */
+	bf_release_index(zmh_info->sph_id_bitmap, mh_vtep->sph_offset);
+
+	list_delete(&mh_vtep->es_vtep_list);
+	list_delete_node(zmh_info->mh_vtep_list, &mh_vtep->listnode);
+	XFREE(MTYPE_MH_VTEP, mh_vtep);
+}
+
+static struct zebra_evpn_mh_vtep *
+zebra_evpn_mh_vtep_find(struct in_addr vtep_ip)
+{
+	struct listnode *node;
+	struct zebra_evpn_mh_vtep *mh_vtep;
+
+	for (ALL_LIST_ELEMENTS_RO(zmh_info->mh_vtep_list, node, mh_vtep)) {
+		if (mh_vtep->vtep_ip.s_addr == vtep_ip.s_addr)
+			return mh_vtep;
+	}
+	return NULL;
+}
+
+void zebra_evpn_mh_vtep_show(struct vty *vty, bool uj)
+{
+	json_object *json_array = NULL;
+	struct listnode *node;
+	struct zebra_evpn_mh_vtep *mh_vtep;
+	char buf1[INET_ADDRSTRLEN];
+
+	if (uj) {
+		json_array = json_object_new_array();
+	} else {
+		vty_out(vty, "%-20s %-10s %s\n", "VTEP", "#ES", "SPH offset");
+	}
+
+	for (ALL_LIST_ELEMENTS_RO(zmh_info->mh_vtep_list, node, mh_vtep)) {
+		if (uj) {
+			json_object *json = NULL;
+			json = json_object_new_object();
+			json_object_string_add(json, "vtepIp",
+					       inet_ntop(AF_INET,
+							 &mh_vtep->vtep_ip,
+							 buf1, sizeof(buf1)));
+			json_object_int_add(json, "esCount",
+					    listcount(mh_vtep->es_vtep_list));
+			json_object_int_add(json, "sphOffset",
+					    mh_vtep->sph_offset);
+			json_object_array_add(json_array, json);
+		} else {
+			vty_out(vty, "%-20pI4 %-10d %u\n", &mh_vtep->vtep_ip,
+				listcount(mh_vtep->es_vtep_list),
+				mh_vtep->sph_offset);
+		}
+	}
+
+	if (uj) {
+		vty_out(vty, "%s\n",
+			json_object_to_json_string_ext(
+				json_array, JSON_C_TO_STRING_PRETTY));
+		json_object_free(json_array);
+	}
+}
+
+static void
+zebra_evpn_es_vtep_sph_egress_tc_setup(struct zebra_evpn_es_vtep *es_vtep,
+				       bool add)
+{
+	struct zebra_if *zif = es_vtep->es->zif;
+	uint32_t handle;
+	struct zebra_evpn_mh_vtep *mh_vtep = es_vtep->mh_vtep;
+	char cmd[TC_CMD_STR_LEN];
+
+	if (!zif || !mh_vtep)
+		return;
+
+	if (add) {
+		if (es_vtep->flags & ZEBRA_EVPNES_VTEP_SPH_SET)
+			return;
+		es_vtep->flags |= ZEBRA_EVPNES_VTEP_SPH_SET;
+		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+			zlog_debug("es %s vtep %pI4 egress sph add",
+				   es_vtep->es->esi_str, &es_vtep->vtep_ip);
+
+		/* If this is the first attempt to add a TC filter on an ED
+		 * we need to init the egress clsact
+		 */
+		if (!(zif->flags & ZIF_FLAG_EVPN_MH_TC_INIT)) {
+			zif->flags |= ZIF_FLAG_EVPN_MH_TC_INIT;
+
+			snprintf(cmd, sizeof(cmd),
+				 "%s%s qdisc replace dev %s clsact",
+				 TC_SUDO_STR, TC_BIN_STR, zif->ifp->name);
+			zebra_evpn_mh_tc_program(cmd);
+
+			/* del all existing ingress rules on the device */
+			snprintf(cmd, sizeof(cmd),
+				 "%s%s filter del dev %s egress", TC_SUDO_STR,
+				 TC_BIN_STR, zif->ifp->name);
+			zebra_evpn_mh_tc_program(cmd);
+		}
+
+		handle = EVPN_MH_SKB_MARK_BASE + mh_vtep->sph_offset;
+		snprintf(
+			cmd, sizeof(cmd),
+			"%s%s filter replace dev %s egress pref %u handle %u fw action drop",
+			TC_SUDO_STR, TC_BIN_STR, zif->ifp->name, handle,
+			handle);
+		zebra_evpn_mh_tc_program(cmd);
+	} else {
+		if (!(es_vtep->flags & ZEBRA_EVPNES_VTEP_SPH_SET))
+			return;
+		es_vtep->flags &= ~ZEBRA_EVPNES_VTEP_SPH_SET;
+		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+			zlog_debug("es %s vtep %pI4 egress sph del",
+				   es_vtep->es->esi_str, &es_vtep->vtep_ip);
+
+		handle = EVPN_MH_SKB_MARK_BASE + mh_vtep->sph_offset;
+		snprintf(cmd, sizeof(cmd),
+			 "%s%s filter del dev %s egress pref %u", TC_SUDO_STR,
+			 TC_BIN_STR, zif->ifp->name, handle);
+		zebra_evpn_mh_tc_program(cmd);
+	}
+}
+
+static void zebra_evpn_es_vtep_local_set(struct zebra_evpn_es_vtep *es_vtep)
+{
+	struct zebra_evpn_mh_vtep *mh_vtep;
+
+	if (es_vtep->flags & ZEBRA_EVPNES_VTEP_LOCAL)
+		return;
+
+	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+		zlog_debug("es %s vtep %pI4 local set", es_vtep->es->esi_str,
+			   &es_vtep->vtep_ip);
+
+	es_vtep->flags |= ZEBRA_EVPNES_VTEP_LOCAL;
+	mh_vtep = zebra_evpn_mh_vtep_find(es_vtep->vtep_ip);
+
+	if (!mh_vtep)
+		mh_vtep = zebra_evpn_mh_vtep_new(es_vtep->vtep_ip);
+
+	es_vtep->mh_vtep = mh_vtep;
+	/* link the es_vtep to the parent mh_vtep */
+	listnode_init(&es_vtep->vtep_listnode, es_vtep);
+	listnode_add_sort(mh_vtep->es_vtep_list, &es_vtep->vtep_listnode);
+
+	if (!(es_vtep->es->flags & ZEBRA_EVPNES_BYPASS))
+		zebra_evpn_es_vtep_sph_egress_tc_setup(es_vtep, true);
+}
+
+static void zebra_evpn_es_vtep_local_clear(struct zebra_evpn_es_vtep *es_vtep)
+{
+	struct zebra_evpn_mh_vtep *mh_vtep;
+
+	if (!(es_vtep->flags & ZEBRA_EVPNES_VTEP_LOCAL))
+		return;
+
+	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+		zlog_debug("es %s vtep %pI4 local clear", es_vtep->es->esi_str,
+			   &es_vtep->vtep_ip);
+
+	es_vtep->flags &= ~ZEBRA_EVPNES_VTEP_LOCAL;
+	mh_vtep = es_vtep->mh_vtep;
+
+	if (!mh_vtep)
+		return;
+
+	zebra_evpn_es_vtep_sph_egress_tc_setup(es_vtep, false);
+	/* unlink the es_vtep from the parent mh_vtep */
+	list_delete_node(mh_vtep->es_vtep_list, &es_vtep->vtep_listnode);
+
+	/* free up the parent if there are no more es_vteps linked to it */
+	if (!listcount(mh_vtep->es_vtep_list))
+		zebra_evpn_mh_vtep_free(mh_vtep);
+}
+
 static int zebra_evpn_es_vtep_cmp(void *p1, void *p2)
 {
 	const struct zebra_evpn_es_vtep *es_vtep1 = p1;
@@ -1565,6 +1951,8 @@ static struct zebra_evpn_es_vtep *zebra_evpn_es_vtep_new(
 	es_vtep->vtep_ip.s_addr = vtep_ip.s_addr;
 	listnode_init(&es_vtep->es_listnode, es_vtep);
 	listnode_add_sort(es->es_vtep_list, &es_vtep->es_listnode);
+	if (es->flags & ZEBRA_EVPNES_LOCAL)
+		zebra_evpn_es_vtep_local_set(es_vtep);
 
 	return es_vtep;
 }
@@ -1573,6 +1961,7 @@ static void zebra_evpn_es_vtep_free(struct zebra_evpn_es_vtep *es_vtep)
 {
 	struct zebra_evpn_es *es = es_vtep->es;
 
+	zebra_evpn_es_vtep_local_clear(es_vtep);
 	list_delete_node(es->es_vtep_list, &es_vtep->es_listnode);
 	/* update the L2-NHG associated with the ES */
 	zebra_evpn_l2_nh_es_vtep_deref(es_vtep);
@@ -2239,6 +2628,9 @@ static void zebra_evpn_mh_on_first_local_es(void)
 static void zebra_evpn_es_local_info_set(struct zebra_evpn_es *es,
 		struct zebra_if *zif)
 {
+	struct zebra_evpn_es_vtep *zvtep;
+	struct listnode *node;
+
 	if (es->flags & ZEBRA_EVPNES_LOCAL)
 		return;
 
@@ -2306,6 +2698,11 @@ static void zebra_evpn_es_local_info_set(struct zebra_evpn_es *es,
 
 	/* inherit EVPN protodown flags on the access port */
 	zebra_evpn_mh_update_protodown_es(es, true /*resync_dplane*/);
+
+	/* Set the VTEPs as local ES peers */
+	for (ALL_LIST_ELEMENTS_RO(es->es_vtep_list, node, zvtep)) {
+		zebra_evpn_es_vtep_local_set(zvtep);
+	}
 }
 
 static void zebra_evpn_es_local_info_clear(struct zebra_evpn_es **esp)
@@ -2313,6 +2710,8 @@ static void zebra_evpn_es_local_info_clear(struct zebra_evpn_es **esp)
 	struct zebra_if *zif;
 	struct zebra_evpn_es *es = *esp;
 	bool dplane_updated = false;
+	struct zebra_evpn_es_vtep *zvtep;
+	struct listnode *node;
 
 	if (!(es->flags & ZEBRA_EVPNES_LOCAL))
 		return;
@@ -2348,6 +2747,11 @@ static void zebra_evpn_es_local_info_clear(struct zebra_evpn_es **esp)
 
 	/* remove from the ES list */
 	list_delete_node(zmh_info->local_es_list, &es->local_es_listnode);
+
+	/* Remove the VTEPs as local ES peers */
+	for (ALL_LIST_ELEMENTS_RO(es->es_vtep_list, node, zvtep)) {
+		zebra_evpn_es_vtep_local_clear(zvtep);
+	}
 
 	/* free up the ES if there is no remote reference */
 	zebra_evpn_es_free(esp);
@@ -2808,6 +3212,8 @@ void zebra_evpn_es_bypass_update(struct zebra_evpn_es *es,
 {
 	bool old_bypass;
 	bool dplane_updated;
+	struct zebra_evpn_es_vtep *zvtep;
+	struct listnode *node;
 
 	old_bypass = !!(es->flags & ZEBRA_EVPNES_BYPASS);
 	if (old_bypass == bypass)
@@ -2835,6 +3241,16 @@ void zebra_evpn_es_bypass_update(struct zebra_evpn_es *es,
 	if (!dplane_updated && (es->flags & ZEBRA_EVPNES_LOCAL)
 	    && (listcount(es->es_vtep_list) > ES_VTEP_MAX_CNT))
 		zebra_evpn_es_br_port_dplane_update(es, __func__);
+
+
+	for (ALL_LIST_ELEMENTS_RO(es->es_vtep_list, node, zvtep)) {
+		if (es->flags & ZEBRA_EVPNES_BYPASS)
+			/* clear SPH-TH filters */
+			zebra_evpn_es_vtep_sph_egress_tc_setup(zvtep, false);
+		else
+			/* setup SPH-TH filters */
+			zebra_evpn_es_vtep_sph_egress_tc_setup(zvtep, true);
+	}
 }
 
 static void zebra_evpn_es_bypass_cfg_update(struct zebra_if *zif, bool bypass)
@@ -3247,12 +3663,18 @@ static void zebra_evpn_es_show_entry_detail(struct vty *vty,
 		for (ALL_LIST_ELEMENTS_RO(es->es_vtep_list, node, es_vtep)) {
 			vty_out(vty, "     %pI4",
 					&es_vtep->vtep_ip);
+			vty_out(vty, "     %s%s", inet_ntoa(es_vtep->vtep_ip),
+				(es_vtep->flags & ZEBRA_EVPNES_VTEP_LOCAL)
+					? "(local)"
+					: "");
 			if (es_vtep->flags & ZEBRA_EVPNES_VTEP_RXED_ESR)
 				vty_out(vty, " df_alg: %s df_pref: %d",
 					evpn_es_df_alg2str(es_vtep->df_alg,
 							   alg_buf,
 							   sizeof(alg_buf)),
 					es_vtep->df_pref);
+			if (es_vtep->flags & ZEBRA_EVPNES_VTEP_SPH_SET)
+				vty_out(vty, " sph: tc-filter\n");
 			vty_out(vty, " nh: %u\n",
 				es_vtep->nh ? es_vtep->nh->nh_id : 0);
 		}
@@ -3880,6 +4302,7 @@ static void zebra_evpn_mh_uplink_cfg_update(struct zebra_if *zif, bool set)
 
 		zif->flags |= ZIF_FLAG_EVPN_MH_UPLINK;
 		++zmh_info->uplink_cfg_cnt;
+		zebra_evpn_mh_uplink_setup(zif, true);
 	} else {
 		if (!(zif->flags & ZIF_FLAG_EVPN_MH_UPLINK))
 			return;
@@ -3887,6 +4310,7 @@ static void zebra_evpn_mh_uplink_cfg_update(struct zebra_if *zif, bool set)
 		zif->flags &= ~ZIF_FLAG_EVPN_MH_UPLINK;
 		if (zmh_info->uplink_cfg_cnt)
 			--zmh_info->uplink_cfg_cnt;
+		zebra_evpn_mh_uplink_setup(zif, false);
 	}
 
 	zebra_evpn_mh_uplink_oper_flags_update(zif, set);
@@ -4092,6 +4516,19 @@ int zebra_evpn_mh_redirect_off(struct vty *vty, bool redirect_off)
 	return 0;
 }
 
+int zebra_evpn_mh_tc_off(struct vty *vty, bool tc_off)
+{
+	/* Changes to this knob require an FFR restart
+	 * i.e. cannot be changed on the fly
+	 */
+	if (tc_off)
+		zmh_info->flags |= ZEBRA_EVPN_MH_TC_OFF;
+	else
+		zmh_info->flags &= ~ZEBRA_EVPN_MH_TC_OFF;
+
+	return 0;
+}
+
 void zebra_evpn_interface_init(void)
 {
 	install_element(INTERFACE_NODE, &zebra_evpn_es_id_cmd);
@@ -4120,6 +4557,15 @@ void zebra_evpn_mh_init(void)
 		hash_create(zebra_evpn_nh_ip_hash_keymake, zebra_evpn_nh_ip_cmp,
 			    "l2 NH IP table");
 
+	/* SPH offset for TC/skb marking */
+	bf_init(zmh_info->sph_id_bitmap, EVPN_SPH_ID_MAX);
+	bf_assign_zero_index(zmh_info->sph_id_bitmap);
+
+	/* Initialize the list of local ES peers */
+	zmh_info->mh_vtep_list = list_new();
+	listset_app_node_mem(zmh_info->mh_vtep_list);
+	zmh_info->mh_vtep_list->cmp = zebra_evpn_mh_vtep_cmp;
+
 	/* setup broadcast domain tables */
 	zmh_info->evpn_vlan_table = hash_create(zebra_evpn_acc_vl_hash_keymake,
 			zebra_evpn_acc_vl_cmp, "access VLAN hash table");
@@ -4131,6 +4577,7 @@ void zebra_evpn_mh_init(void)
 void zebra_evpn_mh_terminate(void)
 {
 	list_delete(&zmh_info->local_es_list);
+	list_delete(&zmh_info->mh_vtep_list);
 
 	hash_iterate(zmh_info->evpn_vlan_table,
 			zebra_evpn_acc_vl_cleanup_all, NULL);
@@ -4140,4 +4587,5 @@ void zebra_evpn_mh_terminate(void)
 	bf_free(zmh_info->nh_id_bitmap);
 
 	XFREE(MTYPE_ZMH_INFO, zrouter.mh_info);
+	bf_free(zmh_info->sph_id_bitmap);
 }

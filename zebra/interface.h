@@ -114,7 +114,10 @@ enum zebra_if_flags {
 	/* On local ESs ARP ND snooping is enabling if fast-failover is
 	 * needed with arp-suppression on
 	 */
-	ZIF_FLAG_ARP_ND_SNOOP = (1 << 4)
+	ZIF_FLAG_ARP_ND_SNOOP = (1 << 4),
+
+	/* TC has been initialized */
+	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 5)
 };
 
 /* We snoop on ARP replies and NAs rxed on bridge ports if MH is
