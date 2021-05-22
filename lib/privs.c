@@ -280,6 +280,8 @@ static void zprivs_state_free_caps(void)
 
 static void zprivs_caps_init(struct zebra_privs_t *zprivs)
 {
+	int i;
+
 	/* Release allocated zcaps if this function was called before. */
 	zprivs_state_free_caps();
 
@@ -362,6 +364,15 @@ static void zprivs_caps_init(struct zebra_privs_t *zprivs)
 		exit(1);
 	}
 
+	for (i = 0; zprivs_state.syscaps_i && (i < zprivs_state.syscaps_i->num); ++i) {
+		if (zprivs_state.syscaps_i->caps[i] == CAP_NET_ADMIN) {
+			if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, CAP_NET_ADMIN, 0, 0) == -1) {
+				fprintf(stderr, "privs_init: ambient raise failed %s\n",
+					safe_strerror(errno));
+				exit(1);
+			}
+		}
+	}
 	/* set methods for the caller to use */
 	zprivs->change = zprivs_change_caps;
 	zprivs->current_state = zprivs_state_caps;
@@ -369,6 +380,8 @@ static void zprivs_caps_init(struct zebra_privs_t *zprivs)
 
 static void zprivs_caps_terminate(void)
 {
+	int i;
+
 	/* Clear all capabilities, if we have any. */
 	if (zprivs_state.caps)
 		cap_clear(zprivs_state.caps);
@@ -380,6 +393,16 @@ static void zprivs_caps_terminate(void)
 		fprintf(stderr, "privs_terminate: cap_set_proc failed, %s",
 			safe_strerror(errno));
 		exit(1);
+	}
+
+	for (i = 0; zprivs_state.syscaps_i && (i < zprivs_state.syscaps_i->num); ++i) {
+		if (zprivs_state.syscaps_i->caps[i] == CAP_NET_ADMIN) {
+			if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_LOWER, CAP_NET_ADMIN, 0, 0) == -1) {
+				fprintf(stderr, "privs_init: ambient lower failed %s\n",
+					safe_strerror(errno));
+				exit(1);
+			}
+		}
 	}
 
 	zprivs_state_free_caps();
