@@ -1926,6 +1926,7 @@ static void zebra_evpn_es_vtep_local_clear(struct zebra_evpn_es_vtep *es_vtep)
 	zebra_evpn_es_vtep_sph_egress_tc_setup(es_vtep, false);
 	/* unlink the es_vtep from the parent mh_vtep */
 	list_delete_node(mh_vtep->es_vtep_list, &es_vtep->vtep_listnode);
+	es_vtep->mh_vtep = NULL;
 
 	/* free up the parent if there are no more es_vteps linked to it */
 	if (!listcount(mh_vtep->es_vtep_list))
@@ -2718,6 +2719,11 @@ static void zebra_evpn_es_local_info_clear(struct zebra_evpn_es **esp)
 
 	zif = es->zif;
 
+	/* Remove the VTEPs as local ES peers */
+	for (ALL_LIST_ELEMENTS_RO(es->es_vtep_list, node, zvtep)) {
+		zebra_evpn_es_vtep_local_clear(zvtep);
+	}
+
 	/* if there any local macs referring to the ES as dest we
 	 * need to clear the contents and start over
 	 */
@@ -2747,11 +2753,6 @@ static void zebra_evpn_es_local_info_clear(struct zebra_evpn_es **esp)
 
 	/* remove from the ES list */
 	list_delete_node(zmh_info->local_es_list, &es->local_es_listnode);
-
-	/* Remove the VTEPs as local ES peers */
-	for (ALL_LIST_ELEMENTS_RO(es->es_vtep_list, node, zvtep)) {
-		zebra_evpn_es_vtep_local_clear(zvtep);
-	}
 
 	/* free up the ES if there is no remote reference */
 	zebra_evpn_es_free(esp);
