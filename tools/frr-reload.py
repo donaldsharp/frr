@@ -942,6 +942,7 @@ def delete_move_lines(lines_to_add, lines_to_del):
             re_pg = re.match("neighbor (\S+) peer-group$", line)
             if re_pg and re_pg.group(1) not in del_dict[ctx_keys[0]]:
                 del_dict[ctx_keys[0]][re_pg.group(1)] = list()
+                found_pg_del_cmd = True
 
     for (ctx_keys, line) in lines_to_del_to_app:
         lines_to_del.remove((ctx_keys, line))
