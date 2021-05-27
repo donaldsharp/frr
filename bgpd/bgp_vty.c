@@ -6901,9 +6901,10 @@ DEFPY (bgp_condadv_period,
        bgp_condadv_period_cmd,
        "[no$no] bgp conditional-advertisement timer (5-240)$period",
        NO_STR
+       BGP_STR
        "Conditional advertisement settings\n"
        "Set period to rescan BGP table to check if condition is met\n"
-       "Period between BGP table scans, in seconds\n")
+       "Period between BGP table scans, in seconds; default 60\n")
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 
