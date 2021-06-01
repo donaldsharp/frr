@@ -1590,50 +1590,6 @@ static int zebra_evpn_mh_vtep_cmp(void *p1, void *p2)
 	return vtep1->vtep_ip.s_addr - vtep2->vtep_ip.s_addr;
 }
 
-/* XXX - non-DF code needs some more thought */
-void zebra_evpn_mh_vtep_uplink_df_ingress_tc_setup(struct zebra_if *zif,
-						   bool add)
-{
-	char cmd[TC_CMD_STR_LEN];
-	uint32_t handle;
-
-	zlog_debug("mh uplink %s df ingress tc %s", zif->ifp->name,
-		   add ? "add" : "del");
-	if (add) {
-		/* If this is the first attempt to add a TC filter on an uplink
-		 * we need to init the ingress clsact
-		 */
-		if (!(zif->flags & ZIF_FLAG_EVPN_MH_TC_INIT)) {
-			zif->flags |= ZIF_FLAG_EVPN_MH_TC_INIT;
-
-			snprintf(cmd, sizeof(cmd),
-				 "%s%s qdisc replace dev %s clsact",
-				 TC_SUDO_STR, TC_BIN_STR, zif->ifp->name);
-			zebra_evpn_mh_tc_program(cmd);
-
-			/* del all existing ingress rules on the device */
-			snprintf(cmd, sizeof(cmd),
-				 "%s%s filter del dev %s ingress", TC_SUDO_STR,
-				 TC_BIN_STR, zif->ifp->name);
-			zebra_evpn_mh_tc_program(cmd);
-		}
-
-		handle = EVPN_MH_SKB_MARK_BASE;
-		snprintf(
-			cmd, sizeof(cmd),
-			"%s%s filter replace dev %s ingress prot ip pref %u flower ip_proto udp dst_ip 224.0.0.0/4 dst_port 4789 skip_hw action skbedit mark %u",
-			TC_SUDO_STR, TC_BIN_STR, zif->ifp->name, handle,
-			handle);
-		zebra_evpn_mh_tc_program(cmd);
-	} else {
-		handle = EVPN_MH_SKB_MARK_BASE;
-		snprintf(cmd, sizeof(cmd),
-			 "%s%s filter del dev %s ingress pref %u", TC_SUDO_STR,
-			 TC_BIN_STR, zif->ifp->name, handle);
-		zebra_evpn_mh_tc_program(cmd);
-	}
-}
-
 static void zebra_evpn_mh_vtep_uplink_sph_ingress_tc_setup(
 	struct zebra_evpn_mh_vtep *mh_vtep, struct zebra_if *zif, bool add)
 {
