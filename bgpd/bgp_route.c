@@ -10275,7 +10275,6 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 	struct listnode *node, *nnode;
 	char buf1[RD_ADDRSTRLEN];
 	char buf2[INET6_ADDRSTRLEN];
-	char buf3[EVPN_ROUTE_STRLEN];
 	char prefix_str[BUFSIZ];
 	int count = 0;
 	int best = 0;
@@ -10309,9 +10308,7 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 		if (!json) {
 			vty_out(vty, "BGP routing table entry for %s%s%pFX\n",
 				prd ? prefix_rd2str(prd, buf1, sizeof(buf1))
-				: "", prd ? ":" : "",
-				bgp_evpn_route2str((struct prefix_evpn *)p,
-				buf3, sizeof(buf3)));
+				: "", prd ? ":" : "", p);
 		} else {
 			char prefix_str[BUFSIZ];
 
