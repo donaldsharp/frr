@@ -363,10 +363,20 @@ with open('../extra/frrlexer.py', 'rb') as lex:
 def setup(app):
     # object type for FRR CLI commands, can be extended to document parent CLI
     # node later on
-    app.add_object_type('clicmd', 'clicmd')
-    # css overrides for HTML theme
-    app.add_stylesheet('overrides.css')
-    app.add_javascript('overrides.js')
+    app.add_object_type("clicmd", "clicmd", indextemplate="pair: %s; configuration command")
+
+    # I dont care how stupid this is
+    if "add_js_file" in dir(app):
+        app.add_js_file("overrides.js")
+    else:
+        app.add_javascript("overrides.js")
+
+    if "add_css_file" in dir(app):
+        app.add_css_file("overrides.css")
+    else:
+        app.add_stylesheet("overrides.css")
+
+
     # load Pygments lexer for FRR config syntax
     #
     # NB: in Pygments 2.2+ this can be done with `load_lexer_from_file`, but we
