@@ -5000,14 +5000,14 @@ char *bgp_evpn_route2str(const struct prefix_evpn *p, char *buf, int len)
 						     : IPV6_MAX_BITLEN,
 			 inet_ntoa(p->prefix.es_addr.ip.ipaddr_v4));
 	} else if (p->prefix.route_type == BGP_EVPN_AD_ROUTE) {
-		snprintf(buf, len, "[%d]:[%u]:[%s]:[%d]:[%s]",
-			 p->prefix.route_type,
-			 p->prefix.ead_addr.eth_tag,
-			 esi_to_str(&p->prefix.ead_addr.esi,
-					buf3, sizeof(buf3)),
-			 is_evpn_prefix_ipaddr_v4(p) ? IPV4_MAX_BITLEN
-						     : IPV6_MAX_BITLEN,
-			 inet_ntoa(p->prefix.ead_addr.ip.ipaddr_v4));
+		snprintf(
+			buf, len, "[%d]:[%u]:[%s]:[%d]:[%s]:[%u]",
+			p->prefix.route_type, p->prefix.ead_addr.eth_tag,
+			esi_to_str(&p->prefix.ead_addr.esi, buf3, sizeof(buf3)),
+			is_evpn_prefix_ipaddr_v4(p) ? IPV4_MAX_BITLEN
+						    : IPV6_MAX_BITLEN,
+			inet_ntoa(p->prefix.ead_addr.ip.ipaddr_v4),
+			p->prefix.ead_addr.frag_id);
 	} else {
 		/* For EVPN route types not supported yet. */
 		snprintf(buf, len, "(unsupported route type %d)",
