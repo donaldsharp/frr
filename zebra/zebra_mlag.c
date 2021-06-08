@@ -111,7 +111,7 @@ void zebra_mlag_process_mlag_data(uint8_t *data, uint32_t len)
 	struct stream *s = NULL;
 	int msg_type = 0;
 
-	s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+	s = stream_new(ZEBRA_MLAG_BUF_LIMIT);
 	/*
 	 * Place holder we need the message type first
 	 */
@@ -1081,7 +1081,7 @@ int zebra_mlag_protobuf_decode_message(struct stream *s, uint8_t *data,
 		case ZEBRA_MLAG__HEADER__MESSAGE_TYPE__ZEBRA_MLAG_MROUTE_ADD_BULK: {
 			ZebraMlagMrouteAddBulk *Bulk_msg = NULL;
 			ZebraMlagMrouteAdd *msg = NULL;
-			size_t i;
+			size_t i, length_spot;
 
 			Bulk_msg = zebra_mlag_mroute_add_bulk__unpack(
 				NULL, hdr->data.len, hdr->data.data);
@@ -1093,10 +1093,14 @@ int zebra_mlag_protobuf_decode_message(struct stream *s, uint8_t *data,
 			stream_putw(s, (Bulk_msg->n_mroute_add
 					* sizeof(struct mlag_mroute_add)));
 			/* No. of msgs in Batch */
-			stream_putw(s, Bulk_msg->n_mroute_add);
+			length_spot = stream_putw(s, Bulk_msg->n_mroute_add);
 
 			/* Actual Data */
 			for (i = 0; i < Bulk_msg->n_mroute_add; i++) {
+				if (STREAM_SIZE(s) < VRF_NAMSIZ + 20 + 2 + INTERFACE_NAMSIZ) {
+					zlog_warn("We have received more messages than we can parse at this point in time: %zu", Bulk_msg->n_mroute_add);
+					break;
+				}
 
 				msg = Bulk_msg->mroute_add[i];
 
@@ -1116,6 +1120,9 @@ int zebra_mlag_protobuf_decode_message(struct stream *s, uint8_t *data,
 				else
 					stream_put(s, NULL, INTERFACE_NAMSIZ);
 			}
+
+			stream_putw_at(s, length_spot, i+1);
+
 			zebra_mlag_mroute_add_bulk__free_unpacked(Bulk_msg,
 								  NULL);
 		} break;
