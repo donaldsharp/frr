@@ -222,8 +222,6 @@ struct static_vrf *static_vty_get_unknown_vrf(const char *vrf_name)
 	svrf = vrf->info;
 	if (!svrf)
 		return NULL;
-	/* Mark as having FRR configuration */
-	SET_FLAG(vrf->status, VRF_CONFIGURED);
 
 	return svrf;
 }
