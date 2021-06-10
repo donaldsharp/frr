@@ -243,7 +243,7 @@ static void zebra_csm_maint_mode(struct event *t)
 
 	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	if (client) {
-		s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+		s = stream_new(ZEBRA_SMALL_PACKET_SIZE);
 		zclient_create_header(s, ZEBRA_MAINTENANCE_MODE, VRF_DEFAULT);
 		stream_putc(s, enter);
 		/* Write packet size. */
@@ -275,7 +275,7 @@ static void zebra_csm_fast_restart(struct event *t)
 	zrouter.fast_shutdown = true;
 	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	if (client) {
-		s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+		s = stream_new(ZEBRA_SMALL_PACKET_SIZE);
 		zclient_create_header(s, ZEBRA_FAST_SHUTDOWN, VRF_DEFAULT);
 		stream_putc(s, upgrade);
 		/* Write packet size. */
