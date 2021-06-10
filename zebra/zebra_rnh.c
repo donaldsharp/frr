@@ -1189,7 +1189,6 @@ static int send_client(struct rnh *rnh, struct zserv *client,
 	stream_putw_at(s, 0, stream_get_endp(s));
 
 	client->nh_last_upd_time = monotime(NULL);
-	client->last_write_cmd = cmd;
 	return zserv_send_message(client, s);
 
 failure:
