@@ -4397,6 +4397,7 @@ void zebra_evpn_proc_remote_nh(ZAPI_HANDLER_ARGS)
 	dummy_prefix.family = AF_EVPN;
 	dummy_prefix.prefixlen = (sizeof(struct evpn_addr) * 8);
 	dummy_prefix.prefix.route_type = 1; /* XXX - fixup to type-1 def */
+	dummy_prefix.prefix.ead_addr.ip.ipa_type = nh.ipa_type;
 
 	if (hdr->command == ZEBRA_EVPN_REMOTE_NH_ADD) {
 		stream_get(&rmac, s, sizeof(rmac));
