@@ -2805,6 +2805,7 @@ DEFPY(show_evpn_access_vlan,
       SHOW_STR
       "EVPN\n"
       "Access VLANs\n"
+      "Interface Name\n"
       "VLAN ID\n"
       "Detailed information\n"
       JSON_STR)
