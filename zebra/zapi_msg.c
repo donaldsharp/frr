@@ -1389,6 +1389,16 @@ static void zread_interface_add(ZAPI_HANDLER_ARGS)
 	struct interface *ifp;
 
 	RB_FOREACH (vrf, vrf_id_head, &vrfs_by_id) {
+		/*
+		 * The intention here is that on startup, upper level
+		 * protocols send down the default vrf to get the
+		 * full dump of all tables.  At a later point in time
+		 * if we register for a new vrf.  Let's only
+		 * dump that new vrf again
+		 */
+		if (hdr->vrf_id != VRF_DEFAULT && hdr->vrf_id != vrf->vrf_id)
+			continue;
+
 		FOR_ALL_INTERFACES (vrf, ifp) {
 			/* Skip pseudo interface. */
 			if (!CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE))
