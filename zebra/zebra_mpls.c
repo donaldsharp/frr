@@ -471,7 +471,7 @@ static int fec_send(zebra_fec_t *fec, struct zserv *client)
 	rn = fec->rn;
 
 	/* Get output stream. */
-	s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+	s = stream_new(ZEBRA_MIN_PACKET_SIZE);
 
 	zclient_create_header(s, ZEBRA_FEC_UPDATE, VRF_DEFAULT);
 

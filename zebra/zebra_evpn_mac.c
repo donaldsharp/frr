@@ -957,7 +957,7 @@ int zebra_evpn_macip_send_msg_to_client(vni_t vni, struct ethaddr *macaddr,
 	if (!client)
 		return 0;
 
-	s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+	s = stream_new(ZEBRA_MIN_PACKET_SIZE);
 
 	zclient_create_header(s, cmd, zebra_vrf_get_evpn_id());
 	stream_putl(s, vni);
