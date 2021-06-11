@@ -626,11 +626,6 @@ static void zl3vni_print_nh_all_table(struct hash *nh_table, vni_t vni,
 		json_object_object_add(json, vni_str, json_evpn);
 }
 
-static void svd_print_nh_all_table(struct vty *vty, json_object *json)
-{
-	zl3vni_print_nh_all_table(svd_nh_table, 0, vty, json);
-}
-
 static void zl3vni_print_nh_hash_all_vni(struct hash_bucket *bucket,
 					 void **args)
 {
@@ -2689,9 +2684,6 @@ void zebra_vxlan_print_nh_all_l3vni(struct vty *vty, bool use_json)
 		     (void (*)(struct hash_bucket *,
 			       void *))zl3vni_print_nh_hash_all_vni,
 		     args);
-
-	/* Global svd table */
-	svd_print_nh_all_table(vty, json);
 
 	if (use_json) {
 		vty_out(vty, "%s\n", json_object_to_json_string_ext(
