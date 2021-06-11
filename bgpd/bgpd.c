@@ -7058,6 +7058,8 @@ static void peer_advertise_map_filter_update(struct peer *peer, afi_t afi,
 		filter->advmap.update_type = ADVERTISE;
 		bgp_conditional_adv_enable(peer, afi, safi);
 	}
+
+	peer_on_policy_change(peer, afi, safi, 1);
 }
 
 /* Set advertise-map to the peer but do not process peer route updates here.  *
