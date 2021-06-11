@@ -4402,16 +4402,18 @@ void zebra_evpn_proc_remote_nh(ZAPI_HANDLER_ARGS)
 	if (hdr->command == ZEBRA_EVPN_REMOTE_NH_ADD) {
 		stream_get(&rmac, s, sizeof(rmac));
 		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-			zlog_debug("evpn remote nh %d %s rmac %s add", vrf_id,
-				   ipaddr2str(&nh, nh_str, sizeof(nh_str)),
-				   prefix_mac2str(&rmac, mac_buf,
-						  sizeof(mac_buf)));
+			zlog_debug(
+				"evpn remote nh %d %s rmac %s add pfx %pFX",
+				vrf_id, ipaddr2str(&nh, nh_str, sizeof(nh_str)),
+				prefix_mac2str(&rmac, mac_buf, sizeof(mac_buf)),
+				&dummy_prefix);
 		zebra_vxlan_evpn_vrf_route_add(vrf_id, &rmac, &nh,
 					       (struct prefix *)&dummy_prefix);
 	} else {
 		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-			zlog_debug("evpn remote nh %d %s del", vrf_id,
-				   ipaddr2str(&nh, nh_str, sizeof(nh_str)));
+			zlog_debug("evpn remote nh %d %s del pfx %pFX", vrf_id,
+				   ipaddr2str(&nh, nh_str, sizeof(nh_str)),
+				   &dummy_prefix);
 		zebra_vxlan_evpn_vrf_route_del(vrf_id, &nh,
 					       (struct prefix *)&dummy_prefix);
 	}

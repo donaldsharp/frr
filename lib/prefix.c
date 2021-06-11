@@ -898,10 +898,16 @@ static const char *prefixevpn_ead2str(const struct prefix_evpn *p, char *str,
 				      int size)
 {
 	char buf[ESI_STR_LEN];
+	uint8_t family;
+	char buf1[PREFIX2STR_BUFFER];
+
+	family = is_evpn_prefix_ipaddr_v4(p) ? AF_INET : AF_INET6;
 
 	snprintf(str, size, "[%d]:[%s]:[%s]/%d", p->prefix.route_type,
 		 esi_to_str(&p->prefix.ead_addr.esi, buf, sizeof(buf)),
-		 inet_ntoa(p->prefix.ead_addr.ip.ipaddr_v4), p->prefixlen);
+		 inet_ntop(family, &p->prefix.ead_addr.ip.ip.addr, buf1,
+			   PREFIX2STR_BUFFER),
+		 p->prefixlen);
 	return str;
 }
 
