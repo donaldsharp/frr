@@ -94,7 +94,8 @@ static void bgp_conditional_adv_routes(struct peer *peer, afi_t afi,
 
 	if (BGP_DEBUG(update, UPDATE_OUT))
 		zlog_debug("%s: %s routes to/from %s for %s", __func__,
-			   update_type == ADVERTISE ? "Advertise" : "Withdraw",
+			   update_type == UPDATE_TYPE_ADVERTISE ? "Advertise"
+								: "Withdraw",
 			   peer->host, get_afi_safi_str(afi, safi, false));
 
 	addpath_capable = bgp_addpath_encode_tx(peer, afi, safi);
@@ -131,7 +132,7 @@ static void bgp_conditional_adv_routes(struct peer *peer, afi_t afi,
 				 * on same peer, routes in advertise-map may not
 				 * be advertised as expected.
 				 */
-				if ((update_type == ADVERTISE)
+				if ((update_type == UPDATE_TYPE_ADVERTISE)
 				    && subgroup_announce_check(dest, pi, subgrp,
 							       dest_p, &attr,
 							       true))
@@ -251,12 +252,14 @@ static int bgp_conditional_adv_timer(struct thread *t)
 			 */
 			if (filter->advmap.condition == CONDITION_EXIST)
 				filter->advmap.update_type =
-					(ret == RMAP_PERMITMATCH) ? ADVERTISE
-								  : WITHDRAW;
+					(ret == RMAP_PERMITMATCH)
+						? UPDATE_TYPE_ADVERTISE
+						: UPDATE_TYPE_WITHDRAW;
 			else
 				filter->advmap.update_type =
-					(ret == RMAP_PERMITMATCH) ? WITHDRAW
-								  : ADVERTISE;
+					(ret == RMAP_PERMITMATCH)
+						? UPDATE_TYPE_WITHDRAW
+						: UPDATE_TYPE_ADVERTISE;
 
 			/* Send regular update as per the existing policy.
 			 * There is a change in route-map, match-rule, ACLs,
