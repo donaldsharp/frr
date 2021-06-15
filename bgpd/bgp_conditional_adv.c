@@ -255,6 +255,19 @@ static void bgp_conditional_adv_timer(struct thread *t)
 					(ret == RMAP_PERMITMATCH) ? WITHDRAW
 								  : ADVERTISE;
 
+			/*
+			 * Update condadv update type so
+			 * subgroup_announce_check() can properly apply
+			 * outbound policy according to advertisement state
+			 */
+			paf = peer_af_find(peer, afi, safi);
+			if (paf) {
+				SUBGRP_PEER(PAF_SUBGRP(paf))
+					->filter[afi][safi]
+					.advmap.update_type =
+					filter->advmap.update_type;
+			}
+
 			/* Send regular update as per the existing policy.
 			 * There is a change in route-map, match-rule, ACLs,
 			 * or route-map filter configuration on the same peer.
@@ -267,11 +280,14 @@ static void bgp_conditional_adv_timer(struct thread *t)
 						__func__, peer->host,
 						get_afi_safi_str(afi, safi,
 								 false));
-
-				paf = peer_af_find(peer, afi, safi);
 				if (paf) {
 					update_subgroup_split_peer(paf, NULL);
 					subgrp = paf->subgroup;
+					SUBGRP_PEER(PAF_SUBGRP(paf))
+						->filter[afi][safi]
+						.advmap.update_type =
+						filter->advmap.update_type;
+
 					if (subgrp && subgrp->update_group)
 						subgroup_announce_table(
 							paf->subgroup, NULL);
