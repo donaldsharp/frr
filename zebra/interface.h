@@ -315,7 +315,10 @@ enum zebra_if_flags {
 	ZIF_FLAG_ARP_ND_SNOOP = (1 << 4),
 
 	/* TC has been initialized */
-	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 5)
+	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 5),
+
+	/* GARP flooding turned on */
+	ZIF_FLAG_EVPN_MH_GARP_FLOOD_CFG_ON = (1 << 6)
 };
 
 /* We snoop on ARP replies and NAs rxed on bridge ports if MH is
@@ -519,6 +522,7 @@ extern void zebra_if_update_link(struct interface *ifp, ifindex_t link_ifindex,
 				 ns_id_t ns_id);
 extern void zebra_if_update_all_links(void);
 extern void zebra_if_set_protodown(struct interface *ifp, bool down);
+extern void zebra_if_set_neigh_grat_flood(struct interface *ifp, bool on);
 extern int if_ip_address_install(struct interface *ifp, struct prefix *prefix,
 				 const char *label, struct prefix *pp);
 extern int if_ipv6_address_install(struct interface *ifp, struct prefix *prefix,

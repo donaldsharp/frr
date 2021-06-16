@@ -49,6 +49,8 @@ extern int netlink_vlan_read(struct zebra_ns *zns);
  */
 int netlink_protodown(struct interface *ifp, bool down);
 
+int netlink_grat_flood_set(struct interface *ifp, uint8_t on);
+
 #ifdef __cplusplus
 }
 #endif
