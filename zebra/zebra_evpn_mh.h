@@ -230,6 +230,14 @@ struct zebra_evpn_mh_info {
 #define ZEBRA_EVPN_MH_ADV_SVI_MAC (1 << 3)
 /* Disable TC programming for DF and SPH filters */
 #define ZEBRA_EVPN_MH_TC_OFF (1 << 4)
+/* GARP needs to be flooded over the vxlan fabric if MH is used
+ * in a local z failure scenario. So GARP flooding is enabled by
+ * default on all bridges if MH is enabled unless the user
+ * has turned it off via the following knob
+ */
+#define ZEBRA_EVPN_MH_NEIGH_GRAT_FLOOD_OFF (1 << 5)
+/* MH is implicity enabled on the first local ES config */
+#define ZEBRA_EVPN_MH_ENABLE (1 << 6)
 
 	/* RB tree of Ethernet segments (used for EVPN-MH)  */
 	struct zebra_es_rb_head es_rb_tree;
@@ -333,6 +341,12 @@ static inline bool zebra_evpn_mh_do_adv_svi_mac(void)
 	return zmh_info && (zmh_info->flags & ZEBRA_EVPN_MH_ADV_SVI_MAC);
 }
 
+static inline bool zebra_evpn_mh_do_garp_flood(void)
+{
+	return zmh_info && (zmh_info->flags & ZEBRA_EVPN_MH_ENABLE) &&
+	       !(zmh_info->flags & ZEBRA_EVPN_MH_NEIGH_GRAT_FLOOD_OFF);
+}
+
 /*****************************************************************************/
 extern esi_t *zero_esi;
 extern void zebra_evpn_mh_init(void);
@@ -415,6 +429,7 @@ extern struct zebra_evpn_es_evi *
 zebra_evpn_es_evi_find(struct zebra_evpn_es *es, struct zebra_evpn *zevpn);
 extern void zebra_evpn_mh_vtep_show(struct vty *vty, bool uj);
 extern int zebra_evpn_mh_tc_off(struct vty *vty, bool tc_off);
+extern int zebra_evpn_mh_garp_flood_off(struct vty *vty, bool flood_off);
 
 void zebra_build_type3_esi(uint32_t lid, struct ethaddr *mac, esi_t *esi);
 
