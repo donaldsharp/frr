@@ -113,11 +113,14 @@ enum zebra_if_flags {
 	/* TC has been initialized */
 	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 7),
 
+	/* GARP flooding turned on */
+	ZIF_FLAG_EVPN_MH_GARP_FLOOD_CFG_ON = (1 << 8),
+
 	/* Interface has been configured to enable or disable the neighbor
 	 * throttling feature.
 	 */
-	ZIF_FLAG_NEIGH_THROTTLE = (1 << 8),
-	ZIF_FLAG_NEIGH_THROTTLE_DISABLE = (1 << 9),
+	ZIF_FLAG_NEIGH_THROTTLE = (1 << 9),
+	ZIF_FLAG_NEIGH_THROTTLE_DISABLE = (1 << 10),
 };
 
 /* We snoop on ARP replies and NAs rxed on bridge ports if MH is
@@ -337,6 +340,7 @@ extern int zebra_if_update_protodown_rc(struct interface *ifp, bool new_down,
  */
 extern int zebra_if_set_protodown(struct interface *ifp, bool down,
 				  enum protodown_reasons new_reason);
+extern void zebra_if_set_neigh_grat_flood(struct interface *ifp, bool on);
 extern int if_ip_address_install(struct interface *ifp, struct prefix *prefix,
 				 const char *label, struct prefix *pp);
 extern int if_ipv6_address_install(struct interface *ifp, struct prefix *prefix,

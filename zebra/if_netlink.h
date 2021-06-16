@@ -68,6 +68,8 @@ extern void if_netlink_unset_frr_protodown_r_bit(void);
 extern bool if_netlink_frr_protodown_r_bit_is_set(void);
 extern uint8_t if_netlink_get_frr_protodown_r_bit(void);
 
+int netlink_grat_flood_set(struct interface *ifp, uint8_t on);
+
 #ifdef __cplusplus
 }
 #endif
