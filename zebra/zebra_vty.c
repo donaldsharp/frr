@@ -1581,25 +1581,25 @@ DEFPY (show_nexthop_group,
 	return CMD_SUCCESS;
 }
 
-DEFPY_HIDDEN(nexthop_group_use_enable,
-	     nexthop_group_use_enable_cmd,
-	     "[no] zebra nexthop kernel enable",
-	     NO_STR
-	     ZEBRA_STR
-	     "Nexthop configuration \n"
-	     "Configure use of kernel nexthops\n"
-	     "Enable kernel nexthops\n")
+DEFPY (nexthop_group_use_enable,
+       nexthop_group_use_enable_cmd,
+       "[no] zebra nexthop kernel enable",
+       NO_STR
+       ZEBRA_STR
+       "Nexthop configuration \n"
+       "Configure use of kernel nexthops\n"
+       "Enable kernel nexthops\n")
 {
 	zebra_nhg_enable_kernel_nexthops(!no);
 	return CMD_SUCCESS;
 }
 
-DEFPY_HIDDEN(proto_nexthop_group_only, proto_nexthop_group_only_cmd,
-	     "[no] zebra nexthop proto only",
-	     NO_STR ZEBRA_STR
-	     "Nexthop configuration\n"
-	     "Configure exclusive use of proto nexthops\n"
-	     "Only use proto nexthops\n")
+DEFPY (proto_nexthop_group_only, proto_nexthop_group_only_cmd,
+       "[no] zebra nexthop proto only",
+       NO_STR ZEBRA_STR
+       "Nexthop configuration\n"
+       "Configure exclusive use of proto nexthops\n"
+       "Only use proto nexthops\n")
 {
 	zebra_nhg_set_proto_nexthops_only(!no);
 	return CMD_SUCCESS;
