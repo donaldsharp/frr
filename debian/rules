@@ -35,6 +35,12 @@ else
   CONF_ASAN=--disable-address-sanitizer
 endif
 
+ifneq (,$(filter devbuild,$(DEB_BUILD_OPTIONS)))
+  CONF_DEVBUILD=--enable-dev-build
+else
+  CONF_DEVBUILD=--disable-dev-build
+endif
+
 
 export PYTHON=python3
 
@@ -54,6 +60,7 @@ override_dh_auto_configure:
 		LIBTOOLFLAGS="-rpath /usr/lib/$(DEB_HOST_MULTIARCH)/frr" \
 		--disable-dependency-tracking \
 		\
+		$(CONF_DEVBUILD) \
 		$(CONF_SYSTEMD) \
 		$(CONF_RPKI) \
 		--with-libpam \
