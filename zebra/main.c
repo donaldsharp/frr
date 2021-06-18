@@ -524,7 +524,9 @@ int main(int argc, char **argv)
 	event_add_timer(zrouter.master, rib_sweep_route, NULL, graceful_restart,
 			&zrouter.sweeper);
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
-	// zrouter.graceful_restart = (zrouter.frr_csm_smode == FAST_START);
+	if (zrouter.frr_csm_smode == FAST_START ||
+	    zrouter.frr_csm_smode == WARM_START)
+		zrouter.graceful_restart = true;
 	zrouter.maint_mode = (zrouter.frr_csm_smode == MAINT);
 #endif
 
