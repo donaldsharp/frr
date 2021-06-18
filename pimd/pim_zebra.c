@@ -436,7 +436,6 @@ static void pim_zebra_connected(struct zclient *zclient)
 
 static void pim_zebra_capabilities(struct zclient_capabilities *cap)
 {
-	router->mlag_role = cap->role;
 }
 
 void pim_zebra_init(void)
