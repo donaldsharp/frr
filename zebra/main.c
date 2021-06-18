@@ -489,7 +489,9 @@ int main(int argc, char **argv)
 	zrouter.rib_sweep_time = 0;
 	zrouter.graceful_restart = zebra_di.graceful_restart;
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
-	zrouter.graceful_restart = (zrouter.frr_csm_smode == FAST_START);
+	if (zrouter.frr_csm_smode == FAST_START ||
+	    zrouter.frr_csm_smode == WARM_START)
+		zrouter.graceful_restart = true;
 	zrouter.maint_mode = (zrouter.frr_csm_smode == MAINT);
 #endif
 	if (!zrouter.graceful_restart)
