@@ -1,3 +1,55 @@
+frr (7.5+cl4.4.0u4) UNRELEASED; urgency=medium
+
+  * Fixes: 2684438 [CUMULUS]: zebra: Treat both warm start and fast start as graceful
+  * Fixes: 2691629 pimd: skip init of mlag roles based on the zebra capabilities messageFix
+  * Fixes: 2695309 CUMULUS: zebra: changes to enabled garp flooding if MH is enabled
+  *                debian: add support for 'devbuild' tag
+  * Fixes: 2690226 tools: reload recognizes `pbr table range` as single-line ctx
+  *                bgpd: apply cond-adv policy to update group
+  *                [CUMULUS] zebra: make NHG disable commands visible
+  *                zebra: handle ipv6-mapped-ipv4 with DVNI
+  *                [CUMULUS]: update configure.ac for 4.4 release
+  *                bgpd: don't adv conditionally withdrawn routes
+  *                bgpd: rename update_type enum values
+  *                pbrd: set VRF unchanged in default VRF to lookup local
+  *                tools: add mac access-list context to frr-reload.py
+  * Fixes: 2618099 zebra: make next-hop svd command hidden for now
+  *                lib: terminate default vrf last
+  *                bgpd, ospfd, isisd: obfuscate passwords
+  *                lib: add caesar cipher
+  *                lib, zebra: print the ip address in the EAD prefix correctly
+  *                zebra: use a separate dummy prefix for referencing v6 nexthops
+  * Fixes: 2685357 zebra: Limit full dump of intf when we ask for the default vrf
+  *                zebra: We already store the last command as part of zserv_write
+  *                zebra: Reduce memory usage of streams for encoding packets
+  *                zebra: Fix vtysh doc string in "show evpn access-vlan..." command
+  *                zebra: Reduce per vrf memory usage from hash table creation
+  * Fixes: 2680069 zebra: Cleanup bond member interfaces in access-bd during ifdown/up of bond member interfaces
+  * Fixes: 2684144 bgpd: Check L3VNI status before announcing default
+  *                zebra, tests: Fix `show ip nht`
+  *                zebra: add show command for RA interface lists
+  * Fixes: 2554299 zebra: rework RA handling for vrf-lite
+  * Fixes: 2682896 bgpd: Extend EVPN next hop tracking to type-1 and type-4 routes
+  * Fixes: 2555982 [CUMULUS] staticd: really don't touch VRF_CONFIGURED outside NB
+  * Fixes: 2659008 zebra: Give extra space and stop processing if we run out of space
+  * Fixes: 2555982 *: modify VRF_CONFIGURED flag only in VRF NB layer
+  *                ospfd: permit over-write of message-digest-key
+  * Fixes: 2632967 lib, bgpd: changes for EAD-per-ES fragmentation
+  *                bgpd: fix evpn detail route display
+  *                zebra: dont install implicit NULL labels non-vni
+  * Fixes: 2555982 lib: fix interface nb stale pointers
+  *                zebra: remove unused evpn function
+  *                zebra: cleanup egress tc entries on ES deletion
+  *                zebra: changes to setup SPH filters using TC
+  *                bgpd: fix missing helptext for cond-adv timer cmd
+  *                pbrd: nhg "add" edge case for last in table range
+  *                pbrd: use sparse table for allocated NHG table IDs
+  * Fixes: 2656351 tools: frr-reload peer-group delete
+  * Fixes: 2656351 tools: fix peer-group deletion in frr-reload
+  *                ospfd: "ip ospf area" command can select wrong process
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Fri, 18 Jun 2021 18:42:57 -0700
+
 frr (7.5+cl4.4.0u3) UNRELEASED; urgency=medium
 
   * tools: run `vtysh -b` once for all-startup
