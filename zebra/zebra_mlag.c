@@ -114,7 +114,7 @@ void zebra_mlag_process_mlag_data(uint8_t *data, uint32_t len)
 	struct stream *s1 = NULL;
 	int msg_type = 0;
 
-	s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+	s = stream_new(ZEBRA_MLAG_BUF_LIMIT);
 	msg_type = zebra_mlag_protobuf_decode_message(s, data, len);
 
 	if (msg_type <= 0) {
