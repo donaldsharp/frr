@@ -574,6 +574,7 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 	struct update_subgroup *subgrp;
 	struct peer_af *paf;
 	struct bgp_filter *filter;
+	struct peer *peer = UPDGRP_PEER(updgrp);
 	int match = 0;
 	json_object *json_updgrp = NULL;
 	json_object *json_subgrps = NULL;
@@ -794,6 +795,8 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 					   SUBGRP_FLAG_NEEDS_REFRESH)
 					? "R"
 					: "");
+			if (peer)
+				vty_out(vty, "    Max packet size: %d\n",
 		}
 		if (subgrp->peer_count > 0) {
 			if (ctx->uj) {
