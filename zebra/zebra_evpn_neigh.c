@@ -550,10 +550,8 @@ bool zebra_evpn_neigh_is_bgp_seq_ok(zebra_evpn_t *zevpn, zebra_neigh_t *n,
 	if (seq < tmp_seq) {
 		/* if the neigh was never advertised to bgp we must accept
 		 * whatever sequence number bgp sends
-		 * XXX - check with Vivek
 		 */
-		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)
-		    && !zebra_evpn_neigh_is_ready_for_bgp(n)) {
+		if (zebra_vxlan_accept_bgp_seq()) {
 			if (IS_ZEBRA_DEBUG_EVPN_MH_NEIGH
 			    || IS_ZEBRA_DEBUG_VXLAN)
 				zlog_debug(

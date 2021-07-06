@@ -1543,10 +1543,8 @@ static inline bool zebra_evpn_mac_is_bgp_seq_ok(zebra_evpn_t *zevpn,
 	if (seq < tmp_seq) {
 		/* if the mac was never advertised to bgp we must accept
 		 * whatever sequence number bgp sends
-		 * XXX - check with Vivek
 		 */
-		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL)
-		    && !zebra_evpn_mac_is_ready_for_bgp(mac->flags)) {
+		if (zebra_vxlan_accept_bgp_seq()) {
 			if (IS_ZEBRA_DEBUG_EVPN_MH_MAC || IS_ZEBRA_DEBUG_VXLAN)
 				zlog_debug(
 					"%s-macip accept vni %u %s-mac %s%s%s lower seq %u f 0x%x",
