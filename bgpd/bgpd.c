@@ -3119,11 +3119,17 @@ static void bgp_vrf_string_name_delete(void *data)
 
 /* BGP instance creation by `router bgp' commands. */
 static struct bgp *bgp_create(as_t *as, const char *name,
-			      enum bgp_instance_type inst_type)
+			      enum bgp_instance_type inst_type,
+			      struct bgp *bgp_old, bool hidden)
 {
 	struct bgp *bgp;
 	afi_t afi;
 	safi_t safi;
+
+	if (hidden) {
+		bgp = bgp_old;
+		goto peer_init;
+	}
 
 	bgp = XCALLOC(MTYPE_BGP, sizeof(struct bgp));
 
@@ -3166,18 +3172,24 @@ static struct bgp *bgp_create(as_t *as, const char *name,
 		bgp->peer_self->domainname =
 			XSTRDUP(MTYPE_BGP_PEER_HOST, cmd_domainname_get());
 	bgp->peer = list_new();
+
+peer_init:
 	bgp->peer->cmp = (int (*)(void *, void *))peer_cmp;
 	bgp->peerhash = hash_create(peer_hash_key_make, peer_hash_same,
 				    "BGP Peer Hash");
 	bgp->peerhash->max_size = BGP_PEER_MAX_HASH_SIZE;
 
-	bgp->group = list_new();
+	if (!hidden)
+		bgp->group = list_new();
 	bgp->group->cmp = (int (*)(void *, void *))peer_group_cmp;
 
 	FOREACH_AFI_SAFI (afi, safi) {
-		bgp->route[afi][safi] = bgp_table_init(bgp, afi, safi);
-		bgp->aggregate[afi][safi] = bgp_table_init(bgp, afi, safi);
-		bgp->rib[afi][safi] = bgp_table_init(bgp, afi, safi);
+		if (!hidden) {
+			bgp->route[afi][safi] = bgp_table_init(bgp, afi, safi);
+			bgp->aggregate[afi][safi] =
+				bgp_table_init(bgp, afi, safi);
+			bgp->rib[afi][safi] = bgp_table_init(bgp, afi, safi);
+		}
 
 		/* Enable maximum-paths */
 		bgp_maximum_paths_set(bgp, afi, safi, BGP_PEER_EBGP,
@@ -3215,7 +3227,7 @@ static struct bgp *bgp_create(as_t *as, const char *name,
 	bgp->llgr_stale_time = BGP_DEFAULT_LLGR_STALE_TIME;
 
 #ifdef ENABLE_BGP_VNC
-	if (inst_type != BGP_INSTANCE_TYPE_VRF) {
+	if (inst_type != BGP_INSTANCE_TYPE_VRF && !hidden) {
 		bgp->rfapi = bgp_rfapi_new(bgp);
 		assert(bgp->rfapi);
 		assert(bgp->rfapi_cfg);
@@ -3232,9 +3244,11 @@ static struct bgp *bgp_create(as_t *as, const char *name,
 		bgp->vpn_policy[afi].import_vrf = list_new();
 		bgp->vpn_policy[afi].import_vrf->del =
 			bgp_vrf_string_name_delete;
-		bgp->vpn_policy[afi].export_vrf = list_new();
-		bgp->vpn_policy[afi].export_vrf->del =
-			bgp_vrf_string_name_delete;
+		if (!hidden) {
+			bgp->vpn_policy[afi].export_vrf = list_new();
+			bgp->vpn_policy[afi].export_vrf->del =
+				bgp_vrf_string_name_delete;
+		}
 		SET_FLAG(bgp->af_flags[afi][SAFI_MPLS_VPN],
 			 BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL);
 	}
@@ -3245,7 +3259,7 @@ static struct bgp *bgp_create(as_t *as, const char *name,
 			 bgp->restart_time, &bgp->t_startup);
 
 	/* printable name we can use in debug messages */
-	if (inst_type == BGP_INSTANCE_TYPE_DEFAULT) {
+	if (inst_type == BGP_INSTANCE_TYPE_DEFAULT && !hidden) {
 		bgp->name_pretty = XSTRDUP(MTYPE_BGP, "VRF default");
 	} else {
 		const char *n;
@@ -3273,19 +3287,23 @@ static struct bgp *bgp_create(as_t *as, const char *name,
 	bgp->coalesce_time = BGP_DEFAULT_SUBGROUP_COALESCE_TIME;
 	bgp->default_af[AFI_IP][SAFI_UNICAST] = true;
 
-	QOBJ_REG(bgp, bgp);
+	if (!hidden)
+		QOBJ_REG(bgp, bgp);
 
 	update_bgp_group_init(bgp);
 
-	/* assign a unique rd id for auto derivation of vrf's RD */
-	bf_assign_index(bm->rd_idspace, bgp->vrf_rd_id);
+	if (!hidden) {
+		/* assign a unique rd id for auto derivation of vrf's RD */
+		bf_assign_index(bm->rd_idspace, bgp->vrf_rd_id);
 
-	bgp->evpn_info = XCALLOC(MTYPE_BGP_EVPN_INFO,
-				 sizeof(struct bgp_evpn_info));
-	bgp_evpn_init(bgp);
-	bgp_evpn_vrf_es_init(bgp);
-	bgp_pbr_init(bgp);
-	bgp_srv6_init(bgp);
+		bgp->evpn_info = XCALLOC(MTYPE_BGP_EVPN_INFO,
+					 sizeof(struct bgp_evpn_info));
+
+		bgp_evpn_init(bgp);
+		bgp_evpn_vrf_es_init(bgp);
+		bgp_pbr_init(bgp);
+		bgp_srv6_init(bgp);
+	}
 
 	/*initilize global GR FSM */
 	bgp_global_gr_init(bgp);
@@ -3424,6 +3442,9 @@ int bgp_lookup_by_as_name_type(struct bgp **bgp_val, as_t *as, const char *name,
 			       enum bgp_instance_type inst_type)
 {
 	struct bgp *bgp;
+	struct peer *peer = NULL;
+	struct listnode *node, *nnode;
+	bool hidden = false;
 
 	/* Multiple instance check. */
 	if (name)
@@ -3432,14 +3453,26 @@ int bgp_lookup_by_as_name_type(struct bgp **bgp_val, as_t *as, const char *name,
 		bgp = bgp_get_default();
 
 	if (bgp) {
-		*bgp_val = bgp;
+		if (IS_BGP_INSTANCE_HIDDEN(bgp) && *as != AS_UNSPECIFIED)
+			hidden = true;
+		/* Handle AS number change */
 		if (bgp->as != *as) {
-			*as = bgp->as;
-			return BGP_ERR_AS_MISMATCH;
+			if (hidden)
+				bgp_create(as, name, inst_type, bgp, hidden);
+
+			/* Set all peer's local as number with this ASN */
+			for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
+				peer->local_as = *as;
+			UNSET_FLAG(bgp->flags, BGP_FLAG_INSTANCE_HIDDEN);
+			*bgp_val = bgp;
+			return BGP_INSTANCE_EXISTS;
 		}
 		if (bgp->inst_type != inst_type)
 			return BGP_ERR_INSTANCE_MISMATCH;
-		return BGP_SUCCESS;
+		if (hidden)
+			bgp_create(as, name, inst_type, bgp, hidden);
+		*bgp_val = bgp;
+		return BGP_INSTANCE_EXISTS;
 	}
 	*bgp_val = NULL;
 
@@ -3458,7 +3491,7 @@ int bgp_get(struct bgp **bgp_val, as_t *as, const char *name,
 	if (ret || *bgp_val)
 		return ret;
 
-	bgp = bgp_create(as, name, inst_type);
+	bgp = bgp_create(as, name, inst_type, NULL, false);
 
 	/*
 	 * view instances will never work inside of a vrf
@@ -3665,6 +3698,15 @@ int bgp_delete(struct bgp *bgp)
 		THREAD_OFF(gr_info->t_route_select);
 	}
 
+	/* Set flag indicating default bgp instance as hidden */
+	if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT &&
+	    (bgp_table_top(bgp->rib[AFI_IP][SAFI_MPLS_VPN]) ||
+	     bgp_table_top(bgp->rib[AFI_IP6][SAFI_MPLS_VPN]))) {
+		zlog_info(
+			"Marking the deleting default bgp instance as hidden");
+		SET_FLAG(bgp->flags, BGP_FLAG_INSTANCE_HIDDEN);
+	}
+
 	if (BGP_DEBUG(zebra, ZEBRA)) {
 		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)
 			zlog_debug("Deleting Default VRF");
@@ -3710,7 +3752,7 @@ int bgp_delete(struct bgp *bgp)
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, next, peer))
 		peer_delete(peer);
 
-	if (bgp->peer_self) {
+	if (bgp->peer_self && !IS_BGP_INSTANCE_HIDDEN(bgp)) {
 		peer_delete(bgp->peer_self);
 		bgp->peer_self = NULL;
 	}
@@ -3720,7 +3762,8 @@ int bgp_delete(struct bgp *bgp)
 /* TODO - Other memory may need to be freed - e.g., NHT */
 
 #ifdef ENABLE_BGP_VNC
-	rfapi_delete(bgp);
+	if (!IS_BGP_INSTANCE_HIDDEN(bgp))
+		rfapi_delete(bgp);
 #endif
 	bgp_cleanup_routes(bgp);
 
@@ -3745,7 +3788,7 @@ int bgp_delete(struct bgp *bgp)
 	}
 
 	/* Deregister from Zebra, if needed */
-	if (IS_BGP_INST_KNOWN_TO_ZEBRA(bgp)) {
+	if (IS_BGP_INST_KNOWN_TO_ZEBRA(bgp) && !IS_BGP_INSTANCE_HIDDEN(bgp)) {
 		if (BGP_DEBUG(zebra, ZEBRA))
 			zlog_debug(
 				"%s: deregistering this bgp %s instance from zebra",
@@ -3753,17 +3796,19 @@ int bgp_delete(struct bgp *bgp)
 		bgp_zebra_instance_deregister(bgp);
 	}
 
-	/* Remove visibility via the master list - there may however still be
-	 * routes to be processed still referencing the struct bgp.
-	 */
-	listnode_delete(bm->bgp, bgp);
-
-	/* Free interfaces in this instance. */
-	bgp_if_finish(bgp);
+	if (!IS_BGP_INSTANCE_HIDDEN(bgp)) {
+		/* Remove visibility via the master list -
+		 * there may however still be routes to be processed
+		 * still referencing the struct bgp.
+		 */
+		listnode_delete(bm->bgp, bgp);
+		/* Free interfaces in this instance. */
+		bgp_if_finish(bgp);
+	}
 
 	vrf = bgp_vrf_lookup_by_instance_type(bgp);
 	bgp_handle_socket(bgp, vrf, VRF_UNKNOWN, false);
-	if (vrf)
+	if (vrf && !IS_BGP_INSTANCE_HIDDEN(bgp))
 		bgp_vrf_unlink(bgp, vrf);
 
 	/* Update EVPN VRF pointer */
@@ -3778,7 +3823,22 @@ int bgp_delete(struct bgp *bgp)
 		work_queue_free_and_null(&bgp->process_queue);
 
 	thread_master_free_unused(bm->master);
-	bgp_unlock(bgp); /* initial reference */
+
+	if (!IS_BGP_INSTANCE_HIDDEN(bgp))
+		bgp_unlock(bgp); /* initial reference */
+	else {
+		for (afi = AFI_IP; afi < AFI_MAX; afi++) {
+			enum vpn_policy_direction dir;
+
+			if (bgp->vpn_policy[afi].import_vrf)
+				list_delete(&bgp->vpn_policy[afi].import_vrf);
+
+			dir = BGP_VPN_POLICY_DIR_FROMVPN;
+			if (bgp->vpn_policy[afi].rtlist[dir])
+				ecommunity_free(
+					&bgp->vpn_policy[afi].rtlist[dir]);
+		}
+	}
 
 	return 0;
 }
