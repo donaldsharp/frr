@@ -497,7 +497,8 @@ struct bgp {
 #define BGP_FLAG_GRACEFUL_NOTIFICATION (1 << 29)
 /* Send Hard Reset CEASE Notification for 'Administrative Reset' */
 #define BGP_FLAG_HARD_ADMIN_RESET (1 << 30)
-/* If BGP gets to 32 make sure we increase the size of flags above */
+#define BGP_FLAG_INSTANCE_HIDDEN (1 << 31)
+	/* If BGP gets to 32 make sure we increase the size of flags above */
 
 	/* BGP default address-families.
 	 * New peers inherit enabled afi/safis from bgp instance.
@@ -1990,6 +1991,7 @@ enum bgp_clear_type {
 enum bgp_create_error_code {
 	BGP_SUCCESS = 0,
 	BGP_CREATED = 1,
+	BGP_INSTANCE_EXISTS = 2,
 	BGP_ERR_INVALID_VALUE = -1,
 	BGP_ERR_INVALID_FLAG = -2,
 	BGP_ERR_INVALID_AS = -3,
@@ -2588,5 +2590,18 @@ extern void bgp_recalculate_afi_safi_bestpaths(struct bgp *bgp, afi_t afi,
 #pragma FRR printfrr_ext "%pBP" (struct peer *)
 /* clang-format on */
 #endif
+
+/* Macro to check if default bgp instance is hidden */
+#define IS_BGP_INSTANCE_HIDDEN(_bgp)                                           \
+	(CHECK_FLAG(_bgp->flags, BGP_FLAG_INSTANCE_HIDDEN) &&                  \
+	 (_bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT ||                      \
+	  _bgp->inst_type == BGP_INSTANCE_TYPE_VRF))
+
+/* Macro to check if bgp instance delete in-progress and !hidden */
+#define BGP_INSTANCE_HIDDEN_DELETE_IN_PROGRESS(_bgp, _afi, _safi)              \
+	(CHECK_FLAG(_bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS) &&               \
+	 !IS_BGP_INSTANCE_HIDDEN(_bgp) &&                                      \
+	 !(_afi == AFI_IP && _safi == SAFI_MPLS_VPN) &&                        \
+	 !(_afi == AFI_IP6 && _safi == SAFI_MPLS_VPN))
 
 #endif /* _QUAGGA_BGPD_H */
