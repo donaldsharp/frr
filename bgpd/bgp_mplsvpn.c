@@ -2360,6 +2360,7 @@ static void vpn_leak_to_vrf_update_onevrf(struct bgp *to_bgp,   /* to */
 	 * detection
 	 */
 	if (path_vpn->extra && path_vpn->extra->vrfleak &&
+	    path_vpn->extra->vrfleak->bgp_orig &&
 	    (to_bgp->as != path_vpn->extra->vrfleak->bgp_orig->as)) {
 		new_aspath = aspath_dup(static_attr.aspath);
 		new_aspath = aspath_add_seq(new_aspath, path_vpn->extra->vrfleak->bgp_orig->as);
