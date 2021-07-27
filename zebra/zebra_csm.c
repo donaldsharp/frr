@@ -54,24 +54,14 @@ static bool csm_rcu_set = false;
 
 static void convert_mode(Mode mode, enum frr_csm_smode *smode)
 {
-	switch (mode) {
-	case REBOOT_FAST:
-	case SYS_UPGRADE_REBOOT_FAST:
-		*smode = FAST_START;
-		break;
-
-	case REBOOT_WARM:
-	case SYS_UPGRADE_REBOOT_WARM:
-		*smode = WARM_START;
-		break;
-
-	case MAINTENANCE:
+	if (IS_MODE_MAINTENANCE(mode)) {
 		*smode = MAINT;
-		break;
-
-	default:
+	} else if (IS_BOOT_FAST(mode)) {
+		*smode = FAST_START;
+	} else if (IS_BOOT_WARM(mode)) {
+		*smode = WARM_START;
+	} else {
 		*smode = COLD_START;
-		break;
 	}
 }
 
@@ -168,6 +158,7 @@ static int frr_csm_get_start_mode(Mode *mode, State *state)
 	module_status *mod_status;
 	module_mode *mod_mode;
 	int nbytes;
+	char buf[256];
 
 	*mode = REBOOT_COLD;
 	*state = UP;
@@ -218,7 +209,7 @@ static int frr_csm_get_start_mode(Mode *mode, State *state)
 			if (IS_ZEBRA_DEBUG_CSM)
 				zlog_debug(
 					"... Received start mode %s state %s",
-					mode_to_str(mod_mode->mode),
+					mode_to_str(mod_mode->mode, buf),
 					mod_state_to_str(mod_mode->state));
 			*mode = mod_mode->mode;
 			*state = mod_mode->state;
@@ -350,7 +341,7 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 		/* We expect 'come up' only in the case of coming out of
 		 * 'maintenance' mode.
 		 */
-		if (mode != MAINTENANCE)
+		if (!IS_MODE_MAINTENANCE(mode))
 			return;
 
 		zrouter.csm_cmode = mode;
@@ -372,24 +363,17 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 
 	zrouter.csm_cmode = mode;
 	zrouter.csm_cstate = state;
-	switch (mode) {
-	case REBOOT_FAST:
-	case REBOOT_WARM:
-		frr_csm_fast_restart_triggered();
-		break;
 
-	case SYS_UPGRADE_REBOOT_FAST:
-	case SYS_UPGRADE_REBOOT_WARM:
-		frr_csm_fast_upgrade_triggered();
-		break;
-
-	case MAINTENANCE:
+	if (IS_MODE_MAINTENANCE(mode)) {
 		frr_csm_enter_maintenance_mode();
-		break;
-
-	default:
-		break;
+	} else if (IS_BOOT_FAST(mode) || IS_BOOT_WARM(mode)) {
+		if (IS_SYS_UPGRADE(mode)) {
+			frr_csm_fast_upgrade_triggered();
+		} else {
+			frr_csm_fast_restart_triggered();
+		}
 	}
+
 }
 
 /*
@@ -415,6 +399,7 @@ static int frr_csm_send_state()
 	msg *entry = (msg *)m->entry;
 	module_status_response *msr;
 	int nbytes;
+	char buf[256];
 
 	/* Send module status */
 	entry->type = MODULE_STATUS_RESP;
@@ -428,7 +413,7 @@ static int frr_csm_send_state()
 
 	if (IS_ZEBRA_DEBUG_CSM)
 		zlog_debug("FRRCSM: Sending module status, mode %s state %s",
-			   mode_to_str(msr->mode.mode),
+			   mode_to_str(msr->mode.mode, buf),
 			   mod_state_to_str(msr->mode.state));
 
 	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
@@ -454,6 +439,7 @@ static int frr_csm_cb(int len, void *buf)
 	keepalive_request *kr;
 	module_mode *mod_mode;
 	module_status *mod_status;
+	char b[256];
 
 	/* Set RCU information in the pthread */
 	if (!csm_rcu_set) {
@@ -482,7 +468,7 @@ static int frr_csm_cb(int len, void *buf)
 				zlog_debug(
 					"... Received ComeUp for %s, mode %s state %s",
 					mod_id_to_str(mod_mode->mod),
-					mode_to_str(mod_mode->mode),
+					mode_to_str(mod_mode->mode, b),
 					mod_state_to_str(mod_mode->state));
 			frr_csm_handle_up_down_trigger(mod_mode->mod,
 						       mod_mode->mode,
@@ -494,7 +480,7 @@ static int frr_csm_cb(int len, void *buf)
 				zlog_debug(
 					"... Received GoDown for %s, mode %s state %s",
 					mod_id_to_str(mod_mode->mod),
-					mode_to_str(mod_mode->mode),
+					mode_to_str(mod_mode->mode, b),
 					mod_state_to_str(mod_mode->state));
 			frr_csm_handle_up_down_trigger(mod_mode->mod,
 						       mod_mode->mode,
@@ -507,7 +493,7 @@ static int frr_csm_cb(int len, void *buf)
 				zlog_debug(
 					"... Received Up for %s, mode %s State %s fr %d",
 					mod_id_to_str(mod_mode->mod),
-					mode_to_str(mod_mode->mode),
+					mode_to_str(mod_mode->mode, b),
 					mod_state_to_str(mod_mode->state),
 					mod_status->failure_reason);
 			frr_csm_update_state(mod_mode->mod, mod_mode->mode,
@@ -519,7 +505,7 @@ static int frr_csm_cb(int len, void *buf)
 				zlog_debug(
 					"... Received Down for %s, mode %s state %s",
 					mod_id_to_str(mod_mode->mod),
-					mode_to_str(mod_mode->mode),
+					mode_to_str(mod_mode->mode, b),
 					mod_state_to_str(mod_mode->state));
 			frr_csm_update_state(mod_mode->mod, mod_mode->mode,
 					     mod_mode->state);
@@ -538,7 +524,7 @@ static int frr_csm_cb(int len, void *buf)
 				zlog_debug(
 					"... NL Info for %s, mode %s State %s fr %d",
 					mod_id_to_str(mod_mode->mod),
-					mode_to_str(mod_mode->mode),
+					mode_to_str(mod_mode->mode, b),
 					mod_state_to_str(mod_mode->state),
 					mod_status->failure_reason);
 			/* TBD: Should we do anything with this? */
@@ -575,6 +561,8 @@ void zebra_csm_fast_restart_client_ack(struct zserv *client, bool upgrade)
 
 void zebra_csm_maint_mode_client_ack(struct zserv *client, bool enter)
 {
+	char buf[256];
+
 	if (IS_ZEBRA_DEBUG_CSM)
 		zlog_debug("Ack for %s maintenance mode from %s",
 			   enter ? "Enter" : "Exit",
@@ -595,7 +583,7 @@ void zebra_csm_maint_mode_client_ack(struct zserv *client, bool enter)
 		convert_mode(mode, &smode);
 		zlog_err(
 			"....... Got start mode %s (converted to %s), state %s",
-			mode_to_str(mode), frr_csm_smode_str[smode],
+			mode_to_str(mode, buf), frr_csm_smode_str[smode],
 			mod_state_to_str(state));
 		zrouter.csm_smode = zrouter.csm_cmode = mode;
 		zrouter.csm_cstate = state;
@@ -675,6 +663,7 @@ void frr_csm_register()
 	Mode mode;
 	State state;
 	enum frr_csm_smode smode;
+	char buf[256];
 
 	/* Init our CSM module id */
 	zrouter.frr_csm_modid = FRR;
@@ -712,7 +701,7 @@ void frr_csm_register()
 		zrouter.frr_csm_smode = COLD_START;
 	} else {
 		zlog_err("FRRCSM: Start mode is %s (converted to %s), state %s",
-			 mode_to_str(mode), frr_csm_smode_str[smode],
+			 mode_to_str(mode, buf), frr_csm_smode_str[smode],
 			 mod_state_to_str(state));
 		zrouter.csm_smode = zrouter.csm_cmode = mode;
 		zrouter.csm_cstate = state;

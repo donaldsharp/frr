@@ -3734,11 +3734,12 @@ DEFUN (show_zebra,
 		vty_out(vty, "There is no Asic offload\n");
 
 #if defined(HAVE_CSMGR)
+	char buf[256];
 	vty_out(vty, "%s with CSM, CSM start mode %s (mapped to %s), current mode %s\n",
 		zrouter.frr_csm_regd ? "Registered" : "Not registered",
-		mode_to_str(zrouter.csm_smode),
+		mode_to_str(zrouter.csm_smode, buf),
 		frr_csm_smode2str(zrouter.frr_csm_smode),
-		mode_to_str(zrouter.csm_cmode));
+		mode_to_str(zrouter.csm_cmode, buf));
 #endif
 
 	vty_out(vty,
