@@ -191,7 +191,7 @@ int zebra_evpn_rem_mac_install(zebra_evpn_t *zevpn, zebra_mac_t *mac,
 			       bool was_static)
 {
 	const struct zebra_if *zif, *br_zif;
-	const struct zebra_l2info_vxlan *vxl;
+	const struct zebra_vxlan_vni *vni;
 	bool sticky;
 	enum zebra_dplane_result res;
 	const struct interface *br_ifp;
@@ -207,7 +207,9 @@ int zebra_evpn_rem_mac_install(zebra_evpn_t *zevpn, zebra_mac_t *mac,
 	if (br_ifp == NULL)
 		return -1;
 
-	vxl = &zif->l2info.vxl;
+	vni = zebra_vxlan_if_vni_find(zif, zevpn->vni);
+	if (!vni)
+		return -1;
 
 	sticky = !!CHECK_FLAG(mac->flags,
 			      (ZEBRA_MAC_STICKY | ZEBRA_MAC_REMOTE_DEF_GW));
@@ -228,7 +230,7 @@ int zebra_evpn_rem_mac_install(zebra_evpn_t *zevpn, zebra_mac_t *mac,
 	br_zif = (const struct zebra_if *)(br_ifp->info);
 
 	if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif))
-		vid = vxl->access_vlan;
+		vid = vni->access_vlan;
 	else
 		vid = 0;
 
@@ -247,7 +249,7 @@ int zebra_evpn_rem_mac_uninstall(zebra_evpn_t *zevpn, zebra_mac_t *mac,
 				 bool force)
 {
 	const struct zebra_if *zif, *br_zif;
-	const struct zebra_l2info_vxlan *vxl;
+	struct zebra_vxlan_vni *vni;
 	struct in_addr vtep_ip;
 	const struct interface *ifp, *br_ifp;
 	vlanid_t vid;
@@ -273,12 +275,14 @@ int zebra_evpn_rem_mac_uninstall(zebra_evpn_t *zevpn, zebra_mac_t *mac,
 	if (br_ifp == NULL)
 		return -1;
 
-	vxl = &zif->l2info.vxl;
+	vni = zebra_vxlan_if_vni_find(zif, zevpn->vni);
+	if (!vni)
+		return -1;
 
 	br_zif = (const struct zebra_if *)br_ifp->info;
 
 	if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif))
-		vid = vxl->access_vlan;
+		vid = vni->access_vlan;
 	else
 		vid = 0;
 
@@ -320,6 +324,8 @@ static void zebra_evpn_mac_get_access_info(zebra_mac_t *mac,
 					   struct interface **ifpP,
 					   vlanid_t *vid)
 {
+	struct zebra_vxlan_vni *vni;
+
 	/* if the mac is associated with an ES we must get the access
 	 * info from the ES
 	 */
@@ -331,7 +337,8 @@ static void zebra_evpn_mac_get_access_info(zebra_mac_t *mac,
 		/* get the vlan from the EVPN */
 		if (mac->zevpn->vxlan_if) {
 			zif = mac->zevpn->vxlan_if->info;
-			*vid = zif->l2info.vxl.access_vlan;
+			vni = zebra_vxlan_if_vni_find(zif, mac->zevpn->vni);
+			*vid = vni->access_vlan;
 		} else {
 			*vid = 0;
 		}

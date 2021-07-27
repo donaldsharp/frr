@@ -33,6 +33,7 @@
 
 #include "zebra/zebra_l2.h"
 #include "zebra/interface.h"
+#include "zebra/zebra_vxlan.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -141,7 +142,7 @@ static inline struct interface *zevpn_map_to_svi(zebra_evpn_t *zevpn)
 {
 	struct interface *ifp;
 	struct zebra_if *zif = NULL;
-	struct zebra_l2info_vxlan zl2_info;
+	struct zebra_vxlan_vni *vni;
 
 	ifp = zevpn->vxlan_if;
 	if (!ifp)
@@ -149,12 +150,15 @@ static inline struct interface *zevpn_map_to_svi(zebra_evpn_t *zevpn)
 	zif = ifp->info;
 	if (!zif)
 		return NULL;
+	vni = zebra_vxlan_if_vni_find(zif, zevpn->vni);
+	if (!vni)
+		return NULL;
 
 	/* If down or not mapped to a bridge, we're done. */
 	if (!if_is_operative(ifp) || !zif->brslave_info.br_if)
 		return NULL;
-	zl2_info = zif->l2info.vxl;
-	return zvni_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
+
+	return zvni_map_to_svi(vni->access_vlan, zif->brslave_info.br_if);
 }
 
 int advertise_gw_macip_enabled(zebra_evpn_t *zevpn);
