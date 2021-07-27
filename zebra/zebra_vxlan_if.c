@@ -156,11 +156,11 @@ static int zebra_vxlan_if_del_vni(struct interface *ifp,
 		zebra_evpn_send_del_to_client(zevpn);
 
 		/* Free up all neighbors and MAC, if any. */
-		zebra_evpn_neigh_del_all(zevpn, 0, 0, DEL_ALL_NEIGH);
-		zebra_evpn_mac_del_all(zevpn, 0, 0, DEL_ALL_MAC);
+		zebra_evpn_neigh_del_all(zevpn, 1, 0, DEL_ALL_NEIGH);
+		zebra_evpn_mac_del_all(zevpn, 1, 0, DEL_ALL_MAC);
 
 		/* Free up all remote VTEPs, if any. */
-		zebra_evpn_vtep_del_all(zevpn, 0);
+		zebra_evpn_vtep_del_all(zevpn, 1);
 
 		/* Delete the hash entry. */
 		if (zebra_evpn_vxlan_del(zevpn)) {
