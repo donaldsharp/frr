@@ -174,7 +174,7 @@ static int zebra_l2_bridge_if_vlan_table_create(struct zebra_if *zif)
 	if (!br->vlan_table) {
 		br->vlan_table = zebra_l2_bridge_vlan_table_create();
 		if (!br->vlan_table)
-			return -ENOMEM;
+			return ENOMEM;
 	}
 
 	return 0;
