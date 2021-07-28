@@ -154,7 +154,8 @@ extern int eigrp_make_md5_digest(struct eigrp_interface *ei, struct stream *s,
 				 uint8_t flags);
 extern int eigrp_check_md5_digest(struct stream *s,
 				  struct TLV_MD5_Authentication_Type *authTLV,
-				  struct eigrp_neighbor *nbr, uint8_t flags);
+				  struct eigrp_neighbor *nbr,
+				  struct eigrp_header *eigrph, uint8_t flags);
 extern int eigrp_make_sha256_digest(struct eigrp_interface *ei,
 				    struct stream *s, uint8_t flags);
 extern int
