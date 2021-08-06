@@ -1711,10 +1711,42 @@ ALIAS(
 void prefix_list_show(struct vty *vty, struct lyd_node *dnode,
 		      bool show_defaults)
 {
-	int type = yang_dnode_get_enum(dnode, "../type");
 	const char *ge_str = NULL, *le_str = NULL;
 	bool is_any;
 	struct prefix p;
+
+	/* Libyang has a serious performance issue when evaluating relative path
+	 * expressions. This involves searching part of a tree structure for
+	 * nodes specified by the path, which requires looking at the schema for
+	 * each node, because the schema is what holds the name of the node. For
+	 * whatever reason this has extremely bad cache performance. When
+	 * showing a configuration containing a lot of prefix lists, 99% of the
+	 * time will be spent on dereferencing the `schema` field of tree
+	 * nodes. Profiling reveals that the value of these accesses always
+	 * invokes at minimum an L1D cache miss and almost always misses all
+	 * levels of cache, falling back to a main memory access.
+	 *
+	 * For this function the biggest problems are `yang_dnode_get_enum` and
+	 * `yang_dnode_get_string`. In the case of a single prefix list with
+	 * many entries, we can help alleviate the cache misses by storing the
+	 * known result of some of these lookups in static variables. These
+	 * tend to have good temporal locality and effectively save the entire
+	 * cost of the lookup (since all of the lookup cost is spent on a cache
+	 * miss). Since this function is called with each plist entry, we can't
+	 * cache all of them since each entry has different values, but we can
+	 * at least cache the lookups on the parent plist.
+	 *
+	 *
+	 */
+	static struct lyd_node *parent;
+	static int type;
+	static const char *name;
+
+	if (parent != dnode->parent) {
+		type = yang_dnode_get_enum(dnode, "../type");
+		name = yang_dnode_get_string(dnode, "../name");
+		parent = dnode->parent;
+	}
 
 	is_any = yang_dnode_exists(dnode, "./any");
 	switch (type) {
@@ -1748,8 +1780,8 @@ void prefix_list_show(struct vty *vty, struct lyd_node *dnode,
 		break;
 	}
 
-	vty_out(vty, "prefix-list %s seq %s %s",
-		yang_dnode_get_string(dnode, "../name"),
+
+	vty_out(vty, "prefix-list %s seq %s %s", name,
 		yang_dnode_get_string(dnode, "./sequence"),
 		yang_dnode_get_string(dnode, "./action"));
 
