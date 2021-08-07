@@ -2908,7 +2908,7 @@ static void evpn_show_route_rd_all_macip(struct vty *vty, struct bgp *bgp,
 				json_path = json_object_new_array();
 
 			route_vty_out_detail(vty, bgp, dest, pi, AFI_L2VPN,
-					     SAFI_EVPN, RPKI_NOT_BEING_USED,
+					     SAFI_EVPN, /* RPKI_NOT_BEING_USED, */
 					     json_path);
 
 			if (json)

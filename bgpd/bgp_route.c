@@ -12873,7 +12873,7 @@ DEFUN (show_bgp_afi_vpn_rd_route,
 	if (!strcmp(argv[5]->arg, "all"))
 		return bgp_show_route(vty, NULL, argv[6]->arg, afi,
 				      SAFI_MPLS_VPN, NULL, 0, BGP_PATH_SHOW_ALL,
-				      RPKI_NOT_BEING_USED,
+				      /* RPKI_NOT_BEING_USED,*/
 				      use_json(argc, argv));
 
 	ret = str2prefix_rd(argv[5]->arg, &prd);
