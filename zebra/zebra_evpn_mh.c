@@ -1183,14 +1183,13 @@ void zebra_evpn_if_cleanup(struct zebra_if *zif)
 		zif->flags &= ~ZIF_FLAG_EVPN_MH_TC_INIT;
 	}
 
-	if (!bf_is_inited(zif->vlan_bitmap))
-		return;
+	if (bf_is_inited(zif->vlan_bitmap)) {
+		bf_for_each_set_bit(zif->vlan_bitmap, vid, IF_VLAN_BITMAP_MAX) {
+			zebra_evpn_vl_mbr_deref(vid, zif);
+		}
 
-	bf_for_each_set_bit(zif->vlan_bitmap, vid, IF_VLAN_BITMAP_MAX) {
-		zebra_evpn_vl_mbr_deref(vid, zif);
+		bf_free(zif->vlan_bitmap);
 	}
-
-	bf_free(zif->vlan_bitmap);
 
 	/* Delete associated Ethernet Segment */
 	es = zif->es_info.es;
