@@ -8155,19 +8155,12 @@ void route_vty_out(struct vty *vty, const struct prefix *p,
 		vty_out(vty, "\n");
 
 		if (safi == SAFI_EVPN) {
-			struct bgp_path_es_info *path_es_info = NULL;
-
 			if (bgp_evpn_is_esi_valid(&attr->esi)) {
 				/* XXX - add these params to the json out */
 				vty_out(vty, "%*s", 20, " ");
 				vty_out(vty, "ESI:%s",
 						esi_to_str(&attr->esi,
 						esi_buf, sizeof(esi_buf)));
-
-				if (path->extra && path->extra->mh_info)
-					path_es_info =
-						path->extra->mh_info->es_info;
-
 				vty_out(vty, "\n");
 			}
 			if (attr->flag &
