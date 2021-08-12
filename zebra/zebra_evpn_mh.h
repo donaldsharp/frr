@@ -429,5 +429,7 @@ extern void zebra_evpn_access_bd_bridge_cleanup(vlanid_t vid, struct interface *
 extern void zebra_evpn_mh_vtep_show(struct vty *vty, bool uj);
 extern int zebra_evpn_mh_tc_off(struct vty *vty, bool tc_off);
 extern int zebra_evpn_mh_garp_flood_off(struct vty *vty, bool flood_off);
+extern struct zebra_evpn_es_evi *
+zebra_evpn_es_evi_find(struct zebra_evpn_es *es, zebra_evpn_t *zevpn);
 
 #endif /* _ZEBRA_EVPN_MH_H */
