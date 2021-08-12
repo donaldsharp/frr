@@ -725,7 +725,7 @@ int bgp_vty_return(struct vty *vty, int ret)
 		str = "The Graceful Restart Operation failed due to an err.";
 		break;
 	case BGP_GR_NO_OPERATION:
-		str = GR_NO_OPER;
+		/* A NO-OP is silently ignored and treated as a success. */
 		break;
 	}
 	if (str) {
