@@ -2784,7 +2784,11 @@ int bgp_gr_update_all(struct bgp *bgp, enum global_gr_command global_gr_cmd)
 				"%s [BGP_GR] global_new_state == global_old_state :%s",
 				__func__,
 				print_global_gr_mode(global_new_state));
-		return BGP_GR_NO_OPERATION;
+        /* Next state 'invalid' is actually an 'ignore' */
+        if (global_new_state == GLOBAL_INVALID)
+            return BGP_GR_NO_OPERATION;
+
+        return BGP_GR_NO_OPERATION;
 	}
 
 	return bgp_gr_lookup_n_update_all_peer(bgp, global_new_state,
@@ -2936,6 +2940,10 @@ int bgp_neighbor_graceful_restart(struct peer *peer,
 	if (peer_new_state == PEER_INVALID)
 		return BGP_ERR_GR_INVALID_CMD;
 
+    /* Next state 'invalid' is actually an 'ignore' */
+	if (peer_new_state == PEER_INVALID)
+		return BGP_GR_NO_OPERATION;
+
 	if (peer_new_state != peer_old_state) {
 		result = peer_state.action_fun(peer, peer_old_state,
 					       peer_new_state);
@@ -2983,6 +2991,9 @@ unsigned int bgp_peer_gr_action(struct peer *peer, enum peer_mode old_peer_state
 		/* something bad happend , print error message */
 		return BGP_ERR_GR_INVALID_CMD;
 	}
+
+	if (new_peer_state == PEER_INVALID)
+		return BGP_GR_NO_OPERATION;
 
 	bgp_gr_global_mode = bgp_global_gr_mode_get(peer->bgp);
 
