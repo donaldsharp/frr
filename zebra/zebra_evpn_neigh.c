@@ -2174,12 +2174,12 @@ void process_neigh_remote_macip_add(zebra_evpn_t *zevpn, struct zebra_vrf *zvrf,
 						prefix_mac2str(&n->emac, buf,
 							       sizeof(buf)),
 						seq, n->flags);
-				zebra_evpn_neigh_clear_sync_info(n);
 				if (IS_ZEBRA_NEIGH_ACTIVE(n))
 					zebra_evpn_neigh_send_del_to_client(
 						zevpn->vni, &n->ip, &n->emac,
 						n->flags, n->state,
 						false /*force*/);
+				zebra_evpn_neigh_clear_sync_info(n);
 			}
 			if (memcmp(&n->emac, &mac->macaddr,
 				   sizeof(struct ethaddr))
