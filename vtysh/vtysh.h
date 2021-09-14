@@ -110,4 +110,15 @@ extern struct vty *vty;
 
 extern int user_mode;
 
+struct vtysh_client {
+	int fd;
+	const char *name;
+	int flag;
+	char path[MAXPATHLEN];
+	struct vtysh_client *next;
+};
+
+extern struct vtysh_client vtysh_client[20];
+extern char my_client[64];
+
 #endif /* VTYSH_H */
