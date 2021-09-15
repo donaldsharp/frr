@@ -36,7 +36,8 @@ Build-Depends:
  libgrpc++-dev,
  libprotobuf-dev,
  protobuf-compiler-grpc,
- csmgrd-dev
+ csmgrd-dev,
+ liblttng-ust-dev
 Standards-Version: 4.4.1
 Homepage: https://www.frrouting.org/
 Vcs-Browser: https://github.com/FRRouting/frr/tree/debian/master
