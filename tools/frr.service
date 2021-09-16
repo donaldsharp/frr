@@ -4,6 +4,7 @@ Documentation=https://frrouting.readthedocs.io/en/latest/setup.html
 After=networking.service csmgrd.service
 
 [Service]
+Environment="LD_PRELOAD=liblttng-ust-fork.so.0"
 Nice=-5
 Type=forking
 NotifyAccess=all
