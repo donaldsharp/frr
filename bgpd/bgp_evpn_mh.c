@@ -48,6 +48,7 @@
 #include "bgpd/bgp_label.h"
 #include "bgpd/bgp_nht.h"
 #include "bgpd/bgp_mpath.h"
+#include "bgpd/bgp_trace.h"
 
 static void bgp_evpn_local_es_down(struct bgp *bgp,
 		struct bgp_evpn_es *es);
@@ -1242,6 +1243,8 @@ static struct bgp_evpn_es_vtep *bgp_evpn_es_vtep_new(struct bgp_evpn_es *es,
 
 	es_vtep->es = es;
 	es_vtep->vtep_ip.s_addr = vtep_ip.s_addr;
+	inet_ntop(AF_INET, &es_vtep->vtep_ip, es_vtep->vtep_str,
+		  sizeof(es_vtep->vtep_str));
 	listnode_init(&es_vtep->es_listnode, es_vtep);
 	listnode_add_sort(es->es_vtep_list, &es_vtep->es_listnode);
 
@@ -1318,6 +1321,8 @@ static int bgp_zebra_send_remote_es_vtep(struct bgp *bgp,
 		zlog_debug("Tx %s Remote ESI %s VTEP %s",
 				add ? "ADD" : "DEL", es->esi_str,
 				inet_ntoa(es_vtep->vtep_ip));
+
+	frrtrace(3, frr_bgp, evpn_mh_vtep_zsend, add, es, es_vtep);
 
 	return zclient_send_message(zclient);
 }
@@ -2761,6 +2766,8 @@ static void bgp_evpn_l3nhg_zebra_add_v4_or_v6(struct bgp_evpn_es_vrf *es_vrf,
 			v4_nhg ? "v4_nhg" : "v6_nhg",
 			nhg_id);
 
+	frrtrace(4, frr_bgp, evpn_mh_nhg_zsend, true, v4_nhg, nhg_id, es_vrf);
+
 	/* only the gateway ip changes for each NH. rest of the params
 	 * are constant
 	 */
@@ -2792,6 +2799,8 @@ static void bgp_evpn_l3nhg_zebra_add_v4_or_v6(struct bgp_evpn_es_vrf *es_vrf,
 					nhg_id,
 					inet_ntoa(es_vtep->vtep_ip),
 					es_vrf->bgp_vrf->l3vni_svi_ifindex);
+
+		frrtrace(3, frr_bgp, evpn_mh_nh_zsend, nhg_id, es_vtep, es_vrf);
 	}
 
 	if (!nh_cnt)
@@ -2837,6 +2846,8 @@ static void bgp_evpn_l3nhg_zebra_del_v4_or_v6(struct bgp_evpn_es_vrf *es_vrf,
 			es_vrf->es->esi_str, es_vrf->bgp_vrf->vrf_id,
 			v4_nhg ? "v4_nhg" : "v6_nhg",
 			nhg_id);
+
+	frrtrace(4, frr_bgp, evpn_mh_nhg_zsend, false, v4_nhg, nhg_id, es_vrf);
 
 	zclient_nhg_del(zclient, nhg_id);
 	zclient_send_message(zclient);
@@ -4448,6 +4459,8 @@ static void bgp_evpn_nh_zebra_update_send(struct bgp_evpn_nh *nh, bool add)
 			zlog_debug("evpn vrf %s nh %s del to zebra",
 				   nh->bgp_vrf->name, nh->nh_str);
 	}
+
+	frrtrace(2, frr_bgp, evpn_mh_nh_rmac_zsend, add, nh);
 
 	zclient_send_message(zclient);
 }
