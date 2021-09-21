@@ -717,6 +717,13 @@ static void show_nexthop_json_helper(json_object *json_nexthop,
 		break;
 	}
 
+	/* This nexthop is a resolver for the parent nexthop.
+	 * Set resolver flag for better clarity and delimiter
+	 * in flat list of nexthops in json.
+	 */
+	if (nexthop->rparent)
+		json_object_boolean_true_add(json_nexthop, "resolver");
+
 	if ((nexthop->vrf_id != re->vrf_id)
 	    && (nexthop->type != NEXTHOP_TYPE_BLACKHOLE)) {
 		vrf = vrf_lookup_by_id(nexthop->vrf_id);
