@@ -601,6 +601,7 @@ void vzlogx(const struct xref_logmsg *xref, int prio,
 {
 	struct zlog_tls *zlog_tls = zlog_tls_get();
 
+#ifndef HAVE_CUMULUS
 #ifdef HAVE_LTTNG
 	va_list copy;
 	va_copy(copy, ap);
@@ -628,6 +629,7 @@ void vzlogx(const struct xref_logmsg *xref, int prio,
 	va_end(copy);
 	XFREE(MTYPE_LOG_MESSAGE, msg);
 #endif
+#endif /* HAVE_CUMULUS */
 
 	if (zlog_tls)
 		vzlog_tls(zlog_tls, xref, prio, fmt, ap);
