@@ -56,6 +56,7 @@
 #define ACCESS_LIST_REMARK_LINE_STR "Comment up to 100 characters\n"
 
 #define PREFIX_LIST_NAME_STR "Prefix list entry name\n"
+DEFINE_MTYPE_STATIC(LIB, CPREFIX_LIST_STR, "Cached Prefix List Str")
 
 /*
  * Helper function to locate filter data structures for Cisco-style ACLs.
@@ -1711,7 +1712,7 @@ ALIAS(
 void prefix_list_show(struct vty *vty, struct lyd_node *dnode,
 		      bool show_defaults)
 {
-	const char *ge_str = NULL, *le_str = NULL;
+	const char *ge_str = NULL, *le_str = NULL, *name;
 	bool is_any;
 	struct prefix p;
 
@@ -1738,14 +1739,23 @@ void prefix_list_show(struct vty *vty, struct lyd_node *dnode,
 	 *
 	 *
 	 */
-	static struct lyd_node *parent;
+	static char *name_c;
+	static struct lyd_node c_parent;
 	static int type;
-	static const char *name;
 
-	if (parent != dnode->parent) {
-		type = yang_dnode_get_enum(dnode, "../type");
-		name = yang_dnode_get_string(dnode, "../name");
-		parent = dnode->parent;
+	if (dnode->parent->hash != c_parent.hash) {
+		/* Shallow-copy plist */
+		c_parent = *dnode->parent;
+
+		/* Cache some things to make intra-plist processing faster */
+		type = yang_dnode_get_enum(dnode->parent, "type");
+		name = yang_dnode_get_string(dnode->parent, "name");
+
+		/* Copy name by value to avoid dangling * if LY string cache
+		 * changes */
+		size_t name_size = strlen(name) + 1;
+		name_c = XREALLOC(MTYPE_CPREFIX_LIST_STR, name_c, name_size);
+		strlcpy(name_c, name, name_size);
 	}
 
 	is_any = yang_dnode_exists(dnode, "./any");
@@ -1781,7 +1791,7 @@ void prefix_list_show(struct vty *vty, struct lyd_node *dnode,
 	}
 
 
-	vty_out(vty, "prefix-list %s seq %s %s", name,
+	vty_out(vty, "prefix-list %s seq %s %s", name_c,
 		yang_dnode_get_string(dnode, "./sequence"),
 		yang_dnode_get_string(dnode, "./action"));
 
