@@ -27,7 +27,7 @@ extern "C" {
 
 #ifdef HAVE_NETLINK
 
-#define NL_RCV_PKT_BUF_SIZE     32768
+#define NL_RCV_PKT_BUF_SIZE     (34 * 1024)
 #define NL_PKT_BUF_SIZE         8192
 
 /*
