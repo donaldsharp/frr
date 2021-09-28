@@ -57,13 +57,6 @@ struct vty *vty;
 char *vtysh_pager_name = NULL;
 
 /* VTY shell client structure */
-struct vtysh_client {
-	int fd;
-	const char *name;
-	int flag;
-	char path[MAXPATHLEN];
-	struct vtysh_client *next;
-};
 
 /* Some utility functions for working on vtysh-specific vty tasks */
 
@@ -140,6 +133,8 @@ struct vtysh_client vtysh_client[] = {
 	{.fd = -1, .name = "bfdd", .flag = VTYSH_BFDD, .next = NULL},
 	{.fd = -1, .name = "vrrpd", .flag = VTYSH_VRRPD, .next = NULL},
 };
+
+char my_client[64];
 
 /* Searches for client by name, returns index */
 static int vtysh_client_lookup(const char *name)
