@@ -126,6 +126,9 @@ struct zebra_mac_t_ {
 	/* list of hosts pointing to this remote RMAC */
 	struct host_rb_tree_entry host_rb;
 
+	/* List of nexthop associated with this RMAC */
+	struct list *nh_list;
+
 	/* Duplicate mac detection */
 	uint32_t dad_count;
 
