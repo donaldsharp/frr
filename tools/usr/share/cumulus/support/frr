@@ -66,6 +66,7 @@ func_frr()
     exec_cmd zebra.ipv6_route vtysh -c "show ipv6 route vrf all"
     exec_cmd zebra.client vtysh -c "show zebra client"
     exec_cmd zebra.table_summary vtysh -c "show zebra router table summary"
+    exec_cmd zebra.mpls_table vtysh -c "show mpls table"
 
     exec_cmd $jexec pim.upstream vtysh -c "show ip pim vrf all upstream $json"
     exec_cmd $jexec pim.join vtysh -c "show ip pim vrf all join $json"
