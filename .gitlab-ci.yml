@@ -1,0 +1,75 @@
+# --- stages
+
+stages:
+  - Static analysis
+  - Style checks
+
+# --- jobs
+
+before_script:
+    # Install git
+    - apt-get update > /dev/null
+    - apt-get install -yy git >/dev/null
+    # Set up git to use qlyoung's personal token; this token has readonly access
+    - echo "https://qlyoung:$QLYOUNG_USER_TOKEN@gitlab-master.nvidia.com" > ~/.git-credentials
+    - git config --global credential.helper store
+    - git config --global user.name "bingus"
+    - git config --global user.email "qlyoung@nvidia.com"
+
+
+scan-build:
+  # variables:
+  #   GIT_STRATEGY: clone
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  stage: Static analysis
+  script:
+    - echo "Not yet implemented"
+    - echo "Pretend I ran scan-build here"
+
+
+pylint:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  stage: Static analysis
+  script:
+    - echo "Not yet implemented"
+    - echo "Pretend I ran pylint here"
+
+
+# style
+clang-format:
+  variables:
+    GIT_STRATEGY: clone
+    IGNORE_DIRS: ldpd babeld nhrpd eigrpd
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  stage: Style checks
+  script:
+    # Install clang-format and git
+    - apt-get update > /dev/null
+    - apt-get install -yy clang-format-10 clang-format git >/dev/null
+    # Set up git to use stored credentials
+    - echo "https://qlyoung:$QLYOUNG_USER_TOKEN@gitlab-master.nvidia.com" > ~/.git-credentials
+    - git config --global credential.helper store
+    - git config --global user.name "bingus"
+    - git config --global user.email "qlyoung@nvidia.com"
+    # Hard reset to target SHA
+    - git reset --hard "$CI_MERGE_REQUEST_TARGET_BRANCH_SHA"
+    # Fetch MR source branch
+    - git fetch "$CI_MERGE_REQUEST_SOURCE_PROJECT_URL" "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
+    # Merge into target branch without committing; changes will be staged
+    - git merge --no-ff --no-commit FETCH_HEAD
+    # Unstage and drop the directories we don't care about
+    - git reset HEAD -- .
+    - git checkout -- $IGNORE_DIRS
+    # Re-stage
+    - git add -u
+    # Run clang-format on staged changes
+    - git clang-format-10
+    - >
+      if [ "$(git diff | wc -l)" -gt "0" ]; then
+        echo "Style issues found"
+        git diff --color
+        exit 1
+      fi
