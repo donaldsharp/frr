@@ -87,7 +87,6 @@ override_dh_auto_configure:
 		--enable-bfdd=no \
 		--enable-sharpd=yes \
 		--enable-grpc=yes \
-		--enable-lttng=yes \
 		# end
 
 override_dh_auto_install:
