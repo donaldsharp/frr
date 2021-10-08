@@ -1396,14 +1396,31 @@ DEFPY_YANG(
 		nb_cli_enqueue_change(vty, "./ipv4-prefix", NB_OP_MODIFY,
 				      prefix_str);
 
-		if (ge_str)
+		if (ge_str) {
 			nb_cli_enqueue_change(
 				vty, "./ipv4-prefix-length-greater-or-equal",
 				NB_OP_MODIFY, ge_str);
-		if (le_str)
+		} else {
+			/*
+			 * Remove old ge if not being modified
+			 */
+			nb_cli_enqueue_change(
+				vty, "./ipv4-prefix-length-greater-or-equal",
+				NB_OP_DESTROY, NULL);
+		}
+
+		if (le_str) {
 			nb_cli_enqueue_change(
 				vty, "./ipv4-prefix-length-lesser-or-equal",
 				NB_OP_MODIFY, le_str);
+		} else {
+			/*
+			 * Remove old le if not being modified
+			 */
+			nb_cli_enqueue_change(
+				vty, "./ipv4-prefix-length-lesser-or-equal",
+				NB_OP_DESTROY, NULL);
+		}
 	} else {
 		nb_cli_enqueue_change(vty, "./any", NB_OP_CREATE, NULL);
 	}
@@ -1591,14 +1608,31 @@ DEFPY_YANG(
 		nb_cli_enqueue_change(vty, "./ipv6-prefix", NB_OP_MODIFY,
 				      prefix_str);
 
-		if (ge_str)
+		if (ge_str) {
 			nb_cli_enqueue_change(
 				vty, "./ipv6-prefix-length-greater-or-equal",
 				NB_OP_MODIFY, ge_str);
-		if (le_str)
+		} else {
+			/*
+			 * Remove old ge if not being modified
+			 */
+			nb_cli_enqueue_change(
+				vty, "./ipv6-prefix-length-greater-or-equal",
+				NB_OP_DESTROY, NULL);
+		}
+
+		if (le_str) {
 			nb_cli_enqueue_change(
 				vty, "./ipv6-prefix-length-lesser-or-equal",
 				NB_OP_MODIFY, le_str);
+		} else {
+			/*
+			 * Remove old le if not being modified
+			 */
+			nb_cli_enqueue_change(
+				vty, "./ipv6-prefix-length-lesser-or-equal",
+				NB_OP_DESTROY, NULL);
+		}
 	} else {
 		nb_cli_enqueue_change(vty, "./any", NB_OP_CREATE, NULL);
 	}
