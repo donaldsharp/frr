@@ -178,7 +178,8 @@ zebra_evpn_t *zebra_evpn_from_svi(struct interface *ifp,
 				  struct interface *br_if);
 struct interface *zebra_evpn_map_to_macvlan(struct interface *br_if,
 					    struct interface *svi_if);
-void zebra_evpn_install_mac_hash(struct hash_bucket *bucket, void *ctxt);
+void zebra_evpn_rem_mac_install_all(zebra_evpn_t *zevpn);
+void zebra_evpn_rem_mac_uninstall_all(zebra_evpn_t *zevpn);
 void zebra_evpn_read_mac_neigh(zebra_evpn_t *zevpn, struct interface *ifp);
 unsigned int zebra_evpn_hash_keymake(const void *p);
 bool zebra_evpn_hash_cmp(const void *p1, const void *p2);
