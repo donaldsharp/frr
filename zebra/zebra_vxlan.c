@@ -1402,8 +1402,6 @@ static int zl3vni_remote_rmac_add(zebra_l3vni_t *zl3vni,
 		zl3vni_rmac_install(zl3vni, zrmac);
 	}
 
-	rb_find_or_add_host(&zrmac->host_rb, host_prefix);
-
 	return 0;
 }
 
@@ -1415,20 +1413,7 @@ static void zl3vni_remote_rmac_del(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac,
 {
 	struct ipaddr ipv4_vtep;
 
-	rb_delete_host(&zrmac->host_rb, host_prefix);
-
-	if (RB_EMPTY(host_rb_tree_entry, &zrmac->host_rb)) {
-		/* uninstall from kernel */
-		zl3vni_rmac_uninstall(zl3vni, zrmac);
-
-		/* Send RMAC for FPM processing */
-		hook_call(zebra_rmac_update, zrmac, zl3vni, true,
-			  "RMAC deleted");
-
-		/* del the rmac entry */
-		zl3vni_rmac_del(zl3vni, zrmac);
-		/* if nh is already deleted fall back to one in the list */
-	} else if (!zl3vni_nh_lookup(zl3vni, vtep_ip)) {
+	if (!zl3vni_nh_lookup(zl3vni, vtep_ip)) {
 		memset(&ipv4_vtep, 0, sizeof(struct ipaddr));
 		ipv4_vtep.ipa_type = IPADDR_V4;
 		if (vtep_ip->ipa_type == IPADDR_V6)
@@ -1459,6 +1444,23 @@ static void zl3vni_remote_rmac_del(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac,
 
 			/* install rmac in kernel */
 			zl3vni_rmac_install(zl3vni, zrmac);
+		}
+
+		if (!listcount(zrmac->nh_list)) {
+			/* uninstall from kernel */
+			zl3vni_rmac_uninstall(zl3vni, zrmac);
+
+			/* Send RMAC for FPM processing */
+			hook_call(zebra_rmac_update, zrmac, zl3vni, true,
+				  "RMAC deleted");
+
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"L3VNI %u RMAC %pEA vtep_ip %pIA delete",
+					zl3vni->vni, &zrmac->macaddr, vtep_ip);
+
+			/* del the rmac entry */
+			zl3vni_rmac_del(zl3vni, zrmac);
 		}
 	}
 }
