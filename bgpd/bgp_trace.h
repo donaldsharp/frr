@@ -23,7 +23,18 @@
 
 #include "lib/trace.h"
 
-#ifdef HAVE_LTTNG
+
+#if defined(HAVE_LTTNG) || defined(HAVE_BGP_LTTNG)
+
+#if !defined(HAVE_LTTNG)
+#undef frrtrace
+#undef frrtrace_enabled
+#undef frrtracelog
+#define frrtrace(nargs, provider, name, ...)                                   \
+	tracepoint(provider, name, ##__VA_ARGS__)
+#define frrtrace_enabled(...) tracepoint_enabled(__VA_ARGS__)
+#define frrtracelog(...) tracelog(__VA_ARGS__)
+#endif
 
 #undef TRACEPOINT_PROVIDER
 #define TRACEPOINT_PROVIDER frr_bgp

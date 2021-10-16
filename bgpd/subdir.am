@@ -207,8 +207,8 @@ bgpd_bgpd_CFLAGS = $(AM_CFLAGS)
 bgpd_bgp_btoa_CFLAGS = $(AM_CFLAGS)
 
 # RFPLDADD is set in bgpd/rfp-example/librfp/subdir.am
-bgpd_bgpd_LDADD = bgpd/libbgp.a $(RFPLDADD) lib/libfrr.la $(LIBCAP) $(LIBM) $(UST_LIBS)
-bgpd_bgp_btoa_LDADD = bgpd/libbgp.a $(RFPLDADD) lib/libfrr.la $(LIBCAP) $(LIBM) $(UST_LIBS)
+bgpd_bgpd_LDADD = bgpd/libbgp.a $(RFPLDADD) lib/libfrr.la $(LIBCAP) $(LIBM) $(BGPUST_LIBS) $(UST_LIBS)
+bgpd_bgp_btoa_LDADD = bgpd/libbgp.a $(RFPLDADD) lib/libfrr.la $(LIBCAP) $(LIBM) $(BGPUST_LIBS) $(UST_LIBS)
 
 bgpd_bgpd_snmp_la_SOURCES = bgpd/bgp_snmp.c
 bgpd_bgpd_snmp_la_CFLAGS = $(WERROR) $(SNMP_CFLAGS) -std=gnu99

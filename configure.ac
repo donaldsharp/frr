@@ -561,6 +561,8 @@ AC_ARG_ENABLE([zeromq],
   AS_HELP_STRING([--enable-zeromq], [enable ZeroMQ handler (libfrrzmq)]))
 AC_ARG_ENABLE([lttng],
   AS_HELP_STRING([--enable-lttng], [enable LTTng tracing]))
+AC_ARG_ENABLE([bgp-lttng],
+  AS_HELP_STRING([--enable-bgp-lttng], [enable BGP LTTng tracing]))
 AC_ARG_ENABLE([usdt],
   AS_HELP_STRING([--enable-usdt], [enable USDT probes]))
 AC_ARG_WITH([libpam],
@@ -1836,6 +1838,18 @@ if test "$enable_lttng" = "yes"; then
     LTTNG=true
   ], [
     AC_MSG_ERROR([configuration specifies --enable-lttng but lttng-ust was not found])
+  ])
+fi
+
+dnl ---------
+dnl BGP LTTng
+dnl ---------
+if test "$enable_bgp_lttng" = "yes"; then
+  PKG_CHECK_MODULES([BGPUST], [lttng-ust >= 2.10.0], [
+    AC_DEFINE([HAVE_BGP_LTTNG], [1], [Enable BGP LTTng support])
+    BGP_LTTNG=true
+  ], [
+    AC_MSG_ERROR([configuration specifies --enable-bgp-lttng but lttng-ust was not found])
   ])
 fi
 
