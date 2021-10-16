@@ -24,7 +24,7 @@ TESTS_CXXFLAGS = \
 	# end
 # note no -Werror
 
-ALL_TESTS_LDADD = lib/libfrr.la $(LIBCAP)
+ALL_TESTS_LDADD = lib/libfrr.la $(LIBCAP) $(BGPUST_LIBS) $(UST_LIBS)
 
 EXTRA_DIST += \
 	tests/runtests.py \
