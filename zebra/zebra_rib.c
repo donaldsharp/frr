@@ -4068,6 +4068,20 @@ struct route_entry *zebra_rib_route_entry_new(vrf_id_t vrf_id, int type,
 
 	return re;
 }
+
+static void route_entry_free_up(struct route_entry *re)
+{
+	if (re->nhe && re->nhe_id) {
+		assert(re->nhe->id == re->nhe_id);
+		zebra_nhg_decrement_ref(re->nhe);
+	} else if (re->nhe && re->nhe->nhg.nexthop)
+		nexthops_free(re->nhe->nhg.nexthop);
+
+	nexthops_free(re->fib_ng.nexthop);
+
+	XFREE(MTYPE_RE, re);
+}
+
 /*
  * Internal route-add implementation; there are a couple of different public
  * signatures. Callers in this path are responsible for the memory they
@@ -4100,6 +4114,100 @@ int rib_add_multipath_nhe(afi_t afi, safi_t safi, struct prefix *p,
 	ere->re = re;
 	ere->re_nhe = re_nhe;
 	ere->startup = startup;
+    struct route_table *table;
+    struct route_node *rn;
+    struct route_entry *same = NULL;
+    int ret = 0;
+
+		apply_mask_ipv6(src_p);
+
+	/* Lookup route node.*/
+	rn = srcdest_rnode_get(table, p, src_p);
+
+	/*
+	 * If same type of route are installed, treat it as a implicit
+	 * withdraw. If the user has specified the No route replace semantics
+	 * for the install don't do a route replace.
+	 */
+	RNODE_FOREACH_RE (rn, same) {
+		if (CHECK_FLAG(same->status, ROUTE_ENTRY_REMOVED))
+			continue;
+
+		/* Compare various route_entry properties */
+		if (rib_compare_routes(re, same))
+			break;
+	}
+
+	/* Set default distance by route type. */
+	if (re->distance == 0) {
+		if (same && !zebra_router_notify_on_ack())
+			re->distance = same->distance;
+		else
+			re->distance = route_distance(re->type);
+	}
+
+	if (!startup &&
+	    (re->flags & ZEBRA_FLAG_SELFROUTE) && zrouter.asic_offloaded) {
+		struct route_entry *entry;
+
+		if (!same) {
+			if (IS_ZEBRA_DEBUG_RIB)
+				zlog_debug("prefix: %pRN is a self route where we do not have an entry for it.  Dropping this update, it's useless", rn);
+			/*
+			 * We are not on startup, this is a self route
+			 * and we have asic offload.  Which means
+			 * we are getting a callback for a entry
+			 * that was already deleted to the kernel
+			 * but an earlier response was just handed
+			 * back.  Drop it on the floor
+			 */
+			route_entry_free_up(re);
+			return ret;
+		}
+
+		RNODE_FOREACH_RE (rn, entry) {
+			if (CHECK_FLAG(entry->status, ROUTE_ENTRY_REMOVED))
+				continue;
+
+			if (entry->type != re->type)
+				continue;
+
+			/*
+			 * If we have an entry that is changed but un
+			 * processed and not a self route, then
+			 * we should just drop this new self route
+			 */
+			if (CHECK_FLAG(entry->status, ROUTE_ENTRY_CHANGED)
+			    && !(entry->flags & ZEBRA_FLAG_SELFROUTE)) {
+				route_entry_free_up(re);
+				return ret;
+			}
+		}
+	}
+
+	/* If this route is kernel/connected route, notify the dataplane. */
+	if (RIB_SYSTEM_ROUTE(re)) {
+		/* Notify dataplane */
+		dplane_sys_route_add(rn, re);
+	}
+
+	/* Link new re to node.*/
+	if (IS_ZEBRA_DEBUG_RIB) {
+		rnode_debug(rn, re->vrf_id,
+			    "Inserting route rn %p, re %p (%s) existing %p",
+			    rn, re, zebra_route_string(re->type), same);
+
+		if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+			route_entry_dump(p, src_p, re);
+	}
+
+	SET_FLAG(re->status, ROUTE_ENTRY_CHANGED);
+	rib_addnode(rn, re, 1);
+	ret = 1;
+
+	/* Free implicit route.*/
+	if (same)
+		rib_delnode(rn, same);
 
 	return mq_add_handler(ere, rib_meta_queue_early_route_add);
 }
@@ -4146,9 +4254,7 @@ void rib_delete(afi_t afi, safi_t safi, vrf_id_t vrf_id, int type,
 		uint32_t nhe_id, uint32_t table_id, uint32_t metric,
 		uint8_t distance, bool fromkernel)
 {
-	struct zebra_early_route *ere;
 	struct route_entry *re = NULL;
-	struct nhg_hash_entry *nhe = NULL;
 	struct route_table *table;
 	struct route_node *rn;
 	struct route_entry *fib = NULL;
