@@ -123,9 +123,6 @@ struct zebra_mac_t_ {
 	/* List of neigh associated with this mac */
 	struct list *neigh_list;
 
-	/* list of hosts pointing to this remote RMAC */
-	struct host_rb_tree_entry host_rb;
-
 	/* List of nexthop associated with this RMAC */
 	struct list *nh_list;
 
