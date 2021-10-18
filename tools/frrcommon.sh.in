@@ -145,7 +145,7 @@ daemon_prep() {
 }
 
 daemon_start() {
-	local dmninst daemon inst args instopt wrap bin
+	local dmninst daemon inst args instopt wrap bin lttng_preload=""
 
 	all=false
 	[ "$1" = "--all" ] && { all=true; shift; }
@@ -164,8 +164,12 @@ daemon_start() {
 	instopt="${inst:+-n $inst}"
 	eval args="\$${daemon}_options"
 
-	if eval "$all_wrap $wrap $bin $nsopt -d $frr_global_options $instopt $args"; then
-		log_success_msg "Started $dmninst"
+	if [ "$daemon" = "bgpd" ] ; then
+		lttng_preload="LD_PRELOAD=liblttng-ust-fork.so.0"
+	fi
+
+	if eval "$lttng_preload $all_wrap $wrap $bin $nsopt -d $frr_global_options $instopt $args"; then
+		log_success_msg "Started $lttng_preload $dmninst"
 		if $all; then
 			debug "Skipping startup of vtysh until all have started"
 		else
