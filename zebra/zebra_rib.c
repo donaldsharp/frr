@@ -2990,6 +2990,19 @@ void rib_lookup_and_pushup(struct prefix_ipv4 *p, vrf_id_t vrf_id)
 	}
 }
 
+static void route_entry_free_up(struct route_entry *re)
+{
+	if (re->nhe && re->nhe_id) {
+		assert(re->nhe->id == re->nhe_id);
+		zebra_nhg_decrement_ref(re->nhe);
+	} else if (re->nhe && re->nhe->nhg.nexthop)
+		nexthops_free(re->nhe->nhg.nexthop);
+
+	nexthops_free(re->fib_ng.nexthop);
+
+	XFREE(MTYPE_RE, re);
+}
+
 /*
  * Internal route-add implementation; there are a couple of different public
  * signatures. Callers in this path are responsible for the memory they
@@ -3087,6 +3100,8 @@ int rib_add_multipath_nhe(afi_t afi, safi_t safi, struct prefix *p,
 
 	if (!startup &&
 	    (re->flags & ZEBRA_FLAG_SELFROUTE) && zrouter.asic_offloaded) {
+		struct route_entry *entry;
+
 		if (!same) {
 			if (IS_ZEBRA_DEBUG_RIB)
 				zlog_debug("prefix: %pRN is a self route where we do not have an entry for it.  Dropping this update, it's useless", rn);
@@ -3098,16 +3113,27 @@ int rib_add_multipath_nhe(afi_t afi, safi_t safi, struct prefix *p,
 			 * but an earlier response was just handed
 			 * back.  Drop it on the floor
 			 */
-			if (re->nhe && re->nhe_id) {
-				assert(re->nhe->id == re->nhe_id);
-				zebra_nhg_decrement_ref(re->nhe);
-			} else if (re->nhe && re->nhe->nhg.nexthop)
-				nexthops_free(re->nhe->nhg.nexthop);
-
-			nexthops_free(re->fib_ng.nexthop);
-
-			XFREE(MTYPE_RE, re);
+			route_entry_free_up(re);
 			return ret;
+		}
+
+		RNODE_FOREACH_RE (rn, entry) {
+			if (CHECK_FLAG(entry->status, ROUTE_ENTRY_REMOVED))
+				continue;
+
+			if (entry->type != re->type)
+				continue;
+
+			/*
+			 * If we have an entry that is changed but un
+			 * processed and not a self route, then
+			 * we should just drop this new self route
+			 */
+			if (CHECK_FLAG(entry->status, ROUTE_ENTRY_CHANGED)
+			    && !(entry->flags & ZEBRA_FLAG_SELFROUTE)) {
+				route_entry_free_up(re);
+				return ret;
+			}
 		}
 	}
 
