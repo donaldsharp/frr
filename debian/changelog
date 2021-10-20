@@ -1,3 +1,20 @@
+frr (7.5+cl5.0.0u0) RELEASED; urgency=medium
+
+  * New Enabled: New Work
+  * Enable Lttng
+  * Fixes: 2798406 zebra: maintain list of nhs in evpn rmac db
+  *                zebra: cleanup host prefix from rmac
+  *                zebra: print rmac nexthop list
+  *                zebra: remove host prefix mapping in rmac
+  * Fixes: 2799568 bgpd: When removing v6 address being used as a nexthop
+  *                ensure peer is reset
+  * Fixes: 2674793 zebra: fix for unexpected fdb entry showing up during
+  *                ifdown/ifup events
+  * Fixes:         lib: ip prefix-list enforce expected ge le behavior
+  * Fixes: 2731464 bgpd: do not clear password if peer is dynamic
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Wed, 20 Oct 2021 08:50:26 -0700
+
 frr (7.5+cl4.4.0u4) UNRELEASED; urgency=medium
 
   * Fixes: 2684438 [CUMULUS]: zebra: Treat both warm start and fast start as graceful
