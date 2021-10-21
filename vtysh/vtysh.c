@@ -138,8 +138,6 @@ struct vtysh_client vtysh_client[19] = {
 	{.fd = -1, .name = "vrrpd", .flag = VTYSH_VRRPD, .next = NULL},
 };
 
-char my_client[64];
-
 /* Searches for client by name, returns index */
 static int vtysh_client_lookup(const char *name)
 {
