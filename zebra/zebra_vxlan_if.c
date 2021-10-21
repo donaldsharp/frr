@@ -786,7 +786,7 @@ int zebra_vxlan_if_vni_table_add_update(struct interface *ifp, struct hash *vni_
 	return 0;
 }
 
-int zebra_vxlan_if_vni_mcast_group_update(struct interface *ifp,
+int zebra_vxlan_if_vni_mcast_group_add_update(struct interface *ifp,
 	vni_t vni_id, struct in_addr *mcast_group)
 {
 	struct zebra_if *zif = NULL;
@@ -806,10 +806,35 @@ int zebra_vxlan_if_vni_mcast_group_update(struct interface *ifp,
 	ctx.old_vni.mcast_grp = vni->mcast_grp;
 	ctx.chgflags = ZEBRA_VXLIF_MCAST_GRP_CHANGE;
 
-	if (mcast_group)
-		vni->mcast_grp = *mcast_group;
-	else
-		memset(&vni->mcast_grp, 0, sizeof(vni->mcast_grp));
+	vni->mcast_grp = *mcast_group;
+
+	return zebra_vxlan_if_update_vni(ifp, vni, &ctx);
+}
+
+int zebra_vxlan_if_vni_mcast_group_del(struct interface *ifp,
+	vni_t vni_id, struct in_addr *mcast_group)
+{
+	struct zebra_if *zif = NULL;
+	struct zebra_vxlan_vni *vni;
+	struct zebra_vxlan_if_update_ctx ctx;
+
+	zif = (struct zebra_if *)ifp->info;
+
+	if (!IS_ZEBRA_VXLAN_IF_SVD(zif))
+		return 0;
+
+	vni = zebra_vxlan_if_vni_find(zif, vni_id);
+	if (!vni)
+		return 0;
+
+	if (memcmp(mcast_group, &vni->mcast_grp, sizeof(*mcast_group)))
+		return 0;
+
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.old_vni.mcast_grp = vni->mcast_grp;
+	ctx.chgflags = ZEBRA_VXLIF_MCAST_GRP_CHANGE;
+
+	memset(&vni->mcast_grp, 0, sizeof(vni->mcast_grp));
 
 	return zebra_vxlan_if_update_vni(ifp, vni, &ctx);
 }
