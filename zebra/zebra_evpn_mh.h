@@ -396,7 +396,8 @@ extern void zebra_evpn_acc_vl_show(struct vty *vty, bool uj);
 extern void zebra_evpn_acc_vl_show_detail(struct vty *vty, bool uj);
 extern void zebra_evpn_acc_vl_show_vid(struct vty *vty, bool uj, vlanid_t vid,
 		struct interface *br_if);
-extern void zebra_evpn_if_es_print(struct vty *vty, struct zebra_if *zif);
+extern void zebra_evpn_if_es_print(struct vty *vty, json_object *json,
+				   struct zebra_if *zif);
 extern void zebra_evpn_es_cleanup(void);
 extern int zebra_evpn_mh_mac_holdtime_update(struct vty *vty,
 		uint32_t duration, bool set_default);
