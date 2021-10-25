@@ -27,6 +27,9 @@ extern "C" {
 
 #ifdef HAVE_NETLINK
 
+#define RTM_NHA(h)                                                             \
+	((struct rtattr *)(((char *)(h)) + NLMSG_ALIGN(sizeof(struct nhmsg))))
+
 #define NL_RCV_PKT_BUF_SIZE     (34 * 1024)
 #define NL_PKT_BUF_SIZE         8192
 
