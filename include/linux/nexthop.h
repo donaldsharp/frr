@@ -60,6 +60,9 @@ enum {
 	/* nested; nexthop bucket attributes */
 	NHA_RES_BUCKET,
 
+	/* nested; nexthop group stats */
+	NHA_GROUP_STATS,
+
 	__NHA_MAX,
 };
 
@@ -100,5 +103,32 @@ enum {
 };
 
 #define NHA_RES_BUCKET_MAX	(__NHA_RES_BUCKET_MAX - 1)
+
+enum {
+	NHA_GROUP_STATS_UNSPEC,
+
+	/* nested; nexthop group entry stats */
+	NHA_GROUP_STATS_ENTRY,
+
+	__NHA_GROUP_STATS_MAX,
+};
+
+#define NHA_GROUP_STATS_MAX	(__NHA_GROUP_STATS_MAX - 1)
+
+enum {
+	NHA_GROUP_STATS_ENTRY_UNSPEC,
+	/* Pad attribute for 64-bit alignment */
+	NHA_GROUP_STATS_ENTRY_PAD = NHA_GROUP_STATS_ENTRY_UNSPEC,
+
+	/* u32; nexthop id of the nexthop group entry */
+	NHA_GROUP_STATS_ENTRY_ID,
+
+	/* u64; number of packets forwarded via the nexthop group entry */
+	NHA_GROUP_STATS_ENTRY_PACKETS,
+
+	__NHA_GROUP_STATS_ENTRY_MAX,
+};
+
+#define NHA_GROUP_STATS_ENTRY_MAX	(__NHA_GROUP_STATS_ENTRY_MAX - 1)
 
 #endif
