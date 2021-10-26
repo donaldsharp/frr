@@ -1531,20 +1531,35 @@ static inline bool zebra_evpn_mac_is_bgp_seq_ok(zebra_evpn_t *zevpn,
 	char ipbuf[INET6_ADDRSTRLEN];
 	uint32_t tmp_seq;
 	const char *n_type;
+	bool is_local = false;
 
 	if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL)) {
 		tmp_seq = mac->loc_seq;
 		n_type = "local";
+		is_local = true;
 	} else {
 		tmp_seq = mac->rem_seq;
 		n_type = "remote";
 	}
 
 	if (seq < tmp_seq) {
+
+		if (is_local && !zebra_evpn_mac_is_ready_for_bgp(mac->flags)) {
+			if (IS_ZEBRA_DEBUG_EVPN_MH_MAC || IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"%s-macip not ready vni %u %s-mac %s lower seq %u f 0x%x",
+					sync ? "sync" : "rem", zevpn->vni,
+					n_type,
+					prefix_mac2str(&mac->macaddr, macbuf,
+						       sizeof(macbuf)),
+					tmp_seq, mac->flags);
+			return true;
+		}
+
 		/* if the mac was never advertised to bgp we must accept
 		 * whatever sequence number bgp sends
 		 */
-		if (zebra_vxlan_accept_bgp_seq()) {
+		if (!is_local && zebra_vxlan_accept_bgp_seq()) {
 			if (IS_ZEBRA_DEBUG_EVPN_MH_MAC || IS_ZEBRA_DEBUG_VXLAN)
 				zlog_debug(
 					"%s-macip accept vni %u %s-mac %s%s%s lower seq %u f 0x%x",
