@@ -416,7 +416,6 @@ static void zl3vni_print_rmac(zebra_mac_t *zrmac, struct vty *vty,
 	struct listnode *node = NULL;
 	struct ipaddr *vtep = NULL;
 	json_object *json_nhs = NULL;
-	struct host_rb_entry *hle;
 
 	if (!json) {
 		vty_out(vty, "MAC: %s\n",
