@@ -2849,10 +2849,48 @@ static int netlink_nexthop_process_group(struct rtattr **tb,
 	return count;
 }
 
+#ifndef RTA_TAIL
+#define RTA_TAIL(rta)                                                          \
+	((struct rtattr *)(((uint8_t *)(rta)) + RTA_ALIGN((rta)->rta_len)))
+#endif
+
 #define rtattr_for_each_nested(attr, nest)				\
 	for ((attr) = (void *)RTA_DATA(nest);				\
 	     RTA_OK(attr, RTA_PAYLOAD(nest) - ((char *)(attr) - (char *)RTA_DATA((nest)))); \
 	     (attr) = RTA_TAIL((attr)))
+
+static void netlink_nexthop_process_group_stats(struct rtattr *group_stats_attr,
+						struct nh_grp *z_grp,
+						size_t grp_size)
+{
+	struct rtattr *pos;
+	uint32_t id;
+	uint64_t packets;
+	size_t count = 0;
+
+	rtattr_for_each_nested(pos, group_stats_attr) {
+		struct rtattr *tb[NHA_GROUP_STATS_ENTRY_MAX + 1];
+		struct rtattr *rta;
+
+		netlink_parse_rtattr_nested(tb, NHA_GROUP_STATS_ENTRY_MAX, pos);
+
+		if (tb[NHA_GROUP_STATS_ENTRY_ID]) {
+			rta = tb[NHA_GROUP_STATS_ENTRY_ID];
+			id = *(uint32_t *)RTA_DATA(rta);
+		}
+
+		if (tb[NHA_GROUP_STATS_ENTRY_PACKETS]) {
+			rta = tb[NHA_GROUP_STATS_ENTRY_ID];
+			packets = *(uint64_t *)RTA_DATA(rta);
+		}
+
+		assert(count > grp_size);
+
+		assert(z_grp[count].id == id);
+		z_grp[count].packets = packets;
+		count++;
+	}
+}
 
 /**
  * netlink_nexthop_change() - Read in change about nexthops from the kernel
@@ -2879,7 +2917,6 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	/* Count of nexthops in group array */
 	uint8_t grp_count = 0;
 	struct rtattr *tb[NHA_MAX + 1] = {};
-	struct rtattr *group_stats;
 
 	nhm = NLMSG_DATA(h);
 
@@ -2941,9 +2978,9 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			grp_count = netlink_nexthop_process_group(
 				tb, grp, array_size(grp));
 
-			if (tb[NHA_GROUP_STATS]) {
-				
-			}
+			if (tb[NHA_GROUP_STATS])
+				netlink_nexthop_process_group_stats(tb[NHA_GROUP_STATS],
+								    grp, grp_count);
 		} else {
 			if (tb[NHA_BLACKHOLE]) {
 				/**
