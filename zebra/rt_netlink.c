@@ -2880,13 +2880,13 @@ static void netlink_nexthop_process_group_stats(struct rtattr *group_stats_attr,
 		}
 
 		if (tb[NHA_GROUP_STATS_ENTRY_PACKETS]) {
-			rta = tb[NHA_GROUP_STATS_ENTRY_ID];
-			packets = *(uint64_t *)RTA_DATA(rta);
+			rta = tb[NHA_GROUP_STATS_ENTRY_PACKETS];
+			memcpy(&packets, RTA_DATA(rta), sizeof(uint64_t));
 		}
 
-		assert(count > grp_size);
-
+		assert(count <= grp_size);
 		assert(z_grp[count].id == id);
+
 		z_grp[count].packets = packets;
 		count++;
 	}
