@@ -231,6 +231,9 @@ extern int zebra_vxlan_dp_network_mac_del(struct interface *ifp,
 				       struct interface *br_if,
 				       struct ethaddr *macaddr, vlanid_t vid, vni_t vni);
 
+extern void zebra_vxlan_set_accept_bgp_seq(bool set);
+extern bool zebra_vxlan_accept_bgp_seq(void);
+
 #ifdef __cplusplus
 }
 #endif

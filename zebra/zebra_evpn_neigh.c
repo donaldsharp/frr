@@ -538,22 +538,37 @@ bool zebra_evpn_neigh_is_bgp_seq_ok(zebra_evpn_t *zevpn, zebra_neigh_t *n,
 	char ipbuf[INET6_ADDRSTRLEN];
 	uint32_t tmp_seq;
 	const char *n_type;
+	bool is_local = false;
 
 	if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)) {
 		tmp_seq = n->loc_seq;
 		n_type = "local";
+		is_local = true;
 	} else {
 		tmp_seq = n->rem_seq;
 		n_type = "remote";
 	}
 
 	if (seq < tmp_seq) {
+		if (is_local && !zebra_evpn_neigh_is_ready_for_bgp(n)) {
+			if (IS_ZEBRA_DEBUG_EVPN_MH_NEIGH
+			    || IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"%s-macip not ready vni %u %s mac %s IP %s lower seq %u f 0x%x",
+					sync ? "sync" : "remote", zevpn->vni,
+					n_type,
+					prefix_mac2str(macaddr, macbuf,
+						       sizeof(macbuf)),
+					ipaddr2str(&n->ip, ipbuf,
+						   sizeof(ipbuf)),
+					tmp_seq, n->flags);
+			return true;
+		}
+
 		/* if the neigh was never advertised to bgp we must accept
 		 * whatever sequence number bgp sends
-		 * XXX - check with Vivek
 		 */
-		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)
-		    && !zebra_evpn_neigh_is_ready_for_bgp(n)) {
+		if (!is_local && zebra_vxlan_accept_bgp_seq()) {
 			if (IS_ZEBRA_DEBUG_EVPN_MH_NEIGH
 			    || IS_ZEBRA_DEBUG_VXLAN)
 				zlog_debug(
@@ -659,15 +674,15 @@ void zebra_evpn_sync_neigh_del(zebra_neigh_t *n)
 			false /*defer_mac_dp*/, __func__);
 }
 
-zebra_neigh_t *
-zebra_evpn_proc_sync_neigh_update(zebra_evpn_t *zevpn, zebra_neigh_t *n,
-				  uint16_t ipa_len, struct ipaddr *ipaddr,
-				  uint8_t flags, uint32_t seq, esi_t *esi,
-				  struct sync_mac_ip_ctx *ctx)
+zebra_neigh_t *zebra_evpn_proc_sync_neigh_update(zebra_evpn_t *zevpn,
+						 zebra_neigh_t *n,
+						 uint16_t ipa_len,
+						 struct ipaddr *ipaddr,
+						 uint8_t flags, uint32_t seq,
+						 esi_t *esi, zebra_mac_t *mac)
 {
 	struct interface *ifp = NULL;
 	bool is_router;
-	zebra_mac_t *mac = ctx->mac;
 	uint32_t tmp_seq;
 	bool old_router = false;
 	bool old_bgp_ready = false;
@@ -837,8 +852,8 @@ zebra_evpn_proc_sync_neigh_update(zebra_evpn_t *zevpn, zebra_neigh_t *n,
 		inform_bgp = true;
 
 	new_mac_static = zebra_evpn_mac_is_static(mac);
-	if ((old_mac_static != new_mac_static) || ctx->mac_dp_update_deferred)
-		zebra_evpn_sync_mac_dp_install(mac, ctx->mac_inactive,
+	if (old_mac_static != new_mac_static)
+		zebra_evpn_sync_mac_dp_install(mac, false /* set_inactive */,
 					       false /* force_clear_static */,
 					       __func__);
 
@@ -1362,17 +1377,13 @@ int zebra_evpn_local_neigh_update(zebra_evpn_t *zevpn, struct interface *ifp,
 				   ipaddr2str(ip, buf2, sizeof(buf2)),
 				   zevpn->vni);
 
-		zmac = zebra_evpn_mac_add(zevpn, macaddr);
+		zmac = zebra_evpn_mac_add_auto(zevpn, macaddr);
 		if (!zmac) {
 			zlog_debug("Failed to add MAC %s VNI %u",
 				   prefix_mac2str(macaddr, buf, sizeof(buf)),
 				   zevpn->vni);
 			return -1;
 		}
-
-		zebra_evpn_mac_clear_fwd_info(zmac);
-		memset(&zmac->flags, 0, sizeof(uint32_t));
-		SET_FLAG(zmac->flags, ZEBRA_MAC_AUTO);
 	} else {
 		if (CHECK_FLAG(zmac->flags, ZEBRA_MAC_REMOTE)) {
 			/*

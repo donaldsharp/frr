@@ -471,7 +471,7 @@ static int bgp_evpn_mh_route_delete(struct bgp *bgp, struct bgp_evpn_es *es,
 	struct prefix_rd *prd;
 
 	if (vpn) {
-		rt_table = vpn->route_table;
+		rt_table = vpn->ip_table;
 		prd = &vpn->prd;
 	} else {
 		rt_table = es->route_table;
@@ -497,8 +497,8 @@ static int bgp_evpn_mh_route_delete(struct bgp *bgp, struct bgp_evpn_es *es,
 	/* Next, locate route node in the global EVPN routing table.
 	 * Note that this table is a 2-level tree (RD-level + Prefix-level)
 	 */
-	global_rn = bgp_global_evpn_node_lookup(bgp->rib[afi][safi], afi, safi,
-			p, prd);
+	global_rn = bgp_evpn_global_node_lookup(bgp->rib[afi][safi], afi, safi,
+						p, prd, NULL);
 	if (global_rn) {
 
 		/* Delete route entry in the global EVPN table. */
@@ -629,8 +629,8 @@ static int bgp_evpn_type4_route_update(struct bgp *bgp,
 	if (route_changed) {
 		struct bgp_path_info *global_pi;
 
-		rn = bgp_global_evpn_node_get(bgp->rib[afi][safi], afi, safi, p,
-					      &es->es_base_frag->prd);
+		rn = bgp_evpn_global_node_get(bgp->rib[afi][safi], afi, safi, p,
+					      &es->es_base_frag->prd, NULL);
 		bgp_evpn_mh_route_update(bgp, es, NULL, afi, safi,
 				rn, attr_new, 1, &global_pi, &route_changed);
 
@@ -905,7 +905,7 @@ static int bgp_evpn_type1_route_update(struct bgp *bgp, struct bgp_evpn_es *es,
 		bgp_evpn_type1_evi_route_extcomm_build(es, vpn, &attr);
 
 		/* First, create (or fetch) route node within the VNI. */
-		rn = bgp_node_get(vpn->route_table, (struct prefix *)p);
+		rn = bgp_node_get(vpn->ip_table, (struct prefix *)p);
 
 		/* Create or update route entry. */
 		ret = bgp_evpn_mh_route_update(bgp, es, vpn, afi, safi,
@@ -960,8 +960,8 @@ static int bgp_evpn_type1_route_update(struct bgp *bgp, struct bgp_evpn_es *es,
 	if (route_changed) {
 		struct bgp_path_info *global_pi;
 
-		rn = bgp_global_evpn_node_get(bgp->rib[afi][safi], afi, safi,
-				p, global_rd);
+		rn = bgp_evpn_global_node_get(bgp->rib[afi][safi], afi, safi, p,
+					      global_rd, NULL);
 		bgp_evpn_mh_route_update(bgp, es, vpn, afi, safi,
 				rn, attr_new, 1, &global_pi, &route_changed);
 

@@ -70,6 +70,9 @@ DEFINE_MTYPE_STATIC(ZEBRA, EVPN_VTEP, "zebra VxLAN VTEP IP");
 DEFINE_HOOK(zebra_rmac_update, (zebra_mac_t *rmac, zebra_l3vni_t *zl3vni,
 	    bool delete, const char *reason), (rmac, zl3vni, delete, reason))
 
+/* config knobs */
+static bool accept_bgp_seq = true;
+
 /* Single VXlan Device Global Neigh Table */
 struct hash *svd_nh_table;
 
@@ -413,7 +416,6 @@ static void zl3vni_print_rmac(zebra_mac_t *zrmac, struct vty *vty,
 	struct listnode *node = NULL;
 	struct ipaddr *vtep = NULL;
 	json_object *json_nhs = NULL;
-	struct host_rb_entry *hle;
 
 	if (!json) {
 		vty_out(vty, "MAC: %s\n",
@@ -6062,6 +6064,17 @@ extern void zebra_vxlan_handle_result(struct zebra_dplane_ctx *ctx)
 {
 	/* TODO -- anything other than freeing the context? */
 	dplane_ctx_fini(&ctx);
+}
+
+/* Config knob for accepting lower sequence numbers */
+void zebra_vxlan_set_accept_bgp_seq(bool set)
+{
+	accept_bgp_seq = set;
+}
+
+bool zebra_vxlan_accept_bgp_seq(void)
+{
+	return accept_bgp_seq;
 }
 
 /* Cleanup BGP EVPN configuration upon client disconnect */

@@ -173,17 +173,6 @@ struct rmac_walk_ctx {
 	struct json_object *json;
 };
 
-/* temporary datastruct to pass info between the mac-update and
- * neigh-update while handling mac-ip routes
- */
-struct sync_mac_ip_ctx {
-	bool ignore_macip;
-	bool mac_created;
-	bool mac_inactive;
-	bool mac_dp_update_deferred;
-	zebra_mac_t *mac;
-};
-
 /**************************** SYNC MAC handling *****************************/
 /* if the mac has been added of a mac-route from the peer
  * or if it is being referenced by a neigh added by the
@@ -227,6 +216,8 @@ int zebra_evpn_rem_mac_install(zebra_evpn_t *zevi, zebra_mac_t *mac,
 void zebra_evpn_deref_ip2mac(zebra_evpn_t *zevi, zebra_mac_t *mac);
 zebra_mac_t *zebra_evpn_mac_lookup(zebra_evpn_t *zevi, struct ethaddr *mac);
 zebra_mac_t *zebra_evpn_mac_add(zebra_evpn_t *zevi, struct ethaddr *macaddr);
+zebra_mac_t *zebra_evpn_mac_add_auto(zebra_evpn_t *zevi,
+				     struct ethaddr *macaddr);
 void zebra_evpn_mac_del(zebra_evpn_t *zevi, zebra_mac_t *mac);
 int zebra_evpn_macip_send_msg_to_client(uint32_t id, struct ethaddr *macaddr,
 					struct ipaddr *ip, uint8_t flags,
@@ -252,16 +243,14 @@ void zebra_evpn_send_mac_list_to_client(zebra_evpn_t *zevi);
 zebra_mac_t *
 zebra_evpn_proc_sync_mac_update(zebra_evpn_t *zevi, struct ethaddr *macaddr,
 				uint16_t ipa_len, struct ipaddr *ipaddr,
-				uint8_t flags, uint32_t seq, esi_t *esi,
-				struct sync_mac_ip_ctx *ctx);
+				uint8_t flags, uint32_t seq, esi_t *esi);
 void zebra_evpn_sync_mac_del(zebra_mac_t *mac);
 void zebra_evpn_rem_mac_del(zebra_evpn_t *zevi, zebra_mac_t *mac);
 void zebra_evpn_print_dad_mac_hash(struct hash_bucket *bucket, void *ctxt);
 void zebra_evpn_print_dad_mac_hash_detail(struct hash_bucket *bucket,
 					  void *ctxt);
 int process_mac_remote_macip_add(zebra_evpn_t *zevpn, struct zebra_vrf *zvrf,
-				 struct ethaddr *macaddr, uint16_t ipa_len,
-				 struct ipaddr *ipaddr, zebra_mac_t **macp,
+				 struct ethaddr *macaddr,
 				 struct in_addr vtep_ip, uint8_t flags,
 				 uint32_t seq, esi_t *esi);
 

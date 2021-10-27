@@ -368,6 +368,8 @@ struct cmd_node {
 #define SHOW_STR "Show running system information\n"
 #define IP_STR "IP information\n"
 #define IPV6_STR "IPv6 information\n"
+#define IP_ADDR_STR "IPv4 Address\n"
+#define IP6_ADDR_STR "IPv6 Address\n"
 #define NO_STR "Negate a command or set its defaults\n"
 #define REDIST_STR "Redistribute information from another routing protocol\n"
 #define CLEAR_STR "Reset functions\n"

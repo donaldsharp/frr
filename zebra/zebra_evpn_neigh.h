@@ -242,11 +242,12 @@ bool zebra_evpn_neigh_is_bgp_seq_ok(zebra_evpn_t *zevpn, zebra_neigh_t *n,
 				    bool sync);
 int zebra_evpn_neigh_del(zebra_evpn_t *zevpn, zebra_neigh_t *n);
 void zebra_evpn_sync_neigh_del(zebra_neigh_t *n);
-zebra_neigh_t *
-zebra_evpn_proc_sync_neigh_update(zebra_evpn_t *zevpn, zebra_neigh_t *n,
-				  uint16_t ipa_len, struct ipaddr *ipaddr,
-				  uint8_t flags, uint32_t seq, esi_t *esi,
-				  struct sync_mac_ip_ctx *ctx);
+zebra_neigh_t *zebra_evpn_proc_sync_neigh_update(zebra_evpn_t *zevpn,
+						 zebra_neigh_t *n,
+						 uint16_t ipa_len,
+						 struct ipaddr *ipaddr,
+						 uint8_t flags, uint32_t seq,
+						 esi_t *esi, zebra_mac_t *mac);
 void zebra_evpn_neigh_del_all(zebra_evpn_t *zevpn, int uninstall,
 			      int upd_client, uint32_t flags);
 zebra_neigh_t *zebra_evpn_neigh_lookup(zebra_evpn_t *zevpn, struct ipaddr *ip);

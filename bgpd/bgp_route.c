@@ -8924,8 +8924,8 @@ static void route_vty_out_detail_es_info(struct vty *vty,
 }
 
 void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
-			  struct bgp_path_info *path, afi_t afi, safi_t safi,
-			  json_object *json_paths)
+			  const struct prefix *p, struct bgp_path_info *path,
+			  afi_t afi, safi_t safi, json_object *json_paths)
 {
 	char buf[INET6_ADDRSTRLEN];
 	char buf1[BUFSIZ];
@@ -8975,9 +8975,8 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 		if (safi == SAFI_EVPN) {
 			if (!json_paths) {
 				bgp_evpn_route2str(
-					(struct prefix_evpn *)
-						bgp_dest_get_prefix(bn),
-					buf2, sizeof(buf2));
+					(const struct prefix_evpn *)p, buf2,
+					sizeof(buf2));
 				vty_out(vty, "  Route %s", buf2);
 				if (tag_buf[0] != '\0')
 					vty_out(vty, " VNI %s", tag_buf);
@@ -9122,10 +9121,9 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 
 	/* Line2 display Next-hop, Neighbor, Router-id */
 	/* Display the nexthop */
-	const struct prefix *bn_p = bgp_dest_get_prefix(bn);
 
-	if ((bn_p->family == AF_INET || bn_p->family == AF_ETHERNET
-	     || bn_p->family == AF_EVPN)
+	if ((p->family == AF_INET || p->family == AF_ETHERNET
+	     || p->family == AF_EVPN)
 	    && (safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP || safi == SAFI_EVPN
 		|| !BGP_ATTR_NEXTHOP_AFI_IP6(attr))) {
 		if (safi == SAFI_MPLS_VPN || safi == SAFI_ENCAP
@@ -9221,7 +9219,7 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 	if (path->peer == bgp->peer_self) {
 
 		if (safi == SAFI_EVPN
-		    || (bn_p->family == AF_INET
+		    || (p->family == AF_INET
 			&& !BGP_ATTR_NEXTHOP_AFI_IP6(attr))) {
 			if (json_paths)
 				json_object_string_add(json_peer, "peerId",
@@ -10125,8 +10123,9 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 				prd = bgp_rd_from_dest(dest, safi);
 
 				route_vty_out_detail_header(
-					vty, bgp, dest, prd, table->afi,
-					safi, jtemp);
+					vty, bgp, dest,
+					bgp_dest_get_prefix(dest), prd,
+					table->afi, safi, jtemp);
 
 				json_object_array_add(json_paths, jtemp);
 
@@ -10152,7 +10151,8 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			else {
 				if (CHECK_FLAG(show_flags, BGP_SHOW_OPT_DETAIL))
 					route_vty_out_detail(
-						vty, bgp, dest, pi,
+						vty, bgp, dest,
+						bgp_dest_get_prefix(dest), pi,
 						family2afi(dest_p->family),
 						safi, json_paths);
 				else
@@ -10373,12 +10373,11 @@ static void bgp_show_all_instances_routes_vty(struct vty *vty, afi_t afi,
 
 /* Header of detailed BGP route information */
 void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
-				 struct bgp_dest *dest,
-				 const struct prefix_rd *prd,
-				 afi_t afi, safi_t safi, json_object *json)
+				 struct bgp_dest *dest, const struct prefix *p,
+				 const struct prefix_rd *prd, afi_t afi,
+				 safi_t safi, json_object *json)
 {
 	struct bgp_path_info *pi;
-	const struct prefix *p;
 	struct peer *peer;
 	struct listnode *node, *nnode;
 	char buf1[RD_ADDRSTRLEN];
@@ -10405,7 +10404,6 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 	mpls_label_t label = 0;
 	json_object *json_adv_to = NULL;
 
-	p = bgp_dest_get_prefix(dest);
 	has_valid_label = bgp_is_valid_label(&dest->local_label);
 
 	if (has_valid_label)
@@ -10614,8 +10612,9 @@ static void bgp_show_path_info(const struct prefix_rd *pfx_rd,
 
 		if (header) {
 			route_vty_out_detail_header(
-				vty, bgp, bgp_node, pfx_rd,
-				AFI_IP, safi, json_header);
+				vty, bgp, bgp_node,
+				bgp_dest_get_prefix(bgp_node), pfx_rd, AFI_IP,
+				safi, json_header);
 			header = 0;
 		}
 		(*display)++;
@@ -10627,8 +10626,8 @@ static void bgp_show_path_info(const struct prefix_rd *pfx_rd,
 			&& (CHECK_FLAG(pi->flags, BGP_PATH_MULTIPATH)
 			    || CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))))
 			route_vty_out_detail(vty, bgp, bgp_node,
-					     pi, AFI_IP, safi,
-					     json_paths);
+					     bgp_dest_get_prefix(bgp_node), pi,
+					     AFI_IP, safi, json_paths);
 	}
 
 	if (json && json_paths) {
