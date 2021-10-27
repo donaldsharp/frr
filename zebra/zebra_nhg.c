@@ -1143,6 +1143,16 @@ static void zebra_nhg_handle_kernel_state_change(struct nhg_hash_entry *nhe,
 		zebra_nhg_handle_uninstall(nhe);
 }
 
+static void zebra_nhg_nhe_add_packets(struct nhg_hash_entry *nhe,
+				      struct nh_grp *nh_grp, size_t count)
+{
+	size_t i;
+
+	for (i = 0; i < count; i++)
+		nhe->packets[i] = nh_grp[i].packets;
+
+}
+
 static int nhg_ctx_process_new(struct nhg_ctx *ctx)
 {
 	struct nexthop_group *nhg = NULL;
@@ -1183,6 +1193,7 @@ static int nhg_ctx_process_new(struct nhg_ctx *ctx)
 				    type, true))
 			depends_decrement_free(&nhg_depends);
 
+		zebra_nhg_nhe_add_packets(nhe, nhg_ctx_get_grp(ctx), count);
 		/* These got copied over in zebra_nhg_alloc() */
 		nexthop_group_delete(&nhg);
 	} else

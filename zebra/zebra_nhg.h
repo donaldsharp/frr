@@ -80,6 +80,8 @@ struct nhg_hash_entry {
 
 	uint32_t flags;
 
+	uint64_t packets[MULTIPATH_NUM];
+
 	/* Dependency tree for other entries.
 	 * For instance a group with two
 	 * nexthops will have two dependencies
