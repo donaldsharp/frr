@@ -2849,6 +2849,11 @@ static int netlink_nexthop_process_group(struct rtattr **tb,
 	return count;
 }
 
+#define rtattr_for_each_nested(attr, nest)				\
+	for ((attr) = (void *)RTA_DATA(nest);				\
+	     RTA_OK(attr, RTA_PAYLOAD(nest) - ((char *)(attr) - (char *)RTA_DATA((nest)))); \
+	     (attr) = RTA_TAIL((attr)))
+
 /**
  * netlink_nexthop_change() - Read in change about nexthops from the kernel
  *
@@ -2874,6 +2879,7 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	/* Count of nexthops in group array */
 	uint8_t grp_count = 0;
 	struct rtattr *tb[NHA_MAX + 1] = {};
+	struct rtattr *group_stats;
 
 	nhm = NLMSG_DATA(h);
 
@@ -2934,6 +2940,10 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			 */
 			grp_count = netlink_nexthop_process_group(
 				tb, grp, array_size(grp));
+
+			if (tb[NHA_GROUP_STATS]) {
+				
+			}
 		} else {
 			if (tb[NHA_BLACKHOLE]) {
 				/**
