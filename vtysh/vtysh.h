@@ -119,6 +119,5 @@ struct vtysh_client {
 };
 
 extern struct vtysh_client vtysh_client[19];
-extern char my_client[64];
 
 #endif /* VTYSH_H */
