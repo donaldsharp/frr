@@ -80,6 +80,7 @@ struct nhg_hash_entry {
 
 	uint32_t flags;
 
+	struct thread *stats;
 	uint64_t packets[MULTIPATH_NUM];
 
 	/* Dependency tree for other entries.

@@ -3237,6 +3237,7 @@ struct nhg_hash_entry *zebra_nhg_proto_add(uint32_t id, int type,
 
 		/* Dont call the dec API, we dont want to uninstall the ID */
 		old->refcnt = 0;
+		THREAD_OFF(old->stats);
 		zebra_nhg_free(old);
 		old = NULL;
 	}
@@ -3295,6 +3296,13 @@ struct nhg_hash_entry *zebra_nhg_proto_del(uint32_t id, int type)
 			   zebra_route_string(nhe->type));
 
 	return nhe;
+}
+
+void zebra_nhg_gather_stats(struct thread *thread)
+{
+	struct nhg_hash_entry *nhe = THREAD_ARG(thread);
+
+	dplane_nexthop_get_stats(nhe);
 }
 
 struct nhg_score_proto_iter {
