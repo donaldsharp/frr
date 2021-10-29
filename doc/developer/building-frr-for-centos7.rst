@@ -22,7 +22,8 @@ Add packages:
       readline-devel texinfo net-snmp-devel groff pkgconfig \
       json-c-devel pam-devel bison flex pytest c-ares-devel \
       python-devel python-sphinx libcap-devel \
-      elfutils-libelf-devel libunwind-devel
+      elfutils-libelf-devel libunwind-devel \
+      protobuf-c-devs
 
 .. include:: building-libunwind-note.rst
 
