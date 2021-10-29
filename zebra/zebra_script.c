@@ -148,6 +148,8 @@ void lua_pushzebra_dplane_ctx(lua_State *L, const struct zebra_dplane_ctx *ctx)
 		}
 		lua_setfield(L, -2, "rinfo");
 		break;
+	case DPLANE_OP_NH_GET_STATS:
+		break;
 	case DPLANE_OP_LSP_INSTALL:
 	case DPLANE_OP_LSP_UPDATE:
 	case DPLANE_OP_LSP_DELETE:

@@ -2641,6 +2641,8 @@ static ssize_t netlink_nexthop_msg_encoder(struct zebra_dplane_ctx *ctx,
 		cmd = RTM_NEWNEXTHOP;
 	else if (op == DPLANE_OP_NH_DELETE)
 		cmd = RTM_DELNEXTHOP;
+	else if (op == DPLANE_OP_NH_GET_STATS)
+		cmd = RTM_GETNEXTHOP;
 	else {
 		flog_err(EC_ZEBRA_NHG_FIB_UPDATE,
 			 "Context received for kernel nexthop update with incorrect OP code (%u)",

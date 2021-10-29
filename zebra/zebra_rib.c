@@ -4186,6 +4186,7 @@ static int rib_process_dplane_results(struct thread *thread)
 			case DPLANE_OP_NH_INSTALL:
 			case DPLANE_OP_NH_UPDATE:
 			case DPLANE_OP_NH_DELETE:
+			case DPLANE_OP_NH_GET_STATS:
 				zebra_nhg_dplane_result(ctx);
 				break;
 

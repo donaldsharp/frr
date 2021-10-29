@@ -653,7 +653,8 @@ static void dplane_ctx_free_internal(struct zebra_dplane_ctx *ctx)
 
 	case DPLANE_OP_NH_INSTALL:
 	case DPLANE_OP_NH_UPDATE:
-	case DPLANE_OP_NH_DELETE: {
+	case DPLANE_OP_NH_DELETE:
+	case DPLANE_OP_NH_GET_STATS: {
 		if (ctx->u.rinfo.nhe.ng.nexthop) {
 			/* This deals with recursive nexthops too */
 			nexthops_free(ctx->u.rinfo.nhe.ng.nexthop);
@@ -932,6 +933,9 @@ const char *dplane_op2str(enum dplane_op_e op)
 		break;
 	case DPLANE_OP_NH_DELETE:
 		ret = "NH_DELETE";
+		break;
+	case DPLANE_OP_NH_GET_STATS:
+		ret = "NH_GET_STATS";
 		break;
 
 	case DPLANE_OP_LSP_INSTALL:
@@ -3353,6 +3357,17 @@ enum zebra_dplane_result dplane_nexthop_delete(struct nhg_hash_entry *nhe)
 	return ret;
 }
 
+enum zebra_dplane_result dplane_nexthop_get_stats(struct nhg_hash_entry *nhe)
+{
+	enum zebra_dplane_result ret = ZEBRA_DPLANE_REQUEST_FAILURE;
+
+	if (nhe)
+		ret = dplane_nexthop_update_internal(nhe,
+						     DPLANE_OP_NH_GET_STATS);
+
+	return ret;
+}
+
 /*
  * Enqueue LSP add for the dataplane.
  */
@@ -4983,6 +4998,7 @@ static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_NH_INSTALL:
 	case DPLANE_OP_NH_UPDATE:
 	case DPLANE_OP_NH_DELETE:
+	case DPLANE_OP_NH_GET_STATS:
 		zlog_debug("ID (%u) Dplane nexthop update ctx %p op %s",
 			   dplane_ctx_get_nhe_id(ctx), ctx,
 			   dplane_op2str(dplane_ctx_get_op(ctx)));
@@ -5142,6 +5158,7 @@ static void kernel_dplane_handle_result(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_NH_INSTALL:
 	case DPLANE_OP_NH_UPDATE:
 	case DPLANE_OP_NH_DELETE:
+	case DPLANE_OP_NH_GET_STATS:
 		if (res != ZEBRA_DPLANE_REQUEST_SUCCESS)
 			atomic_fetch_add_explicit(
 				&zdplane_info.dg_nexthop_errors, 1,

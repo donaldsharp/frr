@@ -2960,7 +2960,8 @@ void zebra_nhg_dplane_result(struct zebra_dplane_ctx *ctx)
 				nhe->id);
 		}
 		break;
-
+	case DPLANE_OP_NH_GET_STATS:
+		break;
 	case DPLANE_OP_ROUTE_INSTALL:
 	case DPLANE_OP_ROUTE_UPDATE:
 	case DPLANE_OP_ROUTE_DELETE:

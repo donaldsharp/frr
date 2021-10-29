@@ -697,7 +697,7 @@ static int fpm_nl_enqueue(struct fpm_nl_ctx *fnc, struct zebra_dplane_ctx *ctx)
 	 */
 	if ((!fnc->use_nhg)
 	    && (op == DPLANE_OP_NH_DELETE || op == DPLANE_OP_NH_INSTALL
-		|| op == DPLANE_OP_NH_UPDATE))
+		|| op == DPLANE_OP_NH_UPDATE || op == DPLANE_OP_NH_GET_STATS))
 		return 0;
 
 	nl_buf_len = 0;
@@ -772,6 +772,8 @@ static int fpm_nl_enqueue(struct fpm_nl_ctx *fnc, struct zebra_dplane_ctx *ctx)
 		}
 
 		nl_buf_len = (size_t)rv;
+		break;
+	case DPLANE_OP_NH_GET_STATS:
 		break;
 
 	case DPLANE_OP_LSP_INSTALL:

@@ -119,6 +119,7 @@ enum dplane_op_e {
 	DPLANE_OP_NH_INSTALL,
 	DPLANE_OP_NH_UPDATE,
 	DPLANE_OP_NH_DELETE,
+	DPLANE_OP_NH_GET_STATS,
 
 	/* LSP update */
 	DPLANE_OP_LSP_INSTALL,
@@ -613,6 +614,7 @@ struct nhg_hash_entry;
 enum zebra_dplane_result dplane_nexthop_add(struct nhg_hash_entry *nhe);
 enum zebra_dplane_result dplane_nexthop_update(struct nhg_hash_entry *nhe);
 enum zebra_dplane_result dplane_nexthop_delete(struct nhg_hash_entry *nhe);
+enum zebra_dplane_result dplane_nexthop_get_stats(struct nhg_hash_entry *nhe);
 
 /*
  * Enqueue LSP change operations for the dataplane.
