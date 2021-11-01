@@ -2668,6 +2668,26 @@ netlink_put_nexthop_update_msg(struct nl_batch *bth,
 				     false);
 }
 
+enum netlink_msg_status
+netlink_put_nexthop_stats_msg(struct zebra_dplane_ctx *ctx)
+{
+	struct zebra_vrf *zvrf = zebra_vrf_lookup_by_id(VRF_DEFAULT);
+	struct zebra_ns *zns = zvrf->zns;
+	struct {
+		struct nlmsghdr n;
+		struct nhmsg nhm;
+		char buf[256];
+	} req;
+
+	memset(&req, 0, sizeof(req));
+	netlink_nexthop_msg_encoder(ctx, &req, sizeof(req));
+
+	netlink_talk(netlink_nexthop_change, &req.n, &zns->netlink_cmd, zns,
+		     false);
+
+	return FRR_NETLINK_SUCCESS;
+}
+
 static ssize_t netlink_newroute_msg_encoder(struct zebra_dplane_ctx *ctx,
 					    void *buf, size_t buflen)
 {

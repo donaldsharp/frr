@@ -113,6 +113,9 @@ extern enum netlink_msg_status
 netlink_put_nexthop_update_msg(struct nl_batch *bth,
 			       struct zebra_dplane_ctx *ctx);
 extern enum netlink_msg_status
+netlink_put_nexthop_stats_msg(struct zebra_dplane_ctx *ctx);
+
+extern enum netlink_msg_status
 netlink_put_mac_update_msg(struct nl_batch *bth, struct zebra_dplane_ctx *ctx);
 extern enum netlink_msg_status
 netlink_put_neigh_update_msg(struct nl_batch *bth,
