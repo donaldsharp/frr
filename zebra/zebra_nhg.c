@@ -3318,7 +3318,7 @@ void zebra_nhg_start_timer(struct nhg_hash_entry *nhe, bool start, int seconds,
 	nhe->stats_time = seconds;
 	nhe->deviation = dev;
 
-	thread_add_timer(zrouter.master, zebra_nhg_gather_stats, nhe, seconds,
+	thread_add_timer(zrouter.master, zebra_nhg_gather_stats, nhe, 0,
 			 &nhe->stats);
 }
 
