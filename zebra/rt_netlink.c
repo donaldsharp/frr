@@ -2618,7 +2618,7 @@ nexthop_done:
 
 		req->nhm.nh_protocol = zebra2proto(type);
 
-	} else if (cmd != RTM_DELNEXTHOP || cmd != RTM_GETNEXTHOP) {
+	} else if (cmd != RTM_DELNEXTHOP && cmd != RTM_GETNEXTHOP) {
 		flog_err(
 			EC_ZEBRA_NHG_FIB_UPDATE,
 			"Nexthop group kernel update command (%d) does not exist",
