@@ -1176,8 +1176,10 @@ static int nhg_ctx_process_new(struct nhg_ctx *ctx)
 		/* This is already present in our table, hence an update
 		 * that we did not initate.
 		 */
-		zebra_nhg_handle_kernel_state_change(lookup, false);
-		return 0;
+		if (!is_thread_scheduled(lookup->stats)) {
+			zebra_nhg_handle_kernel_state_change(lookup, false);
+			return 0;
+		}
 	}
 
 	if (nhg_ctx_get_count(ctx)) {
