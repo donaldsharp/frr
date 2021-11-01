@@ -3298,11 +3298,28 @@ struct nhg_hash_entry *zebra_nhg_proto_del(uint32_t id, int type)
 	return nhe;
 }
 
-void zebra_nhg_gather_stats(struct thread *thread)
+static int zebra_nhg_gather_stats(struct thread *thread)
 {
 	struct nhg_hash_entry *nhe = THREAD_ARG(thread);
 
 	dplane_nexthop_get_stats(nhe);
+
+	thread_add_timer(zrouter.master, zebra_nhg_gather_stats, nhe,
+			 nhe->stats_time, &nhe->stats);
+
+	return 0;
+}
+
+void zebra_nhg_start_timer(struct nhg_hash_entry *nhe, bool start, int seconds,
+			   int dev)
+{
+	assert(nhe);
+
+	nhe->stats_time = seconds;
+	nhe->deviation = dev;
+
+	thread_add_timer(zrouter.master, zebra_nhg_gather_stats, nhe, seconds,
+			 &nhe->stats);
 }
 
 struct nhg_score_proto_iter {

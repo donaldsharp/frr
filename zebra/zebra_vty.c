@@ -1598,6 +1598,27 @@ DEFPY (show_interface_nexthop_group,
 	return CMD_SUCCESS;
 }
 
+DEFPY (nexthop_group_watch,
+       nexthop_group_watch_cmd,
+       "nexthop-group watch (0-4294967295)$id (5-18000)$seconds (0-100)$dev",
+       "Nexthop Group\n"
+       "Watch a particular ID\n"
+       "Nexthop Group ID\n"
+       "Time in seconds between Queries\n"
+       "Percent Deviation from the average\n")
+{
+	struct nhg_hash_entry *nhe = zebra_nhg_lookup_id(id);
+
+	if (!id) {
+		vty_out(vty, "Specified ID: %ld does not exist, nothing to do\n",
+			id);
+		return CMD_SUCCESS;
+	}
+
+	zebra_nhg_start_timer(nhe, true, seconds, dev);
+	return CMD_SUCCESS;
+}
+
 DEFPY (show_nexthop_group,
        show_nexthop_group_cmd,
        "show nexthop-group rib <(0-4294967295)$id|[singleton <ip$v4|ipv6$v6>] [<kernel|zebra|bgp|sharp>$type_str] [vrf <NAME$vrf_name|all$vrf_all>]>",

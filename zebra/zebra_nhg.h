@@ -81,6 +81,8 @@ struct nhg_hash_entry {
 	uint32_t flags;
 
 	struct thread *stats;
+	uint32_t stats_time;
+	uint32_t deviation;
 	uint64_t packets[MULTIPATH_NUM];
 
 	/* Dependency tree for other entries.
@@ -367,6 +369,16 @@ extern void zebra_nhg_mark_keep(void);
 /* Nexthop resolution processing */
 struct route_entry; /* Forward ref to avoid circular includes */
 extern int nexthop_active_update(struct route_node *rn, struct route_entry *re);
+
+/*
+ * Start/Stop a timer to query the nhg statistics
+ *
+ * start - bool value to turn on/off the timer
+ * seconds - Seconds between parsing
+ * dev - The deviation we are looking for
+ */
+extern void zebra_nhg_start_timer(struct nhg_hash_entry *nhe, bool start,
+				  int seconds, int dev);
 
 #ifdef __cplusplus
 }
