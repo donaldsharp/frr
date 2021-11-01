@@ -1399,6 +1399,7 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe)
 	struct nhg_connected *rb_node_dep = NULL;
 	struct nexthop_group *backup_nhg;
 	char up_str[MONOTIME_STRLEN];
+	int i = 0;
 
 	uptime2str(nhe->uptime, up_str, sizeof(up_str));
 
@@ -1433,6 +1434,9 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe)
 			vty_out(vty, "       ");
 
 		show_route_nexthop_helper(vty, NULL, nexthop);
+
+		vty_out(vty, " Packets: %llu", nhe->packets[i]);
+		i++;
 
 		if (nhe->backup_info == NULL || nhe->backup_info->nhe == NULL) {
 			if (CHECK_FLAG(nexthop->flags,
