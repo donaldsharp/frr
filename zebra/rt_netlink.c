@@ -2387,6 +2387,9 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 	if (cmd == RTM_NEWNEXTHOP)
 		req->n.nlmsg_flags |= NLM_F_REPLACE;
 
+	if (cmd == RTM_GETNEXTHOP)
+		req->n.nlmsg_flags |= NLM_F_REQUEST;
+
 	req->n.nlmsg_type = cmd;
 	req->n.nlmsg_pid = dplane_ctx_get_ns(ctx)->nls.snl.nl_pid;
 
@@ -2615,7 +2618,7 @@ nexthop_done:
 
 		req->nhm.nh_protocol = zebra2proto(type);
 
-	} else if (cmd != RTM_DELNEXTHOP) {
+	} else if (cmd != RTM_DELNEXTHOP || cmd != RTM_GETNEXTHOP) {
 		flog_err(
 			EC_ZEBRA_NHG_FIB_UPDATE,
 			"Nexthop group kernel update command (%d) does not exist",
