@@ -1147,10 +1147,31 @@ static void zebra_nhg_nhe_add_packets(struct nhg_hash_entry *nhe,
 				      struct nh_grp *nh_grp, size_t count)
 {
 	size_t i;
+	uint64_t packet_count = 0;
+	float percent;
+	float perlink;
+	bool warned = false;
+	struct nexthop *nexthop;
 
-	for (i = 0; i < count; i++)
+	for (i = 0; i < count; i++) {
 		nhe->packets[i] = nh_grp[i].packets;
+		packet_count += nhe->packets[i];
+	}
 
+	perlink = 1 / count * 100;
+	nexthop = nhe->nhg.nexthop;
+	for (i = 0; i < count; i++) {
+		if (warned)
+			break;
+		percent = nhe->packets[i] / packet_count * 100;
+		if (percent > (perlink + nhe->deviation) ||
+		    percent < (perlink - nhe->deviation)) {
+			warned = true;
+			zlog_debug("NH %pNH percent utilization %f is outside expected deviation of %u for %zd nexthops",
+				   nexthop, percent, nhe->deviation, count);
+		}
+		nexthop = nexthop->next;
+	}
 }
 
 static int nhg_ctx_process_new(struct nhg_ctx *ctx)
@@ -1176,7 +1197,7 @@ static int nhg_ctx_process_new(struct nhg_ctx *ctx)
 		/* This is already present in our table, hence an update
 		 * that we did not initate.
 		 */
-		if (!is_thread_scheduled(lookup->stats)) {
+		if (!thread_is_scheduled(lookup->stats)) {
 			zebra_nhg_handle_kernel_state_change(lookup, false);
 			return 0;
 		}
