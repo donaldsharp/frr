@@ -1167,8 +1167,9 @@ static void zebra_nhg_nhe_add_packets(struct nhg_hash_entry *nhe,
 		if (percent > (perlink + nhe->deviation) ||
 		    percent < (perlink - nhe->deviation)) {
 			warned = true;
-			zlog_debug("NH %pNH percent utilization %f is outside expected deviation of %u for %zd nexthops",
-				   nexthop, percent, nhe->deviation, count);
+			zlog_warn(
+				"NH %pNH percent utilization %f is outside expected deviation of %u for %zd nexthops",
+				nexthop, percent, nhe->deviation, count);
 		}
 		nexthop = nexthop->next;
 	}
