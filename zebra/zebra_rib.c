@@ -135,6 +135,7 @@ static const struct {
 	[ZEBRA_ROUTE_VRRP] = {ZEBRA_ROUTE_VRRP, 255, META_QUEUE_OTHER},
 	[ZEBRA_ROUTE_SRTE] = {ZEBRA_ROUTE_SRTE, 255, META_QUEUE_OTHER},
 	[ZEBRA_ROUTE_ALL] = {ZEBRA_ROUTE_ALL, 255, META_QUEUE_OTHER},
+	[ZEBRA_ROUTE_FRR] = {ZEBRA_ROUTE_FRR, 1, META_QUEUE_STATIC},
 	/* Any new route type added to zebra, should be mirrored here */
 
 	/* no entry/default: 150 */
