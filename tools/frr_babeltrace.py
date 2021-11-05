@@ -7,7 +7,7 @@ i.e. as binary-data/ctf_arrays. These traces need to be converted into pretty
 strings for easy greping etc. This script is a babeltrace python plugin for
 that pretty printing.
 
-Copyright (C) 2021  NVIDIA Corporation
+Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 Anuradha Karuppiah
 
 This program is free software; you can redistribute it and/or modify it

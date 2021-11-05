@@ -1,7 +1,7 @@
 /*
  * Zebra EVPN for VxLAN interface handling
  *
- * Copyright (C) 2021 Cumulus Networks, Inc.
+ * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * Vivek Venkatraman, Stephen Worley, Sharath Ramamurthy
  *
  * This file is part of FRR.

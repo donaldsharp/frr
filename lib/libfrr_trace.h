@@ -1,6 +1,6 @@
 /* Tracing
  *
- * Copyright (C) 2020  NVIDIA Corporation
+ * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * Quentin Young
  *
  * This program is free software; you can redistribute it and/or modify it
