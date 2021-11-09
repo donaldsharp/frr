@@ -1,7 +1,7 @@
 /*
  * Zebra VxLAN (EVPN) interface data structures and definitions
  * These are public definitions referenced by other files.
- * Copyright (C) 2021 Cumulus Networks, Inc.
+ * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * Sharath Ramamurthy
  *
  * This file is part of FRR.
