@@ -2360,6 +2360,12 @@ void zebra_evpn_neigh_remote_uninstall(zebra_evpn_t *zevpn,
 			zebra_evpn_neigh_del(zevpn, n);
 			zebra_evpn_deref_ip2mac(zevpn, mac);
 		}
+	} else {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"%s: IP %pIA MAC %pEA (flags 0x%x) found doesn't match MAC %pEA, ignoring Neigh DEL",
+				__func__, ipaddr, &n->emac, n->flags,
+				&mac->macaddr);
 	}
 }
 
