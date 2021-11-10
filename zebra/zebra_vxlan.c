@@ -4870,6 +4870,11 @@ int zebra_vxlan_svi_down(struct interface *ifp, struct interface *link_if)
 		zevpn = zebra_evpn_from_svi(ifp, link_if);
 
 		if (zevpn) {
+			/* remove from l3-vni list */
+			zl3vni = zl3vni_from_vrf(zevpn->vrf_id);
+			if (zl3vni)
+				listnode_delete(zl3vni->l2vnis, zevpn);
+
 			zevpn->vrf_id = VRF_DEFAULT;
 
 			/* update the tenant vrf in BGP */
@@ -4927,6 +4932,10 @@ int zebra_vxlan_svi_up(struct interface *ifp, struct interface *link_if)
 
 		/* update the vrf information for l2-vni and inform bgp */
 		zevpn->vrf_id = ifp->vrf_id;
+
+		zl3vni = zl3vni_from_vrf(zevpn->vrf_id);
+		if (zl3vni)
+			listnode_add_sort_nodup(zl3vni->l2vnis, zevpn);
 
 		if (if_is_operative(zevpn->vxlan_if) && zevpn->bridge_if)
 			zebra_evpn_send_add_to_client(zevpn);
