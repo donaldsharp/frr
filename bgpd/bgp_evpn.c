@@ -3918,7 +3918,7 @@ static int bgp_evpn_install_uninstall_table(struct bgp *bgp, afi_t afi,
 			}
 
 			if (evp->prefix.route_type != BGP_EVPN_AD_ROUTE
-			    || evp->prefix.route_type != BGP_EVPN_IMET_ROUTE) {
+			    && evp->prefix.route_type != BGP_EVPN_IMET_ROUTE) {
 				vrf_irt = in_vrf_rt ? lookup_vrf_import_rt(eval)
 						    : NULL;
 				if (vrf_irt)

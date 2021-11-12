@@ -1529,8 +1529,6 @@ int pim_msdp_config_write(struct pim_instance *pim, struct vty *vty,
 	struct listnode *mbrnode;
 	struct pim_msdp_mg_mbr *mbr;
 	struct pim_msdp_mg *mg = pim->msdp.mg;
-	char mbr_str[INET_ADDRSTRLEN];
-	char src_str[INET_ADDRSTRLEN];
 	int count = 0;
 
 	if (!mg) {
@@ -1538,9 +1536,8 @@ int pim_msdp_config_write(struct pim_instance *pim, struct vty *vty,
 	}
 
 	if (mg->src_ip.s_addr != INADDR_ANY) {
-		pim_inet4_dump("<src?>", mg->src_ip, src_str, sizeof(src_str));
-		vty_out(vty, "%sip msdp mesh-group %s source %s\n", spaces,
-			mg->mesh_group_name, src_str);
+		vty_out(vty, "%sip msdp mesh-group %s source %pI4\n", spaces,
+			mg->mesh_group_name, &mg->src_ip);
 		++count;
 	}
 
