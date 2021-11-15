@@ -422,6 +422,7 @@ struct cmd_node {
 
 #define CMD_VNI_RANGE "(1-16777215)"
 #define CONF_BACKUP_EXT ".sav"
+#define ZEBRA_NEIGH_THROTTLE_STR "neighbor throttle"
 
 /* Command warnings. */
 #define NO_PASSWD_CMD_WARNING                                                  \

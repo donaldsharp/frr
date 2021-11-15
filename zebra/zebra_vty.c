@@ -61,6 +61,7 @@
 #include "zebra/zebra_nb.h"
 #include "zebra/kernel_netlink.h"
 #include "zebra/if_netlink.h"
+#include "zebra/zebra_neigh_throttle.h"
 
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 #include <cumulus/cs_mgr_intf.h>
@@ -1400,7 +1401,7 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe)
 	if (!zebra_nhg_dependents_is_empty(nhe)) {
 		vty_out(vty, "     Dependents:");
 		frr_each(nhg_connected_tree, &nhe->nhg_dependents,
-			  rb_node_dep) {
+			 rb_node_dep) {
 			vty_out(vty, " (%u)", rb_node_dep->nhe->id);
 		}
 		vty_out(vty, "\n");
@@ -1479,7 +1480,7 @@ static void if_nexthop_group_dump_vty(struct vty *vty, struct interface *ifp)
 		vty_out(vty, "Interface %s:\n", ifp->name);
 
 		frr_each(nhg_connected_tree, &zebra_if->nhg_dependents,
-			  rb_node_dep) {
+			 rb_node_dep) {
 			vty_out(vty, "   ");
 			show_nexthop_group_out(vty, rb_node_dep->nhe);
 		}
@@ -2768,6 +2769,115 @@ DEFPY(show_evpn_l2_nh,
 	return CMD_SUCCESS;
 }
 
+DEFPY (show_neigh_throttle,
+       show_neigh_throttle_cmd,
+       "show " ZEBRA_NEIGH_THROTTLE_STR " [detail]",
+       SHOW_STR
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Detailed output\n")
+{
+	bool detail_p = (argc > 3);
+
+	return zebra_neigh_throttle_show(vty, detail_p);
+}
+
+DEFPY (enable_neigh_throttle,
+       enable_neigh_throttle_cmd,
+       "[no] " ZEBRA_NEIGH_THROTTLE_STR,
+       NO_STR
+       "Neighbor data\n"
+       "Neighbor throttling\n")
+{
+	zebra_neigh_throttle_enable((argc == 2));
+	return CMD_SUCCESS;
+}
+
+DEFUN (neigh_throttle_timeout,
+       neigh_throttle_timeout_cmd,
+       ZEBRA_NEIGH_THROTTLE_STR " timeout " CMD_RANGE_STR(0, ZEBRA_NEIGH_THROTTLE_MAX_TIMEOUT) ,
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Set timeout in seconds\n"
+       "Timeout in seconds\n")
+{
+	uint32_t timeout = strtoul(argv[3]->arg, NULL, 10);
+
+	/* Don't reset */
+	zebra_neigh_throttle_set_timeout(timeout, false);
+
+	return CMD_SUCCESS;
+}
+
+DEFUN (no_neigh_throttle_timeout,
+       no_neigh_throttle_timeout_cmd,
+       "no " ZEBRA_NEIGH_THROTTLE_STR " timeout [" CMD_RANGE_STR(0, ZEBRA_NEIGH_THROTTLE_MAX_TIMEOUT) "]" ,
+       NO_STR
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Set timeout in seconds\n"
+       "Timeout in seconds\n")
+{
+	/* Do reset */
+	zebra_neigh_throttle_set_timeout(0, true);
+	return CMD_SUCCESS;
+}
+
+DEFPY (neigh_throttle_limit,
+       neigh_throttle_limit_cmd,
+       ZEBRA_NEIGH_THROTTLE_STR " limit (0-100000)",
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Limit number of entries\n"
+       "Number of entries\n")
+{
+	/* Don't reset */
+	zebra_neigh_throttle_set_limit(limit, false);
+	return CMD_SUCCESS;
+}
+
+DEFPY (no_neigh_throttle_limit,
+       no_neigh_throttle_limit_cmd,
+       "no " ZEBRA_NEIGH_THROTTLE_STR " limit [(0-100000)]",
+       NO_STR
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Limit number of entries\n"
+       "Number of entries\n")
+{
+	/* Do reset */
+	zebra_neigh_throttle_set_limit(0, true);
+	return CMD_SUCCESS;
+}
+
+/*
+ * TODO test clis
+ */
+DEFPY (test_neigh_throttle,
+       test_neigh_throttle_cmd,
+       "neighbor throttle <add$add|delete$delete> A.B.C.D$address",
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Add an entry\n"
+       "Delete an entry\n"
+       "IPv4 address\n")
+{
+	struct ipaddr addr;
+
+	addr.ipa_type = IPADDR_V4;
+	addr.ipaddr_v4 = address;
+
+	if (add)
+		zebra_neigh_throttle_add(VRF_DEFAULT, &addr);
+	else
+		zebra_neigh_throttle_delete(VRF_DEFAULT, &addr);
+	return CMD_SUCCESS;
+}
+
+/*
+ * TODO test clis
+ */
+
 DEFPY(show_evpn_es_peer,
       show_evpn_es_peer_cmd,
       "show evpn es-peer [json$json]",
@@ -3737,6 +3847,9 @@ static int config_write_protocol(struct vty *vty)
 	if (!zebra_vxlan_accept_bgp_seq())
 		vty_out(vty, "no evpn accept-bgp-seq\n");
 
+	/* Neighbor-throttling config */
+	zebra_neigh_throttle_config_write(vty);
+
 	/* Include nexthop-group config */
 	if (!zebra_nhg_kernel_nexthops_enabled())
 		vty_out(vty, "no zebra nexthop kernel enable\n");
@@ -4287,4 +4400,12 @@ void zebra_vty_init(void)
 #endif /* HAVE_NETLINK */
 
 	install_element(VIEW_NODE, &zebra_show_routing_tables_summary_cmd);
+
+	install_element(VIEW_NODE, &show_neigh_throttle_cmd);
+	install_element(ENABLE_NODE, &test_neigh_throttle_cmd);
+	install_element(CONFIG_NODE, &enable_neigh_throttle_cmd);
+	install_element(CONFIG_NODE, &neigh_throttle_timeout_cmd);
+	install_element(CONFIG_NODE, &no_neigh_throttle_timeout_cmd);
+	install_element(CONFIG_NODE, &neigh_throttle_limit_cmd);
+	install_element(CONFIG_NODE, &no_neigh_throttle_limit_cmd);
 }

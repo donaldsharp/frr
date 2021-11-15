@@ -51,6 +51,7 @@
 #include "zebra/zebra_mpls.h"
 #include "zebra/label_manager.h"
 #include "zebra/zebra_netns_notify.h"
+#include "zebra/zebra_neigh_throttle.h"
 #include "zebra/zebra_rnh.h"
 #include "zebra/zebra_pbr.h"
 #include "zebra/zebra_vxlan.h"
@@ -172,6 +173,8 @@ static void sigint(void)
 	zebra_opaque_stop();
 
 	zebra_dplane_pre_finish();
+
+	zebra_neigh_throttle_fini();
 
 	/* Clean up GR related info. */
 	zebra_gr_stale_client_cleanup(zrouter.stale_client_list);
@@ -458,6 +461,7 @@ int main(int argc, char **argv)
 	zebra_pw_vty_init();
 	zebra_pbr_init();
 	zebra_opaque_init();
+	zebra_neigh_throttle_init();
 
 /* For debug purpose. */
 /* SET_FLAG (zebra_debug_event, ZEBRA_DEBUG_EVENT); */
