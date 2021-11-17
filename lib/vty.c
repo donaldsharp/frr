@@ -48,6 +48,7 @@
 #include "lib_errors.h"
 #include "northbound_cli.h"
 #include "printfrr.h"
+#include "json.h"
 
 #include <arpa/telnet.h>
 #include <termios.h>
@@ -314,6 +315,21 @@ static int vty_log_out(struct vty *vty, const char *level,
 		return -1;
 	}
 	return 0;
+}
+
+int vty_json(struct vty *vty, struct json_object *json)
+{
+	const char *text;
+
+	if (!json)
+		return CMD_SUCCESS;
+
+	text = json_object_to_json_string_ext(
+		json, JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_NOSLASHESCAPE);
+	vty_out(vty, "%s\n", text);
+	json_object_free(json);
+
+	return CMD_SUCCESS;
 }
 
 /* Output current time to the vty. */
