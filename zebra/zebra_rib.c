@@ -1907,7 +1907,7 @@ struct route_node *rib_find_rn_from_ctx(const struct zebra_dplane_ctx *ctx)
 		dplane_ctx_get_afi(ctx), dplane_ctx_get_safi(ctx),
 		dplane_ctx_get_vrf(ctx), dplane_ctx_get_table(ctx));
 	if (table == NULL) {
-		if (IS_ZEBRA_DEBUG_DPLANE) {
+		if (IS_ZEBRA_DEBUG_DPLANE || IS_ZEBRA_DEBUG_RIB) {
 			zlog_debug(
 				"Failed to find route for ctx: no table for afi %d, safi %d, vrf %s(%u)",
 				dplane_ctx_get_afi(ctx),
@@ -1968,7 +1968,7 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 	op = dplane_ctx_get_op(ctx);
 	status = dplane_ctx_get_status(ctx);
 
-	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL)
+	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL || IS_ZEBRA_DEBUG_RIB_DETAILED)
 		zlog_debug(
 			"%s(%u:%u):%pRN Processing dplane result ctx %p, op %s result %s",
 			VRF_LOGNAME(vrf), dplane_ctx_get_vrf(ctx),
@@ -2879,7 +2879,6 @@ static void process_subq_early_route_delete(struct zebra_early_route *ere)
 	struct route_entry *fib = NULL;
 	struct route_entry *same = NULL;
 	struct nexthop *rtnh;
-	char buf2[INET6_ADDRSTRLEN];
 	rib_dest_t *dest;
 
 	if (ere->src_p_provided)
@@ -3034,11 +3033,8 @@ static void process_subq_early_route_delete(struct zebra_early_route *ere)
 				if (nh)
 					rnode_debug(
 						rn, ere->re->vrf_id,
-						"via %s ifindex %d type %d doesn't exist in rib",
-						inet_ntop(afi2family(ere->afi),
-							  &nh->gate, buf2,
-							  sizeof(buf2)),
-						nh->ifindex, ere->re->type);
+						"%pNHv ifindex %d type %d doesn't exist in rib",
+						nh, nh->ifindex, ere->re->type);
 				else
 					rnode_debug(
 						rn, ere->re->vrf_id,
