@@ -1051,6 +1051,16 @@ static void lsp_processq_del(struct work_queue *wq, void *data)
 	zebra_lsp_t *lsp;
 	struct hash *lsp_table;
 	zebra_nhlfe_t *nhlfe;
+	bool in_shutdown = false;
+
+	/* If zebra is shutting down, don't delete any structs,
+	 * just ignore this callback. The LSPs will be cleaned up
+	 * during the shutdown processing.
+	 */
+	in_shutdown = atomic_load_explicit(&zrouter.in_shutdown,
+					   memory_order_relaxed);
+	if (in_shutdown)
+		return;
 
 	zvrf = vrf_info_lookup(VRF_DEFAULT);
 	assert(zvrf);
