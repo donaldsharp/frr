@@ -1885,7 +1885,7 @@ struct route_node *rib_find_rn_from_ctx(const struct zebra_dplane_ctx *ctx)
 		dplane_ctx_get_afi(ctx), dplane_ctx_get_safi(ctx),
 		dplane_ctx_get_vrf(ctx), dplane_ctx_get_table(ctx));
 	if (table == NULL) {
-		if (IS_ZEBRA_DEBUG_DPLANE) {
+		if (IS_ZEBRA_DEBUG_DPLANE || IS_ZEBRA_DEBUG_RIB) {
 			zlog_debug(
 				"Failed to find route for ctx: no table for afi %d, safi %d, vrf %s(%u)",
 				dplane_ctx_get_afi(ctx),
@@ -1946,7 +1946,7 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 	op = dplane_ctx_get_op(ctx);
 	status = dplane_ctx_get_status(ctx);
 
-	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL)
+	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL || IS_ZEBRA_DEBUG_RIB_DETAILED)
 		zlog_debug(
 			"%s(%u:%u):%pRN Processing dplane result ctx %p, op %s result %s",
 			VRF_LOGNAME(vrf), dplane_ctx_get_vrf(ctx),
@@ -4149,29 +4149,197 @@ void rib_delete(afi_t afi, safi_t safi, vrf_id_t vrf_id, int type,
 	struct zebra_early_route *ere;
 	struct route_entry *re = NULL;
 	struct nhg_hash_entry *nhe = NULL;
+	struct route_table *table;
+	struct route_node *rn;
+	struct route_entry *fib = NULL;
+	struct route_entry *same = NULL;
+	struct nexthop *rtnh;
+	rib_dest_t *dest;
 
-	re = zebra_rib_route_entry_new(vrf_id, type, instance, flags, nhe_id,
-				       table_id, metric, 0, distance, 0);
+	assert(!src_p || !src_p->prefixlen || afi == AFI_IP6);
 
-	if (nh) {
-		nhe = zebra_nhg_alloc();
-		nhe->nhg.nexthop = nexthop_dup(nh, NULL);
+	/* Lookup table.  */
+	table = zebra_vrf_lookup_table_with_table_id(afi, safi, vrf_id,
+						     table_id);
+	if (!table)
+		return;
+
+	/* Apply mask. */
+	apply_mask(p);
+	if (src_p)
+		apply_mask_ipv6(src_p);
+
+	/* Lookup route node. */
+	rn = srcdest_rnode_lookup(table, p, src_p);
+	if (!rn) {
+		if (IS_ZEBRA_DEBUG_RIB) {
+			char src_buf[PREFIX_STRLEN];
+			struct vrf *vrf = vrf_lookup_by_id(vrf_id);
+
+			if (src_p && src_p->prefixlen)
+				prefix2str(src_p, src_buf, sizeof(src_buf));
+			else
+				src_buf[0] = '\0';
+
+			zlog_debug("%s[%d]:%pRN%s%s doesn't exist in rib",
+				   vrf->name, table_id, rn,
+				   (src_buf[0] != '\0') ? " from " : "",
+				   src_buf);
+		}
+		return;
 	}
 
-	ere = XCALLOC(MTYPE_WQ_WRAPPER, sizeof(*ere));
-	ere->afi = afi;
-	ere->safi = safi;
-	ere->p = *p;
-	if (src_p)
-		ere->src_p = *src_p;
-	ere->src_p_provided = !!src_p;
-	ere->re = re;
-	ere->re_nhe = nhe;
-	ere->startup = false;
-	ere->deletion = true;
-	ere->fromkernel = fromkernel;
+	dest = rib_dest_from_rnode(rn);
+	fib = dest->selected_fib;
 
-	mq_add_handler(ere, rib_meta_queue_early_route_add);
+	/* Lookup same type route. */
+	RNODE_FOREACH_RE (rn, re) {
+		if (CHECK_FLAG(re->status, ROUTE_ENTRY_REMOVED))
+			continue;
+
+		if (re->type != type)
+			continue;
+		if (re->instance != instance)
+			continue;
+		if (CHECK_FLAG(re->flags, ZEBRA_FLAG_RR_USE_DISTANCE) &&
+		    distance != re->distance)
+			continue;
+
+		if (re->type == ZEBRA_ROUTE_KERNEL && re->metric != metric)
+			continue;
+		if (re->type == ZEBRA_ROUTE_CONNECT &&
+		    (rtnh = re->nhe->nhg.nexthop)
+		    && rtnh->type == NEXTHOP_TYPE_IFINDEX && nh) {
+			if (rtnh->ifindex != nh->ifindex)
+				continue;
+			same = re;
+			break;
+		}
+
+		/* Make sure that the route found has the same gateway. */
+		if (nhe_id && re->nhe_id == nhe_id) {
+			same = re;
+			break;
+		}
+
+		if (nh == NULL) {
+			same = re;
+			break;
+		}
+		for (ALL_NEXTHOPS(re->nhe->nhg, rtnh)) {
+			/*
+			 * No guarantee all kernel send nh with labels
+			 * on delete.
+			 */
+			if (nexthop_same_no_labels(rtnh, nh)) {
+				same = re;
+				break;
+			}
+		}
+
+		if (same)
+			break;
+	}
+	/* If same type of route can't be found and this message is from
+	   kernel. */
+	if (!same) {
+		/*
+		 * In the past(HA!) we could get here because
+		 * we were receiving a route delete from the
+		 * kernel and we're not marking the proto
+		 * as coming from it's appropriate originator.
+		 * Now that we are properly noticing the fact
+		 * that the kernel has deleted our route we
+		 * are not going to get called in this path
+		 * I am going to leave this here because
+		 * this might still work this way on non-linux
+		 * platforms as well as some weird state I have
+		 * not properly thought of yet.
+		 * If we can show that this code path is
+		 * dead then we can remove it.
+		 */
+		if (fib && CHECK_FLAG(flags, ZEBRA_FLAG_SELFROUTE)) {
+			if (IS_ZEBRA_DEBUG_RIB) {
+				rnode_debug(rn, vrf_id,
+					    "rn %p, re %p (%s) was deleted from kernel, adding",
+					    rn, fib,
+					    zebra_route_string(fib->type));
+			}
+			if (zrouter.allow_delete ||
+			    CHECK_FLAG(dest->flags, RIB_ROUTE_ANY_QUEUED)) {
+				UNSET_FLAG(fib->status, ROUTE_ENTRY_INSTALLED);
+				/* Unset flags. */
+				for (rtnh = fib->nhe->nhg.nexthop; rtnh;
+				     rtnh = rtnh->next)
+					UNSET_FLAG(rtnh->flags,
+						   NEXTHOP_FLAG_FIB);
+
+				/*
+				 * This is a non FRR route
+				 * as such we should mark
+				 * it as deleted
+				 */
+				dest->selected_fib = NULL;
+			} else {
+				/* This means someone else, other than Zebra,
+				 * has deleted
+				 * a Zebra router from the kernel. We will add
+				 * it back */
+				rib_install_kernel(rn, fib, NULL);
+			}
+		} else {
+			if (IS_ZEBRA_DEBUG_RIB) {
+				if (nh)
+					rnode_debug(
+						rn, vrf_id,
+						"%pNHv ifindex %d type %d doesn't exist in rib",
+						nh, nh->ifindex, type);
+				else
+					rnode_debug(
+						rn, vrf_id,
+						"type %d doesn't exist in rib",
+						type);
+			}
+			route_unlock_node(rn);
+			return;
+		}
+	}
+
+	if (same) {
+		struct nexthop *tmp_nh;
+
+		if (fromkernel && CHECK_FLAG(flags, ZEBRA_FLAG_SELFROUTE) &&
+		    !zrouter.allow_delete) {
+			rib_install_kernel(rn, same, NULL);
+			route_unlock_node(rn);
+
+			return;
+		}
+
+		/* Special handling for IPv4 or IPv6 routes sourced from
+		 * EVPN - the nexthop (and associated MAC) need to be
+		 * uninstalled if no more refs.
+		 */
+		for (ALL_NEXTHOPS(re->nhe->nhg, tmp_nh)) {
+			struct ipaddr vtep_ip;
+
+			if (CHECK_FLAG(tmp_nh->flags, NEXTHOP_FLAG_EVPN)) {
+				memset(&vtep_ip, 0, sizeof(struct ipaddr));
+				if (afi == AFI_IP) {
+					vtep_ip.ipa_type = IPADDR_V4;
+					memcpy(&(vtep_ip.ipaddr_v4),
+					       &(tmp_nh->gate.ipv4),
+					       sizeof(struct in_addr));
+				} else {
+					vtep_ip.ipa_type = IPADDR_V6;
+					memcpy(&(vtep_ip.ipaddr_v6),
+					       &(tmp_nh->gate.ipv6),
+					       sizeof(struct in6_addr));
+				}
+				zebra_rib_queue_evpn_route_del(re->vrf_id,
+							       &vtep_ip, p);
+			}
+		}
 }
 
 
