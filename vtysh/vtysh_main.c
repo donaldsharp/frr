@@ -22,7 +22,6 @@
 
 #include <sys/un.h>
 #include <setjmp.h>
-#include <sys/wait.h>
 #include <pwd.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -352,6 +351,8 @@ int main(int argc, char **argv, char **env)
 	const char *pathspace_arg = NULL;
 	char pathspace[MAXPATHLEN] = "";
 	const char *histfile = NULL;
+	bool no_fork = false;
+
 
 	/* SUID: drop down to calling user & go back up when needed */
 	elevuid = geteuid();
@@ -495,7 +496,7 @@ int main(int argc, char **argv, char **env)
 		/* Read vtysh configuration file before connecting to daemons.
 		 * (file may not be readable to calling user in SUID mode) */
 		suid_on();
-		vtysh_read_config(vtysh_config, dryrun);
+		vtysh_apply_config(vtysh_config, dryrun, false);
 		suid_off();
 	}
 	/* Error code library system */
@@ -514,9 +515,9 @@ int main(int argc, char **argv, char **env)
 	/* Start execution only if not in dry-run mode */
 	if (dryrun && !cmd) {
 		if (inputfile) {
-			ret = vtysh_read_config(inputfile, dryrun);
+			ret = vtysh_apply_config(inputfile, dryrun, false);
 		} else {
-			ret = vtysh_read_config(frr_config, dryrun);
+			ret = vtysh_apply_config(frr_config, dryrun, false);
 		}
 
 		exit(ret);
@@ -595,10 +596,17 @@ int main(int argc, char **argv, char **env)
 		return vtysh_write_config_integrated();
 	}
 
-	if (inputfile) {
+	if (boot_flag)
+		inputfile = frr_config;
+
+	if (inputfile || boot_flag) {
 		vtysh_flock_config(inputfile);
-		ret = vtysh_read_config(inputfile, dryrun);
+		ret = vtysh_apply_config(inputfile, dryrun, !no_fork);
 		vtysh_unflock_config();
+
+		if (no_error)
+			ret = 0;
+
 		exit(ret);
 	}
 
@@ -715,23 +723,6 @@ int main(int argc, char **argv, char **env)
 
 		history_truncate_file(history_file, 1000);
 		exit(0);
-	}
-
-	/* Boot startup configuration file. */
-	if (boot_flag) {
-		vtysh_flock_config(frr_config);
-		ret = vtysh_read_config(frr_config, dryrun);
-		vtysh_unflock_config();
-		if (ret) {
-			fprintf(stderr,
-				"Configuration file[%s] processing failure: %d\n",
-				frr_config, ret);
-			if (no_error)
-				exit(0);
-			else
-				exit(ret);
-		} else
-			exit(0);
 	}
 
 	vtysh_readline_init();
