@@ -2770,6 +2770,7 @@ static void zebra_evpn_es_local_info_clear(struct zebra_evpn_es **esp)
 	struct zebra_evpn_es *es = *esp;
 	struct zebra_evpn_es_vtep *zvtep;
 	struct listnode *node;
+	bool shut_p = false;
 
 	if (!(es->flags & ZEBRA_EVPNES_LOCAL))
 		return;
@@ -2791,8 +2792,12 @@ static void zebra_evpn_es_local_info_clear(struct zebra_evpn_es **esp)
 
 	THREAD_OFF(es->df_delay_timer);
 
-	/* clear EVPN protodown flags on the access port */
-	zebra_evpn_mh_clear_protodown_es(es);
+	/* If zebra is shutting down, avoid clearing protodown */
+	shut_p = atomic_load_explicit(&zrouter.in_shutdown,
+					  memory_order_relaxed);
+	if (!shut_p) {
+		zebra_evpn_mh_clear_protodown_es(es);
+	}
 
 	/* remove the DF filter */
 	dplane_updated = zebra_evpn_es_run_df_election(es, __func__);
@@ -3180,6 +3185,8 @@ void zebra_evpn_es_cleanup(void)
 {
 	struct zebra_evpn_es *es;
 	struct zebra_evpn_es *es_next;
+
+	zebra_evpn_mh_shutdown_protodown();
 
 	RB_FOREACH_SAFE(es, zebra_es_rb_head,
 			&zmh_info->es_rb_tree, es_next) {
@@ -4481,6 +4488,13 @@ static void zebra_evpn_mh_startup_delay_timer_start(const char *rc)
 				ZEBRA_PROTODOWN_EVPN_STARTUP_DELAY,
 				false /* set */);
 	}
+}
+
+void zebra_evpn_mh_shutdown_protodown(void)
+{
+	zlog_info("Protodown ES bonds on shutdown");
+	zebra_evpn_mh_update_protodown(ZEBRA_PROTODOWN_EVPN_SHUTDOWN,
+			true /* set */);
 }
 
 /*****************************************************************************
