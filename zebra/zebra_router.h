@@ -70,11 +70,17 @@ enum protodown_reasons {
 	 * other switches on the Ethernet Segment
 	 */
 	ZEBRA_PROTODOWN_EVPN_UPLINK_DOWN = (1 << 2),
+	/* We want to protodown all ES bonds on FRR shutdown to
+	 * prevent loss in the encap direction on¿bonds which remain
+	 * up until LACP times out or the NIC is taken down.
+	 */
+	ZEBRA_PROTODOWN_EVPN_SHUTDOWN = (1 << 3),
 	ZEBRA_PROTODOWN_EVPN_ALL = (ZEBRA_PROTODOWN_EVPN_UPLINK_DOWN |
-				    ZEBRA_PROTODOWN_EVPN_STARTUP_DELAY),
-	ZEBRA_PROTODOWN_VRRP = (1 << 3),
+				    ZEBRA_PROTODOWN_EVPN_STARTUP_DELAY |
+				    ZEBRA_PROTODOWN_EVPN_SHUTDOWN),
+	ZEBRA_PROTODOWN_VRRP = (1 << 4),
 	/* This reason used exclusively for testing */
-	ZEBRA_PROTODOWN_SHARP = (1 << 4),
+	ZEBRA_PROTODOWN_SHARP = (1 << 5),
 	/* Just used to clear our fields on shutdown, externel not included */
 	ZEBRA_PROTODOWN_ALL = (ZEBRA_PROTODOWN_EVPN_ALL | ZEBRA_PROTODOWN_VRRP |
 			       ZEBRA_PROTODOWN_SHARP)
