@@ -413,6 +413,7 @@ extern int zebra_evpn_mh_startup_delay_update(struct vty *vty,
 extern void zebra_evpn_mh_uplink_oper_update(struct zebra_if *zif);
 extern void zebra_evpn_mh_update_protodown_bond_mbr(struct zebra_if *zif,
 		bool clear, const char *caller);
+extern void zebra_evpn_mh_shutdown_protodown(void);
 extern bool zebra_evpn_is_es_bond(struct interface *ifp);
 extern bool zebra_evpn_is_es_bond_member(struct interface *ifp);
 extern void zebra_evpn_mh_print(struct vty *vty);
