@@ -534,13 +534,79 @@ void zebra_neigh_throttle_init(void)
 /*
  * Show output
  */
-int zebra_neigh_throttle_show(struct vty *vty, bool detail)
+int zebra_neigh_throttle_show(struct vty *vty, bool detail, bool use_json)
 {
 	const struct nt_entry *entry;
 	time_t now;
 	uint32_t expires;
+	char buf[PREFIX_STRLEN];
+	json_object *json = NULL;
+	json_object *jarray = NULL;
+	json_object *jobj = NULL;
 
-	/* TODO -- json? detail? */
+	if (use_json) {
+		json = json_object_new_object();
+
+		/* Individual attributes */
+		if (nt_globals.enabled_p)
+			json_object_boolean_true_add(json, "enabled");
+		else {
+			json_object_boolean_false_add(json, "enabled");
+			goto json_done;
+		}
+
+		json_object_int_add(json, "timeout",
+				    nt_globals.timeout_secs);
+		json_object_int_add(json, "limit",
+				    nt_globals.max_entries);
+		json_object_int_add(json, "maxExpirations",
+				    nt_globals.max_expirations);
+		json_object_int_add(json, "entryCount",
+				    nt_entry_list_count(
+					    &nt_globals.entry_list));
+
+		if (!detail)
+			goto json_done;
+
+		/* Array/list of entries */
+		jarray = json_object_new_array();
+
+		entry = nt_entry_rb_const_first(&nt_globals.entry_rb);
+		while (entry) {
+			jobj = json_object_new_object();
+
+			json_object_int_add(jobj, "expiration",
+					    entry->expiration);
+
+			if (entry->addr.ipa_type == IPADDR_V4) {
+				json_object_string_add(jobj, "afi", "ipv4");
+				json_object_string_add(jobj, "ipaddr",
+						       inet_ntop(AF_INET,
+								 &entry->addr.ipaddr_v4,
+								 buf, sizeof(buf)));
+			} else if (entry->addr.ipa_type == IPADDR_V6) {
+				json_object_string_add(jobj, "afi", "ipv6");
+				json_object_string_add(jobj, "ipaddr",
+						       inet_ntop(AF_INET6,
+								 &entry->addr.ipaddr_v6,
+								 buf, sizeof(buf)));
+			}
+
+			json_object_array_add(jarray, jobj);
+
+			entry = nt_entry_rb_const_next(&nt_globals.entry_rb,
+						       entry);
+		}
+
+		json_object_object_add(json, "entries", jarray);
+
+json_done:
+		vty_out(vty, "%s\n",
+			json_object_to_json_string_ext(
+				json, JSON_C_TO_STRING_PRETTY));
+		json_object_free(json);
+		return CMD_SUCCESS;
+	}
 
 	vty_out(vty, "Throttled neighbor entries: %s\n",
 		nt_globals.enabled_p ? "enabled" : "disabled");
@@ -555,20 +621,22 @@ int zebra_neigh_throttle_show(struct vty *vty, bool detail)
 		vty_out(vty, "Entries: (%zu)\n",
 			nt_entry_list_count(&nt_globals.entry_list));
 
-		/* Show output sorted by ip */
-		entry = nt_entry_rb_const_first(&nt_globals.entry_rb);
-		while (entry) {
-			/* Compute remaining timeout */
-			if (entry->expiration >= now)
-				expires = entry->expiration - now;
-			else
-				expires = 0;
+		if (detail) {
+			/* Show output sorted by ip */
+			entry = nt_entry_rb_const_first(&nt_globals.entry_rb);
+			while (entry) {
+				/* Compute remaining timeout */
+				if (entry->expiration >= now)
+					expires = entry->expiration - now;
+				else
+					expires = 0;
 
-			vty_out(vty, "  %pIA, expires in %u secs\n",
-				&entry->addr, expires);
+				vty_out(vty, "  %pIA, expires in %u secs\n",
+					&entry->addr, expires);
 
-			entry = nt_entry_rb_const_next(&nt_globals.entry_rb,
-						       entry);
+				entry = nt_entry_rb_const_next(
+					&nt_globals.entry_rb, entry);
+			}
 		}
 	}
 
