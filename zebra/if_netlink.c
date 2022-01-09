@@ -500,7 +500,8 @@ static int netlink_extract_vlan_info(struct rtattr *link_data,
 }
 
 static int netlink_extract_vxlan_info(struct rtattr *link_data,
-				      struct zebra_l2info_vxlan *vxl_info)
+				      struct zebra_l2info_vxlan *vxl_info,
+				      struct zebra_if *zif)
 {
 	uint8_t svd = 0;
 	struct rtattr *attr[IFLA_VXLAN_MAX + 1];
@@ -533,6 +534,8 @@ static int netlink_extract_vxlan_info(struct rtattr *link_data,
 		vxl_info->vni_info.vni.vni = vni_in_msg;
 	} else {
 		vxl_info->vni_info.iftype = ZEBRA_VXLAN_IF_SVD;
+		if (zif && IS_ZEBRA_IF_VRF_SLAVE(zif->ifp))
+			vxl_info->vni_info.iftype = ZEBRA_VXLAN_IF_L3SVD;
 	}
 
 	if (!attr[IFLA_VXLAN_LOCAL]) {
@@ -587,9 +590,11 @@ static void netlink_interface_update_l2info(struct interface *ifp,
 		zebra_evpn_acc_bd_svi_set(ifp->info, NULL,
 					  !!if_is_operative(ifp));
 	} else if (IS_ZEBRA_IF_VXLAN(ifp)) {
-		struct zebra_l2info_vxlan vxlan_info;
+		struct zebra_l2info_vxlan vxlan_info = {0};
+		struct zebra_if *zif;
 
-		netlink_extract_vxlan_info(link_data, &vxlan_info);
+		zif = (struct zebra_if *)ifp->info;
+		netlink_extract_vxlan_info(link_data, &vxlan_info, zif);
 		vxlan_info.link_nsid = link_nsid;
 		zebra_l2_vxlanif_add_update(ifp, &vxlan_info, add);
 		if (link_nsid != NS_UNKNOWN &&
@@ -790,7 +795,7 @@ static int netlink_bridge_interface(struct nlmsghdr *h, int len, ns_id_t ns_id,
 	/* We are only interested in the access VLAN i.e., AF_SPEC */
 	af_spec = tb[IFLA_AF_SPEC];
 	if (!af_spec)
- 		return 0;
+		return 0;
 
 	if (IS_ZEBRA_IF_VXLAN(ifp))
 		return netlink_bridge_vxlan_update(ifp, af_spec);
@@ -1738,9 +1743,21 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			/* VRF change for an interface. */
 			if (IS_ZEBRA_DEBUG_KERNEL)
 				zlog_debug(
-					"RTM_NEWLINK vrf-change for %s(%u) vrf_id %u -> %u flags 0x%x",
+					"RTM_NEWLINK vrf-change for %s(%u) vrf_id %u -> %u flags 0x%x zif_type %d",
 					name, ifp->ifindex, ifp->vrf_id, vrf_id,
-					ifi->ifi_flags);
+					ifi->ifi_flags, zif_type);
+
+			zif = ifp->info;
+			/* Update interface type - NOTE: Only slave_type can
+			 * change. */
+			zebra_if_set_ziftype(ifp, zif_type, zif_slave_type);
+			if (IS_ZEBRA_VXLAN_IF_SVD(zif)) {
+				/* Extract and save L2 interface information,
+				 * take additional actions. */
+				netlink_interface_update_l2info(
+					ifp, linkinfo[IFLA_INFO_DATA], 0,
+					link_nsid);
+			}
 
 			if_handle_vrf_change(ifp, vrf_id);
 		} else {
@@ -1843,6 +1860,20 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			 * additional actions. */
 			netlink_interface_update_l2info(
 				ifp, linkinfo[IFLA_INFO_DATA], 0, link_nsid);
+			if (IS_ZEBRA_VXLAN_IF_SVD(zif)) {
+				if (IS_ZEBRA_IF_VRF_SLAVE(ifp)) {
+					if (IS_ZEBRA_DEBUG_KERNEL)
+						zlog_debug(
+							"RTM_NEWLINK update svd link %s as L3SVD zif_slave_type %u",
+							ifp->name,
+							zif_slave_type);
+					zif->l2info.vxl.vni_info.iftype =
+						ZEBRA_VXLAN_IF_L3SVD;
+				} else {
+					zif->l2info.vxl.vni_info.iftype =
+						ZEBRA_VXLAN_IF_SVD;
+				}
+			}
 			if (IS_ZEBRA_IF_BOND(ifp))
 				zebra_l2if_update_bond(ifp, true);
 			if (IS_ZEBRA_IF_BRIDGE_SLAVE(ifp) || was_bridge_slave)
