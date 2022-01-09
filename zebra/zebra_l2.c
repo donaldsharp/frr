@@ -332,7 +332,7 @@ void zebra_l2_vxlanif_add_update(struct interface *ifp,
 {
 	struct zebra_if *zif;
 	uint16_t chgflags = 0;
-	struct zebra_vxlan_if_update_ctx ctx;
+	struct zebra_vxlan_if_update_ctx ctx = { 0 };
 
 	zif = ifp->info;
 	assert(zif);
@@ -359,6 +359,11 @@ void zebra_l2_vxlanif_add_update(struct interface *ifp,
 			zif->l2info.vxl.vni_info.vni.mcast_grp =
 				vxlan_info->vni_info.vni.mcast_grp;
 		}
+	}
+
+	if (zif->l2info.vxl.vni_info.iftype != vxlan_info->vni_info.iftype) {
+		zif->l2info.vxl.vni_info.iftype = vxlan_info->vni_info.iftype;
+		chgflags |= ZEBRA_VXLIF_VLAN_CHANGE;
 	}
 
 	if (chgflags) {

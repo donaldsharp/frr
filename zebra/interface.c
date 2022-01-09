@@ -1655,7 +1655,7 @@ static void interface_update_l2info(struct zebra_dplane_ctx *ctx,
 				    enum zebra_iftype zif_type, int add,
 				    ns_id_t link_nsid)
 {
-	const struct zebra_l2info_vxlan *vxlan_info;
+	const struct zebra_l2info_vxlan *vxlan_info = { 0 };
 	const struct zebra_l2info_gre *gre_info;
 
 	switch (zif_type) {
@@ -2102,10 +2102,21 @@ static void zebra_if_dplane_ifp_handling(struct zebra_dplane_ctx *ctx)
 		} else if (ifp->vrf->vrf_id != vrf_id) {
 			/* VRF change for an interface. */
 			if (IS_ZEBRA_DEBUG_KERNEL)
-				zlog_debug(
-					"RTM_NEWLINK vrf-change for %s(%u) vrf_id %u -> %u",
-					name, ifp->ifindex, ifp->vrf->vrf_id,
-					vrf_id);
+				zlog_debug("RTM_NEWLINK vrf-change for %s(%u) vrf_id %u -> %u zif_type %d",
+					   name, ifp->ifindex, ifp->vrf->vrf_id,
+					   vrf_id, zif_type);
+
+			zif = ifp->info;
+			/* Update interface type - NOTE: Only slave_type can
+			 * change.
+			 */
+			zebra_if_set_ziftype(ifp, zif_type, zif_slave_type);
+			if (IS_ZEBRA_VXLAN_IF_SVD(zif)) {
+				/* Extract and save L2 interface information,
+				 * take additional actions. */
+				interface_update_l2info(ctx, ifp, zif_type, 0,
+							link_nsid);
+			}
 
 			if_handle_vrf_change(ifp, vrf_id);
 		} else {
@@ -2229,6 +2240,19 @@ static void zebra_if_dplane_ifp_handling(struct zebra_dplane_ctx *ctx)
 						link_nsid);
 			if (IS_ZEBRA_IF_BRIDGE(ifp))
 				zebra_l2if_update_bridge(ifp, chgflags);
+			if (IS_ZEBRA_VXLAN_IF_SVD(zif)) {
+				if (IS_ZEBRA_IF_VRF_SLAVE(ifp)) {
+					if (IS_ZEBRA_DEBUG_KERNEL)
+						zlog_debug("RTM_NEWLINK update svd link %s as L3SVD zif_slave_type %u",
+							   ifp->name,
+							   zif_slave_type);
+					zif->l2info.vxl.vni_info.iftype =
+						ZEBRA_VXLAN_IF_L3SVD;
+				} else {
+					zif->l2info.vxl.vni_info.iftype =
+						ZEBRA_VXLAN_IF_SVD;
+				}
+			}
 			if (IS_ZEBRA_IF_BOND(ifp))
 				zebra_l2if_update_bond(ifp, true);
 			if (IS_ZEBRA_IF_BRIDGE_SLAVE(ifp) || was_bridge_slave)

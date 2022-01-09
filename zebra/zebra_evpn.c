@@ -924,6 +924,42 @@ struct interface *zebra_evpn_map_to_macvlan(struct interface *br_if,
 	return tmp_if;
 }
 
+/* Map to MAC-VLAN interface corresponding to specified vxlan-if interface.
+ */
+struct interface *zebra_evpn_map_l3svd_to_macvlan(struct interface *vxlan_if)
+{
+	struct zebra_ns *zns;
+	struct route_node *rn;
+	struct interface *tmp_if = NULL;
+	struct zebra_if *zif;
+	int found = 0;
+
+	/* Identify corresponding VLAN interface. */
+	zns = zebra_ns_lookup(NS_DEFAULT);
+	for (rn = route_top(zns->if_table); rn; rn = route_next(rn)) {
+		tmp_if = (struct interface *)rn->info;
+		/* Check oper status of the SVI. */
+		if (!tmp_if || !if_is_operative(tmp_if))
+			continue;
+		zif = tmp_if->info;
+
+		if (!zif || zif->zif_type != ZEBRA_IF_MACVLAN)
+			continue;
+
+		if (zif->link == vxlan_if) {
+			found = 1;
+			break;
+		}
+	}
+
+	if (found)
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug("%s l3svd %s macvlan %s found", __func__,
+				   vxlan_if->name, tmp_if->name);
+
+	return found ? tmp_if : NULL;
+}
+
 /*
  * Uninstall MAC hash entry - called upon access VLAN change.
  */

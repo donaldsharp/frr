@@ -35,6 +35,7 @@ struct zebra_l3vni {
 	uint32_t filter;
 #define PREFIX_ROUTES_ONLY	(1 << 0) /* l3-vni used for prefix routes only */
 
+	bool is_l3svd;
 	/* Corresponding Bridge information */
 	vlanid_t vid;
 	struct interface *bridge_if;
@@ -63,6 +64,10 @@ struct zebra_l3vni {
 #define IS_ZL3VNI_SVD_BACKED(zl3vni)                                           \
 	(zl3vni->vxlan_if && zl3vni->vxlan_if->info &&                         \
 	 IS_ZEBRA_VXLAN_IF_SVD((struct zebra_if *)zl3vni->vxlan_if->info))
+
+#define IS_ZL3VNI_L3SVD_BACKED(zl3vni)                                         \
+	(zl3vni->vxlan_if && zl3vni->vxlan_if->info &&                         \
+	 IS_ZEBRA_VXLAN_IF_L3SVD((struct zebra_if *)zl3vni->vxlan_if->info))
 
 /* get the vx-intf name for l3vni */
 static inline const char *zl3vni_vxlan_if_name(struct zebra_l3vni *zl3vni)
@@ -162,10 +167,24 @@ static inline int is_l3vni_oper_up(struct zebra_l3vni *zl3vni)
 		&& zl3vni->svi_if && if_is_operative(zl3vni->svi_if));
 }
 
+static inline int is_l3svd_l3vni_oper_up(struct zebra_l3vni *zl3vni)
+{
+	return (is_evpn_enabled() && zl3vni &&
+		(zl3vni->vrf_id != VRF_UNKNOWN) && zl3vni->is_l3svd &&
+		zl3vni->vxlan_if && if_is_operative(zl3vni->vxlan_if));
+}
+
 static inline const char *zl3vni_state2str(struct zebra_l3vni *zl3vni)
 {
 	if (!zl3vni)
 		return NULL;
+
+	if (zl3vni->is_l3svd) {
+		if (is_l3svd_l3vni_oper_up(zl3vni))
+			return "Up";
+		else
+			return "Down";
+	}
 
 	if (is_l3vni_oper_up(zl3vni))
 		return "Up";

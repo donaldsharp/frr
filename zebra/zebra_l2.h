@@ -90,7 +90,8 @@ struct zebra_vxlan_vni_array {
 
 enum {
 	ZEBRA_VXLAN_IF_VNI = 0, /* per vni vxlan if */
-	ZEBRA_VXLAN_IF_SVD	/* single vxlan device */
+	ZEBRA_VXLAN_IF_SVD,	/* single vxlan device */
+	ZEBRA_VXLAN_IF_L3SVD	/* single vxlan L3VXI device */
 };
 
 struct zebra_vxlan_if_vlan_ctx {
@@ -155,6 +156,8 @@ union zebra_l2if_info {
 	((zif)->l2info.vxl.vni_info.iftype == ZEBRA_VXLAN_IF_SVD)
 #define IS_ZEBRA_VXLAN_IF_VNI(zif)                                             \
 	((zif)->l2info.vxl.vni_info.iftype == ZEBRA_VXLAN_IF_VNI)
+#define IS_ZEBRA_VXLAN_IF_L3SVD(zif)                                           \
+	((zif)->l2info.vxl.vni_info.iftype == ZEBRA_VXLAN_IF_L3SVD)
 #define VLAN_ID_FROM_ZEBRA_IF(zif) (zif)->l2info.vl.vid
 
 #define BRIDGE_FROM_ZEBRA_IF(zif) (&((zif)->l2info.br.bridge))

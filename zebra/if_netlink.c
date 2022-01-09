@@ -462,7 +462,8 @@ static int netlink_extract_gre_info(struct rtattr *link_data,
 }
 
 static int netlink_extract_vxlan_info(struct rtattr *link_data,
-				      struct zebra_l2info_vxlan *vxl_info)
+				      struct zebra_l2info_vxlan *vxl_info,
+				      enum zebra_slave_iftype zif_slave_type)
 {
 	uint8_t svd = 0;
 	struct rtattr *attr[IFLA_VXLAN_MAX + 1];
@@ -497,6 +498,8 @@ static int netlink_extract_vxlan_info(struct rtattr *link_data,
 		vxl_info->vni_info.vni.vni = vni_in_msg;
 	} else {
 		vxl_info->vni_info.iftype = ZEBRA_VXLAN_IF_SVD;
+		if (zif_slave_type == ZEBRA_IF_SLAVE_VRF)
+			vxl_info->vni_info.iftype = ZEBRA_VXLAN_IF_L3SVD;
 	}
 
 	if (!attr[IFLA_VXLAN_LOCAL]) {
@@ -532,14 +535,14 @@ static int netlink_extract_vxlan_info(struct rtattr *link_data,
  * bridge interface is added or updated, take further actions to map
  * its members. Likewise, for VxLAN interface.
  */
-static void netlink_interface_update_l2info(struct zebra_dplane_ctx *ctx,
-					    enum zebra_iftype zif_type,
-					    struct rtattr *link_data, int add,
-					    ns_id_t link_nsid)
+static void netlink_interface_update_l2info(
+	struct zebra_dplane_ctx *ctx, enum zebra_iftype zif_type,
+	enum zebra_slave_iftype zif_slave_type, struct rtattr *link_data,
+	int add, ns_id_t link_nsid)
 {
 	struct zebra_l2info_bridge bridge_info;
 	struct zebra_l2info_vlan vlan_info;
-	struct zebra_l2info_vxlan vxlan_info;
+	struct zebra_l2info_vxlan vxlan_info = { 0 };
 	struct zebra_l2info_gre gre_info;
 
 	if (!link_data)
@@ -555,7 +558,9 @@ static void netlink_interface_update_l2info(struct zebra_dplane_ctx *ctx,
 		dplane_ctx_set_ifp_vlan_info(ctx, &vlan_info);
 		break;
 	case ZEBRA_IF_VXLAN:
-		netlink_extract_vxlan_info(link_data, &vxlan_info);
+		// zif_slave_type = dplane_ctx_get_ifp_zif_slave_type(ctx);
+		netlink_extract_vxlan_info(link_data, &vxlan_info,
+					   zif_slave_type);
 		vxlan_info.link_nsid = link_nsid;
 		dplane_ctx_set_ifp_vxlan_info(ctx, &vxlan_info);
 		break;
@@ -1630,8 +1635,9 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 
 		/* Extract and save L2 interface information, take
 		 * additional actions. */
-		netlink_interface_update_l2info(
-			ctx, zif_type, linkinfo[IFLA_INFO_DATA], 1, link_nsid);
+		netlink_interface_update_l2info(ctx, zif_type, zif_slave_type,
+						linkinfo[IFLA_INFO_DATA], 1,
+						link_nsid);
 	} else {
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug("RTM_DELLINK for %s(%u), enqueuing to zebra",
