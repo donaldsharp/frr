@@ -46,24 +46,26 @@ extern "C" {
 /* Bridge interface change flags of interest. */
 #define ZEBRA_BRIDGEIF_ACCESS_BD_CHANGE (1 << 0)
 
-extern struct zebra_l2_bridge_vlan *
-zebra_l2_bridge_if_vlan_find(const struct zebra_if *zif, vlanid_t vid);
-extern vni_t zebra_l2_bridge_if_vni_find(const struct zebra_if *zif,
-					 vlanid_t vid);
-extern void zebra_l2_bridge_if_vlan_iterate(
-	struct zebra_if *zif,
-	int (*func)(struct zebra_if *zif, struct zebra_l2_bridge_vlan *,
-		    void *),
-	void *arg);
-extern void
-zebra_l2_bridge_if_vlan_walk(struct zebra_if *zif,
-			     int (*func)(struct zebra_if *zif,
-					 struct zebra_l2_bridge_vlan *, void *),
-			     void *arg);
-extern int
-zebra_l2_bridge_if_vlan_access_bd_deref(struct zebra_evpn_access_bd *bd);
-extern int
-zebra_l2_bridge_if_vlan_access_bd_ref(struct zebra_evpn_access_bd *bd);
+extern int zebra_l2_brvlan_mac_del(struct interface *br_if,
+				   struct zebra_l2_brvlan_mac *bmac);
+extern int zebra_l2_brvlan_mac_update(struct interface *br_if,
+				      struct zebra_l2_brvlan_mac *bmac,
+				      ifindex_t ifidx);
+extern struct zebra_l2_brvlan_mac *
+zebra_l2_brvlan_mac_add(struct interface *br_if, vlanid_t vid,
+			struct ethaddr *mac, ifindex_t ifidx);
+extern struct zebra_l2_brvlan_mac *
+zebra_l2_brvlan_mac_find(struct interface *br_if, vlanid_t vid,
+			 struct ethaddr *mac);
+
+extern struct zebra_l2_bridge_vlan * zebra_l2_bridge_if_vlan_find(const struct zebra_if *zif, vlanid_t vid);
+extern vni_t zebra_l2_bridge_if_vni_find(const struct zebra_if *zif, vlanid_t vid);
+extern void zebra_l2_bridge_if_vlan_iterate(struct zebra_if *zif,
+        int (*func)(struct zebra_if *zif, struct zebra_l2_bridge_vlan *, void *), void *arg);
+extern void zebra_l2_bridge_if_vlan_walk(struct zebra_if *zif,
+        int (*func)(struct zebra_if *zif, struct zebra_l2_bridge_vlan *, void *), void *arg);
+extern int zebra_l2_bridge_if_vlan_access_bd_deref(struct zebra_evpn_access_bd *bd);
+extern int zebra_l2_bridge_if_vlan_access_bd_ref(struct zebra_evpn_access_bd *bd);
 extern int zebra_l2_bridge_if_del(struct interface *ifp);
 extern int zebra_l2_bridge_if_add(struct interface *ifp);
 extern int zebra_l2_bridge_if_cleanup(struct interface *ifp);
