@@ -46,6 +46,8 @@ extern "C" {
 /* Bridge interface change flags of interest. */
 #define ZEBRA_BRIDGEIF_ACCESS_BD_CHANGE     (1 << 0)
 
+extern void zebra_l2_brvlan_print_macs(struct vty *vty, struct interface *br_if,
+				       vlanid_t vid, bool uj);
 extern int zebra_l2_brvlan_mac_del(struct interface *br_if,
 				   struct zebra_l2_brvlan_mac *bmac);
 extern int zebra_l2_brvlan_mac_update(struct interface *br_if,
