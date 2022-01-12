@@ -2296,18 +2296,20 @@ static int zl3vni_send_add_to_client(struct zebra_l3vni *zl3vni)
 	stream_putl(s, zl3vni->svi_if ? zl3vni->svi_if->ifindex : 0);
 	stream_put(s, &vrr_rmac, sizeof(struct ethaddr));
 	stream_putl(s, is_anycast_mac);
+	stream_putl(s, zl3vni->vxlan_if ? zl3vni->vxlan_if->ifindex : 0);
+	stream_putl(s, zl3vni->is_l3svd);
 
 	/* Write packet size. */
 	stream_putw_at(s, 0, stream_get_endp(s));
 
 	if (IS_ZEBRA_DEBUG_VXLAN)
-		zlog_debug("Send L3VNI ADD %u VRF %s RMAC %pEA VRR %pEA local-ip %pI4 filter %s to %s",
+		zlog_debug("Send L3VNI ADD %u VRF %s RMAC %pEA VRR %pEA local-ip %pI4 filter %s l3svd %u to %s",
 			   zl3vni->vni, vrf_id_to_name(zl3vni_vrf_id(zl3vni)),
 			   &svi_rmac, &vrr_rmac, &zl3vni->local_vtep_ip,
 			   CHECK_FLAG(zl3vni->filter, PREFIX_ROUTES_ONLY)
 				   ? "prefix-routes-only"
 				   : "none",
-			   zebra_route_string(client->proto));
+			   zl3vni->is_l3svd, zebra_route_string(client->proto));
 
 	client->l3vniadd_cnt++;
 	return zserv_send_message(client, s);

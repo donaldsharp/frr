@@ -2920,8 +2920,9 @@ static int bgp_zebra_process_local_l3vni(ZAPI_CALLBACK_ARGS)
 	struct ethaddr svi_rmac, vrr_rmac = {.octet = {0} };
 	struct in_addr originator_ip;
 	struct stream *s;
-	ifindex_t svi_ifindex;
+	ifindex_t svi_ifindex, vxlan_ifindex;
 	bool is_anycast_mac = false;
+	bool is_l3svd = false;
 
 	memset(&svi_rmac, 0, sizeof(svi_rmac));
 	memset(&originator_ip, 0, sizeof(originator_ip));
@@ -2934,13 +2935,15 @@ static int bgp_zebra_process_local_l3vni(ZAPI_CALLBACK_ARGS)
 		svi_ifindex = stream_getl(s);
 		stream_get(&vrr_rmac, s, sizeof(struct ethaddr));
 		is_anycast_mac = stream_getl(s);
+		vxlan_ifindex = stream_getl(s);
+		is_l3svd = stream_getl(s);
 
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("Rx L3VNI ADD VRF %s VNI %u Originator-IP %pI4 RMAC svi-mac %pEA vrr-mac %pEA filter %s svi-if %u",
+			zlog_debug("Rx L3VNI ADD VRF %s VNI %u Originator-IP %pI4 RMAC svi-mac %pEA vrr-mac %pEA filter %s svi-if %u vxlan-if %u is_l3svd %u",
 				   vrf_id_to_name(vrf_id), l3vni,
 				   &originator_ip, &svi_rmac, &vrr_rmac,
 				   filter ? "prefix-routes-only" : "none",
-				   svi_ifindex);
+				   svi_ifindex, vxlan_ifindex, is_l3svd);
 
 		frrtrace(8, frr_bgp, evpn_local_l3vni_add_zrecv, l3vni, vrf_id,
 			 &svi_rmac, &vrr_rmac, filter, originator_ip,
