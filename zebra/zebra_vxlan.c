@@ -1595,7 +1595,17 @@ static int _nh_install(zebra_l3vni_t *zl3vni, struct interface *ifp,
 	uint8_t flags;
 	int ret = 0;
 
-	if (zl3vni && !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
+		return -1;
+	if (zl3vni->is_l3svd) {
+		if (!is_l3svd_l3vni_oper_up(zl3vni)) {
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"l3svd based l3vni %u is not up skip nh_install",
+					zl3vni->vni);
+			return -1;
+		}
+	} else if (!is_l3vni_oper_up(zl3vni))
 		return -1;
 
 	if (!(n->flags & ZEBRA_NEIGH_REMOTE)
@@ -1634,7 +1644,10 @@ static int _nh_uninstall(struct interface *ifp, zebra_neigh_t *n)
  */
 static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 {
-	return _nh_install(zl3vni, zl3vni->svi_if, n);
+	if (zl3vni->is_l3svd)
+		return _nh_install(zl3vni, zl3vni->vxlan_if, n);
+	else
+		return _nh_install(zl3vni, zl3vni->svi_if, n);
 }
 
 /*
@@ -1642,7 +1655,10 @@ static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
  */
 static int zl3vni_nh_uninstall(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 {
-	return _nh_uninstall(zl3vni->svi_if, n);
+	if (zl3vni->is_l3svd)
+		return _nh_uninstall(zl3vni->vxlan_if, n);
+	else
+		return _nh_uninstall(zl3vni->svi_if, n);
 }
 
 /*
@@ -2459,8 +2475,22 @@ void zebra_vxlan_evpn_vrf_route_add(vrf_id_t vrf_id, const struct ethaddr *rmac,
 	struct ipaddr ipv4_vtep;
 
 	zl3vni = zl3vni_from_vrf(vrf_id);
-	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
 		return;
+	if (zl3vni->is_l3svd) {
+		if (!is_l3svd_l3vni_oper_up(zl3vni)) {
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"l3svd based l3vni %u is not up skip vrf route add",
+					zl3vni->vni);
+			return;
+		}
+	} else if (!is_l3vni_oper_up(zl3vni))
+		return;
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug("l3vni %u add nexthop: rmac %pEA vtep-ip %pIA",
+			   zl3vni->vni, rmac, vtep_ip);
 
 	/*
 	 * add the next hop neighbor -
