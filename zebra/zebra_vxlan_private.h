@@ -138,6 +138,15 @@ static inline const char *zl3vni_rmac2str(zebra_l3vni_t *zl3vni, char *buf,
 			 (uint8_t)zl3vni->svi_if->hw_addr[3],
 			 (uint8_t)zl3vni->svi_if->hw_addr[4],
 			 (uint8_t)zl3vni->svi_if->hw_addr[5]);
+	else if (zl3vni->vxlan_if)
+		snprintf(ptr, (ETHER_ADDR_STRLEN),
+			 "%02x:%02x:%02x:%02x:%02x:%02x",
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[0],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[1],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[2],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[3],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[4],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[5]);
 	else
 		snprintf(ptr, ETHER_ADDR_STRLEN, "None");
 
@@ -166,6 +175,15 @@ static inline const char *zl3vni_sysmac2str(zebra_l3vni_t *zl3vni, char *buf,
 			 (uint8_t)zl3vni->svi_if->hw_addr[3],
 			 (uint8_t)zl3vni->svi_if->hw_addr[4],
 			 (uint8_t)zl3vni->svi_if->hw_addr[5]);
+	else if (zl3vni->vxlan_if)
+		snprintf(ptr, (ETHER_ADDR_STRLEN),
+			 "%02x:%02x:%02x:%02x:%02x:%02x",
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[0],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[1],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[2],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[3],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[4],
+			 (uint8_t)zl3vni->vxlan_if->hw_addr[5]);
 	else
 		snprintf(ptr, ETHER_ADDR_STRLEN, "None");
 
@@ -199,6 +217,13 @@ static inline const char *zl3vni_state2str(zebra_l3vni_t *zl3vni)
 	if (!zl3vni)
 		return NULL;
 
+	if (zl3vni->is_l3svd) {
+		if (is_l3svd_l3vni_oper_up(zl3vni))
+			return "Up";
+		else
+			return "Down";
+	}
+
 	if (is_l3vni_oper_up(zl3vni))
 		return "Up";
 	else
@@ -217,6 +242,11 @@ static inline void zl3vni_get_svi_rmac(zebra_l3vni_t *zl3vni,
 {
 	if (!zl3vni)
 		return;
+
+	if (zl3vni->is_l3svd) {
+		if (!is_l3svd_l3vni_oper_up(zl3vni))
+			return;
+	}
 
 	if (!is_l3vni_oper_up(zl3vni))
 		return;
