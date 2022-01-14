@@ -49,6 +49,7 @@
 #include "bgpd/bgp_nht.h"
 #include "bgpd/bgp_mpath.h"
 #include "bgpd/bgp_trace.h"
+#include "if.h"
 
 static void bgp_evpn_local_es_down(struct bgp *bgp,
 		struct bgp_evpn_es *es);
@@ -2761,10 +2762,9 @@ static void bgp_evpn_l3nhg_zebra_add_v4_or_v6(struct bgp_evpn_es_vrf *es_vrf,
 		return;
 
 	if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
-		zlog_debug("es %s vrf %u %s nhg %d to zebra",
-			es->esi_str, es_vrf->bgp_vrf->vrf_id,
-			v4_nhg ? "v4_nhg" : "v6_nhg",
-			nhg_id);
+		zlog_debug("es %s vrf %u %s nhg %d to zebra", es->esi_str,
+			   es_vrf->bgp_vrf->vrf_id,
+			   v4_nhg ? "v4_nhg" : "v6_nhg", nhg_id);
 
 	frrtrace(4, frr_bgp, evpn_mh_nhg_zsend, true, v4_nhg, nhg_id, es_vrf);
 
@@ -2795,10 +2795,16 @@ static void bgp_evpn_l3nhg_zebra_add_v4_or_v6(struct bgp_evpn_es_vrf *es_vrf,
 
 		++nh_cnt;
 		if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
-			zlog_debug("nhg %d vtep %s l3-svi %d",
-					nhg_id,
-					inet_ntoa(es_vtep->vtep_ip),
-					es_vrf->bgp_vrf->l3vni_svi_ifindex);
+			zlog_debug(
+				"%s nhg %d vtep %s l3-svi %d %s ", __func__,
+				nhg_id, inet_ntoa(es_vtep->vtep_ip),
+				es_vrf->bgp_vrf->l3vni_svi_ifindex,
+				(es_vrf->bgp_vrf->l3vni_svi_ifindex
+					 ? ifindex2ifname(
+						   es_vrf->bgp_vrf
+							   ->l3vni_svi_ifindex,
+						   es_vrf->bgp_vrf->vrf_id)
+					 : "NIL"));
 
 		frrtrace(3, frr_bgp, evpn_mh_nh_zsend, nhg_id, es_vtep, es_vrf);
 	}
@@ -2893,8 +2899,8 @@ static void bgp_evpn_l3nhg_activate(struct bgp_evpn_es_vrf *es_vrf,
 	} else {
 		if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
 			zlog_debug("es %s vrf %u nhg %d activate",
-				es_vrf->es->esi_str, es_vrf->bgp_vrf->vrf_id,
-				es_vrf->nhg_id);
+				   es_vrf->es->esi_str, es_vrf->bgp_vrf->vrf_id,
+				   es_vrf->nhg_id);
 		es_vrf->flags |= BGP_EVPNES_VRF_NHG_ACTIVE;
 		/* MAC-IPs can now be installed via the L3NHG */
 		bgp_evpn_es_path_update_on_es_vrf_chg(es_vrf, "l3nhg_activate");

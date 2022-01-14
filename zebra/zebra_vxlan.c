@@ -2209,7 +2209,11 @@ static int zl3vni_send_add_to_client(zebra_l3vni_t *zl3vni)
 	stream_putl(s, zl3vni->svi_if ? zl3vni->svi_if->ifindex : 0);
 	stream_put(s, &vrr_rmac, sizeof(struct ethaddr));
 	stream_putl(s, is_anycast_mac);
-	stream_putl(s, zl3vni->vxlan_if ? zl3vni->vxlan_if->ifindex : 0);
+	if (zl3vni->is_l3svd)
+		stream_putl(s,
+			    zl3vni->vxlan_if ? zl3vni->vxlan_if->ifindex : 0);
+	else
+		stream_putl(s, 0);
 	stream_putl(s, zl3vni->is_l3svd);
 
 	/* Write packet size. */
@@ -5763,7 +5767,10 @@ ifindex_t get_l3vni_vxlan_ifindex(vrf_id_t vrf_id)
 	zebra_l3vni_t *zl3vni = NULL;
 
 	zl3vni = zl3vni_from_vrf(vrf_id);
-	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
+		return 0;
+
+	if (!is_l3vni_oper_up(zl3vni) && !is_l3svd_l3vni_oper_up(zl3vni))
 		return 0;
 
 	return zl3vni->vxlan_if->ifindex;
@@ -5775,7 +5782,12 @@ vni_t get_l3vni_vni(vrf_id_t vrf_id)
 	zebra_l3vni_t *zl3vni = NULL;
 
 	zl3vni = zl3vni_from_vrf(vrf_id);
-	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
+		return 0;
+	if (zl3vni->is_l3svd) {
+		if (!is_l3svd_l3vni_oper_up(zl3vni))
+			return 0;
+	} else if (!is_l3vni_oper_up(zl3vni))
 		return 0;
 
 	return zl3vni->vni;
@@ -5787,7 +5799,14 @@ bool is_vrf_l3vni_svd_backed(vrf_id_t vrf_id)
 	zebra_l3vni_t *zl3vni = NULL;
 
 	zl3vni = zl3vni_from_vrf(vrf_id);
-	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
+		return false;
+	if (zl3vni->is_l3svd) {
+		if (!is_l3svd_l3vni_oper_up(zl3vni))
+			return false;
+		else
+			return IS_ZL3VNI_L3SVD_BACKED(zl3vni);
+	} else if (!is_l3vni_oper_up(zl3vni))
 		return false;
 
 	return IS_ZL3VNI_SVD_BACKED(zl3vni);

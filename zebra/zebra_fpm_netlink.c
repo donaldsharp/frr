@@ -235,10 +235,12 @@ static int netlink_route_info_add_nh(struct netlink_route_info *ri,
 		nhi.encap_info.encap_type = FPM_NH_ENCAP_VXLAN;
 
 		zl3vni = zl3vni_from_vrf(nexthop->vrf_id);
-		if (zl3vni && is_l3vni_oper_up(zl3vni)) {
-
-			/* Add VNI to VxLAN encap info */
-			nhi.encap_info.vxlan_encap.vni = zl3vni->vni;
+		if (zl3vni) {
+			if (is_l3vni_oper_up(zl3vni) ||
+			    is_l3svd_l3vni_oper_up(zl3vni)) {
+				/* Add VNI to VxLAN encap info */
+				nhi.encap_info.vxlan_encap.vni = zl3vni->vni;
+			}
 		}
 	}
 

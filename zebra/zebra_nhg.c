@@ -42,6 +42,7 @@
 #include "zebra_dplane.h"
 #include "zebra/interface.h"
 #include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_vxlan_private.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, NHG, "Nexthop Group Entry");
 DEFINE_MTYPE_STATIC(ZEBRA, NHG_CONNECTED, "Nexthop Group Connected");
@@ -2323,6 +2324,7 @@ static bool nexthop_list_set_evpn_dvni(struct route_entry *re,
 	vni_t re_vrf_vni;
 	vni_t nh_vni;
 	bool use_dvni = false;
+	zebra_l3vni_t *zl3vni = NULL;
 
 	nexthop = nhg->nexthop;
 
@@ -2331,8 +2333,18 @@ static bool nexthop_list_set_evpn_dvni(struct route_entry *re,
 
 	re_vrf_vni = get_l3vni_vni(re->vrf_id);
 
+	zl3vni = zl3vni_lookup(re_vrf_vni);
+
+	if (zl3vni && IS_ZEBRA_DEBUG_NHG_DETAIL)
+		zlog_debug("VRF %s vni %u %u is_l3svd %u",
+			   vrf_id_to_name(re->vrf_id), re_vrf_vni, zl3vni->vni,
+			   zl3vni->is_l3svd);
+
 	for (; nexthop; nexthop = nexthop->next) {
 		nh_vni = label2vni(&nexthop->nh_label->label[0]);
+
+		if (zl3vni && zl3vni->is_l3svd)
+			use_dvni = true;
 
 		if (nh_vni != re_vrf_vni)
 			use_dvni = true;

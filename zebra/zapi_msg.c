@@ -1522,6 +1522,8 @@ static struct nexthop *nexthop_from_zapi(const struct zapi_nexthop *api_nh,
 		 * the nexthop and associated MAC need to be installed.
 		 */
 		if (CHECK_FLAG(flags, ZEBRA_FLAG_EVPN_ROUTE)) {
+			inet_ntop(AF_INET, &api_nh->gate.ipv4, nhbuf,
+				  sizeof(nhbuf));
 			memset(&vtep_ip, 0, sizeof(struct ipaddr));
 			vtep_ip.ipa_type = IPADDR_V4;
 			memcpy(&(vtep_ip.ipaddr_v4), &(api_nh->gate.ipv4),
