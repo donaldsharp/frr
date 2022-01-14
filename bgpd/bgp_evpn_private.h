@@ -179,6 +179,7 @@ struct bgp_evpn_info {
 	struct ethaddr pip_rmac_static;
 	struct ethaddr pip_rmac_zebra;
 	bool is_anycast_mac;
+	ifindex_t vxlan_ifindex;
 };
 
 /* This structure defines an entry in remote_ip_hash */
@@ -295,9 +296,14 @@ static inline int is_vni_live(struct bgpevpn *vpn)
 	return (CHECK_FLAG(vpn->flags, VNI_FLAG_LIVE));
 }
 
-static inline int is_l3vni_live(struct bgp *bgp_vrf)
+static inline bool is_l3vni_live(struct bgp *bgp_vrf)
 {
-	return (bgp_vrf->l3vni && bgp_vrf->l3vni_svi_ifindex);
+	if (bgp_vrf->l3vni)
+		if (bgp_vrf->l3vni_svi_ifindex ||
+		    bgp_vrf->evpn_info->vxlan_ifindex)
+			return true;
+
+	return false;
 }
 
 static inline int is_rd_configured(struct bgpevpn *vpn)

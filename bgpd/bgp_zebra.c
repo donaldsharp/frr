@@ -54,6 +54,7 @@
 #include "bgpd/bgp_trace.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_lcommunity.h"
+#include "if.h"
 
 /* All information about zebra. */
 struct zclient *zclient = NULL;
@@ -1103,7 +1104,11 @@ static bool update_ipv4nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 			api_nh->type = NEXTHOP_TYPE_IPV4_IFINDEX;
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN);
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_ONLINK);
-			api_nh->ifindex = nh_bgp->l3vni_svi_ifindex;
+			if (nh_bgp->evpn_info->vxlan_ifindex)
+				api_nh->ifindex =
+					nh_bgp->evpn_info->vxlan_ifindex;
+			else
+				api_nh->ifindex = nh_bgp->l3vni_svi_ifindex;
 		}
 	} else if (nh_othervrf && api_nh->gate.ipv4.s_addr == INADDR_ANY) {
 		api_nh->type = NEXTHOP_TYPE_IFINDEX;
@@ -1142,7 +1147,11 @@ static bool update_ipv6nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 			api_nh->type = NEXTHOP_TYPE_IPV6_IFINDEX;
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN);
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_ONLINK);
-			api_nh->ifindex = nh_bgp->l3vni_svi_ifindex;
+			if (nh_bgp->evpn_info->vxlan_ifindex)
+				api_nh->ifindex =
+					nh_bgp->evpn_info->vxlan_ifindex;
+			else
+				api_nh->ifindex = nh_bgp->l3vni_svi_ifindex;
 		}
 	} else if (nh_othervrf) {
 		if (IN6_IS_ADDR_UNSPECIFIED(nexthop)) {
@@ -2951,7 +2960,7 @@ static int bgp_zebra_process_local_l3vni(ZAPI_CALLBACK_ARGS)
 
 		bgp_evpn_local_l3vni_add(l3vni, vrf_id, &svi_rmac, &vrr_rmac,
 					 originator_ip, filter, svi_ifindex,
-					 is_anycast_mac);
+					 vxlan_ifindex, is_anycast_mac);
 	} else {
 		if (BGP_DEBUG(zebra, ZEBRA))
 			zlog_debug("Rx L3VNI DEL VRF %s VNI %u",

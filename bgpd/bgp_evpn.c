@@ -6650,10 +6650,9 @@ static void link_l2vni_hash_to_l3vni(struct hash_bucket *bucket,
 }
 
 int bgp_evpn_local_l3vni_add(vni_t l3vni, vrf_id_t vrf_id,
-			     struct ethaddr *svi_rmac,
-			     struct ethaddr *vrr_rmac,
+			     struct ethaddr *svi_rmac, struct ethaddr *vrr_rmac,
 			     struct in_addr originator_ip, int filter,
-			     ifindex_t svi_ifindex,
+			     ifindex_t svi_ifindex, ifindex_t vxlan_ifindex,
 			     bool is_anycast_mac)
 {
 	struct bgp *bgp_vrf = NULL; /* bgp VRF instance */
@@ -6714,6 +6713,7 @@ int bgp_evpn_local_l3vni_add(vni_t l3vni, vrf_id_t vrf_id,
 	bgp_vrf->l3vni = l3vni;
 	bgp_vrf->l3vni_svi_ifindex = svi_ifindex;
 	bgp_vrf->evpn_info->is_anycast_mac = is_anycast_mac;
+	bgp_vrf->evpn_info->vxlan_ifindex = vxlan_ifindex;
 
 	/* Update tip_hash of the EVPN underlay BGP instance (bgp_evpn)
 	 * if the VTEP-IP (originator_ip) has changed
@@ -6729,14 +6729,13 @@ int bgp_evpn_local_l3vni_add(vni_t l3vni, vrf_id_t vrf_id,
 		memcpy(&bgp_vrf->evpn_info->pip_rmac, svi_rmac, ETH_ALEN);
 
 	if (bgp_debug_zebra(NULL))
-		zlog_debug(
-			"VRF %s vni %u pip %s RMAC %pEA sys RMAC %pEA static RMAC %pEA is_anycast_mac %s",
-			vrf_id_to_name(bgp_vrf->vrf_id), bgp_vrf->l3vni,
-			bgp_vrf->evpn_info->advertise_pip ? "enable"
-							  : "disable",
-			&bgp_vrf->rmac, &bgp_vrf->evpn_info->pip_rmac,
-			&bgp_vrf->evpn_info->pip_rmac_static,
-			is_anycast_mac ? "Enable" : "Disable");
+		zlog_debug("VRF %s vni %u pip %s RMAC %pEA sys RMAC %pEA static RMAC %pEA is_anycast_mac %s vlxan_if %u",
+			   vrf_id_to_name(bgp_vrf->vrf_id), bgp_vrf->l3vni,
+			   bgp_vrf->evpn_info->advertise_pip ? "enable"
+							     : "disable",
+			   &bgp_vrf->rmac, &bgp_vrf->evpn_info->pip_rmac,
+			   &bgp_vrf->evpn_info->pip_rmac_static,
+			   is_anycast_mac ? "Enable" : "Disable", vxlan_ifindex);
 
 	/* set the right filter - are we using l3vni only for prefix routes? */
 	if (filter) {

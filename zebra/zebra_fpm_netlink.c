@@ -198,7 +198,6 @@ static int netlink_route_info_add_nh(struct netlink_route_info *ri,
 
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_EVPN)) {
 		nhi.encap_info.encap_type = FPM_NH_ENCAP_VXLAN;
-
 		/* Extract VNI id for the nexthop SVI interface */
 		zvrf = zebra_vrf_lookup_by_id(nexthop->vrf_id);
 		if (zvrf) {
@@ -220,7 +219,9 @@ static int netlink_route_info_add_nh(struct netlink_route_info *ri,
 				}
 			}
 		}
-
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug("%s ifp %s encap vni %u", __func__,
+				   ifp->name, vni);
 		nhi.encap_info.vxlan_encap.vni = vni;
 	}
 
