@@ -59,6 +59,8 @@
 #include "zebra/interface.h"
 #include "northbound_cli.h"
 #include "zebra/zebra_nb.h"
+#include "zebra/kernel_netlink.h"
+#include "zebra/if_netlink.h"
 
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 #include <cumulus/cs_mgr_intf.h>
@@ -3732,6 +3734,11 @@ static int config_write_protocol(struct vty *vty)
 	if (zebra_nhg_proto_nexthops_only())
 		vty_out(vty, "zebra nexthop proto only\n");
 
+#ifdef HAVE_NETLINK
+	/* Include netlink info */
+	netlink_config_write_helper(vty);
+#endif /* HAVE_NETLINK */
+
 	return 1;
 }
 
@@ -4085,6 +4092,34 @@ DEFUN_HIDDEN (show_frr,
 	return CMD_SUCCESS;
 }
 
+#ifdef HAVE_NETLINK
+DEFPY (zebra_protodown_bit,
+       zebra_protodown_bit_cmd,
+       "zebra protodown reason-bit (0-31)$bit",
+       ZEBRA_STR
+       "Protodown Configuration\n"
+       "Reason Bit used in the kernel for application\n"
+       "Reason Bit range\n")
+{
+	if_netlink_set_frr_protodown_r_bit(bit);
+	return CMD_SUCCESS;
+}
+
+DEFPY (no_zebra_protodown_bit,
+       no_zebra_protodown_bit_cmd,
+       "no zebra protodown reason-bit [(0-31)$bit]",
+       NO_STR
+       ZEBRA_STR
+       "Protodown Configuration\n"
+       "Reason Bit used in the kernel for setting protodown\n"
+       "Reason Bit Range\n")
+{
+	if_netlink_unset_frr_protodown_r_bit();
+	return CMD_SUCCESS;
+}
+
+#endif /* HAVE_NETLINK */
+
 /* IP node for static routes. */
 static int zebra_ip_config(struct vty *vty);
 static struct cmd_node ip_node = {
@@ -4235,6 +4270,11 @@ void zebra_vty_init(void)
 	install_element(VIEW_NODE, &show_dataplane_providers_cmd);
 	install_element(CONFIG_NODE, &zebra_dplane_queue_limit_cmd);
 	install_element(CONFIG_NODE, &no_zebra_dplane_queue_limit_cmd);
+
+#ifdef HAVE_NETLINK
+	install_element(CONFIG_NODE, &zebra_protodown_bit_cmd);
+	install_element(CONFIG_NODE, &no_zebra_protodown_bit_cmd);
+#endif /* HAVE_NETLINK */
 
 	install_element(VIEW_NODE, &zebra_show_routing_tables_summary_cmd);
 }

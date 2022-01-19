@@ -112,6 +112,11 @@ int netlink_talk_info(int (*filter)(struct nlmsghdr *, ns_id_t, int startup),
 
 extern int netlink_request(struct nlsock *nl, void *req);
 
+/*
+ * Vty/cli apis
+ */
+extern int netlink_config_write_helper(struct vty *vty);
+
 #endif /* HAVE_NETLINK */
 
 #ifdef __cplusplus
