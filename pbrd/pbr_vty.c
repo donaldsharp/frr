@@ -360,7 +360,7 @@ DEFPY(pbr_map_nexthop_group, pbr_map_nexthop_group_cmd,
 	/* This is new/replacement config */
 	pbrms_clear_set_config(pbrms);
 
-	pbr_nht_set_seq_nhg(pbrms, nhgc);
+	pbr_nht_set_seq_nhg(pbrms, name);
 
 	pbr_map_check(pbrms, true);
 
