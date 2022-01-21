@@ -302,23 +302,27 @@ enum zebra_if_flags {
 
 	/* Dataplane protodown-on */
 	ZIF_FLAG_PROTODOWN = (1 << 2),
+	/* Dataplane protodown-on Queued to the dplane */
+	ZIF_FLAG_SET_PROTODOWN = (1 << 3),
+	/* Dataplane protodown-off Queued to the dplane */
+	ZIF_FLAG_UNSET_PROTODOWN = (1 << 4),
 
 	/* LACP bypass state is set by the dataplane on a bond member
 	 * and inherited by the bond (if one or more bond members are in
 	 * a bypass state the bond is placed in a bypass state)
 	 */
-	ZIF_FLAG_LACP_BYPASS = (1 << 3),
+	ZIF_FLAG_LACP_BYPASS = (1 << 5),
 
 	/* On local ESs ARP ND snooping is enabling if fast-failover is
 	 * needed with arp-suppression on
 	 */
-	ZIF_FLAG_ARP_ND_SNOOP = (1 << 4),
+	ZIF_FLAG_ARP_ND_SNOOP = (1 << 6),
 
 	/* TC has been initialized */
-	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 5),
+	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 7),
 
 	/* GARP flooding turned on */
-	ZIF_FLAG_EVPN_MH_GARP_FLOOD_CFG_ON = (1 << 6)
+	ZIF_FLAG_EVPN_MH_GARP_FLOOD_CFG_ON = (1 << 8)
 };
 
 /* We snoop on ARP replies and NAs rxed on bridge ports if MH is
