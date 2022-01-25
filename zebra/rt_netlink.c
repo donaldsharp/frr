@@ -4295,8 +4295,9 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	else {
 		link_if = NULL;
 		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug(
-				"    Neighbor Entry received is not on a VLAN or a BRIDGE, ignoring");
+			zlog_debug("    Neighbor Entry received on link %s is not on a VLAN or a BRIDGE, ignoring",
+				   ifp->name);
+		return 0;
 	}
 
 	memset(&mac, 0, sizeof(mac));

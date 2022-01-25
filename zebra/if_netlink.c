@@ -1797,12 +1797,14 @@ int netlink_tunneldump_read(struct zebra_ns *zns)
 		if (!zif || zif->zif_type != ZEBRA_IF_VXLAN)
 			continue;
 
+		if (!IS_ZEBRA_VXLAN_IF_L3SVD(zif))
+			continue;
 		ret = netlink_request_tunneldump(zns, PF_BRIDGE,
 						 tmp_if->ifindex);
 		if (ret < 0)
 			return ret;
 
-		ret = netlink_parse_info(netlink_link_change, netlink_cmd,
+		ret = netlink_parse_info(netlink_vni_change, netlink_cmd,
 					 &dp_info, 0, true);
 
 		if (ret < 0)
@@ -2042,4 +2044,113 @@ int netlink_vlan_read(struct zebra_ns *zns)
 	return ret;
 }
 
+
+/**
+ * netlink_vni_change() - Read in change about vni from the kernel
+ *
+ * @h:		Netlink message header
+ * @ns_id:	Namspace id
+ * @startup:	Are we reading under startup conditions?
+ *
+ * Return:	Result status
+ */
+int netlink_vni_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
+{
+	int len, rem;
+	struct interface *ifp;
+	struct zebra_if *zif;
+	struct tunnel_msg *tmsg = NLMSG_DATA(h);
+	struct rtattr *attr;
+	struct rtattr *ttb[VXLAN_VNIFILTER_ENTRY_MAX + 1];
+	vni_t vni_id, vni_start = 0, vni_end = 0;
+	struct zebra_vxlan_vni vni = { 0 }, *vnip;
+	struct hash *vni_table = NULL;
+
+	/* We only care about state changes for now */
+	if ((h->nlmsg_type != RTM_NEWTUNNEL && h->nlmsg_type != RTM_DELTUNNEL &&
+	     h->nlmsg_type != RTM_GETTUNNEL))
+		return 0;
+
+	len = h->nlmsg_len - NLMSG_LENGTH(sizeof(struct tunnel_msg));
+	if (len < 0) {
+		zlog_warn("%s: Message received from netlink is of a broken size %d %zu",
+			  __func__, h->nlmsg_len,
+			  (size_t)NLMSG_LENGTH(sizeof(struct tunnel_msg)));
+		return -1;
+	}
+
+	if (tmsg->family != PF_BRIDGE)
+		return -1;
+
+	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id), tmsg->ifindex);
+	if (!ifp) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("Cannot find IF (%u) for vni update",
+				   tmsg->ifindex);
+		return 0;
+	}
+	zif = (struct zebra_if *)ifp->info;
+	if (!IS_ZEBRA_VXLAN_IF_L3SVD(zif))
+		return 0;
+
+	rem = len;
+	for (attr = TUNNEL_RTA(tmsg); RTA_OK(attr, rem);
+	     attr = RTA_NEXT(attr, rem)) {
+		uint8_t rta_type = attr->rta_type & NLA_TYPE_MASK;
+
+		if (rta_type != VXLAN_VNIFILTER_ENTRY)
+			continue;
+
+		memset(ttb, 0, sizeof(ttb));
+		netlink_parse_rtattr_flags(ttb, VXLAN_VNIFILTER_ENTRY_MAX,
+					   RTA_DATA(attr), RTA_PAYLOAD(attr),
+					   NLA_F_NESTED);
+
+		if (ttb[VXLAN_VNIFILTER_ENTRY_START])
+			vni_start = *(uint32_t *)RTA_DATA(
+				ttb[VXLAN_VNIFILTER_ENTRY_START]);
+
+		if (ttb[VXLAN_VNIFILTER_ENTRY_END])
+			vni_end = *(uint32_t *)RTA_DATA(
+				ttb[VXLAN_VNIFILTER_ENTRY_END]);
+
+
+		if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug("%s link %s(%u) vni_start %u vni_end %u intf-type %u",
+				   nl_msg_type_to_str(h->nlmsg_type), ifp->name,
+				   tmsg->ifindex, vni_start, vni_end,
+				   zif->l2info.vxl.vni_info.iftype);
+
+		if (!vni_table) {
+			vni_table = zebra_vxlan_vni_table_create();
+			if (!vni_table)
+				return 0;
+		}
+		vni_id = vni_start;
+		do {
+			if (vni_id && !zebra_vxlan_if_vni_find(zif, vni_id)) {
+				vni.vni = vni_id;
+				vni.access_vlan = 0;
+				vnip = hash_get(vni_table, &vni,
+						zebra_vxlan_vni_alloc);
+				if (!vnip)
+					return 0;
+			}
+			vni_id++;
+		} while (vni_id <= vni_end);
+
+		if (IS_ZEBRA_VXLAN_IF_SVD(zif) || IS_ZEBRA_VXLAN_IF_L3SVD(zif)) {
+			if (h->nlmsg_type == RTM_NEWTUNNEL) {
+				if (vni_table && hashcount(vni_table))
+					zebra_vxlan_if_vni_table_add_update(ifp,
+									    vni_table);
+
+			} else if (h->nlmsg_type == RTM_DELTUNNEL) {
+				zebra_vxlan_if_vni_del(ifp, vni_start);
+			}
+		}
+	}
+
+	return 0;
+}
 #endif /* GNU_LINUX */
