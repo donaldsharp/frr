@@ -96,7 +96,10 @@ enum protodown_reasons {
 				    | ZEBRA_PROTODOWN_EVPN_SHUTDOWN),
 	ZEBRA_PROTODOWN_VRRP = (1 << 4),
 	/* This reason used exclusively for testing */
-	ZEBRA_PROTODOWN_SHARP = (1 << 5)
+	ZEBRA_PROTODOWN_SHARP = (1 << 5),
+	/* Just used to clear our fields on shutdown, externel not included */
+	ZEBRA_PROTODOWN_ALL = (ZEBRA_PROTODOWN_EVPN_ALL | ZEBRA_PROTODOWN_VRRP |
+			       ZEBRA_PROTODOWN_SHARP)
 };
 #define ZEBRA_PROTODOWN_RC_STR_LEN 80
 

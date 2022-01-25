@@ -337,6 +337,10 @@ struct zebra_arp_nd_if_info {
 	uint32_t na_pkts;
 };
 
+#define ZEBRA_IF_IS_PROTODOWN(zif) (zif->flags & ZIF_FLAG_PROTODOWN)
+#define ZEBRA_IF_IS_PROTODOWN_ONLY_EXTERNAL(zif)                               \
+	(zif->protodown_rc == ZEBRA_PROTODOWN_EXTERNAL)
+
 /* `zebra' daemon local interface structure. */
 struct zebra_if {
 	/* back pointer to the interface */
