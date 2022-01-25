@@ -3980,7 +3980,8 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	else {
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug(
-				"\tNeighbor Entry received is not on a VLAN or a BRIDGE, ignoring");
+				"\tNeighbor Entry received on link %s is not on a VLAN or a BRIDGE, ignoring",
+				ifp->name);
 		return 0;
 	}
 
