@@ -159,6 +159,11 @@ enum dplane_op_e {
 	DPLANE_OP_RULE_ADD,
 	DPLANE_OP_RULE_DELETE,
 	DPLANE_OP_RULE_UPDATE,
+
+	/* Interface update */
+	DPLANE_OP_INTF_INSTALL,
+	DPLANE_OP_INTF_UPDATE,
+	DPLANE_OP_INTF_DELETE,
 };
 
 /*
@@ -402,6 +407,11 @@ const struct nexthop_group *dplane_ctx_get_pw_nhg(
 /* Accessors for interface information */
 uint32_t dplane_ctx_get_intf_metric(const struct zebra_dplane_ctx *ctx);
 void dplane_ctx_set_intf_metric(struct zebra_dplane_ctx *ctx, uint32_t metric);
+uint32_t dplane_ctx_get_intf_r_bitfield(const struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_intf_r_bitfield(struct zebra_dplane_ctx *ctx,
+				    uint32_t r_bitfield);
+bool dplane_ctx_intf_is_protodown(const struct zebra_dplane_ctx *ctx);
+
 /* Is interface addr p2p? */
 bool dplane_ctx_intf_is_connected(const struct zebra_dplane_ctx *ctx);
 void dplane_ctx_intf_set_connected(struct zebra_dplane_ctx *ctx);
@@ -557,6 +567,13 @@ enum zebra_dplane_result dplane_intf_addr_unset(const struct interface *ifp,
 						const struct connected *ifc);
 
 /*
+ * Enqueue interface link changes for the dataplane.
+ */
+enum zebra_dplane_result dplane_intf_add(const struct interface *ifp);
+enum zebra_dplane_result dplane_intf_update(const struct interface *ifp);
+enum zebra_dplane_result dplane_intf_delete(const struct interface *ifp);
+
+/*
  * Enqueue evpn mac operations for the dataplane.
  */
 enum zebra_dplane_result dplane_rem_mac_add(const struct interface *ifp,
@@ -647,6 +664,10 @@ int dplane_ctx_route_init(struct zebra_dplane_ctx *ctx, enum dplane_op_e op,
 /* Encode next hop information into data plane context. */
 int dplane_ctx_nexthop_init(struct zebra_dplane_ctx *ctx, enum dplane_op_e op,
 			    struct nhg_hash_entry *nhe);
+
+/* Encode interface information into data plane context. */
+int dplane_ctx_intf_init(struct zebra_dplane_ctx *ctx, enum dplane_op_e op,
+			 const struct interface *ifp);
 
 /* Retrieve the limit on the number of pending, unprocessed updates. */
 uint32_t dplane_get_in_queue_limit(void);

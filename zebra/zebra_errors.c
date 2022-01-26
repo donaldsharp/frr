@@ -792,6 +792,15 @@ static struct log_ref ferr_zebra_err[] = {
 		.suggestion = "Use different table id's for the VRF's in question"
 	},
 	{
+		.code = EC_ZEBRA_INTF_UPDATE_FAILURE,
+		.title =
+			"Zebra failed to update interface in the kernel",
+		.description =
+			"Zebra made an attempt to update an interfce in the kernel, but it was not successful.",
+		.suggestion =
+			"Wait for Zebra to reattempt update.",
+	},
+	{
 		.code = END_FERR,
 	}
 };

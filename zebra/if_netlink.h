@@ -35,6 +35,12 @@ extern int interface_lookup_netlink(struct zebra_ns *zns);
 extern int netlink_vlan_change(struct nlmsghdr *h, ns_id_t ns_id, int startup);
 extern int netlink_vlan_read(struct zebra_ns *zns);
 
+extern ssize_t netlink_intf_msg_encode(uint16_t cmd,
+				       const struct zebra_dplane_ctx *ctx,
+				       void *buf, size_t buflen);
+
+#define FRR_PROTODOWN_REASON_DEFAULT_BIT 7
+#define PROTODOWN_REASON_NUM_BITS 32
 /*
  * Set protodown status of interface.
  *
@@ -44,10 +50,13 @@ extern int netlink_vlan_read(struct zebra_ns *zns);
  * down
  *    If true, set protodown on. If false, set protodown off.
  *
+ * reason
+ *    bitfield representing reason codes
+ *
  * Returns:
  *    0
  */
-int netlink_protodown(struct interface *ifp, bool down);
+int netlink_protodown(struct interface *ifp, bool down, uint32_t r_bitfield);
 
 int netlink_grat_flood_set(struct interface *ifp, uint8_t on);
 
