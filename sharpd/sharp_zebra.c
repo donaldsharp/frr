@@ -720,6 +720,18 @@ void sharp_opaque_reg_send(bool is_reg, uint32_t proto, uint32_t instance,
 
 }
 
+int sharp_zebra_send_interface_protodown(struct interface *ifp, bool down)
+{
+	zlog_debug("Sending zebra to set %s protodown %s", ifp->name,
+		   down ? "on" : "off");
+
+	if (zclient_send_interface_protodown(zclient, ifp->vrf_id, ifp,
+					     down) == -1)
+		return -1;
+
+	return 0;
+}
+
 void sharp_zebra_init(void)
 {
 	struct zclient_options opt = {.receive_notify = true};

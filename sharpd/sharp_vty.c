@@ -642,6 +642,67 @@ DEFPY (send_opaque_reg,
 	return CMD_SUCCESS;
 }
 
+static struct interface *if_lookup_vrf_all(const char *ifname)
+{
+	struct interface *ifp;
+	struct vrf *vrf;
+
+	RB_FOREACH(vrf, vrf_name_head, &vrfs_by_name) {
+		ifp = if_lookup_by_name(ifname, vrf->vrf_id);
+		if (ifp)
+			return ifp;
+	}
+
+	return NULL;
+}
+
+DEFPY (sharp_interface_protodown,
+       sharp_interface_protodown_cmd,
+       "sharp interface IFNAME$ifname protodown",
+       SHARP_STR
+       INTERFACE_STR
+       IFNAME_STR
+       "Set interface protodown\n")
+{
+	struct interface *ifp;
+
+	ifp = if_lookup_vrf_all(ifname);
+
+	if (!ifp) {
+		vty_out(vty, "%% Can't find interface %s\n", ifname);
+		return CMD_WARNING;
+	}
+
+	if (sharp_zebra_send_interface_protodown(ifp, true) != 0)
+		return CMD_WARNING;
+
+	return CMD_SUCCESS;
+}
+
+DEFPY (no_sharp_interface_protodown,
+       no_sharp_interface_protodown_cmd,
+       "no sharp interface IFNAME$ifname protodown",
+       NO_STR
+       SHARP_STR
+       INTERFACE_STR
+       IFNAME_STR
+       "Set interface protodown\n")
+{
+	struct interface *ifp;
+
+	ifp = if_lookup_vrf_all(ifname);
+
+	if (!ifp) {
+		vty_out(vty, "%% Can't find interface %s\n", ifname);
+		return CMD_WARNING;
+	}
+
+	if (sharp_zebra_send_interface_protodown(ifp, false) != 0)
+		return CMD_WARNING;
+
+	return CMD_SUCCESS;
+}
+
 void sharp_vty_init(void)
 {
 	install_element(ENABLE_NODE, &install_routes_data_dump_cmd);
@@ -661,6 +722,9 @@ void sharp_vty_init(void)
 	install_element(ENABLE_NODE, &send_opaque_reg_cmd);
 
 	install_element(VIEW_NODE, &show_debugging_sharpd_cmd);
+
+	install_element(ENABLE_NODE, &sharp_interface_protodown_cmd);
+	install_element(ENABLE_NODE, &no_sharp_interface_protodown_cmd);
 
 	return;
 }
