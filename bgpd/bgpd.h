@@ -492,11 +492,12 @@ struct bgp {
 #define BGP_FLAG_SHUTDOWN (1 << 25)
 #define BGP_FLAG_SUPPRESS_FIB_PENDING (1 << 26)
 #define BGP_FLAG_SUPPRESS_DUPLICATES (1 << 27)
-#define BGP_FLAG_PEERTYPE_MULTIPATH_RELAX (1 << 29)
+#define BGP_FLAG_PEERTYPE_MULTIPATH_RELAX (1 << 28)
 /* Indicate Graceful Restart support for BGP NOTIFICATION messages */
-#define BGP_FLAG_GRACEFUL_NOTIFICATION (1 << 30)
+#define BGP_FLAG_GRACEFUL_NOTIFICATION (1 << 29)
 /* Send Hard Reset CEASE Notification for 'Administrative Reset' */
-#define BGP_FLAG_HARD_ADMIN_RESET (1 << 31)
+#define BGP_FLAG_HARD_ADMIN_RESET (1 << 30)
+/* If BGP gets to 32 make sure we increase the size of flags above */
 
 	/* BGP default address-families.
 	 * New peers inherit enabled afi/safis from bgp instance.
