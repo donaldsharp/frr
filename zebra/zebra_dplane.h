@@ -407,9 +407,8 @@ const struct nexthop_group *dplane_ctx_get_pw_nhg(
 /* Accessors for interface information */
 uint32_t dplane_ctx_get_intf_metric(const struct zebra_dplane_ctx *ctx);
 void dplane_ctx_set_intf_metric(struct zebra_dplane_ctx *ctx, uint32_t metric);
-uint32_t dplane_ctx_get_intf_r_bitfield(const struct zebra_dplane_ctx *ctx);
-void dplane_ctx_set_intf_r_bitfield(struct zebra_dplane_ctx *ctx,
-				    uint32_t r_bitfield);
+uint32_t dplane_ctx_get_intf_pd_reason_val(const struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_intf_pd_reason_val(struct zebra_dplane_ctx *ctx, bool val);
 bool dplane_ctx_intf_is_protodown(const struct zebra_dplane_ctx *ctx);
 
 /* Is interface addr p2p? */
