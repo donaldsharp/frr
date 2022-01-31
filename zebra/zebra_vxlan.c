@@ -4349,6 +4349,7 @@ int zebra_vxlan_dp_network_mac_add(struct interface *ifp,
 		vlanid_t vid, vni_t vni, uint32_t nhg_id, bool sticky,
 		bool dp_static)
 {
+	struct zebra_l2_brvlan_mac *bmac;
 	struct zebra_evpn_es *es;
 	struct interface *acc_ifp;
 	char buf[ETHER_ADDR_STRLEN];
@@ -4372,6 +4373,22 @@ int zebra_vxlan_dp_network_mac_add(struct interface *ifp,
 				prefix_mac2str(macaddr, buf, sizeof(buf)),
 				vid);
 	acc_ifp = es->zif->ifp;
+
+	bmac = zebra_l2_brvlan_mac_find(br_if, vid, macaddr);
+	if (bmac)
+		zebra_l2_brvlan_mac_update(br_if, bmac, ifp->ifindex);
+	else {
+		bmac = zebra_l2_brvlan_mac_add(br_if, vid, macaddr,
+					       ifp->ifindex, sticky, false,
+					       dp_static);
+		if (!bmac)
+			zlog_err(
+				"Failed to add local MAC cache bridge %s vid %u mac %s IF %u",
+				br_if->name, vid,
+				prefix_mac2str(macaddr, buf, sizeof(buf)),
+				ifp->ifindex);
+	}
+
 	return zebra_vxlan_local_mac_add_update(acc_ifp,
 			br_if, macaddr, vid,
 			sticky, false /* local_inactive */,

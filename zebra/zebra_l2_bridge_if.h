@@ -50,7 +50,8 @@ extern void zebra_l2_brvlan_mac_iterate(struct interface *br_if, vlanid_t vid,
 					int (*func)(struct interface *br_if,
 						    vlanid_t vid,
 						    struct ethaddr *macaddr,
-						    ifindex_t ifidx, void *a),
+						    ifindex_t ifidx, bool, bool,
+						    bool, void *a),
 					void *arg);
 extern void zebra_l2_brvlan_print_macs(struct vty *vty, struct interface *br_if,
 				       vlanid_t vid, bool uj);
@@ -61,7 +62,8 @@ extern int zebra_l2_brvlan_mac_update(struct interface *br_if,
 				      ifindex_t ifidx);
 extern struct zebra_l2_brvlan_mac *
 zebra_l2_brvlan_mac_add(struct interface *br_if, vlanid_t vid,
-			struct ethaddr *mac, ifindex_t ifidx);
+			struct ethaddr *mac, ifindex_t ifidx, bool sticky,
+			bool local_inactive, bool dp_static);
 extern struct zebra_l2_brvlan_mac *
 zebra_l2_brvlan_mac_find(struct interface *br_if, vlanid_t vid,
 			 struct ethaddr *mac);

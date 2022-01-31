@@ -3138,8 +3138,9 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 		if (bmac)
 			zebra_l2_brvlan_mac_update(br_if, bmac, ifp->ifindex);
 		else {
-			bmac = zebra_l2_brvlan_mac_add(br_if, vid, &mac,
-						       ifp->ifindex);
+			bmac = zebra_l2_brvlan_mac_add(
+				br_if, vid, &mac, ifp->ifindex, sticky,
+				local_inactive, dp_static);
 			if (!bmac)
 				zlog_err(
 					"Failed to add local MAC cache bridge %s vid %u mac %s IF %u",

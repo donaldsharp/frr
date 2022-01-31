@@ -66,6 +66,7 @@ static void zebra_l2_brvlan_mac_iterate_callback(struct hash_bucket *bucket,
 	ctx = (struct zebra_l2_brvlan_mac_ctx *)ctxt;
 
 	ctx->func(ctx->br_if, ctx->vid, &bmac->macaddr, bmac->ifindex,
+		  bmac->sticky, bmac->local_inactive, bmac->dp_static,
 		  ctx->arg);
 }
 
@@ -159,7 +160,8 @@ void zebra_l2_brvlan_mac_iterate(struct interface *br_if, vlanid_t vid,
 				 int (*func)(struct interface *br_if,
 					     vlanid_t vid,
 					     struct ethaddr *macaddr,
-					     ifindex_t ifidx, void *a),
+					     ifindex_t ifidx, bool, bool, bool,
+					     void *a),
 				 void *arg)
 {
 	struct zebra_if *zif;
@@ -273,10 +275,10 @@ int zebra_l2_brvlan_mac_update(struct interface *br_if,
 	return 0;
 }
 
-struct zebra_l2_brvlan_mac *zebra_l2_brvlan_mac_add(struct interface *br_if,
-						    vlanid_t vid,
-						    struct ethaddr *mac,
-						    ifindex_t ifidx)
+struct zebra_l2_brvlan_mac *
+zebra_l2_brvlan_mac_add(struct interface *br_if, vlanid_t vid,
+			struct ethaddr *mac, ifindex_t ifidx, bool sticky,
+			bool local_inactive, bool dp_static)
 {
 	struct zebra_if *zif;
 	struct zebra_l2_bridge_if *br;
@@ -308,7 +310,9 @@ struct zebra_l2_brvlan_mac *zebra_l2_brvlan_mac_add(struct interface *br_if,
 	bmac->br_if = br_if;
 	bmac->vid = vid;
 	bmac->ifindex = ifidx;
-
+	bmac->sticky = sticky;
+	bmac->local_inactive = local_inactive;
+	bmac->dp_static = dp_static;
 	num_macs = hashcount(br->mac_table[vid]);
 
 	if (IS_ZEBRA_DEBUG_VXLAN)
