@@ -52,6 +52,12 @@ static ssize_t netlink_rule_msg_encode(
 	const struct prefix *dst_ip, uint32_t fwmark, uint8_t dsfield,
 	uint8_t ip_protocol, void *buf, size_t buflen)
 {
+	/*
+	 * CL ships with the "from all lookup local" rule set to prio 32765.
+	 * Other distros seem to ship this rule with prio 0, so for now we'll
+	 * hardcode this and make it Cumulus-specific.
+	 */
+	uint32_t goto_target = 32765;
 	uint8_t protocol = RTPROT_ZEBRA;
 	int family;
 	int bytelen;
@@ -127,8 +133,16 @@ static ssize_t netlink_rule_msg_encode(
 	if (filter_bm & PBR_FILTER_IP_PROTOCOL)
 		nl_attr_put8(&req->n, buflen, FRA_IP_PROTO, ip_protocol);
 
+	/*
+	 * If vrf is default, jump to "from all lookup local" rule, that way
+	 * packets will lookup local -> main -> default tables.
+	 */
+	if (table == RT_TABLE_MAIN) {
+		req->frh.action = FR_ACT_GOTO;
+		if (!nl_attr_put32(&req->n, buflen, FRA_GOTO, goto_target))
+			return 0;
 	/* Route table to use to forward, if filter criteria matches. */
-	if (table < 256)
+	} else if (table < 256)
 		req->frh.table = table;
 	else {
 		req->frh.table = RT_TABLE_UNSPEC;
