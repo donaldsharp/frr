@@ -66,6 +66,12 @@ struct zebra_ns {
 
 	struct route_table *if_table;
 
+	/* PACKET socket fd for ARP */
+	int arp_fd;
+
+	/* PACKET socket fd for v6 ND */
+	int nd_fd;
+
 	/* Back pointer */
 	struct ns *ns;
 };

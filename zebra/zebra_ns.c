@@ -57,7 +57,13 @@ struct zebra_ns *zebra_ns_lookup(ns_id_t ns_id)
 
 static struct zebra_ns *zebra_ns_alloc(void)
 {
-	return XCALLOC(MTYPE_ZEBRA_NS, sizeof(struct zebra_ns));
+	struct zebra_ns *p;
+
+	p = XCALLOC(MTYPE_ZEBRA_NS, sizeof(struct zebra_ns));
+	p->arp_fd = -1;
+	p->nd_fd = -1;
+
+	return p;
 }
 
 static int zebra_ns_new(struct ns *ns)
@@ -138,6 +144,17 @@ int zebra_ns_enable(ns_id_t ns_id, void **info)
  */
 static int zebra_ns_disable_internal(struct zebra_ns *zns, bool complete)
 {
+	/* Close ARP and ND sockets */
+	if (zns->arp_fd > 0) {
+		close(zns->arp_fd);
+		zns->arp_fd = -1;
+	}
+
+	if (zns->nd_fd > 0) {
+		close(zns->nd_fd);
+		zns->nd_fd = -1;
+	}
+
 	route_table_finish(zns->if_table);
 
 	zebra_dplane_ns_enable(zns, false /*Disable*/);
