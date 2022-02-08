@@ -89,10 +89,16 @@ enum zebra_if_flags {
 	 */
 	ZIF_FLAG_LACP_BYPASS = (1 << 3),
 
+	/* Interface has been configured to enable or disable the neighbor
+	 * throttling feature.
+	 */
+	ZIF_FLAG_NEIGH_THROTTLE = (1 << 6),
+	ZIF_FLAG_NEIGH_THROTTLE_DISABLE = (1 << 7),
+
 	/* On local ESs ARP ND snooping is enabling if fast-failover is
 	 * needed with arp-suppression on
 	 */
-	ZIF_FLAG_ARP_ND_SNOOP = (1 << 4)
+	ZIF_FLAG_ARP_ND_SNOOP = (1 << 8)
 };
 
 /* We snoop on ARP replies and NAs rxed on bridge ports if MH is
@@ -118,7 +124,8 @@ struct zebra_if {
 	/* back pointer to the interface */
 	struct interface *ifp;
 
-	enum zebra_if_flags flags;
+	/* Flags values, see above. */
+	uint32_t flags;
 
 	/* Shutdown configuration. */
 	uint8_t shutdown;
@@ -367,6 +374,9 @@ extern void zebra_l2_unmap_slave_from_bond(struct zebra_if *zif);
 extern const char *zebra_protodown_rc_str(uint32_t protodown_rc, char *pd_buf,
 					  uint32_t pd_buf_len);
 void zebra_if_dplane_result(struct zebra_dplane_ctx *ctx);
+
+/* Find appropriate source IP for 'dest'; return in caller's buffer */
+bool zebra_if_get_source(struct interface *ifp, const struct ipaddr *dest, struct ipaddr *src);
 
 #ifdef HAVE_PROC_NET_DEV
 extern void ifstat_update_proc(void);
