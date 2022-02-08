@@ -357,6 +357,13 @@ const struct frr_yang_module_info frr_zebra_info = {
 			}
 		},
 		{
+			.xpath = "/frr-interface:lib/interface/frr-zebra:zebra/neighbor-throttle",
+			.cbs = {
+				.modify = lib_interface_zebra_neighbor_throttle_modify,
+				.destroy = lib_interface_zebra_neighbor_throttle_destroy,
+			}
+		},
+		{
 			.xpath = "/frr-interface:lib/interface/frr-zebra:zebra/link-detect",
 			.cbs = {
 				.modify = lib_interface_zebra_link_detect_modify,

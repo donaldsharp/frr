@@ -98,6 +98,8 @@ int lib_interface_zebra_ipv6_addrs_create(struct nb_cb_create_args *args);
 int lib_interface_zebra_ipv6_addrs_destroy(struct nb_cb_destroy_args *args);
 int lib_interface_zebra_multicast_modify(struct nb_cb_modify_args *args);
 int lib_interface_zebra_multicast_destroy(struct nb_cb_destroy_args *args);
+int lib_interface_zebra_neighbor_throttle_modify(struct nb_cb_modify_args *args);
+int lib_interface_zebra_neighbor_throttle_destroy(struct nb_cb_destroy_args *args);
 int lib_interface_zebra_link_detect_modify(struct nb_cb_modify_args *args);
 int lib_interface_zebra_enabled_modify(struct nb_cb_modify_args *args);
 int lib_interface_zebra_enabled_destroy(struct nb_cb_destroy_args *args);

@@ -1173,6 +1173,44 @@ int lib_interface_zebra_multicast_destroy(struct nb_cb_destroy_args *args)
 }
 
 /*
+ * XPath: /frr-interface:lib/interface/frr-zebra:zebra/neighbor-throttle
+ */
+int lib_interface_zebra_neighbor_throttle_modify(struct nb_cb_modify_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	struct interface *ifp = nb_running_get_entry(args->dnode, NULL, true);
+	struct zebra_if *zif = ifp->info;
+
+	bool enable = yang_dnode_get_bool(args->dnode, NULL);
+
+	if (enable) {
+		UNSET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE_DISABLE);
+		SET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE);
+	} else {
+		SET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE_DISABLE);
+		UNSET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE);
+	}
+
+	return NB_OK;
+}
+
+int lib_interface_zebra_neighbor_throttle_destroy(struct nb_cb_destroy_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	struct interface *ifp = nb_running_get_entry(args->dnode, NULL, true);
+	struct zebra_if *zif = ifp->info;
+
+	UNSET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE_DISABLE);
+	UNSET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE);
+
+	return NB_OK;
+}
+
+/*
  * XPath: /frr-interface:lib/interface/frr-zebra:zebra/link-detect
  */
 int lib_interface_zebra_link_detect_modify(struct nb_cb_modify_args *args)

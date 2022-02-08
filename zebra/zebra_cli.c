@@ -89,6 +89,40 @@ DEFPY_YANG (multicast_new,
 	return nb_cli_apply_changes(vty, NULL);
 }
 
+DEFPY_YANG (intf_neigh_throttle, intf_neigh_throttle_cmd,
+	    "[no] neighbor throttle <enable$enable_p | disable$disable_p>",
+	    NO_STR
+	    "Neighbor commands\n"
+	    "Neighbor throttling\n"
+	    "Enable for this interface\n"
+	    "Disable for this interface\n")
+{
+	/* Manage per-interface config */
+	if (no)
+		nb_cli_enqueue_change(vty, "./frr-zebra:zebra/neighbor-throttle", NB_OP_DESTROY,
+				      NULL);
+	else if (enable_p)
+		nb_cli_enqueue_change(vty, "./frr-zebra:zebra/neighbor-throttle", NB_OP_CREATE,
+				      "true");
+	else if (disable_p)
+		nb_cli_enqueue_change(vty, "./frr-zebra:zebra/neighbor-throttle", NB_OP_CREATE,
+				      "false");
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+static void lib_interface_zebra_neighbor_throttle_cli_write(struct vty *vty,
+							    const struct lyd_node *dnode,
+							    bool show_defaults)
+{
+	bool neighbor_throttle = yang_dnode_get_bool(dnode, NULL);
+
+	if (neighbor_throttle)
+		vty_out(vty, "  neighbor throttle enable\n");
+	else
+		vty_out(vty, "  neighbor throttle disable\n");
+}
+
 static void lib_interface_zebra_multicast_cli_write(struct vty *vty,
 						    const struct lyd_node *dnode,
 						    bool show_defaults)
@@ -2643,6 +2677,10 @@ const struct frr_yang_module_info frr_zebra_cli_info = {
 			.cbs.cli_show = lib_interface_zebra_multicast_cli_write,
 		},
 		{
+			.xpath = "/frr-interface:lib/interface/frr-zebra:zebra/neighbor-throttle",
+			.cbs.cli_show = lib_interface_zebra_neighbor_throttle_cli_write,
+		},
+		{
 			.xpath = "/frr-interface:lib/interface/frr-zebra:zebra/link-detect",
 			.cbs.cli_show = lib_interface_zebra_link_detect_cli_write,
 		},
@@ -2874,6 +2912,7 @@ void zebra_cli_init(void)
 
 	install_element(INTERFACE_NODE, &multicast_new_cmd);
 	install_element(INTERFACE_NODE, &multicast_cmd);
+	install_element(INTERFACE_NODE, &intf_neigh_throttle_cmd);
 	install_element(INTERFACE_NODE, &mpls_cmd);
 	install_element(INTERFACE_NODE, &linkdetect_cmd);
 	install_element(INTERFACE_NODE, &shutdown_if_cmd);

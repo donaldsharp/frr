@@ -2036,6 +2036,12 @@ module frr-zebra {
           "Link-detection for the interface.";
       }
 
+      leaf neighbor-throttle {
+        type boolean;
+        description
+          "Neighbor Throttling for the interface.";
+      }
+
       leaf enabled {
         type boolean;
         description
