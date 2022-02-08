@@ -72,7 +72,8 @@ static int do_show_ip_route(struct vty *vty, const char *vrf_name, afi_t afi,
 			    route_tag_t tag,
 			    const struct prefix *longer_prefix_p,
 			    bool supernets_only, int type,
-			    unsigned short ospf_instance_id, uint32_t tableid);
+			    unsigned short ospf_instance_id, uint32_t tableid,
+			    bool show_ng);
 static void vty_show_ip_route_detail(struct vty *vty, struct route_node *rn,
 				     int mcast, bool use_fib, bool show_ng);
 static void vty_show_ip_route_summary(struct vty *vty,
@@ -147,7 +148,7 @@ DEFUN (show_ip_rpf,
 {
 	bool uj = use_json(argc, argv);
 	return do_show_ip_route(vty, VRF_DEFAULT_NAME, AFI_IP, SAFI_MULTICAST,
-				false, uj, 0, NULL, false, 0, 0, 0);
+				false, uj, 0, NULL, false, 0, 0, 0, false);
 }
 
 DEFUN (show_ip_rpf_addr,
@@ -817,7 +818,7 @@ static void show_nexthop_json_helper(json_object *json_nexthop,
 
 static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 			      struct route_entry *re, json_object *json,
-			      bool is_fib)
+			      bool is_fib, bool show_ng)
 {
 	const struct nexthop *nexthop;
 	int len = 0;
@@ -984,6 +985,9 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 		len += vty_out(vty, " [%u/%u]", re->distance,
 			       re->metric);
 
+	if (show_ng)
+		len += vty_out(vty, " (%u)", re->nhe_id);
+
 	/* Nexthop information. */
 	for (ALL_NEXTHOPS_PTR(nhg, nexthop)) {
 		if (first_p) {
@@ -1056,7 +1060,7 @@ static void vty_show_ip_route_detail_json(struct vty *vty,
 		 */
 		if (use_fib && re != dest->selected_fib)
 			continue;
-		vty_show_ip_route(vty, rn, re, json_prefix, use_fib);
+		vty_show_ip_route(vty, rn, re, json_prefix, use_fib, false);
 	}
 
 	prefix2str(&rn->p, buf, sizeof(buf));
@@ -1072,7 +1076,7 @@ static void do_show_route_helper(struct vty *vty, struct zebra_vrf *zvrf,
 				 const struct prefix *longer_prefix_p,
 				 bool supernets_only, int type,
 				 unsigned short ospf_instance_id, bool use_json,
-				 uint32_t tableid)
+				 uint32_t tableid, bool show_ng)
 {
 	struct route_node *rn;
 	struct route_entry *re;
@@ -1145,7 +1149,8 @@ static void do_show_route_helper(struct vty *vty, struct zebra_vrf *zvrf,
 				}
 			}
 
-			vty_show_ip_route(vty, rn, re, json_prefix, use_fib);
+			vty_show_ip_route(vty, rn, re, json_prefix, use_fib,
+					  show_ng);
 		}
 
 		if (json_prefix) {
@@ -1167,7 +1172,7 @@ static void do_show_ip_route_all(struct vty *vty, struct zebra_vrf *zvrf,
 				 route_tag_t tag,
 				 const struct prefix *longer_prefix_p,
 				 bool supernets_only, int type,
-				 unsigned short ospf_instance_id)
+				 unsigned short ospf_instance_id, bool show_ng)
 {
 	struct zebra_router_table *zrt;
 	struct rib_table_info *info;
@@ -1182,11 +1187,10 @@ static void do_show_ip_route_all(struct vty *vty, struct zebra_vrf *zvrf,
 		    zrt->safi != SAFI_UNICAST)
 			continue;
 
-		do_show_ip_route(vty, zvrf_name(zvrf), afi,
-				 SAFI_UNICAST, use_fib, use_json,
-				 tag, longer_prefix_p,
-				 supernets_only, type,
-				 ospf_instance_id, zrt->tableid);
+		do_show_ip_route(vty, zvrf_name(zvrf), afi, SAFI_UNICAST,
+				 use_fib, use_json, tag, longer_prefix_p,
+				 supernets_only, type, ospf_instance_id,
+				 zrt->tableid, show_ng);
 	}
 }
 
@@ -1195,7 +1199,8 @@ static int do_show_ip_route(struct vty *vty, const char *vrf_name, afi_t afi,
 			    route_tag_t tag,
 			    const struct prefix *longer_prefix_p,
 			    bool supernets_only, int type,
-			    unsigned short ospf_instance_id, uint32_t tableid)
+			    unsigned short ospf_instance_id, uint32_t tableid,
+			    bool show_ng)
 {
 	struct route_table *table;
 	struct zebra_vrf *zvrf = NULL;
@@ -1228,7 +1233,7 @@ static int do_show_ip_route(struct vty *vty, const char *vrf_name, afi_t afi,
 
 	do_show_route_helper(vty, zvrf, table, afi, use_fib, tag,
 			     longer_prefix_p, supernets_only, type,
-			     ospf_instance_id, use_json, tableid);
+			     ospf_instance_id, use_json, tableid, show_ng);
 
 	return CMD_SUCCESS;
 }
@@ -1699,7 +1704,7 @@ DEFPY (show_route,
 	   }]\
 	   [" FRR_IP6_REDIST_STR_ZEBRA "$type_str]\
 	 >\
-        [json$json]",
+        [<json$json|nexthop-group$ng>]",
        SHOW_STR
        IP_STR
        "IP forwarding table\n"
@@ -1728,7 +1733,8 @@ DEFPY (show_route,
        "IPv6 prefix\n"
        "Show route matching the specified Network/Mask pair only\n"
        FRR_IP6_REDIST_HELP_STR_ZEBRA
-       JSON_STR)
+       JSON_STR
+       "Nexthop Group Information\n")
 {
 	afi_t afi = ipv4 ? AFI_IP : AFI_IP6;
 	struct vrf *vrf;
@@ -1761,17 +1767,18 @@ DEFPY (show_route,
 				continue;
 
 			if (table_all)
-				do_show_ip_route_all(vty, zvrf, afi,
-						     !!fib, !!json,
-						     tag, prefix_str ? prefix : NULL,
+				do_show_ip_route_all(vty, zvrf, afi, !!fib,
+						     !!json, tag,
+						     prefix_str ? prefix : NULL,
 						     !!supernets_only, type,
-						     ospf_instance_id);
+						     ospf_instance_id, !!ng);
 			else
 				do_show_ip_route(vty, zvrf_name(zvrf), afi,
-						 SAFI_UNICAST, !!fib, !!json, tag,
+						 SAFI_UNICAST, !!fib, !!json,
+						 tag,
 						 prefix_str ? prefix : NULL,
 						 !!supernets_only, type,
-						 ospf_instance_id, table);
+						 ospf_instance_id, table, !!ng);
 		}
 	} else {
 		vrf_id_t vrf_id = VRF_DEFAULT;
@@ -1789,11 +1796,13 @@ DEFPY (show_route,
 					     !!fib, !!json,
 					     tag, prefix_str ? prefix : NULL,
 					     !!supernets_only, type,
-					     ospf_instance_id);
+					     ospf_instance_id, !!ng);
 		else
-			do_show_ip_route(vty, vrf->name, afi, SAFI_UNICAST, !!fib,
-					 !!json, tag, prefix_str ? prefix : NULL,
-					 !!supernets_only, type, ospf_instance_id, table);
+			do_show_ip_route(vty, vrf->name, afi, SAFI_UNICAST,
+					 !!fib, !!json, tag,
+					 prefix_str ? prefix : NULL,
+					 !!supernets_only, type,
+					 ospf_instance_id, table, !!ng);
 	}
 
 	return CMD_SUCCESS;
@@ -2357,7 +2366,7 @@ DEFUN (show_ipv6_mroute,
 				vty_out(vty, SHOW_ROUTE_V6_HEADER);
 				first = 0;
 			}
-			vty_show_ip_route(vty, rn, re, NULL, false);
+			vty_show_ip_route(vty, rn, re, NULL, false, false);
 		}
 	return CMD_SUCCESS;
 }
@@ -2389,7 +2398,8 @@ DEFUN (show_ipv6_mroute_vrf_all,
 					vty_out(vty, SHOW_ROUTE_V6_HEADER);
 					first = 0;
 				}
-				vty_show_ip_route(vty, rn, re, NULL, false);
+				vty_show_ip_route(vty, rn, re, NULL, false,
+						  false);
 			}
 	}
 	return CMD_SUCCESS;
