@@ -28,7 +28,7 @@
 #define EVPN_AUTORT_VXLAN 0x10000000
 
 #define EVPN_ENABLED(bgp)                                                      \
-       ((bgp)->advertise_all_vni
+       ((bgp)->advertise_all_vni)
 
 /* Allow evpn configuration to change in default bgp instace,
  * even advertise-all-vni is not present.
