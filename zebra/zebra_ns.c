@@ -58,7 +58,13 @@ struct zebra_ns *zebra_ns_lookup(ns_id_t ns_id)
 
 static struct zebra_ns *zebra_ns_alloc(void)
 {
-	return XCALLOC(MTYPE_ZEBRA_NS, sizeof(struct zebra_ns));
+	struct zebra_ns *p;
+
+	p = XCALLOC(MTYPE_ZEBRA_NS, sizeof(struct zebra_ns));
+	p->arp_fd = -1;
+	p->nd_fd = -1;
+
+	return p;
 }
 
 static int zebra_ns_new(struct ns *ns)
@@ -123,6 +129,20 @@ int zebra_ns_enable(ns_id_t ns_id, void **info)
 
 	zns->ns_id = ns_id;
 
+	frr_with_privs(&zserv_privs) {
+		zns->arp_fd = socket(PF_PACKET, SOCK_RAW | SOCK_CLOEXEC,
+				     htons(ETH_P_ARP));
+		if (zns->arp_fd < 0)
+			zlog_warn("Failed to open ARP socket for NS %s.",
+				  zns->ns->name);
+
+		zns->nd_fd = socket(PF_PACKET, SOCK_RAW | SOCK_CLOEXEC,
+				    htons(ETH_P_IPV6));
+		if (zns->nd_fd < 0)
+			zlog_warn("Failed to open ND socket for NS %s.",
+				  zns->ns->name);
+	}
+
 	kernel_init(zns);
 	interface_list(zns);
 	route_read(zns);
@@ -141,6 +161,17 @@ int zebra_ns_enable(ns_id_t ns_id, void **info)
  */
 static int zebra_ns_disable_internal(struct zebra_ns *zns, bool complete)
 {
+	/* Close ARP and ND sockets */
+	if (zns->arp_fd > 0) {
+		close(zns->arp_fd);
+		zns->arp_fd = -1;
+	}
+
+	if (zns->nd_fd > 0) {
+		close(zns->nd_fd);
+		zns->nd_fd = -1;
+	}
+
 	route_table_finish(zns->if_table);
 
 	kernel_terminate(zns, complete);
