@@ -4052,12 +4052,13 @@ void zebra_evpn_mh_json(json_object *json)
 
 	if (zmh_info->protodown_rc) {
 		json_array = json_object_new_array();
-		if (zmh_info->protodown_rc &
-				ZEBRA_PROTODOWN_EVPN_STARTUP_DELAY)
-			json_object_array_add(json_array,
+		if (CHECK_FLAG(zmh_info->protodown_rc,
+			       ZEBRA_PROTODOWN_EVPN_STARTUP_DELAY))
+			json_object_array_add(
+				json_array,
 				json_object_new_string("startupDelay"));
-		if (zmh_info->protodown_rc &
-				ZEBRA_PROTODOWN_EVPN_UPLINK_DOWN)
+		if (CHECK_FLAG(zmh_info->protodown_rc,
+			       ZEBRA_PROTODOWN_EVPN_UPLINK_DOWN))
 			json_object_array_add(json_array,
 				json_object_new_string("uplinkDown"));
 		json_object_object_add(json, "protodownReasons", json_array);
