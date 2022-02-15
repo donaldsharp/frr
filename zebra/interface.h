@@ -530,6 +530,14 @@ extern void zebra_if_update_link(struct interface *ifp, ifindex_t link_ifindex,
 				 ns_id_t ns_id);
 extern void zebra_if_update_all_links(void);
 extern void zebra_if_set_neigh_grat_flood(struct interface *ifp, bool on);
+/**
+ * Directly update entire protodown & reason code bitfield.
+ */
+extern int zebra_if_update_protodown_rc(struct interface *ifp, bool new_down,
+					uint32_t new_protodown_rc);
+/**
+ * Set protodown with single reason.
+ */
 extern int zebra_if_set_protodown(struct interface *ifp, bool down,
 				  enum protodown_reasons new_reason);
 extern int if_ip_address_install(struct interface *ifp, struct prefix *prefix,
