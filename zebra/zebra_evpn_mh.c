@@ -4238,8 +4238,9 @@ void zebra_evpn_mh_update_protodown_bond_mbr(struct zebra_if *zif, bool clear,
 			caller, zif->ifp->name, old_protodown_rc,
 			new_protodown_rc);
 
-	if (zebra_if_set_protodown(zif->ifp, new_protodown, new_protodown_rc) ==
-	    0) {
+	if (zebra_if_update_protodown_rc(zif->ifp, new_protodown,
+					 new_protodown_rc)
+	    == 0) {
 		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
 			zlog_debug("%s protodown %s", zif->ifp->name,
 				   new_protodown ? "on" : "off");
