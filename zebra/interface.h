@@ -302,23 +302,27 @@ enum zebra_if_flags {
 
 	/* Dataplane protodown-on */
 	ZIF_FLAG_PROTODOWN = (1 << 2),
+	/* Dataplane protodown-on Queued to the dplane */
+	ZIF_FLAG_SET_PROTODOWN = (1 << 3),
+	/* Dataplane protodown-off Queued to the dplane */
+	ZIF_FLAG_UNSET_PROTODOWN = (1 << 4),
 
 	/* LACP bypass state is set by the dataplane on a bond member
 	 * and inherited by the bond (if one or more bond members are in
 	 * a bypass state the bond is placed in a bypass state)
 	 */
-	ZIF_FLAG_LACP_BYPASS = (1 << 3),
+	ZIF_FLAG_LACP_BYPASS = (1 << 5),
 
 	/* On local ESs ARP ND snooping is enabling if fast-failover is
 	 * needed with arp-suppression on
 	 */
-	ZIF_FLAG_ARP_ND_SNOOP = (1 << 4),
+	ZIF_FLAG_ARP_ND_SNOOP = (1 << 6),
 
 	/* TC has been initialized */
-	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 5),
+	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 7),
 
 	/* GARP flooding turned on */
-	ZIF_FLAG_EVPN_MH_GARP_FLOOD_CFG_ON = (1 << 6)
+	ZIF_FLAG_EVPN_MH_GARP_FLOOD_CFG_ON = (1 << 8)
 };
 
 /* We snoop on ARP replies and NAs rxed on bridge ports if MH is
@@ -332,6 +336,10 @@ struct zebra_arp_nd_if_info {
 	uint32_t arp_pkts;
 	uint32_t na_pkts;
 };
+
+#define ZEBRA_IF_IS_PROTODOWN(zif) ((zif)->flags & ZIF_FLAG_PROTODOWN)
+#define ZEBRA_IF_IS_PROTODOWN_ONLY_EXTERNAL(zif)                               \
+	((zif)->protodown_rc == ZEBRA_PROTODOWN_EXTERNAL)
 
 /* `zebra' daemon local interface structure. */
 struct zebra_if {
@@ -431,7 +439,7 @@ struct zebra_if {
 	 * in the dataplane. This results in a carrier/L1 down on the
 	 * physical device.
 	 */
-	enum protodown_reasons protodown_rc;
+	uint32_t protodown_rc;
 
 	/* list of zebra_mac entries using this interface as destination */
 	struct list *mac_list;
@@ -521,8 +529,17 @@ extern void if_handle_vrf_change(struct interface *ifp, vrf_id_t vrf_id);
 extern void zebra_if_update_link(struct interface *ifp, ifindex_t link_ifindex,
 				 ns_id_t ns_id);
 extern void zebra_if_update_all_links(void);
-extern void zebra_if_set_protodown(struct interface *ifp, bool down);
 extern void zebra_if_set_neigh_grat_flood(struct interface *ifp, bool on);
+/**
+ * Directly update entire protodown & reason code bitfield.
+ */
+extern int zebra_if_update_protodown_rc(struct interface *ifp, bool new_down,
+					uint32_t new_protodown_rc);
+/**
+ * Set protodown with single reason.
+ */
+extern int zebra_if_set_protodown(struct interface *ifp, bool down,
+				  enum protodown_reasons new_reason);
 extern int if_ip_address_install(struct interface *ifp, struct prefix *prefix,
 				 const char *label, struct prefix *pp);
 extern int if_ipv6_address_install(struct interface *ifp, struct prefix *prefix,
@@ -546,8 +563,9 @@ extern bool if_nhg_dependents_is_empty(const struct interface *ifp);
 extern void vrf_add_update(struct vrf *vrfp);
 extern void zebra_l2_map_slave_to_bond(struct zebra_if *zif, vrf_id_t vrf);
 extern void zebra_l2_unmap_slave_from_bond(struct zebra_if *zif);
-extern const char *zebra_protodown_rc_str(enum protodown_reasons protodown_rc,
-					  char *pd_buf, uint32_t pd_buf_len);
+extern const char *zebra_protodown_rc_str(uint32_t protodown_rc, char *pd_buf,
+					  uint32_t pd_buf_len);
+void zebra_if_dplane_result(struct zebra_dplane_ctx *ctx);
 
 #ifdef HAVE_PROC_NET_DEV
 extern void ifstat_update_proc(void);

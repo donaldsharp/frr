@@ -88,6 +88,7 @@ static const struct message nlmsg_str[] = {{RTM_NEWROUTE, "RTM_NEWROUTE"},
 					   {RTM_DELROUTE, "RTM_DELROUTE"},
 					   {RTM_GETROUTE, "RTM_GETROUTE"},
 					   {RTM_NEWLINK, "RTM_NEWLINK"},
+					   {RTM_SETLINK, "RTM_SETLINK"},
 					   {RTM_DELLINK, "RTM_DELLINK"},
 					   {RTM_GETLINK, "RTM_GETLINK"},
 					   {RTM_SETLINK, "RTM_SETLINK"},
@@ -155,6 +156,15 @@ extern uint32_t nl_rcvbufsize;
 
 extern struct zebra_privs_t zserv_privs;
 
+
+int netlink_config_write_helper(struct vty *vty)
+{
+	if (if_netlink_frr_protodown_r_bit_is_set())
+		vty_out(vty, "zebra protodown reason-bit %u\n",
+			if_netlink_get_frr_protodown_r_bit());
+
+	return 0;
+}
 
 int netlink_talk_filter(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 {
@@ -571,6 +581,12 @@ bool nl_attr_put(struct nlmsghdr *n, unsigned int maxlen, int type,
 	n->nlmsg_len = NLMSG_ALIGN(n->nlmsg_len) + RTA_ALIGN(len);
 
 	return true;
+}
+
+bool nl_attr_put8(struct nlmsghdr *n, unsigned int maxlen, int type,
+		  uint8_t data)
+{
+	return nl_attr_put(n, maxlen, type, &data, sizeof(uint8_t));
 }
 
 bool nl_attr_put16(struct nlmsghdr *n, unsigned int maxlen, int type,

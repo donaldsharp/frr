@@ -59,4 +59,6 @@ void sharp_opaque_send(uint32_t type, uint32_t proto, uint32_t instance,
 void sharp_opaque_reg_send(bool is_reg, uint32_t proto, uint32_t instance,
 			   uint32_t session_id, uint32_t type);
 
+extern int sharp_zebra_send_interface_protodown(struct interface *ifp,
+						bool down);
 #endif

@@ -41,6 +41,8 @@ extern "C" {
  */
 extern bool nl_attr_put(struct nlmsghdr *n, unsigned int maxlen, int type,
 			const void *data, unsigned int alen);
+extern bool nl_attr_put8(struct nlmsghdr *n, unsigned int maxlen, int type,
+			 uint8_t data);
 extern bool nl_attr_put16(struct nlmsghdr *n, unsigned int maxlen, int type,
 			  uint16_t data);
 extern bool nl_attr_put32(struct nlmsghdr *n, unsigned int maxlen, int type,
@@ -112,6 +114,11 @@ int netlink_talk_info(int (*filter)(struct nlmsghdr *, ns_id_t, int startup),
 		      const struct zebra_dplane_info *dp_info, int startup);
 
 extern int netlink_request(struct nlsock *nl, void *req);
+
+/*
+ * Vty/cli apis
+ */
+extern int netlink_config_write_helper(struct vty *vty);
 
 #endif /* HAVE_NETLINK */
 

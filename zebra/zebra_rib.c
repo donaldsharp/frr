@@ -3963,6 +3963,12 @@ static int rib_process_dplane_results(struct thread *thread)
 				zebra_pbr_dplane_result(ctx);
 				break;
 
+			case DPLANE_OP_INTF_INSTALL:
+			case DPLANE_OP_INTF_UPDATE:
+			case DPLANE_OP_INTF_DELETE:
+				zebra_if_dplane_result(ctx);
+				break;
+
 			/* Some op codes not handled here */
 			case DPLANE_OP_ADDR_INSTALL:
 			case DPLANE_OP_ADDR_UNINSTALL:

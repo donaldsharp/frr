@@ -62,6 +62,9 @@ enum zebra_dplane_result kernel_br_port_update_ctx(
 enum zebra_dplane_result kernel_address_update_ctx(
 	struct zebra_dplane_ctx *ctx);
 
+/* CUMULUS only function until batching exists */
+enum zebra_dplane_result kernel_intf_update(struct zebra_dplane_ctx *ctx);
+
 enum zebra_dplane_result kernel_mac_update_ctx(struct zebra_dplane_ctx *ctx);
 
 enum zebra_dplane_result kernel_neigh_update_ctx(struct zebra_dplane_ctx *ctx);
