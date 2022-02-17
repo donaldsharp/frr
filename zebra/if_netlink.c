@@ -1155,17 +1155,7 @@ int interface_lookup_netlink(struct zebra_ns *zns)
 	if (ret < 0)
 		return ret;
 	ret = netlink_parse_info(netlink_interface, netlink_cmd, &dp_info, 0,
-				 0);
-	if (ret < 0)
-		return ret;
-
-	/* Get interface information - for bridge interfaces. */
-	ret = netlink_request_intf_addr(netlink_cmd, AF_BRIDGE, RTM_GETLINK,
-					RTEXT_FILTER_BRVLAN);
-	if (ret < 0)
-		return ret;
-	ret = netlink_parse_info(netlink_interface, netlink_cmd, &dp_info, 0,
-				 0);
+				 1);
 	if (ret < 0)
 		return ret;
 
@@ -1607,6 +1597,14 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 		return -1;
 	name = (char *)RTA_DATA(tb[IFLA_IFNAME]);
 
+	/* Must be valid string. */
+	len = RTA_PAYLOAD(tb[IFLA_IFNAME]);
+	if (len < 2 || name[len - 1] != '\0') {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("%s: invalid intf name", __func__);
+		return -1;
+	}
+
 	if (tb[IFLA_LINKINFO]) {
 		parse_rtattr_nested(linkinfo, IFLA_INFO_MAX, tb[IFLA_LINKINFO]);
 
@@ -1773,6 +1771,9 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			zebra_if_set_ziftype(ifp, zif_type, zif_slave_type);
 
 			memcpy(old_hw_addr, ifp->hw_addr, INTERFACE_HWADDR_MAX);
+
+			/* Update link. */
+			zebra_if_update_link(ifp, link_ifindex, ns_id);
 
 			ifp->ll_type =
 				netlink_to_zebra_link_type(ifi->ifi_type);
