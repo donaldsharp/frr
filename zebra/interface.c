@@ -75,8 +75,6 @@ static int if_zebra_speed_update(struct thread *thread)
 	bool changed = false;
 	int error = 0;
 
-	zif->speed_update = NULL;
-
 	new_speed = kernel_get_speed(ifp, &error);
 
 	/* error may indicate vrf not available or
@@ -94,9 +92,29 @@ static int if_zebra_speed_update(struct thread *thread)
 		changed = true;
 	}
 
-	if (changed || new_speed == UINT32_MAX)
-		thread_add_timer(zrouter.master, if_zebra_speed_update, ifp, 5,
-				 &zif->speed_update);
+	if (changed || new_speed == UINT32_MAX) {
+#define SPEED_UPDATE_SLEEP_TIME 5
+#define SPEED_UPDATE_COUNT_MAX (4 * 60 / SPEED_UPDATE_SLEEP_TIME)
+		/*
+		 * Some interfaces never actually have an associated speed
+		 * with them ( I am looking at you bridges ).
+		 * So instead of iterating forever, let's give the
+		 * system 4 minutes to try to figure out the speed
+		 * if after that it it's probably never going to become
+		 * useful.
+		 * Since I don't know all the wonderful types of interfaces
+		 * that may come into existence in the future I am going
+		 * to not update the system to keep track of that.  This
+		 * is far simpler to just stop trying after 4 minutes
+		 */
+		if (new_speed == UINT32_MAX &&
+		    zif->speed_update_count == SPEED_UPDATE_COUNT_MAX)
+			return;
+
+		zif->speed_update_count++;
+		thread_add_timer(zrouter.master, if_zebra_speed_update, ifp,
+				 SPEED_UPDATE_SLEEP_TIME, &zif->speed_update);
+	}
 	return 1;
 }
 
@@ -188,6 +206,7 @@ static int if_zebra_new_hook(struct interface *ifp)
 	 * of seconds and ask again.  Hopefully it's all settled
 	 * down upon startup.
 	 */
+	zebra_if->speed_update_count = 0;
 	thread_add_timer(zrouter.master, if_zebra_speed_update, ifp, 15,
 			 &zebra_if->speed_update);
 	return 0;
