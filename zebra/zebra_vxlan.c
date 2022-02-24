@@ -1114,9 +1114,8 @@ static void zebra_evpn_vxlan_cleanup_all(struct hash_bucket *bucket, void *arg)
 
 	zevpn = (zebra_evpn_t *)bucket->data;
 
-	/* remove from l3-vni list */
-	if (zvrf->l3vni)
-		zl3vni = zl3vni_lookup(zvrf->l3vni);
+	/* remove l2vni from l2vni's tenant-vrf l3-vni list */
+	zl3vni = zl3vni_from_vrf(zevpn->vrf_id);
 	if (zl3vni)
 		listnode_delete(zl3vni->l2vnis, zevpn);
 
