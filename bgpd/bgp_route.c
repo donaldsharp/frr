@@ -7664,7 +7664,7 @@ void bgp_redistribute_withdraw(struct bgp *bgp, afi_t afi, int type,
 
 /* Static function to display route. */
 static void route_vty_out_route(const struct prefix *p, struct vty *vty,
-				json_object *json, bool wide)
+				json_object *json, bool wide, char *rd_str)
 {
 	int len = 0;
 	char buf[BUFSIZ];
@@ -7688,13 +7688,15 @@ static void route_vty_out_route(const struct prefix *p, struct vty *vty,
 	} else if (p->family == AF_ETHERNET) {
 		len = vty_out(vty, "%pFX", p);
 	} else if (p->family == AF_EVPN) {
-		if (!json)
+		if (!json) {
 			len = vty_out(
 				vty, "%s",
 				bgp_evpn_route2str((struct prefix_evpn *)p, buf,
 						   BUFSIZ));
-		else
+			len += vty_out(vty, " RD %s", rd_str);
+		} else {
 			bgp_evpn_route2json((struct prefix_evpn *)p, json);
+		}
 	} else if (p->family == AF_FLOWSPEC) {
 		route_vty_out_flowspec(vty, p, NULL,
 			       json ?
@@ -7821,7 +7823,7 @@ static char *bgp_nexthop_hostname(struct peer *peer,
 /* called from terminal list command */
 void route_vty_out(struct vty *vty, const struct prefix *p,
 		   struct bgp_path_info *path, int display, safi_t safi,
-		   json_object *json_paths, bool wide)
+		   json_object *json_paths, bool wide, char *rd_str)
 {
 	int len;
 	struct attr *attr = path->attr;
@@ -7849,11 +7851,11 @@ void route_vty_out(struct vty *vty, const struct prefix *p,
 	if (!json_paths) {
 		/* print prefix and mask */
 		if (!display)
-			route_vty_out_route(p, vty, json_path, wide);
+			route_vty_out_route(p, vty, json_path, wide, rd_str);
 		else
 			vty_out(vty, "%*s", (wide ? 45 : 17), " ");
 	} else {
-		route_vty_out_route(p, vty, json_path, wide);
+		route_vty_out_route(p, vty, json_path, wide, rd_str);
 	}
 
 	/*
@@ -7956,8 +7958,9 @@ void route_vty_out(struct vty *vty, const struct prefix *p,
 						     "used");
 		} else {
 			if (nexthop_hostname)
-				len = vty_out(vty, "%pI4(%s)%s", &attr->nexthop,
-					      nexthop_hostname, vrf_id_str);
+				len = vty_out(vty, "%pI4 (%s)%s",
+					      &attr->nexthop, nexthop_hostname,
+					      vrf_id_str);
 			else
 				len = vty_out(vty, "%pI4%s", &attr->nexthop,
 					      vrf_id_str);
@@ -7989,7 +7992,7 @@ void route_vty_out(struct vty *vty, const struct prefix *p,
 							     "used");
 			} else {
 				if (nexthop_hostname)
-					len = vty_out(vty, "%pI4(%s)%s",
+					len = vty_out(vty, "%pI4 (%s)%s",
 						      &attr->nexthop,
 						      nexthop_hostname,
 						      vrf_id_str);
@@ -8298,7 +8301,7 @@ void route_vty_out_tmp(struct vty *vty, const struct prefix *p,
 			json_object_string_add(json_net, "network", buff);
 		}
 	} else
-		route_vty_out_route(p, vty, NULL, wide);
+		route_vty_out_route(p, vty, NULL, wide, NULL);
 
 	/* Print attribute */
 	if (attr) {
@@ -8438,7 +8441,7 @@ void route_vty_out_tag(struct vty *vty, const struct prefix *p,
 	/* print prefix and mask */
 	if (json == NULL) {
 		if (!display)
-			route_vty_out_route(p, vty, NULL, false);
+			route_vty_out_route(p, vty, NULL, false, NULL);
 		else
 			vty_out(vty, "%*s", 17, " ");
 	}
@@ -8535,7 +8538,7 @@ void route_vty_out_overlay(struct vty *vty, const struct prefix *p,
 
 	/* print prefix and mask */
 	if (!display)
-		route_vty_out_route(p, vty, json_path, false);
+		route_vty_out_route(p, vty, json_path, false, NULL);
 	else
 		vty_out(vty, "%*s", 17, " ");
 
@@ -8641,7 +8644,7 @@ static void damp_route_vty_out(struct vty *vty, const struct prefix *p,
 	/* print prefix and mask */
 	if (!use_json) {
 		if (!display)
-			route_vty_out_route(p, vty, NULL, false);
+			route_vty_out_route(p, vty, NULL, false, NULL);
 		else
 			vty_out(vty, "%*s", 17, " ");
 	}
@@ -8712,7 +8715,7 @@ static void flap_route_vty_out(struct vty *vty, const struct prefix *p,
 	/* print prefix and mask */
 	if (!use_json) {
 		if (!display)
-			route_vty_out_route(p, vty, NULL, false);
+			route_vty_out_route(p, vty, NULL, false, NULL);
 		else
 			vty_out(vty, "%*s", 17, " ");
 	}
@@ -9185,7 +9188,7 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 						path->peer->hostname);
 			} else {
 				if (nexthop_hostname)
-					vty_out(vty, "    %pI4(%s)",
+					vty_out(vty, "    %pI4 (%s)",
 						&attr->mp_nexthop_global_in,
 						nexthop_hostname);
 				else
@@ -9204,7 +9207,7 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 						path->peer->hostname);
 			} else {
 				if (nexthop_hostname)
-					vty_out(vty, "    %pI4(%s)",
+					vty_out(vty, "    %pI4 (%s)",
 						&attr->nexthop,
 						nexthop_hostname);
 				else
@@ -9234,7 +9237,7 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 					       "global");
 		} else {
 			if (nexthop_hostname)
-				vty_out(vty, "    %pI6(%s)",
+				vty_out(vty, "    %pI6 (%s)",
 					&attr->mp_nexthop_global,
 					nexthop_hostname);
 			else
@@ -10216,7 +10219,8 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 						safi, json_paths);
 				else
 					route_vty_out(vty, dest_p, pi, display,
-						      safi, json_paths, wide);
+						      safi, json_paths, wide,
+						      NULL);
 			}
 			display++;
 		}
