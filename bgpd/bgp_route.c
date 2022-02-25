@@ -7812,9 +7812,8 @@ static void route_vty_short_status_out(struct vty *vty,
 static char *bgp_nexthop_hostname(struct peer *peer,
 				  struct bgp_nexthop_cache *bnc)
 {
-	if (peer->hostname
-	    && CHECK_FLAG(peer->bgp->flags, BGP_FLAG_SHOW_HOSTNAME)
-	    && CHECK_FLAG(bnc->flags, BGP_NEXTHOP_CONNECTED))
+	if (peer->hostname &&
+	    CHECK_FLAG(peer->bgp->flags, BGP_FLAG_SHOW_NEXTHOP_HOSTNAME))
 		return peer->hostname;
 	return NULL;
 }
@@ -7955,9 +7954,20 @@ void route_vty_out(struct vty *vty, const struct prefix *p,
 					       "ipv4");
 			json_object_boolean_true_add(json_nexthop_global,
 						     "used");
-		} else
-			vty_out(vty, "%-16s%s",
-				inet_ntoa(attr->nexthop), vrf_id_str);
+		} else {
+			if (nexthop_hostname)
+				len = vty_out(vty, "%pI4(%s)%s", &attr->nexthop,
+					      nexthop_hostname, vrf_id_str);
+			else
+				len = vty_out(vty, "%pI4%s", &attr->nexthop,
+					      vrf_id_str);
+
+			len = 16 - len;
+			if (len < 1)
+				vty_out(vty, "\n%*s", 36, " ");
+			else
+				vty_out(vty, "%*s", len, " ");
+		}
 	} else if (safi == SAFI_FLOWSPEC) {
 		if (attr->nexthop.s_addr != INADDR_ANY) {
 			if (json_paths) {
@@ -7977,8 +7987,23 @@ void route_vty_out(struct vty *vty, const struct prefix *p,
 				json_object_boolean_true_add(
 							json_nexthop_global,
 							     "used");
-			} else
-				vty_out(vty, "%-16s", inet_ntoa(attr->nexthop));
+			} else {
+				if (nexthop_hostname)
+					len = vty_out(vty, "%pI4(%s)%s",
+						      &attr->nexthop,
+						      nexthop_hostname,
+						      vrf_id_str);
+				else
+					len = vty_out(vty, "%pI4%s",
+						      &attr->nexthop,
+						      vrf_id_str);
+
+				len = 16 - len;
+				if (len < 1)
+					vty_out(vty, "\n%*s", 36, " ");
+				else
+					vty_out(vty, "%*s", len, " ");
+			}
 		}
 	} else if (p->family == AF_INET && !BGP_ATTR_NEXTHOP_AFI_IP6(attr)) {
 		if (json_paths) {
@@ -9157,10 +9182,15 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 				if (path->peer->hostname)
 					json_object_string_add(
 						json_nexthop_global, "hostname",
-						path->peer->hostname);
+						nexthop_hostname);
 			} else {
-				vty_out(vty, "    %s",
-					inet_ntoa(attr->mp_nexthop_global_in));
+				if (nexthop_hostname)
+					vty_out(vty, "    %pI4(%s)",
+						&attr->mp_nexthop_global_in,
+						nexthop_hostname);
+				else
+					vty_out(vty, "    %pI4",
+						&attr->mp_nexthop_global_in);
 			}
 		} else {
 			if (json_paths) {
@@ -9171,10 +9201,15 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 				if (path->peer->hostname)
 					json_object_string_add(
 						json_nexthop_global, "hostname",
-						path->peer->hostname);
+						nexthop_hostname);
 			} else {
-				vty_out(vty, "    %s",
-					inet_ntoa(attr->nexthop));
+				if (nexthop_hostname)
+					vty_out(vty, "    %pI4(%s)",
+						&attr->nexthop,
+						nexthop_hostname);
+				else
+					vty_out(vty, "    %pI4",
+						&attr->nexthop);
 			}
 		}
 
@@ -9198,10 +9233,13 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 			json_object_string_add(json_nexthop_global, "scope",
 					       "global");
 		} else {
-			vty_out(vty, "    %s",
-				inet_ntop(AF_INET6,
-					  &attr->mp_nexthop_global,
-					  buf, INET6_ADDRSTRLEN));
+			if (nexthop_hostname)
+				vty_out(vty, "    %pI6(%s)",
+					&attr->mp_nexthop_global,
+					nexthop_hostname);
+			else
+				vty_out(vty, "    %pI6",
+					&attr->mp_nexthop_global);
 		}
 	}
 
