@@ -208,7 +208,8 @@ static inline void typesafe_dlist_add(struct dlist_head *head,
 		struct dlist_item *prev, struct dlist_item *item)
 {
 	item->next = prev->next;
-	item->next->prev = item;
+	if (item->next)
+		item->next->prev = item;
 	item->prev = prev;
 	prev->next = item;
 	head->count++;
@@ -283,6 +284,30 @@ macro_pure const type *prefix ## _const_next(const struct prefix##_head *h,    \
 	if (ditem->next == &h->dh.hitem)                                       \
 		return NULL;                                                   \
 	return container_of(ditem->next, type, field.di);                      \
+}                                                                              \
+macro_pure const type *prefix ## _const_last(const struct prefix##_head *h)    \
+{                                                                              \
+	const struct dlist_item *ditem = h->dh.hitem.prev;                     \
+	if (ditem == &h->dh.hitem)                                             \
+		return NULL;                                                   \
+	return container_of(ditem, type, field.di);                            \
+}                                                                              \
+macro_pure const type *prefix ## _const_prev(const struct prefix##_head *h,    \
+					     const type *item)	               \
+{                                                                              \
+	const struct dlist_item *ditem = &item->field.di;                      \
+	if (ditem->prev == &h->dh.hitem)                                       \
+		return NULL;                                                   \
+	return container_of(ditem->prev, type, field.di);                      \
+}                                                                              \
+macro_pure type *prefix ## _last(struct prefix##_head *h)                      \
+{                                                                              \
+	return (type *)prefix ## _const_last((h));                             \
+}                                                                              \
+macro_pure type *prefix ## _prev(struct prefix##_head *h,                      \
+				       type *item)		               \
+{									       \
+	return (type *)prefix ## _const_prev((h), (item));                     \
 }                                                                              \
 TYPESAFE_FIRST_NEXT(prefix, type)                                              \
 macro_pure type *prefix ## _next_safe(struct prefix##_head *h, type *item)     \

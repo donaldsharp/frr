@@ -51,6 +51,7 @@
 #include "zebra/zebra_mpls.h"
 #include "zebra/label_manager.h"
 #include "zebra/zebra_netns_notify.h"
+#include "zebra/zebra_neigh_throttle.h"
 #include "zebra/zebra_rnh.h"
 #include "zebra/zebra_pbr.h"
 #include "zebra/zebra_vxlan.h"
@@ -172,6 +173,8 @@ static void sigint(void)
 	zebra_opaque_stop();
 
 	zebra_dplane_pre_finish();
+
+	zebra_neigh_throttle_fini();
 
 	/* Clean up GR related info. */
 	zebra_gr_stale_client_cleanup(zrouter.stale_client_list);
@@ -458,17 +461,18 @@ int main(int argc, char **argv)
 	zebra_pw_vty_init();
 	zebra_pbr_init();
 	zebra_opaque_init();
+	zebra_neigh_throttle_init();
 
-/* For debug purpose. */
-/* SET_FLAG (zebra_debug_event, ZEBRA_DEBUG_EVENT); */
+	/* For debug purpose. */
+	/* SET_FLAG (zebra_debug_event, ZEBRA_DEBUG_EVENT); */
 
 	/* Process the configuration file. Among other configuration
-	*  directives we can meet those installing static routes. Such
-	*  requests will not be executed immediately, but queued in
-	*  zebra->ribq structure until we enter the main execution loop.
-	*  The notifications from kernel will show originating PID equal
-	*  to that after daemon() completes (if ever called).
-	*/
+	 * directives we can meet those installing static routes. Such
+	 * requests will not be executed immediately, but queued in
+	 * zebra->ribq structure until we enter the main execution loop.
+	 * The notifications from kernel will show originating PID equal
+	 * to that after daemon() completes (if ever called).
+	 */
 	frr_config_fork();
 
 #if defined(HAVE_CSMGR)
@@ -476,16 +480,17 @@ int main(int argc, char **argv)
 #endif
 
 	/* After we have successfully acquired the pidfile, we can be sure
-	*  about being the only copy of zebra process, which is submitting
-	*  changes to the FIB.
-	*  Clean up zebra-originated routes. The requests will be sent to OS
-	*  immediately, so originating PID in notifications from kernel
-	*  will be equal to the current getpid(). To know about such routes,
-	*  we have to have route_read() called before.
-	*  If FRR is gracefully restarting, we either wait for clients
-	*  (e.g., BGP) to signal GR is complete else we wait for specified
-	*  duration.
-	*/
+	 * about being the only copy of zebra process, which is submitting
+	 * changes to the FIB.
+	 * Clean up zebra-originated routes. The requests will be sent to OS
+	 * immediately, so originating PID in notifications from kernel
+	 * will be equal to the current getpid(). To know about such routes,
+	 * we have to have route_read() called before.
+	 * If FRR is gracefully restarting, we either wait for clients
+	 * (e.g., BGP) to signal GR is complete else we wait for specified
+	 * duration.
+	 */
+
 	zrouter.startup_time = monotime(NULL);
 	zrouter.rib_sweep_time = 0;
 	zrouter.graceful_restart = zebra_di.graceful_restart;
