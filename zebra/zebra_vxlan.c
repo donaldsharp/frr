@@ -435,8 +435,6 @@ static void zl3vni_print_rmac(zebra_mac_t *zrmac, struct vty *vty,
 						      vtep, buf, sizeof(buf))));
 		}
 		json_object_object_add(json, "nexthops", json_nhs);
-		json_object_int_add(json, "localSequence", zrmac->loc_seq);
-		json_object_int_add(json, "remoteSequence", zrmac->rem_seq);
 	}
 }
 
