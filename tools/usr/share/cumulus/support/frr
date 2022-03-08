@@ -54,6 +54,8 @@ func_frr()
     exec_cmd $jexec bgp.ipv6_vpn_route_leak vtysh -c "show bgp vrf all ipv6 unicast route-leak $json"
     exec_cmd bgp.ipv4_vpn_all vtysh -c "show bgp ipv4 vpn all"
     exec_cmd bgp.ipv6_vpn_all vtysh -c "show bgp ipv6 vpn all"
+    exec_cmd bgp.ipv4_lu vtysh -c "show bgp ipv4 labeled-unicast"
+    exec_cmd bgp.ipv6_lu vtysh -c "show bgp ipv6 labeled-unicast"
 
     exec_cmd frr.show_running vtysh -c "show running-config"
 
@@ -67,6 +69,7 @@ func_frr()
     exec_cmd zebra.client vtysh -c "show zebra client"
     exec_cmd zebra.table_summary vtysh -c "show zebra router table summary"
     exec_cmd zebra.mpls_table vtysh -c "show mpls table"
+    exec_cmd zebra.mpls_fec vtysh -c "show mpls fec"
     exec_cmd zebra.nhg vtysh -c "show nexthop-group rib"
 
     exec_cmd $jexec pim.upstream vtysh -c "show ip pim vrf all upstream $json"
