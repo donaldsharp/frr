@@ -137,6 +137,8 @@ struct route_entry {
  * used for nexthops
  */
 #define ROUTE_ENTRY_ROUTE_REPLACING 0x80
+/* Route should not use OS/kernel NHGs, if available. */
+#define ROUTE_ENTRY_NO_NHG           0x100
 
 	/* Sequence value incremented for each dataplane operation */
 	uint32_t dplane_sequence;
