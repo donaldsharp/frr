@@ -574,6 +574,8 @@ static void vty_show_ip_route_detail(struct vty *vty, struct route_node *rn,
 		}
 		if (CHECK_FLAG(re->flags, ZEBRA_FLAG_SELECTED))
 			vty_out(vty, ", best");
+		if (CHECK_FLAG(re->status, ROUTE_ENTRY_NO_NHG))
+			vty_out(vty, ", no-NHG");
 		vty_out(vty, "\n");
 
 		uptime2str(re->uptime, buf, sizeof(buf));
@@ -1007,6 +1009,9 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 
 		if (CHECK_FLAG(re->status, ROUTE_ENTRY_QUEUED))
 			json_object_boolean_true_add(json_route, "queued");
+
+		if (CHECK_FLAG(re->status, ROUTE_ENTRY_NO_NHG))
+			json_object_boolean_true_add(json_route, "noNHG");
 
 		if (CHECK_FLAG(re->flags, ZEBRA_FLAG_TRAPPED))
 			json_object_boolean_true_add(json_route, "trapped");
@@ -4260,6 +4265,9 @@ static int config_write_protocol(struct vty *vty)
 	netlink_config_write_helper(vty);
 #endif /* HAVE_NETLINK */
 
+	if (zrouter.gre_use_nhg)
+		vty_out(vty, "zebra gre-use-nhg\n");
+
 	return 1;
 }
 
@@ -4774,6 +4782,18 @@ DEFUN(zebra_on_rib_process_script, zebra_on_rib_process_script_cmd,
 
 #endif /* HAVE_SCRIPTING */
 
+DEFPY (zebra_gre_use_nhg,
+       zebra_gre_use_nhg_cmd,
+       "[no] zebra gre-use-nhg",
+       NO_STR
+       ZEBRA_STR
+       "Allow nexthop-groups for GRE links\n")
+{
+	zrouter.gre_use_nhg = !no;
+
+	return CMD_SUCCESS;
+}
+
 /* IP node for static routes. */
 static int zebra_ip_config(struct vty *vty);
 static struct cmd_node ip_node = {
@@ -4933,6 +4953,7 @@ void zebra_vty_init(void)
 
 	install_element(CONFIG_NODE, &ip_table_range_cmd);
 	install_element(VRF_NODE, &ip_table_range_cmd);
+	install_element(CONFIG_NODE, &zebra_gre_use_nhg_cmd);
 
 #ifdef HAVE_NETLINK
 	install_element(CONFIG_NODE, &zebra_kernel_netlink_batch_tx_buf_cmd);
