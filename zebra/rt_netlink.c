@@ -115,6 +115,19 @@ static bool kernel_nexthops_supported(void)
 		&& zebra_nhg_kernel_nexthops_enabled());
 }
 
+/* Check both route ctx and global setting for use of NHGs */
+static bool ctx_nexthops_supported(const struct zebra_dplane_ctx *ctx)
+{
+	if (dplane_ctx_is_no_nhg(ctx)) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("%s: ctx no NHG set", __func__);
+
+		return false;
+	}
+
+	return kernel_nexthops_supported();
+}
+
 /*
  * Some people may only want to use NHGs created by protos and not
  * implicitly created by Zebra. This check accounts for that.
@@ -1831,7 +1844,7 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 		nl_attr_nest_end(&req->n, nest);
 	}
 
-	if ((!fpm && kernel_nexthops_supported()
+	if ((!fpm && ctx_nexthops_supported(ctx)
 	     && (!proto_nexthops_only()
 		 || is_proto_nhg(dplane_ctx_get_nhe_id(ctx), 0))
 	     && /* CUMULUS ONLY */ !nexthop_group_has_label(

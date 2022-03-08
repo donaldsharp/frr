@@ -2090,6 +2090,49 @@ done_with_match:
 	return 0;
 }
 
+/*
+ * Check for conditions that prevent use of NHGs on platforms (Linux)
+ * that normally support them.
+ */
+static void
+no_nhg_check(struct route_node *rn, struct route_entry *re,
+	     struct nexthop *nexthop)
+{
+	struct interface *ifp;
+	struct nexthop *nh;
+	bool set_p = false;
+
+	/* If enabled via config, just return */
+	if (zrouter.gre_use_nhg)
+		return;
+
+	/* If we've already decided, just return */
+	if (CHECK_FLAG(re->status, ROUTE_ENTRY_NO_NHG))
+		return;
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE)) {
+		/* Need to check resolving nexthop(s) */
+		for (nh = nexthop->resolved; nh; nh = nh->next) {
+			ifp = if_lookup_by_index(nh->ifindex, nh->vrf_id);
+			if (ifp && (ifp->ll_type == ZEBRA_LLT_IPGRE)) {
+				set_p = true;
+				break;
+			}
+		}
+	} else {
+		ifp = if_lookup_by_index(nexthop->ifindex, nexthop->vrf_id);
+		if (ifp && (ifp->ll_type == ZEBRA_LLT_IPGRE))
+			set_p = true;
+	}
+
+	if (set_p) {
+		if (IS_ZEBRA_DEBUG_NHG_DETAIL)
+			zlog_debug("%s: %pRN: no NHG, link type GRE",
+				   __func__, rn);
+		SET_FLAG(re->status, ROUTE_ENTRY_NO_NHG);
+	}
+}
+
 /* This function verifies reachability of one given nexthop, which can be
  * numbered or unnumbered, IPv4 or IPv6. The result is unconditionally stored
  * in nexthop->flags field. The nexthop->ifindex will be updated
@@ -2176,6 +2219,9 @@ static unsigned nexthop_active_check(struct route_node *rn,
 	default:
 		break;
 	}
+
+	/* Check for no-NHG condition */
+	no_nhg_check(rn, re, nexthop);
 
 	if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE)) {
 		if (IS_ZEBRA_DEBUG_RIB_DETAILED)
@@ -2404,6 +2450,7 @@ int nexthop_active_update(struct route_node *rn, struct route_entry *re)
 	afi_t rt_afi = family2afi(rn->p.family);
 
 	UNSET_FLAG(re->status, ROUTE_ENTRY_CHANGED);
+	UNSET_FLAG(re->status, ROUTE_ENTRY_NO_NHG);
 
 	/* Make a local copy of the existing nhe, so we don't work on/modify
 	 * the shared nhe.

@@ -148,6 +148,8 @@ struct route_entry {
  * differs from the rib/normal set of nexthops.
  */
 #define ROUTE_ENTRY_USE_FIB_NHG      0x40
+/* Route should not use OS/kernel NHGs, if available. */
+#define ROUTE_ENTRY_NO_NHG           0x80
 
 	/* Sequence value incremented for each dataplane operation */
 	uint32_t dplane_sequence;

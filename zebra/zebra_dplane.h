@@ -270,6 +270,10 @@ uint32_t dplane_ctx_get_provider(const struct zebra_dplane_ctx *ctx);
 void dplane_ctx_set_skip_kernel(struct zebra_dplane_ctx *ctx);
 bool dplane_ctx_is_skip_kernel(const struct zebra_dplane_ctx *ctx);
 
+/* Control use of kernel NHGs */
+void dplane_ctx_set_no_nhg(struct zebra_dplane_ctx *ctx);
+bool dplane_ctx_is_no_nhg(const struct zebra_dplane_ctx *ctx);
+
 /* Source prefix is a little special - use convention to return NULL
  * to mean "no src prefix"
  */
