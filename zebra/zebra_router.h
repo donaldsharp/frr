@@ -239,6 +239,8 @@ struct zebra_router {
 
 	/* Should we allow non FRR processes to delete our routes */
 	bool allow_delete;
+	/* Allow NHGs for routes on GRE links */
+	bool gre_use_nhg;
 };
 
 #define GRACEFUL_RESTART_TIME 60
