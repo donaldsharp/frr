@@ -262,6 +262,9 @@ struct zebra_router {
 	uint8_t protodown_r_bit;
 
 	uint64_t nexthop_weight_scale_value;
+
+	/* Allow NHGs for routes on GRE links */
+	bool gre_use_nhg;
 };
 
 #define GRACEFUL_RESTART_TIME 60
