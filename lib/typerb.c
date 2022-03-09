@@ -481,6 +481,19 @@ struct rb_entry *typed_rb_min(const struct rbt_tree *rbt)
 	return parent;
 }
 
+struct rb_entry *typed_rb_max(const struct rbt_tree *rbt)
+{
+	struct rb_entry *rbe = RBH_ROOT(rbt);
+	struct rb_entry *parent = NULL;
+
+	while (rbe != NULL) {
+		parent = rbe;
+		rbe = RBE_RIGHT(rbe);
+	}
+
+	return parent;
+}
+
 bool typed_rb_member(const struct typed_rb_root *rbt,
 		     const struct typed_rb_entry *rbe)
 {
