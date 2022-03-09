@@ -163,6 +163,8 @@ static struct prefix_list *prefix_list_new(void)
 	struct prefix_list *new;
 
 	new = XCALLOC(MTYPE_PREFIX_LIST, sizeof(struct prefix_list));
+
+	ple_rbtree_init(&new->head);
 	return new;
 }
 
@@ -228,13 +230,11 @@ void prefix_list_delete(struct prefix_list *plist)
 {
 	struct prefix_master *master;
 	struct prefix_list_entry *pentry;
-	struct prefix_list_entry *next;
 
 	/* If prefix-list contain prefix_list_entry free all of it. */
-	for (pentry = plist->head; pentry; pentry = next) {
+	while ((pentry = ple_rbtree_pop(&plist->head)) != NULL) {
 		route_map_notify_pentry_dependencies(plist->name, pentry,
 						     RMAP_EVENT_PLIST_DELETED);
-		next = pentry->next;
 		prefix_list_trie_del(plist, pentry);
 		prefix_list_entry_free(pentry);
 		plist->count--;
@@ -258,6 +258,8 @@ void prefix_list_delete(struct prefix_list *plist)
 	XFREE(MTYPE_MPREFIX_LIST_STR, plist->name);
 
 	XFREE(MTYPE_PREFIX_LIST_TRIE, plist->trie);
+
+	ple_rbtree_fini(&plist->head);
 
 	prefix_list_free(plist);
 }
@@ -305,10 +307,9 @@ int64_t prefix_new_seq_get(struct prefix_list *plist)
 
 	maxseq = 0;
 
-	for (pentry = plist->head; pentry; pentry = pentry->next) {
-		if (maxseq < pentry->seq)
-			maxseq = pentry->seq;
-	}
+	pentry = ple_rbtree_last(&plist->head);
+	if (pentry)
+		maxseq = pentry->seq;
 
 	newseq = ((maxseq / 5) * 5) + 5;
 
@@ -319,12 +320,11 @@ int64_t prefix_new_seq_get(struct prefix_list *plist)
 static struct prefix_list_entry *prefix_seq_check(struct prefix_list *plist,
 						  int64_t seq)
 {
-	struct prefix_list_entry *pentry;
+	struct prefix_list_entry *pentry, lookup;
 
-	for (pentry = plist->head; pentry; pentry = pentry->next)
-		if (pentry->seq == seq)
-			return pentry;
-	return NULL;
+	lookup.seq = seq;
+	pentry = ple_rbtree_find(&plist->head, &lookup);
+	return pentry;
 }
 
 struct prefix_list_entry *
@@ -334,9 +334,10 @@ prefix_list_entry_lookup(struct prefix_list *plist, struct prefix *prefix,
 {
 	struct prefix_list_entry *pentry;
 
-	for (pentry = plist->head; pentry; pentry = pentry->next)
+	frr_each (ple_rbtree, &plist->head, pentry)
 		if (prefix_same(&pentry->prefix, prefix)
 		    && pentry->type == type) {
+			zlog_debug("Sequence: %ld", (long int)seq);
 			if (seq >= 0 && pentry->seq != seq)
 				continue;
 
@@ -427,14 +428,7 @@ void prefix_list_entry_delete(struct prefix_list *plist,
 
 	prefix_list_trie_del(plist, pentry);
 
-	if (pentry->prev)
-		pentry->prev->next = pentry->next;
-	else
-		plist->head = pentry->next;
-	if (pentry->next)
-		pentry->next->prev = pentry->prev;
-	else
-		plist->tail = pentry->prev;
+	ple_rbtree_del(&plist->head, pentry);
 
 	route_map_notify_pentry_dependencies(plist->name, pentry,
 					     RMAP_EVENT_PLIST_DELETED);
@@ -448,8 +442,7 @@ void prefix_list_entry_delete(struct prefix_list *plist,
 		if (plist->master->delete_hook)
 			(*plist->master->delete_hook)(plist);
 
-		if (plist->head == NULL && plist->tail == NULL
-		    && plist->desc == NULL)
+		if (ple_rbtree_count(&plist->head) == 0 && plist->desc == NULL)
 			prefix_list_delete(plist);
 		else
 			plist->master->recent = plist;
@@ -505,46 +498,17 @@ static void prefix_list_entry_add(struct prefix_list *plist,
 				  struct prefix_list_entry *pentry)
 {
 	struct prefix_list_entry *replace;
-	struct prefix_list_entry *point;
 
 	/* Automatic asignment of seq no. */
 	if (pentry->seq == -1)
 		pentry->seq = prefix_new_seq_get(plist);
 
-	if (plist->tail && pentry->seq > plist->tail->seq)
-		point = NULL;
-	else {
-		/* Is there any same seq prefix list entry? */
-		replace = prefix_seq_check(plist, pentry->seq);
-		if (replace)
-			prefix_list_entry_delete(plist, replace, 0);
+	/* Is there any same seq prefix list entry? */
+	replace = prefix_seq_check(plist, pentry->seq);
+	if (replace)
+		prefix_list_entry_delete(plist, replace, 0);
 
-		/* Check insert point. */
-		for (point = plist->head; point; point = point->next)
-			if (point->seq >= pentry->seq)
-				break;
-	}
-
-	/* In case of this is the first element of the list. */
-	pentry->next = point;
-
-	if (point) {
-		if (point->prev)
-			point->prev->next = pentry;
-		else
-			plist->head = pentry;
-
-		pentry->prev = point->prev;
-		point->prev = pentry;
-	} else {
-		if (plist->tail)
-			plist->tail->next = pentry;
-		else
-			plist->head = pentry;
-
-		pentry->prev = plist->tail;
-		plist->tail = pentry;
-	}
+	ple_rbtree_add(&plist->head, pentry);
 
 	prefix_list_trie_add(plist, pentry);
 
@@ -579,15 +543,7 @@ void prefix_list_entry_update_start(struct prefix_list_entry *ple)
 
 	prefix_list_trie_del(pl, ple);
 
-	/* List manipulation: shameless copy from `prefix_list_entry_delete`. */
-	if (ple->prev)
-		ple->prev->next = ple->next;
-	else
-		pl->head = ple->next;
-	if (ple->next)
-		ple->next->prev = ple->prev;
-	else
-		pl->tail = ple->prev;
+	ple_rbtree_del(&pl->head, ple);
 
 	route_map_notify_pentry_dependencies(pl->name, ple,
 					     RMAP_EVENT_PLIST_DELETED);
@@ -597,11 +553,22 @@ void prefix_list_entry_update_start(struct prefix_list_entry *ple)
 	if (pl->master->delete_hook)
 		(*pl->master->delete_hook)(pl);
 
-	if (pl->head || pl->tail || pl->desc)
-		pl->master->recent = pl;
+	pl->master->recent = pl;
 
 	ple->next_best = NULL;
 	ple->installed = false;
+}
+
+int prefix_list_entry_compare_func(const struct prefix_list_entry *a,
+				   const struct prefix_list_entry *b)
+{
+	if (a->seq < b->seq)
+		return -1;
+
+	if (a->seq > b->seq)
+		return 1;
+
+	return 0;
 }
 
 /**
@@ -614,7 +581,6 @@ void prefix_list_entry_update_start(struct prefix_list_entry *ple)
 void prefix_list_entry_update_finish(struct prefix_list_entry *ple)
 {
 	struct prefix_list *pl = ple->pl;
-	struct prefix_list_entry *point;
 
 	/* Already installed, nothing to do. */
 	if (ple->installed)
@@ -628,36 +594,7 @@ void prefix_list_entry_update_finish(struct prefix_list_entry *ple)
 	if (ple->prefix.family != AF_INET && ple->prefix.family != AF_INET6)
 		return;
 
-	/* List manipulation: shameless copy from `prefix_list_entry_add`. */
-	if (pl->tail && ple->seq > pl->tail->seq)
-		point = NULL;
-	else {
-		/* Check insert point. */
-		for (point = pl->head; point; point = point->next)
-			if (point->seq >= ple->seq)
-				break;
-	}
-
-	/* In case of this is the first element of the list. */
-	ple->next = point;
-
-	if (point) {
-		if (point->prev)
-			point->prev->next = ple;
-		else
-			pl->head = ple;
-
-		ple->prev = point->prev;
-		point->prev = ple;
-	} else {
-		if (pl->tail)
-			pl->tail->next = ple;
-		else
-			pl->head = ple;
-
-		ple->prev = pl->tail;
-		pl->tail = ple;
-	}
+	ple_rbtree_add(&pl->head, ple);
 
 	prefix_list_trie_add(pl, ple);
 	pl->count++;
@@ -817,7 +754,7 @@ static void __attribute__((unused)) prefix_list_print(struct prefix_list *plist)
 
 	printf("ip prefix-list %s: %d entries\n", plist->name, plist->count);
 
-	for (pentry = plist->head; pentry; pentry = pentry->next) {
+	frr_each (ple_rbtree, &plist->head, pentry) {
 		if (pentry->any)
 			printf("any %s\n", prefix_list_type_str(pentry));
 		else {
@@ -918,6 +855,10 @@ static void vty_show_prefix_entry(struct vty *vty, json_object *json, afi_t afi,
 					plist->desc);
 		}
 	} else if (dtype == summary_display || dtype == detail_display) {
+		struct prefix_list_entry *first, *last;
+
+		first = ple_rbtree_first(&plist->head);
+		last = ple_rbtree_last(&plist->head);
 		if (json) {
 			json_object_string_add(json_pl, "addressFamily",
 					       afi2str(afi));
@@ -928,9 +869,9 @@ static void vty_show_prefix_entry(struct vty *vty, json_object *json, afi_t afi,
 			json_object_int_add(json_pl, "rangeEntries",
 					    plist->rangecount);
 			json_object_int_add(json_pl, "sequenceStart",
-					    plist->head ? plist->head->seq : 0);
+					    first ? first->seq : 0);
 			json_object_int_add(json_pl, "sequenceEnd",
-					    plist->tail ? plist->tail->seq : 0);
+					    last ? last->seq : 0);
 		} else {
 			vty_out(vty, "ip%s prefix-list %s:\n",
 				afi == AFI_IP ? "" : "v6", plist->name);
@@ -943,8 +884,7 @@ static void vty_show_prefix_entry(struct vty *vty, json_object *json, afi_t afi,
 				"   count: %d, range entries: %d, sequences: %" PRId64
 				" - %" PRId64 "\n",
 				plist->count, plist->rangecount,
-				plist->head ? plist->head->seq : 0,
-				plist->tail ? plist->tail->seq : 0);
+				first ? first->seq : 0, last ? last->seq : 0);
 		}
 	}
 
@@ -957,7 +897,7 @@ static void vty_show_prefix_entry(struct vty *vty, json_object *json, afi_t afi,
 					       json_entries);
 		}
 
-		for (pentry = plist->head; pentry; pentry = pentry->next) {
+		frr_each (ple_rbtree, &plist->head, pentry) {
 			if (dtype == sequential_display
 			    && pentry->seq != seqnum)
 				continue;
@@ -1104,7 +1044,7 @@ static int vty_show_prefix_list_prefix(struct vty *vty, afi_t afi,
 		return CMD_WARNING;
 	}
 
-	for (pentry = plist->head; pentry; pentry = pentry->next) {
+	frr_each (ple_rbtree, &plist->head, pentry) {
 		match = 0;
 
 		if (type == normal_display || type == first_match_display)
@@ -1163,8 +1103,7 @@ static int vty_clear_prefix_list(struct vty *vty, afi_t afi, const char *name,
 
 	if (name == NULL && prefix == NULL) {
 		frr_each(plist, &master->str, plist)
-			for (pentry = plist->head; pentry;
-			     pentry = pentry->next)
+			frr_each (ple_rbtree, &plist->head, pentry)
 				pentry->hitcnt = 0;
 	} else {
 		plist = prefix_list_lookup(afi, name);
@@ -1181,7 +1120,7 @@ static int vty_clear_prefix_list(struct vty *vty, afi_t afi, const char *name,
 			}
 		}
 
-		for (pentry = plist->head; pentry; pentry = pentry->next) {
+		frr_each (ple_rbtree, &plist->head, pentry) {
 			if (prefix) {
 				if (pentry->prefix.family == p.family
 				    && prefix_match(&pentry->prefix, &p))
@@ -1411,7 +1350,7 @@ struct stream *prefix_bgp_orf_entry(struct stream *s, struct prefix_list *plist,
 	if (!plist)
 		return s;
 
-	for (pentry = plist->head; pentry; pentry = pentry->next) {
+	frr_each (ple_rbtree, &plist->head, pentry) {
 		uint8_t flag = init_flag;
 		struct prefix *p = &pentry->prefix;
 
@@ -1511,7 +1450,7 @@ int prefix_bgp_show_prefix_list(struct vty *vty, afi_t afi, char *name,
 		json_object_string_add(json_prefix, "prefixListName",
 				       plist->name);
 
-		for (pentry = plist->head; pentry; pentry = pentry->next) {
+		frr_each (ple_rbtree, &plist->head, pentry) {
 			struct prefix *p = &pentry->prefix;
 			char buf_a[BUFSIZ];
 
@@ -1542,7 +1481,7 @@ int prefix_bgp_show_prefix_list(struct vty *vty, afi_t afi, char *name,
 		vty_out(vty, "ip%s prefix-list %s: %d entries\n",
 			afi == AFI_IP ? "" : "v6", plist->name, plist->count);
 
-		for (pentry = plist->head; pentry; pentry = pentry->next) {
+		frr_each (ple_rbtree, &plist->head, pentry) {
 			struct prefix *p = &pentry->prefix;
 
 			vty_out(vty, "   seq %" PRId64 " %s %pFX", pentry->seq,

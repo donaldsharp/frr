@@ -2147,7 +2147,7 @@ static void route_map_add_plist_entries(afi_t afi,
 						index, entry);
 		}
 	} else {
-		for (pentry = plist->head; pentry; pentry = pentry->next) {
+		frr_each (ple_rbtree, &plist->head, pentry) {
 			if (afi == AFI_IP) {
 				route_map_pfx_table_add(
 					index->map->ipv4_prefix_table, index,
@@ -2222,7 +2222,7 @@ static void route_map_del_plist_entries(afi_t afi,
 						index, entry);
 		}
 	} else {
-		for (pentry = plist->head; pentry; pentry = pentry->next) {
+		frr_each (ple_rbtree, &plist->head, pentry) {
 			if (afi == AFI_IP) {
 				route_map_pfx_table_del(
 					index->map->ipv4_prefix_table, index,

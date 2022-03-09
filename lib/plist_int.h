@@ -26,10 +26,12 @@
 extern "C" {
 #endif
 
+#include <typesafe.h>
+
 struct pltrie_table;
 
 PREDECL_RBTREE_UNIQ(plist);
-
+PREDECL_RBTREE_UNIQ(ple_rbtree);
 struct prefix_list {
 	char *name;
 	char *desc;
@@ -41,8 +43,7 @@ struct prefix_list {
 
 	struct plist_item plist_item;
 
-	struct prefix_list_entry *head;
-	struct prefix_list_entry *tail;
+	struct ple_rbtree_head head;
 
 	struct pltrie_table *trie;
 };
@@ -64,8 +65,7 @@ struct prefix_list_entry {
 
 	struct prefix_list *pl;
 
-	struct prefix_list_entry *next;
-	struct prefix_list_entry *prev;
+	struct ple_rbtree_item item;
 
 	/* up the chain for best match search */
 	struct prefix_list_entry *next_best;
@@ -73,6 +73,11 @@ struct prefix_list_entry {
 	/* Flag to track trie/list installation status. */
 	bool installed;
 };
+
+int prefix_list_entry_compare_func(const struct prefix_list_entry *a,
+				   const struct prefix_list_entry *b);
+DECLARE_RBTREE_UNIQ(ple_rbtree, struct prefix_list_entry, item,
+		    prefix_list_entry_compare_func);
 
 extern void prefix_list_entry_free(struct prefix_list_entry *pentry);
 extern void prefix_list_entry_delete2(struct prefix_list_entry *ple);
