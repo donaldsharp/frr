@@ -291,6 +291,12 @@ The following documentation assumes that a list has been defined using
    empty.  This is O(1) for all data structures except red-black trees
    where it is O(log n).
 
+.. c:function:: const itemtype *Z_const_last(const struct Z_head *)
+.. c:function:: itemtype *Z_last(struct z_head *)
+
+   Returns the last item in the structure, or ``NULL` if the structure is
+   empty.  This is only available for red-black trees where it is O(log n).
+
 .. c:function:: itemtype *Z_pop(struct Z_head *)
 
    Remove and return the first item in the structure, or ``NULL`` if the
