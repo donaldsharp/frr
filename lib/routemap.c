@@ -48,6 +48,21 @@ DEFINE_MTYPE_STATIC(LIB, ROUTE_MAP_DEP_DATA, "Route map dependency data");
 DEFINE_QOBJ_TYPE(route_map_index);
 DEFINE_QOBJ_TYPE(route_map);
 
+static int rmi_rbtree_compare_func(const struct route_map_index *a,
+				   const struct route_map_index *b)
+{
+	if (a->pref > b->pref)
+		return -1;
+
+	if (a->pref < b->pref)
+		return 1;
+
+	return 0;
+}
+
+DECLARE_RBTREE_UNIQ(rmi_rbtree, struct route_map_index, item,
+		    rmi_rbtree_compare_func);
+
 static int rmap_cmd_name_cmp(const struct route_map_rule_cmd_proxy *a,
 			     const struct route_map_rule_cmd_proxy *b)
 {
@@ -692,7 +707,7 @@ static void route_map_free_map(struct route_map *map)
 	if (map == NULL)
 		return;
 
-	while ((index = map->head) != NULL)
+	while ((index = rmi_rbtree_first(&map->rmi_head)) != NULL)
 		route_map_index_delete(index, 0);
 
 	if (rmap_debug)
@@ -723,11 +738,11 @@ void route_map_delete(struct route_map *map)
 	struct route_map_index *index;
 	char *name;
 
-	while ((index = map->head) != NULL)
+	while ((index = rmi_rbtree_first(&map->rmi_head)) != NULL)
 		route_map_index_delete(index, 0);
 
 	name = map->name;
-	map->head = NULL;
+	rmi_rbtree_fini(&map->rmi_head);
 
 	/* Clear all dependencies */
 	route_map_clear_all_references(name);
@@ -919,7 +934,7 @@ static void vty_show_route_map_entry(struct vty *vty, struct route_map *map,
 			map->to_be_processed ? "true" : "false");
 	}
 
-	for (index = map->head; index; index = index->next) {
+	frr_each (rmi_rbtree, &map->rmi_head, index) {
 		if (json) {
 			json_object *json_rule;
 			json_object *json_matches;
@@ -1155,16 +1170,7 @@ void route_map_index_delete(struct route_map_index *index, int notify)
 	while ((rule = index->set_list.head) != NULL)
 		route_map_rule_delete(&index->set_list, rule);
 
-	/* Remove index from route map list. */
-	if (index->next)
-		index->next->prev = index->prev;
-	else
-		index->map->tail = index->prev;
-
-	if (index->prev)
-		index->prev->next = index->next;
-	else
-		index->map->head = index->next;
+	rmi_rbtree_del(&index->map->rmi_head, index);
 
 	/* Free 'char *nextrm' if not NULL */
 	XFREE(MTYPE_ROUTE_MAP_NAME, index->nextrm);
@@ -1185,12 +1191,14 @@ static struct route_map_index *route_map_index_lookup(struct route_map *map,
 						      enum route_map_type type,
 						      int pref)
 {
-	struct route_map_index *index;
+	struct route_map_index *index, lookup;
 
-	for (index = map->head; index; index = index->next)
-		if ((index->type == type || type == RMAP_ANY)
-		    && index->pref == pref)
-			return index;
+	lookup.pref = pref;
+	index = rmi_rbtree_find(&map->rmi_head, &lookup);
+
+	if (index && (index->type == type || type == RMAP_ANY))
+		return index;
+
 	return NULL;
 }
 
@@ -1199,7 +1207,6 @@ static struct route_map_index *
 route_map_index_add(struct route_map *map, enum route_map_type type, int pref)
 {
 	struct route_map_index *index;
-	struct route_map_index *point;
 
 	/* Allocate new route map inex. */
 	index = route_map_index_new();
@@ -1207,28 +1214,7 @@ route_map_index_add(struct route_map *map, enum route_map_type type, int pref)
 	index->type = type;
 	index->pref = pref;
 
-	/* Compare preference. */
-	for (point = map->head; point; point = point->next)
-		if (point->pref >= pref)
-			break;
-
-	if (map->head == NULL) {
-		map->head = map->tail = index;
-	} else if (point == NULL) {
-		index->prev = map->tail;
-		map->tail->next = index;
-		map->tail = index;
-	} else if (point == map->head) {
-		index->next = map->head;
-		map->head->prev = index;
-		map->head = index;
-	} else {
-		index->next = point;
-		index->prev = point->prev;
-		if (point->prev)
-			point->prev->next = index;
-		point->prev = index;
-	}
+	rmi_rbtree_add(&map->rmi_head, index);
 
 	route_map_pfx_tbl_update(RMAP_EVENT_INDEX_ADDED, index, 0, NULL);
 
@@ -2328,7 +2314,7 @@ static void route_map_pfx_tbl_update(route_map_event_t event,
 		route_map_pfx_table_del_default(AFI_IP, index);
 		route_map_pfx_table_del_default(AFI_IP6, index);
 
-		if ((index->map->head == NULL) && (index->map->tail == NULL)) {
+		if (rmi_rbtree_count(&index->map->rmi_head) == 0) {
 			rmap = index->map;
 
 			if (rmap->ipv4_prefix_table) {
@@ -2419,10 +2405,10 @@ static void route_map_pentry_process_dependency(struct hash_bucket *bucket,
 
 	rmap_name = dep_data->rname;
 	rmap = route_map_lookup_by_name(rmap_name);
-	if (!rmap || !rmap->head)
+	if (!rmap || rmi_rbtree_count(&rmap->rmi_head) == 0)
 		return;
 
-	for (index = rmap->head; index; index = index->next) {
+	frr_each (rmi_rbtree, &rmap->rmi_head, index) {
 		match_list = &index->match_list;
 
 		if (!match_list)
@@ -2548,7 +2534,7 @@ route_map_result_t route_map_apply_ext(struct route_map *map,
 		return RMAP_DENYMATCH;
 	}
 
-	if (map == NULL || map->head == NULL) {
+	if (map == NULL || rmi_rbtree_count(&map->rmi_head) == 0) {
 		ret = RMAP_DENYMATCH;
 		goto route_map_apply_end;
 	}
@@ -2584,10 +2570,10 @@ route_map_result_t route_map_apply_ext(struct route_map *map,
 		}
 		skip_match_clause = true;
 	} else {
-		index = map->head;
+		index = rmi_rbtree_first(&map->rmi_head);
 	}
 
-	for (; index; index = index->next) {
+	for (; index; index = rmi_rbtree_next(&map->rmi_head, index)) {
 		if (!skip_match_clause) {
 			index->applied++;
 			/* Apply this index. */
@@ -2683,12 +2669,14 @@ route_map_result_t route_map_apply_ext(struct route_map *map,
 				case RMAP_GOTO: {
 					/* Find the next clause to jump to */
 					struct route_map_index *next =
-						index->next;
+						rmi_rbtree_next(&map->rmi_head,
+								index);
 					int nextpref = index->nextpref;
 
 					while (next && next->pref < nextpref) {
 						index = next;
-						next = next->next;
+						next = rmi_rbtree_next(
+							&map->rmi_head, index);
 					}
 					if (next == NULL) {
 						/* No clauses match! */
@@ -3068,7 +3056,7 @@ static void clear_route_map_helper(struct route_map *map)
 	struct route_map_index *index;
 
 	map->applied_clear = map->applied;
-	for (index = map->head; index; index = index->next)
+	frr_each (rmi_rbtree, &map->rmi_head, index)
 		index->applied_clear = index->applied;
 }
 

@@ -156,6 +156,7 @@ struct route_map_rule_list {
 /* Forward struct declaration: the complete can be found later this file. */
 struct routemap_hook_context;
 
+PREDECL_RBTREE_UNIQ(rmi_rbtree);
 /* Route map index structure. */
 struct route_map_index {
 	struct route_map *map;
@@ -180,9 +181,7 @@ struct route_map_index {
 	struct route_map_rule_list match_list;
 	struct route_map_rule_list set_list;
 
-	/* Make linked list. */
-	struct route_map_index *next;
-	struct route_map_index *prev;
+	struct rmi_rbtree_item item;
 
 	/* Keep track how many times we've try to apply */
 	uint64_t applied;
@@ -206,8 +205,7 @@ struct route_map {
 	char *name;
 
 	/* Route map's rule. */
-	struct route_map_index *head;
-	struct route_map_index *tail;
+	struct rmi_rbtree_head rmi_head;
 
 	/* Make linked list. */
 	struct route_map *next;
