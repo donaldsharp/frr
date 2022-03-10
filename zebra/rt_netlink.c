@@ -2989,6 +2989,7 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	vni_t vni = 0;
 	uint32_t nhg_id = 0;
 	bool vni_mcast_grp = false;
+	struct zebra_l2_brvlan_mac *bmac;
 
 	ndm = NLMSG_DATA(h);
 
@@ -3139,6 +3140,21 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 					!!(ndm->ndm_flags & NTF_EXT_LEARNED));
 		}
 
+		bmac = zebra_l2_brvlan_mac_find(br_if, vid, &mac);
+		if (bmac)
+			zebra_l2_brvlan_mac_update(br_if, bmac, ifp->ifindex);
+		else {
+			bmac = zebra_l2_brvlan_mac_add(
+				br_if, vid, &mac, ifp->ifindex, sticky,
+				local_inactive, dp_static);
+			if (!bmac)
+				zlog_err(
+					"Failed to add local MAC cache bridge %s vid %u mac %s IF %u",
+					br_if->name, vid,
+					prefix_mac2str(&mac, buf, sizeof(buf)),
+					ifp->ifindex);
+		}
+
 		return zebra_vxlan_local_mac_add_update(ifp, br_if, &mac, vid,
 				sticky, local_inactive, dp_static);
 	}
@@ -3168,6 +3184,15 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 
 	if (IS_ZEBRA_IF_VXLAN(ifp))
 		return 0;
+
+	bmac = zebra_l2_brvlan_mac_find(br_if, vid, &mac);
+	if (bmac)
+		zebra_l2_brvlan_mac_del(br_if, bmac);
+	else
+		zlog_err(
+			"Failed to find local MAC cache for bridge %s vid %u mac %s at DEL",
+			br_if->name, vid,
+			prefix_mac2str(&mac, buf, sizeof(buf)));
 
 	return zebra_vxlan_local_mac_del(ifp, br_if, &mac, vid);
 }

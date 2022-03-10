@@ -56,6 +56,329 @@
 #include "zebra/zebra_evpn_vxlan.h"
 #include "zebra/zebra_router.h"
 
+static void zebra_l2_brvlan_mac_iterate_callback(struct hash_bucket *bucket,
+						 void *ctxt)
+{
+	struct zebra_l2_brvlan_mac *bmac;
+	struct zebra_l2_brvlan_mac_ctx *ctx;
+
+	bmac = (struct zebra_l2_brvlan_mac *)bucket->data;
+	ctx = (struct zebra_l2_brvlan_mac_ctx *)ctxt;
+
+	ctx->func(ctx->br_if, ctx->vid, &bmac->macaddr, bmac->ifindex,
+		  bmac->sticky, bmac->local_inactive, bmac->dp_static,
+		  ctx->arg);
+}
+
+static void zebra_l2_brvlan_print_mac_hash(struct hash_bucket *bucket,
+					   void *ctxt)
+{
+	struct zebra_l2_brvlan_mac_ctx *ctx;
+	struct vty *vty;
+	struct zebra_l2_brvlan_mac *bmac;
+	json_object *json_obj = NULL, *json_mac = NULL;
+	char mac[ETHER_ADDR_STRLEN];
+	struct interface *ifp;
+
+	ctx = (struct zebra_l2_brvlan_mac_ctx *)ctxt;
+	vty = (struct vty *)(ctx->arg);
+	bmac = (struct zebra_l2_brvlan_mac *)bucket->data;
+	json_obj = ctx->json;
+
+	prefix_mac2str(&bmac->macaddr, mac, sizeof(mac));
+	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(NS_DEFAULT),
+					bmac->ifindex);
+	if (json_obj) {
+		json_mac = json_object_new_object();
+		json_object_int_add(json_mac, "IfIndex", bmac->ifindex);
+		json_object_string_add(json_mac, "Interface",
+				       ifp ? ifp->name : "-");
+		json_object_object_add(json_obj, mac, json_mac);
+	} else {
+		vty_out(vty, "%-17s %-7u %s\n", mac, bmac->ifindex,
+			ifp ? ifp->name : "-");
+	}
+}
+
+static unsigned int zebra_l2_brvlan_mac_hash_keymake(const void *p)
+{
+	const struct zebra_l2_brvlan_mac *bmac;
+	const void *pnt;
+
+	bmac = (const struct zebra_l2_brvlan_mac *)p;
+	pnt = (void *)bmac->macaddr.octet;
+
+	return jhash(pnt, ETH_ALEN, 0xa5a5a55a);
+}
+
+static bool zebra_l2_brvlan_mac_hash_cmp(const void *p1, const void *p2)
+{
+	const struct zebra_l2_brvlan_mac *bmac1;
+	const struct zebra_l2_brvlan_mac *bmac2;
+
+	bmac1 = (const struct zebra_l2_brvlan_mac *)p1;
+	bmac2 = (const struct zebra_l2_brvlan_mac *)p2;
+
+	if (bmac1 == NULL && bmac2 == NULL)
+		return true;
+
+	if (bmac1 == NULL || bmac2 == NULL)
+		return false;
+
+	return (memcmp(bmac1->macaddr.octet, bmac2->macaddr.octet, ETH_ALEN) ==
+		0);
+}
+
+static void zebra_l2_brvlan_mac_free(void *p)
+{
+	struct zebra_l2_brvlan_mac *bmac;
+
+	bmac = (struct zebra_l2_brvlan_mac *)p;
+	XFREE(MTYPE_TMP, bmac);
+}
+
+static void *zebra_l2_brvlan_mac_alloc(void *p)
+{
+	struct zebra_l2_brvlan_mac *bmac;
+	const struct zebra_l2_brvlan_mac *tmp_mac;
+
+	tmp_mac = (const struct zebra_l2_brvlan_mac *)p;
+	bmac = XCALLOC(MTYPE_TMP, sizeof(*bmac));
+	bmac->vid = tmp_mac->vid;
+	memcpy(&bmac->macaddr, &tmp_mac->macaddr, ETH_ALEN);
+
+	return (void *)bmac;
+}
+
+static void zebra_l2_brvlan_mac_table_destroy(struct hash *mac_table)
+{
+	if (mac_table) {
+		hash_clean(mac_table, zebra_l2_brvlan_mac_free);
+		hash_free(mac_table);
+	}
+}
+
+static struct hash *zebra_l2_brvlan_mac_table_create()
+{
+	return hash_create(zebra_l2_brvlan_mac_hash_keymake,
+			   zebra_l2_brvlan_mac_hash_cmp,
+			   "Zebra L2 Bridge MAC Table");
+}
+
+void zebra_l2_brvlan_mac_iterate(struct interface *br_if, vlanid_t vid,
+				 int (*func)(struct interface *br_if,
+					     vlanid_t vid,
+					     struct ethaddr *macaddr,
+					     ifindex_t ifidx, bool, bool, bool,
+					     void *a),
+				 void *arg)
+{
+	struct zebra_if *zif;
+	struct zebra_l2_bridge_if *br;
+	struct zebra_l2_brvlan_mac_ctx ctx;
+
+	zif = (struct zebra_if *)br_if->info;
+	br = BRIDGE_FROM_ZEBRA_IF(zif);
+	if (!br || !br->mac_table[vid])
+		return;
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.br_if = br_if;
+	ctx.vid = vid;
+	ctx.func = func;
+	ctx.arg = arg;
+	hash_iterate(br->mac_table[vid], zebra_l2_brvlan_mac_iterate_callback,
+		     &ctx);
+}
+
+void zebra_l2_brvlan_print_macs(struct vty *vty, struct interface *br_if,
+				vlanid_t vid, bool uj)
+{
+	struct zebra_if *zif;
+	struct zebra_l2_bridge_if *br;
+	uint32_t num_macs;
+	struct zebra_l2_brvlan_mac_ctx ctx;
+
+	zif = (struct zebra_if *)br_if->info;
+	br = BRIDGE_FROM_ZEBRA_IF(zif);
+	if (!br) {
+		return;
+	}
+	json_object *json_obj = NULL, *json_mac_obj = NULL;
+	if (uj) { /* json format */
+		json_obj = json_object_new_object();
+		json_mac_obj = json_object_new_object();
+	}
+	if (!br->mac_table[vid]) {
+		vty_out(vty,
+			"%% bridge %s VID %u does not have a MAC hash table\n",
+			br_if->name, vid);
+		return;
+	}
+	num_macs = hashcount(br->mac_table[vid]);
+	if (!num_macs) {
+		vty_out(vty, "bridge %s VID %u - No local MACs\n", br_if->name,
+			vid);
+		return;
+	}
+	if (uj) {
+		json_object_string_add(json_obj, "bridge", br_if->name);
+		json_object_int_add(json_obj, "VID", vid);
+		json_object_int_add(json_obj, "number of local MACS", num_macs);
+	} else {
+		vty_out(vty, "bridge %s VID %u - Number of local MACs: %u\n",
+			br_if->name, vid, num_macs);
+		vty_out(vty, "%-17s %-7s %-30s\n", "MAC", "IfIndex",
+			"Interface");
+	}
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.br_if = br_if;
+	ctx.vid = vid;
+	ctx.arg = vty;
+	ctx.json = json_mac_obj;
+	hash_iterate(br->mac_table[vid], zebra_l2_brvlan_print_mac_hash, &ctx);
+	if (uj) {
+		json_object_object_add(json_obj, "MAC", json_mac_obj);
+		vty_out(vty, "%s\n",
+			json_object_to_json_string_ext(
+				json_obj, JSON_C_TO_STRING_PRETTY));
+		json_object_free(json_obj);
+	}
+}
+
+int zebra_l2_brvlan_mac_del(struct interface *br_if,
+			    struct zebra_l2_brvlan_mac *bmac)
+{
+	struct zebra_if *zif;
+	struct zebra_l2_bridge_if *br;
+	vlanid_t vid;
+	struct zebra_l2_brvlan_mac *tmp_mac;
+	char buf[ETHER_ADDR_STRLEN];
+	uint32_t num_macs;
+
+	zif = (struct zebra_if *)br_if->info;
+	br = BRIDGE_FROM_ZEBRA_IF(zif);
+	if (!br->mac_table[bmac->vid]) {
+		zlog_debug("bridge %s VID %u - MAC hash table not found",
+			   br_if->name, bmac->vid);
+		return -1;
+	}
+
+	vid = bmac->vid;
+	tmp_mac = hash_release(br->mac_table[vid], &bmac);
+	if (tmp_mac)
+		zebra_l2_brvlan_mac_free(tmp_mac);
+
+	num_macs = hashcount(br->mac_table[vid]);
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug("bridge %s VID %u bmac %p MAC %s delete - hash# %u",
+			   br_if->name, vid, bmac,
+			   prefix_mac2str(&bmac->macaddr, buf, sizeof(buf)),
+			   num_macs);
+
+	if (!num_macs) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug("bridge %s vlan %u - destroying MAC table",
+				   br_if->name, vid);
+		zebra_l2_brvlan_mac_table_destroy(br->mac_table[vid]);
+		br->mac_table[vid] = NULL;
+	}
+
+	return 0;
+}
+
+int zebra_l2_brvlan_mac_update(struct interface *br_if,
+			       struct zebra_l2_brvlan_mac *bmac,
+			       ifindex_t ifidx)
+{
+	char buf[ETHER_ADDR_STRLEN];
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug("bridge %s VID %u bmac %p MAC %s update ifidx %u",
+			   br_if->name, bmac->vid, bmac,
+			   prefix_mac2str(&bmac->macaddr, buf, sizeof(buf)),
+			   ifidx);
+
+	bmac->ifindex = ifidx;
+	return 0;
+}
+
+struct zebra_l2_brvlan_mac *
+zebra_l2_brvlan_mac_add(struct interface *br_if, vlanid_t vid,
+			struct ethaddr *mac, ifindex_t ifidx, bool sticky,
+			bool local_inactive, bool dp_static)
+{
+	struct zebra_if *zif;
+	struct zebra_l2_bridge_if *br;
+	struct zebra_l2_brvlan_mac *bmac;
+	struct zebra_l2_brvlan_mac tmp_mac;
+	char buf[ETHER_ADDR_STRLEN];
+	uint32_t num_macs;
+
+	zif = (struct zebra_if *)br_if->info;
+	br = BRIDGE_FROM_ZEBRA_IF(zif);
+	if (!br->mac_table[vid]) {
+		br->mac_table[vid] = zebra_l2_brvlan_mac_table_create();
+		if (!br->mac_table[vid]) {
+			zlog_err(
+				"bridge %s vid %u - failed to create MAC hash table",
+				br_if->name, vid);
+			return NULL;
+		}
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug("bridge %s vid %u - MAC hash table created",
+				   br_if->name, vid);
+	}
+
+	memset(&tmp_mac, 0, sizeof(tmp_mac));
+	memcpy(&tmp_mac.macaddr, mac, ETH_ALEN);
+	bmac = hash_get(br->mac_table[vid], (void *)&tmp_mac,
+			zebra_l2_brvlan_mac_alloc);
+	assert(bmac);
+	bmac->br_if = br_if;
+	bmac->vid = vid;
+	bmac->ifindex = ifidx;
+	bmac->sticky = sticky;
+	bmac->local_inactive = local_inactive;
+	bmac->dp_static = dp_static;
+	num_macs = hashcount(br->mac_table[vid]);
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug(
+			"bridge %s VID %u MAC %s ifidx %u add - %p, hash# %u",
+			br_if->name, vid, prefix_mac2str(mac, buf, sizeof(buf)),
+			ifidx, bmac, num_macs);
+
+	return bmac;
+}
+
+struct zebra_l2_brvlan_mac *zebra_l2_brvlan_mac_find(struct interface *br_if,
+						     vlanid_t vid,
+						     struct ethaddr *mac)
+{
+	struct zebra_if *zif;
+	struct zebra_l2_bridge_if *br;
+	struct zebra_l2_brvlan_mac *bmac;
+	struct zebra_l2_brvlan_mac tmp_mac;
+	char buf[ETHER_ADDR_STRLEN];
+
+	zif = (struct zebra_if *)br_if->info;
+	br = BRIDGE_FROM_ZEBRA_IF(zif);
+	if (!br->mac_table[vid])
+		return NULL;
+
+	memset(&tmp_mac, 0, sizeof(tmp_mac));
+	memcpy(&tmp_mac.macaddr, mac, ETH_ALEN);
+	bmac = (struct zebra_l2_brvlan_mac *)hash_lookup(br->mac_table[vid],
+							 (void *)&tmp_mac);
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug("bridge %s VID %u MAC %s find - %p", br_if->name,
+			   vid, prefix_mac2str(mac, buf, sizeof(buf)), bmac);
+
+	return bmac;
+}
+
 static unsigned int zebra_l2_bridge_vlan_hash_keymake(const void *p)
 {
 	const struct zebra_l2_bridge_vlan *bvlan;

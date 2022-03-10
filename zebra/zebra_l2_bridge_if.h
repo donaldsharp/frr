@@ -46,6 +46,28 @@ extern "C" {
 /* Bridge interface change flags of interest. */
 #define ZEBRA_BRIDGEIF_ACCESS_BD_CHANGE     (1 << 0)
 
+extern void zebra_l2_brvlan_mac_iterate(struct interface *br_if, vlanid_t vid,
+					int (*func)(struct interface *br_if,
+						    vlanid_t vid,
+						    struct ethaddr *macaddr,
+						    ifindex_t ifidx, bool, bool,
+						    bool, void *a),
+					void *arg);
+extern void zebra_l2_brvlan_print_macs(struct vty *vty, struct interface *br_if,
+				       vlanid_t vid, bool uj);
+extern int zebra_l2_brvlan_mac_del(struct interface *br_if,
+				   struct zebra_l2_brvlan_mac *bmac);
+extern int zebra_l2_brvlan_mac_update(struct interface *br_if,
+				      struct zebra_l2_brvlan_mac *bmac,
+				      ifindex_t ifidx);
+extern struct zebra_l2_brvlan_mac *
+zebra_l2_brvlan_mac_add(struct interface *br_if, vlanid_t vid,
+			struct ethaddr *mac, ifindex_t ifidx, bool sticky,
+			bool local_inactive, bool dp_static);
+extern struct zebra_l2_brvlan_mac *
+zebra_l2_brvlan_mac_find(struct interface *br_if, vlanid_t vid,
+			 struct ethaddr *mac);
+
 extern struct zebra_l2_bridge_vlan * zebra_l2_bridge_if_vlan_find(const struct zebra_if *zif, vlanid_t vid);
 extern vni_t zebra_l2_bridge_if_vni_find(const struct zebra_if *zif, vlanid_t vid);
 extern void zebra_l2_bridge_if_vlan_iterate(struct zebra_if *zif,

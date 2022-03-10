@@ -887,6 +887,9 @@ void zebra_evpn_read_mac_neigh(zebra_evpn_t *zevpn, struct interface *ifp)
 {
 	struct zebra_ns *zns;
 	struct zebra_if *zif;
+	struct interface *br_if;
+	struct zebra_vrf *zvrf;
+	struct mac_walk_ctx m_wctx;
 	struct interface *vlan_if;
 	struct interface *vrr_if;
 	struct zebra_vxlan_vni *vni;
@@ -894,18 +897,28 @@ void zebra_evpn_read_mac_neigh(zebra_evpn_t *zevpn, struct interface *ifp)
 	zif = ifp->info;
 	vni = zebra_vxlan_if_vni_find(zif, zevpn->vni);
 	zns = zebra_ns_lookup(NS_DEFAULT);
+	br_if = zif->brslave_info.br_if;
 
 	if (IS_ZEBRA_DEBUG_VXLAN)
 		zlog_debug(
-			"Reading MAC FDB and Neighbors for intf %s(%u) VNI %u master %u",
-			ifp->name, ifp->ifindex, zevpn->vni,
-			zif->brslave_info.bridge_ifindex);
+			"Building EVPN MAC cache for VNI %u - bridge %s(%u) VID %u",
+			zevpn->vni, br_if->name, br_if->ifindex,
+			vni->access_vlan);
 
-	macfdb_read_for_bridge(zns, ifp, zif->brslave_info.br_if, vni->access_vlan);
+	zvrf = zebra_vrf_get_evpn();
+	assert(zvrf);
+
+	memset(&m_wctx, 0, sizeof(struct mac_walk_ctx));
+	m_wctx.zevpn = zevpn;
+	m_wctx.zvrf = zvrf;
+	zebra_l2_brvlan_mac_iterate(br_if, vni->access_vlan,
+				    zebra_evpn_mac_add_local_mac, &m_wctx);
+
 	/* We need to specifically read and retrieve the entry for BUM handling
 	 * via multicast, if any.
 	 */
 	macfdb_read_mcast_entry_for_vni(zns, ifp, zevpn->vni);
+
 	vlan_if = zvni_map_to_svi(vni->access_vlan, zif->brslave_info.br_if);
 	if (vlan_if) {
 		/* Add SVI MAC */
@@ -922,6 +935,11 @@ void zebra_evpn_read_mac_neigh(zebra_evpn_t *zevpn, struct interface *ifp)
 			if (vrr_if)
 				zebra_evpn_add_macip_for_intf(vrr_if, zevpn);
 		}
+
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"Building EVPN Neigh cache for VNI %u - SVI %s(%u)",
+				zevpn->vni, vlan_if->name, vlan_if->ifindex);
 
 		neigh_read_for_vlan(zns, vlan_if);
 	}
