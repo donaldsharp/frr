@@ -1108,7 +1108,6 @@ static void zebra_evpn_vxlan_cleanup_all(struct hash_bucket *bucket, void *arg)
 {
 	zebra_evpn_t *zevpn = NULL;
 	zebra_l3vni_t *zl3vni = NULL;
-	struct zebra_vrf *zvrf = (struct zebra_vrf *)arg;
 
 	zevpn = (zebra_evpn_t *)bucket->data;
 
