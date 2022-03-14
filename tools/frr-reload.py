@@ -917,6 +917,38 @@ def bgp_delete_nbr_remote_as_line(lines_to_add):
         lines_to_add.remove((ctx_keys, line))
 
 
+def bgp_delete_inst_move_line(lines_to_del):
+    # Deletion of bgp default inst followed by
+    # bgp vrf inst leads to issue of default
+    # instance can not be removed.
+    # Move the bgp default instance line to end.
+    bgp_default_inst = False
+    bgp_vrf_inst = False
+
+    for (ctx_keys, line) in lines_to_del:
+        # Find bgp default inst
+        if (
+            ctx_keys[0].startswith("router bgp")
+            and not line
+            and "vrf" not in ctx_keys[0]
+        ):
+            bgp_default_inst = True
+        # Find bgp vrf inst
+        elif ctx_keys[0].startswith("router bgp") and not line and "vrf" in ctx_keys[0]:
+            bgp_vrf_inst = True
+
+    if bgp_default_inst and bgp_vrf_inst:
+        for (ctx_keys, line) in lines_to_del:
+            # move bgp default inst to end
+            if (
+                ctx_keys[0].startswith("router bgp")
+                and not line
+                and "vrf" not in ctx_keys[0]
+            ):
+                lines_to_del.remove((ctx_keys, line))
+                lines_to_del.append((ctx_keys, line))
+
+
 """
 This method handles deletion of bgp peer group config.
 The objective is to delete config lines related to peers
@@ -1035,6 +1067,7 @@ def delete_move_lines(lines_to_add, lines_to_del):
         lines_to_del.append((ctx_keys, line))
 
     if found_pg_del_cmd == False:
+        bgp_delete_inst_move_line(lines_to_del)
         return (lines_to_add, lines_to_del)
 
     """
@@ -1085,6 +1118,8 @@ def delete_move_lines(lines_to_add, lines_to_del):
     for (ctx_keys, line) in lines_to_del_to_app:
         lines_to_del.remove((ctx_keys, line))
         lines_to_del.append((ctx_keys, line))
+
+    bgp_delete_inst_move_line(lines_to_del)
 
     return (lines_to_add, lines_to_del)
 
