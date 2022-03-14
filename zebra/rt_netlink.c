@@ -3825,7 +3825,14 @@ static void netlink_handle_neigh_throttle(int cmd, const struct ndmsg *ndm,
 					  struct zebra_ns *zns,
 					  struct interface *ifp)
 {
-
+	/*
+	 * We may see three different netlink messages:
+	 *   NEWNEIGH when an entry is added; maybe resolved or failed.
+	 *   DELNEIGH when an entry is removed by the OS
+	 *   GETNEIGH if application resolution has been configured (via
+	 *   sysctl on linux). in this case, we will attempt to send the
+	 *   the first APR or NS request ourselves.
+	 */
 	if (cmd == RTM_NEWNEIGH) {
 		if (ndm->ndm_state & NUD_REACHABLE)
 			zebra_neigh_throttle_delete(ifp->vrf_id, addr);
