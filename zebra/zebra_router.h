@@ -247,6 +247,9 @@ struct zebra_router {
 	 */
 	bool asic_offloaded;
 	bool notify_on_ack;
+
+	/* Allow NHGs for routes on GRE links */
+	bool gre_use_nhg;
 };
 
 #define GRACEFUL_RESTART_TIME 60
