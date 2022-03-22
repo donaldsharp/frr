@@ -8951,8 +8951,8 @@ static void route_vty_short_status_out(struct vty *vty,
 static char *bgp_nexthop_hostname(struct peer *peer,
 				  struct bgp_nexthop_cache *bnc)
 {
-	if (peer->hostname
-	    && CHECK_FLAG(peer->bgp->flags, BGP_FLAG_SHOW_NEXTHOP_HOSTNAME))
+	if (peer->hostname &&
+	    CHECK_FLAG(peer->bgp->flags, BGP_FLAG_SHOW_NEXTHOP_HOSTNAME))
 		return peer->hostname;
 	return NULL;
 }
@@ -9115,7 +9115,7 @@ void route_vty_out(struct vty *vty, const struct prefix *p,
 					      &attr->mp_nexthop_global_in,
 					      vrf_id_str);
 
-			len = wide ? (41 - len) : (16 - len);
+			len = 16 - len;
 			if (len < 1)
 				vty_out(vty, "\n%*s", 36, " ");
 			else
