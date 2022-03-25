@@ -11565,6 +11565,8 @@ DEFPY (show_ip_bgp_json,
 			return bgp_show(vty, bgp, afi, safi, sh_type,
 					output_arg, show_flags);
 	} else {
+		struct listnode *node;
+		struct bgp *abgp;
 		/* show <ip> bgp ipv4 all: AFI_IP, show <ip> bgp ipv6 all:
 		 * AFI_IP6 */
 
@@ -11576,72 +11578,80 @@ DEFPY (show_ip_bgp_json,
 			afi = CHECK_FLAG(show_flags, BGP_SHOW_OPT_AFI_IP)
 				      ? AFI_IP
 				      : AFI_IP6;
-			FOREACH_SAFI (safi) {
-				if (strmatch(get_afi_safi_str(afi, safi, true),
-					     "Unknown"))
-					continue;
+			for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, abgp)) {
+				FOREACH_SAFI (safi) {
+					if (!bgp_afi_safi_peer_exists(abgp, afi,
+								      safi))
+						continue;
 
-				if (!bgp_afi_safi_peer_exists(bgp, afi, safi))
-					continue;
+					if (uj) {
+						if (first)
+							first = false;
+						else
+							vty_out(vty, ",\n");
 
-				if (uj) {
-					if (first)
-						first = false;
+						vty_out(vty, "\"%s\":{\n",
+							get_afi_safi_str(afi,
+									 safi,
+									 true));
+					} else
+						vty_out(vty,
+							"\nFor address family: %s\n",
+							get_afi_safi_str(
+								afi, safi,
+								false));
+
+					if (community)
+						bgp_show_community(
+							vty, abgp, community,
+							exact_match, afi, safi,
+							show_flags);
 					else
-						vty_out(vty, ",\n");
-					vty_out(vty, "\"%s\":{\n",
-						get_afi_safi_str(afi, safi,
-								 true));
-				} else
-					vty_out(vty,
-						"\nFor address family: %s\n",
-						get_afi_safi_str(afi, safi,
-								 false));
-
-				if (community)
-					bgp_show_community(vty, bgp, community,
-							   exact_match, afi,
-							   safi, show_flags);
-				else
-					bgp_show(vty, bgp, afi, safi, sh_type,
-						 output_arg, show_flags);
-				if (uj)
-					vty_out(vty, "}\n");
+						bgp_show(vty, abgp, afi, safi,
+							 sh_type, output_arg,
+							 show_flags);
+					if (uj)
+						vty_out(vty, "}\n");
+				}
 			}
 		} else {
 			/* show <ip> bgp all: for each AFI and SAFI*/
-			FOREACH_AFI_SAFI (afi, safi) {
-				if (strmatch(get_afi_safi_str(afi, safi, true),
-					     "Unknown"))
-					continue;
+			for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, abgp)) {
+				FOREACH_AFI_SAFI (afi, safi) {
+					if (!bgp_afi_safi_peer_exists(abgp, afi,
+								      safi))
+						continue;
 
-				if (!bgp_afi_safi_peer_exists(bgp, afi, safi))
-					continue;
+					if (uj) {
+						if (first)
+							first = false;
+						else
+							vty_out(vty, ",\n");
 
-				if (uj) {
-					if (first)
-						first = false;
+						vty_out(vty, "\"%s\":{\n",
+							get_afi_safi_str(afi,
+									 safi,
+									 true));
+					} else
+						vty_out(vty,
+							"\nFor address family: %s\n",
+							get_afi_safi_str(
+								afi, safi,
+								false));
+
+					if (community)
+						bgp_show_community(
+							vty, abgp, community,
+							exact_match, afi, safi,
+							show_flags);
 					else
-						vty_out(vty, ",\n");
+						bgp_show(vty, abgp, afi, safi,
+							 sh_type, output_arg,
+							 show_flags);
 
-					vty_out(vty, "\"%s\":{\n",
-						get_afi_safi_str(afi, safi,
-								 true));
-				} else
-					vty_out(vty,
-						"\nFor address family: %s\n",
-						get_afi_safi_str(afi, safi,
-								 false));
-
-				if (community)
-					bgp_show_community(vty, bgp, community,
-							   exact_match, afi,
-							   safi, show_flags);
-				else
-					bgp_show(vty, bgp, afi, safi, sh_type,
-						 output_arg, show_flags);
-				if (uj)
-					vty_out(vty, "}\n");
+					if (uj)
+						vty_out(vty, "}\n");
+				}
 			}
 		}
 		if (uj)
