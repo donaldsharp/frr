@@ -3077,6 +3077,95 @@ DEFUN (show_ip_ssmpingd,
 	return CMD_SUCCESS;
 }
 
+static int pim_rp_cmd_worker(struct pim_instance *pim, struct vty *vty,
+			     const char *rp, const char *group,
+			     const char *plist)
+{
+	int result;
+
+	result = pim_rp_new_config(pim, rp, group, plist);
+
+	if (result == PIM_GROUP_BAD_ADDR_MASK_COMBO) {
+		vty_out(vty, "%% Inconsistent address and mask: %s\n",
+			group ? group : "No Group Address");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	if (result == PIM_GROUP_BAD_ADDRESS) {
+		vty_out(vty, "%% Bad group address specified: %s\n",
+			group ? group : "No Group Address");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	if (result == PIM_RP_BAD_ADDRESS) {
+		vty_out(vty, "%% Bad RP address specified: %s\n", rp);
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	if (result == PIM_RP_NO_PATH) {
+		vty_out(vty, "%% No Path to RP address specified: %s\n", rp);
+		return CMD_WARNING;
+	}
+
+	if (result == PIM_GROUP_OVERLAP) {
+		vty_out(vty,
+			"%% Group range specified cannot exact match another\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	if (result == PIM_GROUP_PFXLIST_OVERLAP) {
+		vty_out(vty,
+			"%% This group is already covered by a RP prefix-list\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	if (result == PIM_RP_PFXLIST_IN_USE) {
+		vty_out(vty,
+			"%% The same prefix-list cannot be applied to multiple RPs\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	return CMD_SUCCESS;
+}
+
+static int pim_cmd_spt_switchover(struct pim_instance *pim,
+				  enum pim_spt_switchover spt,
+				  const char *plist)
+{
+	/*
+	 * If we are already in the given state, switching
+	 * to it again, will cause things like the lhr to
+	 * readd the pimreg again.  Which would be...
+	 * fun to any hardware forwarding that is going on
+	 * since it will be brought up to the control plane
+	 * again when it has already been programmed correctly
+	 * based upon given state
+	 */
+	if (pim->spt.switchover == spt)
+		return CMD_SUCCESS;
+
+	pim->spt.switchover = spt;
+
+	switch (pim->spt.switchover) {
+	case PIM_SPT_IMMEDIATE:
+		XFREE(MTYPE_PIM_PLIST_NAME, pim->spt.plist);
+
+		pim_upstream_add_lhr_star_pimreg(pim);
+		break;
+	case PIM_SPT_INFINITY:
+		pim_upstream_remove_lhr_star_pimreg(pim, plist);
+
+		XFREE(MTYPE_PIM_PLIST_NAME, pim->spt.plist);
+
+		if (plist)
+			pim->spt.plist =
+				XSTRDUP(MTYPE_PIM_PLIST_NAME, plist);
+		break;
+	}
+
+	return CMD_SUCCESS;
+}
+
 DEFUN (ip_pim_spt_switchover_infinity,
        ip_pim_spt_switchover_infinity_cmd,
        "ip pim spt-switchover infinity-and-beyond",
