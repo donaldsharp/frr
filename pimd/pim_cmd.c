@@ -6826,6 +6826,18 @@ static int pim_cmd_spt_switchover(struct pim_instance *pim,
 				  enum pim_spt_switchover spt,
 				  const char *plist)
 {
+	/*
+	 * If we are already in the given state, switching
+	 * to it again, will cause things like the lhr to
+	 * readd the pimreg again.  Which would be...
+	 * fun to any hardware forwarding that is going on
+	 * since it will be brought up to the control plane
+	 * again when it has already been programmed correctly
+	 * based upon given state
+	 */
+	if (pim->spt.switchover == spt)
+		return CMD_SUCCESS;
+
 	pim->spt.switchover = spt;
 
 	switch (pim->spt.switchover) {
