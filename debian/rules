@@ -51,17 +51,28 @@ override_dh_auto_configure:
 		--enable-doc-html \
 		--enable-snmp \
 		--enable-fpm \
-		--disable-protobuf \
 		--disable-zeromq \
 		--enable-ospfapi \
-		--enable-bgp-vnc \
-		--enable-multipath=256 \
+		--disable-bgp-vnc \
+		--enable-multipath=128 \
 		\
 		--enable-user=frr \
 		--enable-group=frr \
 		--enable-vty-group=frrvty \
 		--enable-configfile-mask=0640 \
 		--enable-logfile-mask=0640 \
+		\
+		--enable-protobuf \
+		--enable-cumulus=yes \
+		--enable-csmgr=yes \
+		--enable-datacenter=yes \
+		--enable-bfdd=no \
+		--enable-sharpd=yes \
+		--enable-grpc=yes \
+		--enable-bgp-lttng=yes \
+		# end
+
+
 		# end
 
 override_dh_auto_install:
