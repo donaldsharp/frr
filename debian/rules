@@ -21,10 +21,12 @@ else
   CONF_RPKI=--disable-rpki
 endif
 
-ifeq ($(filter pkg.frr.lua,$(DEB_BUILD_PROFILES)),)
-  CONF_LUA=--disable-scripting
+ifeq ($(filter pkg.frr.nosystemd,$(DEB_BUILD_PROFILES)),)
+  DH_WITH_SYSTEMD=systemd,
+  CONF_SYSTEMD=--enable-systemd=yes
 else
-  CONF_LUA=--enable-scripting
+  DH_WITH_SYSTEMD=
+  CONF_SYSTEMD=--enable-systemd=no
 endif
 
 ifeq ($(filter pkg.frr.nopim6d,$(DEB_BUILD_PROFILES)),)
@@ -39,14 +41,28 @@ else
   CONF_GRPC=--enable-grpc
 endif
 
+ifneq (,$(filter sanitizer,$(DEB_BUILD_OPTIONS)))
+  CONF_ASAN=--enable-address-sanitizer
+else
+  CONF_ASAN=--disable-address-sanitizer
+endif
+
+ifneq (,$(filter devbuild,$(DEB_BUILD_OPTIONS)))
+  CONF_DEVBUILD=--enable-dev-build
+else
+  CONF_DEVBUILD=--disable-dev-build
+endif
+
+
 export PYTHON=python3
 
 %:
-	dh $@ -Bbuild --with=sphinxdoc
+	dh $@ -Bbuild --with=sphinxdoc --with=$(DH_WITH_SYSTEMD)autoreconf --parallel
 
 override_dh_auto_configure:
 	$(shell dpkg-buildflags --export=sh); \
 	dh_auto_configure -- \
+		--enable-exampledir=/usr/share/doc/frr/examples/ \
 		--sbindir=/usr/lib/frr \
 		--with-vtysh-pager=/usr/bin/pager \
 		--libdir=/usr/lib/$(DEB_HOST_MULTIARCH)/frr \
@@ -54,8 +70,9 @@ override_dh_auto_configure:
 		LIBTOOLFLAGS="-rpath /usr/lib/$(DEB_HOST_MULTIARCH)/frr" \
 		--disable-dependency-tracking \
 		\
+		$(CONF_DEVBUILD) \
+		$(CONF_SYSTEMD) \
 		$(CONF_RPKI) \
-		$(CONF_LUA) \
 		$(CONF_PIM6) \
 		$(CONF_GRPC) \
 		--with-libpam \
@@ -63,17 +80,27 @@ override_dh_auto_configure:
 		--enable-doc-html \
 		--enable-snmp \
 		--enable-fpm \
-		--disable-protobuf \
 		--disable-zeromq \
 		--enable-ospfapi \
-		--enable-bgp-vnc \
-		--enable-multipath=256 \
+		--disable-bgp-vnc \
+		--enable-multipath=128 \
 		\
 		--enable-user=frr \
 		--enable-group=frr \
 		--enable-vty-group=frrvty \
 		--enable-configfile-mask=0640 \
 		--enable-logfile-mask=0640 \
+		\
+		$(CONF_ASAN) \
+		--enable-protobuf \
+		--enable-cumulus=yes \
+		--enable-csmgr=yes \
+		--enable-datacenter=yes \
+		--enable-bfdd=no \
+		--enable-sharpd=yes \
+		--enable-grpc=yes \
+		--enable-bgp-lttng=yes \
+		--enable-zebra-lttng=yes \
 		# end
 
 override_dh_auto_install:
@@ -85,8 +112,9 @@ override_dh_auto_install:
 	sed -e '1c #!/usr/bin/python3' -i debian/tmp/usr/lib/frr/ospfclient.py
 
 # let dh_systemd_* and dh_installinit do their thing automatically
+ifeq ($(filter pkg.frr.nosystemd,$(DEB_BUILD_PROFILES)),)
 	cp build/tools/frr.service debian/frr.service
-	cp build/tools/frr@.service debian/frr@.service
+endif
 	cp build/tools/frrinit.sh debian/frr.init
 	-rm -f debian/tmp/usr/lib/frr/frr
 
@@ -126,4 +154,4 @@ override_dh_auto_clean:
 	if test -f Makefile; then make redistclean; fi
 	-rm -f debian/frr.init
 	-rm -f debian/frr.service
-	-rm -f debian/frr@.service
+
