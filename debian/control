@@ -31,7 +31,13 @@ Build-Depends: bison,
                python3-sphinx,
                texinfo (>= 4.7),
                lua5.3 <pkg.frr.lua>,
-               liblua5.3-dev <pkg.frr.lua>
+               liblua5.3-dev <pkg.frr.lua>,
+               protobuf-c-compiler,
+               libprotobuf-dev,
+               libprotobuf-c-dev,
+               protobuf-compiler-grpc,
+               libgrpc-dev,
+               libgrpc++-dev
 Standards-Version: 4.5.0.3
 Homepage: https://www.frrouting.org/
 Vcs-Browser: https://github.com/FRRouting/frr/tree/debian/master
