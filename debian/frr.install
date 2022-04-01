@@ -3,6 +3,7 @@ etc/
 tools/etc/frr/frr.conf etc/frr/
 tools/etc/logrotate.d/frr etc/logrotate.d/
 tools/frr-reload usr/lib/frr/
+tools/usr/share/cumulus/* usr/share/cumulus
 usr/bin/mtracebis
 usr/bin/vtysh
 usr/lib/*/frr/libfrr.*
@@ -20,3 +21,11 @@ usr/lib/frr/watchfrr
 usr/lib/frr/zebra
 usr/share/man/
 usr/share/yang/
+
+usr/lib/*/frr/libfrr_pb.*
+usr/lib/*/frr/libfrrfpm_pb.*
+usr/lib/*/frr/libmlag_pb.*
+usr/lib/*/frr/libfrrcares.*
+usr/lib/*/frr/libfrrospfapiclient.*
+usr/lib/*/frr/libfrrgrpc_pb.*
+usr/lib/*/frr/modules/grpc.so

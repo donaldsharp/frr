@@ -33,7 +33,16 @@ Build-Depends: bison,
                python3-sphinx:native,
                texinfo (>= 4.7),
                lua5.3 <pkg.frr.lua>,
-               liblua5.3-dev <pkg.frr.lua>
+               liblua5.3-dev <pkg.frr.lua>,
+	       libgrpc-dev,
+	       libgrpc++-dev,
+	       protobuf-compiler,
+	       protobuf-compiler-grpc,
+               protobuf-c-compiler,
+               libprotobuf-dev,
+               libprotobuf-c-dev,
+               csmgrd-dev,
+               liblttng-ust-dev
 Standards-Version: 4.5.0.3
 Homepage: https://www.frrouting.org/
 Vcs-Browser: https://github.com/FRRouting/frr/tree/debian/master
@@ -120,6 +129,8 @@ Architecture: all
 Depends: frr (<< ${source:Upstream-Version}.0-~),
          frr (>= ${source:Version}~),
          python3:any,
+         python3-babeltrace,
+	 python-ipaddress,
          ${misc:Depends}
 Description: FRRouting suite - Python tools
  The FRRouting suite uses a small Python tool to provide configuration
