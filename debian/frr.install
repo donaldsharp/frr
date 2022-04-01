@@ -19,3 +19,11 @@ usr/lib/frr/watchfrr
 usr/lib/frr/zebra
 usr/share/man/
 usr/share/yang/
+
+usr/lib/*/frr/libfrr_pb.*
+usr/lib/*/frr/libfrrfpm_pb.*
+usr/lib/*/frr/libmlag_pb.*
+usr/lib/*/frr/libfrrcares.*
+usr/lib/*/frr/libfrrospfapiclient.*
+usr/lib/*/frr/libfrrgrpc_pb.*
+usr/lib/*/frr/modules/grpc.so
