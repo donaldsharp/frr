@@ -185,7 +185,7 @@ version 7.5 and before Solaris was supported in a limited fashion.
 .. _feature-matrix:
 
 Feature Matrix
-^^^^^^^^^^^^^^
+--------------
 
 The following table lists all protocols cross-referenced to all operating
 systems that have at least CI build tests. Note that for features, only
