@@ -2776,7 +2776,7 @@ DEFPY(show_evpn_l2_nh,
 
 DEFPY (show_neigh_throttle,
        show_neigh_throttle_cmd,
-       "show " ZEBRA_NEIGH_THROTTLE_STR " [detail]$detail [json]$json",
+       "show " ZEBRA_NEIGH_THROTTLE_STR " [{detail$detail | json$json}]",
        SHOW_STR
        "Neighbor data\n"
        "Neighbor throttling data\n"
