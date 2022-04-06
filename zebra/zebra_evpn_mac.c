@@ -1139,7 +1139,6 @@ int zebra_evpn_mac_del(struct zebra_evpn *zevpn, struct zebra_mac *mac)
 {
 	zebra_mac_t *tmp_mac;
 	char buf[ETHER_ADDR_STRLEN];
-	struct zebra_l2_brvlan_mac *bmac;
 
 	if (IS_ZEBRA_DEBUG_VXLAN || IS_ZEBRA_DEBUG_EVPN_MH_MAC) {
 		char mac_buf[MAC_BUF_SIZE];
@@ -1149,12 +1148,6 @@ int zebra_evpn_mac_del(struct zebra_evpn *zevpn, struct zebra_mac *mac)
 			   zebra_evpn_zebra_mac_flag_dump(mac, mac_buf,
 							  sizeof(mac_buf)));
 	}
-
-	/* clean up from the local mac db */
-	bmac = zebra_l2_brvlan_mac_find(zevpn->bridge_if, zevpn->vid,
-					&mac->macaddr);
-	if (bmac)
-		zebra_l2_brvlan_mac_del(zevpn->bridge_if, bmac);
 	/* force de-ref any ES entry linked to the MAC */
 	zebra_evpn_es_mac_deref_entry(mac);
 
