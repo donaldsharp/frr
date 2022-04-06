@@ -69,14 +69,14 @@ struct thread_master *master;
 
 static bool watch_only = false;
 
-typedef enum {
+enum restart_phase {
 	PHASE_NONE = 0,
 	PHASE_INIT,
 	PHASE_STOPS_PENDING,
 	PHASE_WAITING_DOWN,
 	PHASE_ZEBRA_RESTART_PENDING,
 	PHASE_WAITING_ZEBRA_UP
-} restart_phase_t;
+};
 
 static const char *const phase_str[] = {
 	"Idle",
@@ -102,7 +102,7 @@ struct restart_info {
 };
 
 static struct global_state {
-	restart_phase_t phase;
+	enum restart_phase phase;
 	struct thread *t_phase_hanging;
 	struct thread *t_startup_timeout;
 	const char *vtydir;
@@ -864,7 +864,7 @@ static int phase_hanging(struct thread *t_hanging)
 	return 0;
 }
 
-static void set_phase(restart_phase_t new_phase)
+static void set_phase(enum restart_phase new_phase)
 {
 	gs.phase = new_phase;
 	if (gs.t_phase_hanging)
