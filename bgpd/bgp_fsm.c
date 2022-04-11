@@ -604,14 +604,13 @@ const char *const peer_down_str[] = {"",
 			       "Waiting for peer OPEN",
 			       "Reached received prefix count"};
 
-static int bgp_graceful_restart_timer_expire(struct thread *thread)
+static void bgp_gr_terminate(struct peer *peer)
 {
-	struct peer *peer;
 	afi_t afi;
 	safi_t safi;
 
-	peer = THREAD_ARG(thread);
-	peer->t_gr_restart = NULL;
+	BGP_TIMER_OFF(peer->t_gr_restart);
+	BGP_TIMER_OFF(peer->t_gr_stale);
 
 	/* NSF delete stale route */
 	for (afi = AFI_IP; afi < AFI_MAX; afi++)
@@ -620,15 +619,23 @@ static int bgp_graceful_restart_timer_expire(struct thread *thread)
 				bgp_clear_stale_route(peer, afi, safi);
 
 	UNSET_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT);
-	BGP_TIMER_OFF(peer->t_gr_stale);
+
+	bgp_timer_set(peer);
+}
+
+static int bgp_graceful_restart_timer_expire(struct thread *thread)
+{
+	struct peer *peer;
+
+	peer = THREAD_ARG(thread);
+
+	bgp_gr_terminate(peer);
 
 	if (bgp_debug_neighbor_events(peer)) {
 		zlog_debug("%s graceful restart timer expired", peer->host);
 		zlog_debug("%s graceful restart stalepath timer stopped",
 			   peer->host);
 	}
-
-	bgp_timer_set(peer);
 
 	return 0;
 }
@@ -1490,6 +1497,13 @@ int bgp_stop(struct peer *peer)
 					"%s graceful restart stalepath timer stopped",
 					peer->host);
 		}
+
+		/* Special case for link-down - GR doesn't apply here, because
+		 * the link event will have removed routes etc.
+		 */
+		if (peer->last_reset == PEER_DOWN_IF_DOWN)
+			UNSET_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT);
+
 		if (CHECK_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT)) {
 			if (bgp_debug_neighbor_events(peer)) {
 				zlog_debug(
@@ -1526,6 +1540,19 @@ int bgp_stop(struct peer *peer)
 
 		/* Reset peer synctime */
 		peer->synctime = 0;
+	} else if (peer->last_reset == PEER_DOWN_IF_DOWN) {
+		/* Try to handle case where a GR peer connection has gone down,
+		 * while we're in the GR waiting period. In this case,
+		 * the link event has removed routes, so we need to reflect that
+		 * in BGP.
+		 */
+		if (peer->t_gr_restart || peer->t_gr_stale) {
+			if (bgp_debug_neighbor_events(peer))
+				zlog_debug("%s: IF_DOWN during GR, terminating GR",
+					   peer->host);
+
+			bgp_gr_terminate(peer);
+		}
 	}
 
 	/* stop keepalives */
