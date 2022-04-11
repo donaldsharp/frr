@@ -152,7 +152,7 @@ netlink_rule_msg_encode(int cmd, const struct zebra_dplane_ctx *ctx,
 		req->frh.action = FR_ACT_GOTO;
 		if (!nl_attr_put32(&req->n, buflen, FRA_GOTO, goto_target))
 			return 0;
-	/* Route table to use to forward, if filter criteria matches. */
+		/* Route table to use to forward, if filter criteria matches. */
 	} else if (table < 256)
 		req->frh.table = table;
 	else {
