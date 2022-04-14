@@ -52,6 +52,9 @@ pthread_t csm_pthread;
 static struct rcu_thread *csm_rcu_thread;
 static bool csm_rcu_set = false;
 
+/* Move zebra globals to init complete, and send ack to CSM. */
+static int frr_csm_init_complete(void);
+
 static void convert_mode(Mode mode, enum frr_csm_smode *smode)
 {
 	if (IS_MODE_MAINTENANCE(mode)) {
@@ -252,8 +255,17 @@ static int zebra_csm_maint_mode(struct thread *t)
 				   enter ? "Enter" : "Exit",
 				   zebra_route_string(client->proto));
 		zserv_send_message(client, s);
-	}
+	} else {
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug("... %s maintenance mode: no clients",
+				   enter ? "Enter" : "Exit");
 
+		/* Respond to CSM immediately */
+		if (enter)
+			frr_csm_send_down_complete(zrouter.frr_csm_modid);
+		else
+			frr_csm_init_complete();
+	}
 	return 0;
 }
 
@@ -286,6 +298,13 @@ static int zebra_csm_fast_restart(struct thread *t)
 				   upgrade ? " (upgrade)" : "",
 				   zebra_route_string(client->proto));
 		zserv_send_message(client, s);
+	} else {
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug("... Send fast shutdown%s : no clients",
+				   upgrade ? " (upgrade)" : "");
+
+		/* Respond back to CSM immediately */
+		frr_csm_send_down_complete(zrouter.frr_csm_modid);
 	}
 
 	return 0;
@@ -548,6 +567,36 @@ static int frr_csm_cb(int len, void *buf)
 	return 0;
 }
 
+/*
+ * Move zebra globals to init complete, and send ack to CSM.
+ */
+static int frr_csm_init_complete(void)
+{
+	int rc;
+	char buf[256];
+	Mode mode;
+	State state;
+	enum frr_csm_smode smode;
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("%s: init complete", __func__);
+
+	rc = frr_csm_get_start_mode(&mode, &state);
+	if (rc)
+		zlog_err("FRRCSM: Failed to send load complete");
+	convert_mode(mode, &smode);
+	zlog_err("....... Got start mode %s (converted to %s), state %s",
+		 mode_to_str(mode, buf), frr_csm_smode_str[smode],
+		 mod_state_to_str(state));
+	zrouter.csm_smode = zrouter.csm_cmode = mode;
+	zrouter.csm_cstate = state;
+	zrouter.frr_csm_smode = smode;
+
+	frr_csm_send_init_complete();
+
+	return 0;
+}
+
 void zebra_csm_fast_restart_client_ack(struct zserv *client, bool upgrade)
 {
 	if (IS_ZEBRA_DEBUG_CSM)
@@ -561,35 +610,16 @@ void zebra_csm_fast_restart_client_ack(struct zserv *client, bool upgrade)
 
 void zebra_csm_maint_mode_client_ack(struct zserv *client, bool enter)
 {
-	char buf[256];
-
 	if (IS_ZEBRA_DEBUG_CSM)
 		zlog_debug("Ack for %s maintenance mode from %s",
 			   enter ? "Enter" : "Exit",
 			   zebra_route_string(client->proto));
 
 	/* Respond back to CSM */
-	if (enter) {
+	if (enter)
 		frr_csm_send_down_complete(zrouter.frr_csm_modid);
-	} else {
-		int rc;
-		Mode mode;
-		State state;
-		enum frr_csm_smode smode;
-
-		rc = frr_csm_get_start_mode(&mode, &state);
-		if (rc)
-			zlog_err("FRRCSM: Failed to send load complete");
-		convert_mode(mode, &smode);
-		zlog_err(
-			"....... Got start mode %s (converted to %s), state %s",
-			mode_to_str(mode, buf), frr_csm_smode_str[smode],
-			mod_state_to_str(state));
-		zrouter.csm_smode = zrouter.csm_cmode = mode;
-		zrouter.csm_cstate = state;
-		zrouter.frr_csm_smode = smode;
-		frr_csm_send_init_complete();
-	}
+	else
+		frr_csm_init_complete();
 }
 
 /*
