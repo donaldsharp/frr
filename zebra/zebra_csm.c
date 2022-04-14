@@ -600,7 +600,6 @@ static int frr_csm_init_complete(void)
 void zebra_csm_fast_restart_client_ack(struct zserv *client, bool upgrade)
 {
 	if (IS_ZEBRA_DEBUG_CSM)
-
 		zlog_debug("Ack for entering fast shutdown%s from %s",
 			   upgrade ? " (upgrade)" : "",
 			   zebra_route_string(client->proto));
