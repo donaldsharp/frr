@@ -1914,7 +1914,6 @@ int process_mac_remote_macip_add(zebra_evpn_t *zevpn, struct zebra_vrf *zvrf,
 				 struct in_addr vtep_ip, uint8_t flags,
 				 uint32_t seq, esi_t *esi)
 {
-	struct zebra_l2_brvlan_mac *bmac;
 	char buf[ETHER_ADDR_STRLEN];
 	bool sticky;
 	bool remote_gw;
@@ -2053,20 +2052,6 @@ int process_mac_remote_macip_add(zebra_evpn_t *zevpn, struct zebra_vrf *zvrf,
 			zebra_evpn_process_neigh_on_remote_mac_add(zevpn, mac);
 			/* Install the entry. */
 			zebra_evpn_rem_mac_install(zevpn, mac, old_static);
-		}
-		/* Remove the MAC from the FDB cache as it should contain the
-		 * locally-learnt MACs in sync with the kernel FDB */
-		bmac = zebra_l2_brvlan_mac_find(zevpn->bridge_if, zevpn->vni,
-						macaddr);
-		if (bmac)
-			zebra_l2_brvlan_mac_del(zevpn->bridge_if, bmac);
-		else {
-			if (IS_ZEBRA_DEBUG_VXLAN) {
-				zlog_debug(
-					"Failed to find mac %s in local cache",
-					prefix_mac2str(macaddr, buf,
-						       sizeof(buf)));
-			}
 		}
 	}
 
