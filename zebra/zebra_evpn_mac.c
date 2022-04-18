@@ -2007,11 +2007,54 @@ void zebra_evpn_print_dad_mac_hash_detail(struct hash_bucket *bucket,
 		zebra_evpn_print_mac_hash_detail(bucket, ctxt);
 }
 
-int zebra_evpn_mac_remote_macip_add(
-	struct zebra_evpn *zevpn, struct zebra_vrf *zvrf,
-	const struct ethaddr *macaddr, uint16_t ipa_len,
-	const struct ipaddr *ipaddr, struct zebra_mac **macp,
-	struct in_addr vtep_ip, uint8_t flags, uint32_t seq, const esi_t *esi)
+/* API to get the vlan id associated with the bridge */
+static vlanid_t zebra_get_bridge_vlan_id(zebra_evpn_t *zevpn)
+{
+	vlanid_t vid;
+	const struct interface *br_ifp;
+	const struct zebra_if *zif, *br_zif;
+	const struct zebra_vxlan_vni *vni_ptr;
+
+	zif = zevpn->vxlan_if->info;
+	if (!zif) {
+		if (IS_ZEBRA_DEBUG_VXLAN) {
+			zlog_debug("Failed to get the zif info");
+		}
+		return 0;
+	}
+	vni_ptr = zebra_vxlan_if_vni_find(zif, zevpn->vni);
+	if (!vni_ptr) {
+		if (IS_ZEBRA_DEBUG_VXLAN) {
+			zlog_debug("Failed to get zevpn vni");
+		}
+		return 0;
+	}
+	br_ifp = zif->brslave_info.br_if;
+	if (br_ifp == NULL) {
+		if (IS_ZEBRA_DEBUG_VXLAN) {
+			zlog_debug("Failed to get bridge interface");
+		}
+		return 0;
+	}
+	br_zif = (const struct zebra_if *)(br_ifp->info);
+	if (br_zif == NULL) {
+		if (IS_ZEBRA_DEBUG_VXLAN) {
+			zlog_debug("Failed to get the bridge interface info");
+		}
+		return 0;
+	}
+	if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif))
+		vid = vni_ptr->access_vlan;
+	else
+		vid = 0;
+	return vid;
+}
+
+
+int process_mac_remote_macip_add(zebra_evpn_t *zevpn, struct zebra_vrf *zvrf,
+				 struct ethaddr *macaddr,
+				 struct in_addr vtep_ip, uint8_t flags,
+				 uint32_t seq, esi_t *esi)
 {
 	char buf1[INET6_ADDRSTRLEN];
 	struct zebra_l2_brvlan_mac *bmac;
@@ -2026,6 +2069,7 @@ int zebra_evpn_mac_remote_macip_add(
 	struct zebra_mac *mac;
 	bool old_es_present;
 	bool new_es_present;
+	struct zebra_l2_brvlan_mac *bmac;
 	vlanid_t vid;
 
 	sticky = !!CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_STICKY);
@@ -2152,7 +2196,7 @@ int zebra_evpn_mac_remote_macip_add(
 		 * If the install fails then the local cache and kernel might
 		 * get out of sync */
 		vid = zebra_get_bridge_vlan_id(zevpn);
-		if (vid != 0 && zevpn->bridge_if != NULL) {
+		if (vid != 0) {
 			bmac = zebra_l2_brvlan_mac_find(zevpn->bridge_if, vid,
 							macaddr);
 			if (bmac)
