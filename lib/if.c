@@ -1019,6 +1019,7 @@ void if_terminate(struct vrf *vrf)
 			route_unlock_node(ifp->node);
 		}
 		if_delete(&ifp);
+		ifp->node = NULL;
 	}
 }
 
