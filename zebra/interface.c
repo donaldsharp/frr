@@ -292,6 +292,8 @@ static int if_zebra_delete_hook(struct interface *ifp)
 		THREAD_OFF(zebra_if->speed_update);
 
 		XFREE(MTYPE_ZINFO, zebra_if);
+
+		ifp->info = NULL;
 	}
 
 	return 0;
