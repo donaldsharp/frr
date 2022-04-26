@@ -241,6 +241,13 @@ void zebra_l2if_update_bond(struct interface *ifp, bool add)
 	}
 }
 
+/* Initialize the mac_table in bridge intf */
+void zebra_init_mac_table(struct zebra_l2_bridge_if *br)
+{
+	for (int i = 0; i < VLANID_MAX; i++)
+		br->mac_table[i] = NULL;
+}
+
 /*
  * Handle Bridge interface add or update. Update relevant info,
  * map slaves (if any) to the bridge.
@@ -258,7 +265,8 @@ void zebra_l2_bridge_add_update(struct interface *ifp,
 	br = BRIDGE_FROM_ZEBRA_IF(zif);
 	br->vlan_aware = bridge_info->bridge.vlan_aware;
 	zebra_l2_bridge_if_add(ifp);
-
+	if (add)
+		zebra_init_mac_table(br);
 	/* Link all slaves to this bridge */
 	map_slaves_to_bridge(ifp, 1);
 }
