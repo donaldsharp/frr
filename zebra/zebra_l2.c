@@ -242,7 +242,7 @@ void zebra_l2if_update_bond(struct interface *ifp, bool add)
 }
 
 /* Initialize the mac_table in bridge intf */
-void zebra_init_mac_table(struct zebra_l2_bridge_if *br)
+static void zebra_init_mac_table(struct zebra_l2_bridge_if *br)
 {
 	for (int i = 0; i < VLANID_MAX; i++)
 		br->mac_table[i] = NULL;
