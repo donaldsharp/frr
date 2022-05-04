@@ -92,7 +92,7 @@ void pcep_socket_comm_test_setup()
 	inet_pton(AF_INET, "127.0.0.1", &(test_host_ip));
 	inet_pton(AF_INET, "127.0.0.1", &(test_src_ip));
 	inet_pton(AF_INET6, "::1", &(test_host_ipv6));
-	inet_pton(AF_INET6, "::1", &(test_src_ipv6));
+	inet_pton(AF_INET6, "::", &(test_src_ipv6));
 }
 
 void pcep_socket_comm_test_teardown()
