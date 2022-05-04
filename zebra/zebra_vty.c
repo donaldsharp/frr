@@ -3499,6 +3499,7 @@ DEFPY(show_evpn_local_mac_all,
 			zebra_l2_brvlan_print_macs(vty, ifp, vid, uj);
 		}
 	}
+	return CMD_SUCCESS;
 }
 
 DEFUN (show_evpn_neigh_vni_all_detail, show_evpn_neigh_vni_all_detail_cmd,
