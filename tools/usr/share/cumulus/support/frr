@@ -132,6 +132,8 @@ func_frr()
     exec_cmd frr.memory vtysh -c "show memory"
     exec_cmd frr.modules vtysh -c "show modules"
 
+    exec_cmd evpn.local_mac.all  vtysh -c "show evpn local-mac"
+
     sed -i -e 's/authentication-key [^ ]*/ authentication-key SSSS/' -e '/password/s/ [^ ]*$/ SSSS/' -e '/message-digest/s/md5 [^ ]*/md5 SSSS/' -e '/authentication string/s/ [^ ]*$/ SSSS/' -e '/key-string/s/ [^ ]*$/ SSSS/' *.show_running
 
     [ $SUP_SECURE -eq 0 ] && {
@@ -170,7 +172,6 @@ func_evpntable()
     # json version was removed because these cmds were leading to memory pileup on scale
     exec_cmd bgp.evpn.route.detail vtysh -c "show bgp l2vpn evpn route detail"
     exec_cmd bgp.evpn.route.vni.all.detail vtysh -c "show bgp vni all detail"
-    exec_cmd evpn.local_mac.all  vtysh -c "show evpn local-mac"
 }
 
 # main
