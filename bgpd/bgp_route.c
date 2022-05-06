@@ -8771,7 +8771,8 @@ static void route_vty_out_route(struct bgp_dest *dest, const struct prefix *p,
 	} else if (p->family == AF_EVPN) {
 		if (!json) {
 			len = vty_out(vty, "%pFX", p);
-			len += vty_out(vty, " RD %s", rd_str);
+			if (rd_str)
+				len += vty_out(vty, " RD %s", rd_str);
 		} else {
 			bgp_evpn_route2json((struct prefix_evpn *)p, json);
 		}
