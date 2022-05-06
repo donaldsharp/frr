@@ -7693,7 +7693,8 @@ static void route_vty_out_route(const struct prefix *p, struct vty *vty,
 				vty, "%s",
 				bgp_evpn_route2str((struct prefix_evpn *)p, buf,
 						   BUFSIZ));
-			len += vty_out(vty, " RD %s", rd_str);
+			if (rd_str)
+				len += vty_out(vty, " RD %s", rd_str);
 		} else {
 			bgp_evpn_route2json((struct prefix_evpn *)p, json);
 		}
