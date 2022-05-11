@@ -1,7 +1,7 @@
-/* Tracing for zebra
+/* Lttng Tracing for Zebra daemon
  *
- * Copyright (C) 2020  NVIDIA Corporation
- * Donald Sharp
+ * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Rajesh Varatharaj
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -18,12 +18,13 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#if !defined(__ZEBRA_TRACE_H__) || defined(TRACEPOINT_HEADER_MULTI_READ)
-#define __ZEBRA_TRACE_H__
+#if !defined(_ZEBRA_TRACE_H) || defined(TRACEPOINT_HEADER_MULTI_READ)
+#define _ZEBRA_TRACE_H
 
 #include "lib/trace.h"
 
-#ifdef HAVE_LTTNG
+
+#if defined(HAVE_LTTNG) || defined(HAVE_ZEBRA_LTTNG)
 
 #undef TRACEPOINT_PROVIDER
 #define TRACEPOINT_PROVIDER frr_zebra
@@ -37,6 +38,12 @@
 #include <lib/table.h>
 
 #include <zebra/zebra_ns.h>
+#include "zebra/zserv.h"
+#include "zebra/zebra_vrf.h"
+#include "zebra/zebra_mroute.h"
+#include "zebra/rt.h"
+#include "lib/stream.h"
+#include "lib/vrf.h"
 
 TRACEPOINT_EVENT(
 	frr_zebra,
@@ -122,9 +129,37 @@ TRACEPOINT_EVENT(
 		ctf_integer(uint32_t, startup, startup)
 		)
 	)
+/* clang-format off */
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	zebra_ipmr_route_stats,
+	TP_ARGS(vrf_id_t,  vrf_id),
+	TP_FIELDS(
+    ctf_integer(unsigned int, vrfid, vrf_id)
+		ctf_string(mroute_vrf_id, "Asking for mroute information")
+	)
+)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_ipmr_route_stats, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	if_add_update,
+	TP_ARGS(struct interface *, ifp),
+	TP_FIELDS(
+    ctf_integer(unsigned int, ifindex, ifp->ifindex)
+    ctf_integer(unsigned int, vrfid, ifp->vrf_id)
+    ctf_string(ifp, ifp->name)
+		ctf_string(interface, "Interface Index added")
+	)
+)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_add_update, TRACE_INFO)
+/* clang-format on */
 
 #include <lttng/tracepoint-event.h>
 
 #endif /* HAVE_LTTNG */
 
-#endif /* __ZEBRA_TRACE_H__ */
+#endif /* _ZEBRA_TRACE_H */
