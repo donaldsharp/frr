@@ -64,6 +64,7 @@
 #include "zebra/netconf_netlink.h"
 #include "zebra/zebra_trace.h"
 #include "zebra/zebra_evpn_arp_nd.h"
+#include "zebra/zebra_trace.h"
 
 extern struct zebra_privs_t zserv_privs;
 
@@ -1886,12 +1887,13 @@ static void vxlan_vni_state_change(struct zebra_if *zif, uint16_t id,
 
 	if (!vnip) {
 		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug(
-				"Cannot find VNI for VID (%u) IF %s for vlan state update",
-				id, zif->ifp->name);
-
+			zlog_debug("Cannot find VNI for VID (%u) IF %s for vlan state update", id,
+				   zif->ifp->name);
 		return;
 	}
+	if (zif)
+		frrtrace(4, frr_zebra, vxlan_vni_state_change, id, zif,
+			 vnip->vni, state);
 
 	switch (state) {
 	case BR_STATE_FORWARDING:
@@ -2026,7 +2028,9 @@ int netlink_vlan_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 				zlog_debug("VLANDB_ENTRY: VID (%u) state=%s",
 					   vinfo->vid, port_state2str(state));
 		}
-
+		if (vinfo)
+			frrtrace(7, frr_zebra, netlink_vlan_change, h, bvm, ns_id, vinfo, vrange,
+				 state, ifp);
 		vlan_id_range_state_change(
 			ifp, vinfo->vid, (vrange ? vrange : vinfo->vid), state);
 	}

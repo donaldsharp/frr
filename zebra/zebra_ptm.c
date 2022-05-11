@@ -28,6 +28,7 @@
 #include "zebra/zebra_ptm_redistribute.h"
 #include "zebra/zebra_router.h"
 #include "zebra_vrf.h"
+#include "zebra/zebra_trace.h"
 
 /*
  * Choose the BFD implementation that we'll use.
@@ -784,6 +785,7 @@ void zebra_ptm_bfd_dst_register(ZAPI_HANDLER_ARGS)
 	if (IS_ZEBRA_DEBUG_SEND)
 		zlog_debug("%s: Sent message (%d) %s", __func__, data_len,
 			   ptm_cb.out_data);
+	frrtrace(1, frr_zebra, zebra_ptm_bfd_dst_register, len);
 	zebra_ptm_send_message(ptm_cb.out_data, data_len);
 
 	return;
@@ -914,7 +916,7 @@ void zebra_ptm_bfd_dst_deregister(ZAPI_HANDLER_ARGS)
 	if (IS_ZEBRA_DEBUG_SEND)
 		zlog_debug("%s: Sent message (%d) %s", __func__, data_len,
 			   ptm_cb.out_data);
-
+	frrtrace(1, frr_zebra, zebra_ptm_bfd_dst_deregister, data_len);
 	zebra_ptm_send_message(ptm_cb.out_data, data_len);
 
 	return;
@@ -967,6 +969,7 @@ void zebra_ptm_bfd_client_register(ZAPI_HANDLER_ARGS)
 	if (IS_ZEBRA_DEBUG_SEND)
 		zlog_debug("%s: Sent message (%d) %s", __func__, data_len,
 			   ptm_cb.out_data);
+	frrtrace(1, frr_zebra, zebra_ptm_bfd_client_register, data_len);
 	zebra_ptm_send_message(ptm_cb.out_data, data_len);
 
 	SET_FLAG(ptm_cb.client_flags[client->proto],
@@ -1022,6 +1025,7 @@ int zebra_ptm_bfd_client_deregister(struct zserv *client)
 	if (IS_ZEBRA_DEBUG_SEND)
 		zlog_debug("%s: Sent message (%d) %s", __func__, data_len,
 			   ptm_cb.out_data);
+	frrtrace(1, frr_zebra, zebra_ptm_bfd_client_deregister, data_len);
 
 	zebra_ptm_send_message(ptm_cb.out_data, data_len);
 	UNSET_FLAG(ptm_cb.client_flags[proto], ZEBRA_PTM_BFD_CLIENT_FLAG_REG);
