@@ -563,6 +563,8 @@ AC_ARG_ENABLE([lttng],
   AS_HELP_STRING([--enable-lttng], [enable LTTng tracing]))
 AC_ARG_ENABLE([bgp-lttng],
   AS_HELP_STRING([--enable-bgp-lttng], [enable BGP LTTng tracing]))
+AC_ARG_ENABLE([zebra-lttng],
+  AS_HELP_STRING([--enable-zebra-lttng], [enable Zebra LTTng tracing]))
 AC_ARG_ENABLE([usdt],
   AS_HELP_STRING([--enable-usdt], [enable USDT probes]))
 AC_ARG_WITH([libpam],
@@ -1859,6 +1861,18 @@ if test "$enable_bgp_lttng" = "yes"; then
     BGP_LTTNG=true
   ], [
     AC_MSG_ERROR([configuration specifies --enable-bgp-lttng but lttng-ust was not found])
+  ])
+fi
+
+dnl ---------
+dnl Zebra LTTng
+dnl ---------
+if test "$enable_zebra_lttng" = "yes"; then
+  PKG_CHECK_MODULES([ZEBRAUST], [lttng-ust >= 2.10.0], [
+    AC_DEFINE([HAVE_ZEBRA_LTTNG], [1], [Enable ZEBRA LTTng support])
+    ZEBRA_LTTNG=true
+  ], [
+    AC_MSG_ERROR([configuration specifies --enable-zebra-lttng but lttng-ust was not found])
   ])
 fi
 

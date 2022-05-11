@@ -53,6 +53,7 @@
 #include "zebra/zebra_errors.h"
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_evpn_arp_nd.h"
+#include "zebra/zebra_trace.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, ZINFO, "Zebra Interface Information")
 
@@ -652,6 +653,9 @@ void if_add_update(struct interface *ifp)
 				   ifp->name, VRF_LOGNAME(zvrf->vrf),
 				   ifp->vrf_id, ifp->ifindex);
 	}
+	// FIXME: Remove below trace, this for reference lttng
+	// tracepoints
+	frrtrace(1, frr_zebra, if_add_update, ifp);
 }
 
 /* Install connected routes corresponding to an interface. */
