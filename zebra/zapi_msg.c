@@ -52,6 +52,7 @@
 #include "zebra/zebra_opaque.h"
 #include "zebra/zebra_srte.h"
 #include "zebra/zebra_srv6.h"
+#include "zebra/zebra_trace.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, RE_OPAQUE, "Route Opaque Data");
 
@@ -629,6 +630,18 @@ int zsend_redistribute_route(int cmd, struct zserv *client,
 			   zebra_route_string(client->proto),
 			   zebra_route_string(api.type), api.vrf_id,
 			   &api.prefix);
+
+	char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+	char buf1[NEXTHOP_STRLEN + 2];
+	buf[0] = '\0';
+	struct nexthop *tnexthop;
+	for (tnexthop = re->nhe->nhg.nexthop; tnexthop;
+	     tnexthop = tnexthop->next) {
+		nexthop2str(tnexthop, buf1, sizeof(buf1));
+		strlcat(buf, buf1, sizeof(buf));
+	}
+	frrtrace(4, frr_zebra, zsend_redistribute_route, cmd, client, api, buf);
+
 	return zserv_send_message(client, s);
 }
 
@@ -1975,6 +1988,8 @@ static void zread_nhg_del(ZAPI_HANDLER_ARGS)
 	nhe->zapi_instance = client->instance;
 	nhe->zapi_session = client->session_id;
 
+	frrtrace(2, frr_zebra, zread_nhg_del, api_nhg.id, api_nhg.proto);
+
 	/* Sanity check - Empty nexthop and group */
 	nhe->nhg.nexthop = NULL;
 
@@ -2024,6 +2039,20 @@ static void zread_nhg_add(ZAPI_HANDLER_ARGS)
 	nhe->type = api_nhg.proto;
 	nhe->zapi_instance = client->instance;
 	nhe->zapi_session = client->session_id;
+
+	if (nhg && nhg->nexthop) {
+		// lttn_trace
+		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+		char buf1[NEXTHOP_STRLEN + 2];
+		buf[0] = '\0';
+		struct nexthop *nexthop;
+		for (nexthop = nhg->nexthop; nexthop; nexthop = nexthop->next) {
+			nexthop2str(nexthop, buf1, sizeof(buf1));
+			strlcat(buf, buf1, sizeof(buf));
+		}
+		frrtrace(4, frr_zebra, zread_nhg_add, api_nhg.id, api_nhg.proto,
+			 nhg, buf);
+	}
 
 	/* Take over the list(s) of nexthops */
 	nhe->nhg.nexthop = nhg->nexthop;
@@ -2189,6 +2218,27 @@ static void zread_route_add(ZAPI_HANDLER_ARGS)
 		client->error_cnt++;
 		XFREE(MTYPE_RE_OPAQUE, re->opaque);
 		XFREE(MTYPE_RE, re);
+	} else {
+		memset(&nhe, 0, sizeof(struct nhg_hash_entry));
+	}
+	// lttn_trace
+	// This should be moved as a api
+	if (nhe.nhg.nexthop) {
+		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+		char buf1[NEXTHOP_STRLEN + 2];
+		buf[0] = '\0';
+		struct nexthop *nexthop = NULL;
+		for (nexthop = nhe.nhg.nexthop; nexthop;
+		     nexthop = nexthop->next) {
+			nexthop2str(nexthop, buf1, sizeof(buf1));
+			strlcat(buf, buf1, sizeof(buf));
+		}
+
+		char lttng_buf_prefix[PREFIX_STRLEN];
+		prefix2str(&api.prefix, lttng_buf_prefix,
+			   sizeof(lttng_buf_prefix));
+		frrtrace(4, frr_zebra, zread_route_add, api, lttng_buf_prefix,
+			 vrf_id, buf);
 	}
 
 	/* At this point, these allocations are not needed: 're' has been
@@ -2252,6 +2302,11 @@ static void zread_route_del(ZAPI_HANDLER_ARGS)
 		zlog_debug("%s: p=(%u:%u)%pFX, msg flags=0x%x, flags=0x%x",
 			   __func__, zvrf_id(zvrf), table_id, &api.prefix,
 			   (int)api.message, api.flags);
+
+	char lttng_buf_prefix[PREFIX_STRLEN];
+	prefix2str(&api.prefix, lttng_buf_prefix, sizeof(lttng_buf_prefix));
+	frrtrace(3, frr_zebra, zread_route_del, api, lttng_buf_prefix,
+		 table_id);
 
 	rib_delete(afi, api.safi, zvrf_id(zvrf), api.type, api.instance,
 		   api.flags, &api.prefix, src_p, NULL, 0, table_id, api.metric,

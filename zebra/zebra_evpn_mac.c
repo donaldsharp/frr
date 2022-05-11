@@ -26,6 +26,7 @@
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_evpn_mac.h"
 #include "zebra/zebra_evpn_neigh.h"
+#include "zebra/zebra_trace.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, MAC, "EVPN MAC");
 
@@ -1040,15 +1041,16 @@ int zebra_evpn_macip_send_msg_to_client(vni_t vni,
 	if (IS_ZEBRA_DEBUG_VXLAN) {
 		char flag_buf[MACIP_BUF_SIZE];
 
-		zlog_debug(
-			"Send MACIP %s f %s state %u MAC %pEA IP %pIA seq %u L2-VNI %u ESI %s to %s",
-			(cmd == ZEBRA_MACIP_ADD) ? "Add" : "Del",
-			zclient_evpn_dump_macip_flags(flags, flag_buf,
-						      sizeof(flag_buf)),
-			state, macaddr, ip, seq, vni, es ? es->esi_str : "-",
-			zebra_route_string(client->proto));
+		zlog_debug("Send MACIP %s f %s state %u MAC %pEA IP %pIA seq %u L2-VNI %u ESI %s to %s",
+			   (cmd == ZEBRA_MACIP_ADD) ? "Add" : "Del",
+			   zclient_evpn_dump_macip_flags(flags, flag_buf, sizeof(flag_buf)), state,
+			   macaddr, ip, seq, vni, es ? es->esi_str : "-",
+			   zebra_route_string(client->proto));
 	}
 
+	if (macaddr && ip)
+		frrtrace(8, frr_zebra, zebra_evpn_macip_send_msg_to_client, vni,
+			 macaddr, ip, state, cmd, seq, ipa_len, esi);
 	if (cmd == ZEBRA_MACIP_ADD)
 		client->macipadd_cnt++;
 	else

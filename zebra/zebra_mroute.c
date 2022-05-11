@@ -18,6 +18,7 @@
 #include "zebra/zebra_mroute.h"
 #include "zebra/rt.h"
 #include "zebra/debug.h"
+#include "zebra/zebra_trace.h"
 
 void zebra_ipmr_route_stats(ZAPI_HANDLER_ARGS)
 {

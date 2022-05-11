@@ -2360,10 +2360,12 @@ ssize_t netlink_route_multipath_msg_encode(int cmd, struct zebra_dplane_ctx *ctx
 	     (!proto_nexthops_only() || is_proto_nhg(dplane_ctx_get_nhe_id(ctx), 0)) &&
 	     /* CUMULUS ONLY */ !nexthop_group_has_label(dplane_ctx_get_ng(ctx))) ||
 	    (fpm && force_nhg)) {
+		uint32_t nhg_id;
+
+		nhg_id = dplane_ctx_get_nhe_id(ctx);
 		/* Kernel supports nexthop objects */
 		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug("%s: %pFX nhg_id is %u", __func__, p,
-				   dplane_ctx_get_nhe_id(ctx));
+			zlog_debug("%s: %pFX nhg_id is %u", __func__, p, nhg_id);
 
 		if (!nl_attr_put32(&req->n, datalen, RTA_NH_ID,
 				   dplane_ctx_get_nhe_id(ctx)))
@@ -2388,6 +2390,8 @@ ssize_t netlink_route_multipath_msg_encode(int cmd, struct zebra_dplane_ctx *ctx
 					return 0;
 			}
 		}
+		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p, cmd, nhg_id, buf,
+			 datalen);
 
 		return NLMSG_ALIGN(req->n.nlmsg_len);
 	}
@@ -2535,6 +2539,18 @@ ssize_t netlink_route_multipath_msg_encode(int cmd, struct zebra_dplane_ctx *ctx
 	if (nexthop_num == 0) {
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug("%s: No useful nexthop.", __func__);
+	}
+
+	if (p && nexthop) {
+		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+		char buf1[NEXTHOP_STRLEN + 2];
+		buf[0] = '\0';
+		struct nexthop *tnexthop;
+		for (tnexthop = nexthop; tnexthop; tnexthop = tnexthop->next) {
+			nexthop2str(tnexthop, buf1, sizeof(buf1));
+			strlcat(buf, buf1, sizeof(buf));
+		}
+		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p, cmd, 0, buf, datalen);
 	}
 
 	return NLMSG_ALIGN(req->n.nlmsg_len);
@@ -3039,8 +3055,20 @@ nexthop_done:
 					   __func__, id, nh, nh->ifindex,
 					   vrf_id_to_name(nh->vrf_id),
 					   nh->vrf_id, label_buf);
+			if (nh) {
+				char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+				char buf1[NEXTHOP_STRLEN + 2];
+				buf[0] = '\0';
+				const struct nexthop *tnexthop;
+				for (tnexthop = nh; tnexthop; tnexthop = tnexthop->next) {
+					nexthop2str(tnexthop, buf1, sizeof(buf1));
+					strlcat(buf, buf1, sizeof(buf));
+					strlcat(buf, " ", sizeof(buf));
+				}
+				frrtrace(4, frr_zebra, netlink_nexthop_msg_encode, nh, id,
+					 label_buf, buf);
+			}
 		}
-
 		req->nhm.nh_protocol = zebra2proto(type);
 
 	} else if (cmd != RTM_DELNEXTHOP) {
@@ -3612,7 +3640,10 @@ static ssize_t netlink_neigh_update_msg_encode(
 				 ipa_len))
 			return 0;
 	}
-
+	if (lla && ip) {
+		frrtrace(7, frr_zebra, netlink_neigh_update_msg_encode, lla, ip,
+			 nhg_id, flags, state, family, type);
+	}
 	if (op == DPLANE_OP_MAC_INSTALL || op == DPLANE_OP_MAC_DELETE) {
 		vlanid_t vid = dplane_ctx_mac_get_vlan(ctx);
 		vni_t vni = dplane_ctx_mac_get_vni(ctx);
@@ -3776,6 +3807,10 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 			vid_present ? vid_buf : "", ndm->ndm_state,
 			ndm->ndm_flags, &mac, dst_present ? dst_buf : "",
 			nhg_id, vni);
+
+	if (h && ndm)
+		frrtrace(6, frr_zebra, netlink_macfdb_change, h, ndm, nhg_id,
+			 vni, &mac, vtep_ip);
 
 	/* The interface should exist. */
 	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id),
@@ -4571,7 +4606,8 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 		zlog_debug("%s family %s IF %s(%u) vrf %s(%u) - no DST",
 			   nl_msg_type_to_str(h->nlmsg_type),
 			   nl_family_to_str(ndm->ndm_family), ifp->name,
-			   ndm->ndm_ifindex, ifp->vrf->name, ifp->vrf->vrf_id);
+			   ndm->ndm_ifindex, ifp->vrf->name,
+			   ifp->vrf->vrf_id);
 		return 0;
 	}
 
@@ -4767,6 +4803,9 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 			   ndm->ndm_ifindex, ifp->vrf->name, ifp->vrf->vrf_id,
 			   &ip);
 
+	if (h && ndm && ifp)
+		frrtrace(5, frr_zebra, netlink_ipneigh_change, h, ndm, ifp,
+			 &mac, &ip);
 	/* Process the delete - it may result in re-adding the neighbor if it is
 	 * a valid "remote" neighbor.
 	 */
