@@ -720,6 +720,56 @@ bool nl_attr_put64(struct nlmsghdr *n, unsigned int maxlen, int type,
 	return nl_attr_put(n, maxlen, type, &data, sizeof(uint64_t));
 }
 
+int nl_rta_put(struct rtattr *rta, unsigned int maxlen, int type,
+               const void *data, int alen)
+{
+        struct rtattr *subrta;
+        int len = RTA_LENGTH(alen);
+
+        if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(len) > maxlen) {
+		zlog_debug("%s rta_addattr_l: Error! max allowed bound %d exceeded",
+			   __func__, maxlen);
+                return -1;
+	}
+        subrta = (struct rtattr *)(((char *)rta) + RTA_ALIGN(rta->rta_len));
+        subrta->rta_type = type;
+        subrta->rta_len = len;
+        if (alen)
+                memcpy(RTA_DATA(subrta), data, alen);
+        rta->rta_len = NLMSG_ALIGN(rta->rta_len) + RTA_ALIGN(len);
+        return 0;
+}
+
+bool nl_rta_put16(struct rtattr *rta, unsigned int maxlen, int type,
+		 uint16_t data)
+{
+	return nl_rta_put(rta, maxlen, type, &data, sizeof(uint16_t));
+}
+
+bool nl_rta_put64(struct rtattr *rta, unsigned int maxlen, int type, uint64_t data)
+{
+	return nl_rta_put(rta, maxlen, type, &data, sizeof(uint64_t));
+}
+
+struct rtattr *nl_rta_nest(struct rtattr *rta, unsigned int maxlen, int type)
+{
+        struct rtattr *nest = RTA_TAIL(rta);
+
+        if (nl_rta_put(rta, maxlen, type, NULL, 0))
+		return NULL;
+
+        nest->rta_type |= NLA_F_NESTED;
+
+        return nest;
+}
+
+int nl_rta_nest_end(struct rtattr *rta, struct rtattr *nest)
+{
+        nest->rta_len = (uint8_t *)RTA_TAIL(rta) - (uint8_t *)nest;
+
+        return rta->rta_len;
+}
+
 struct rtattr *nl_attr_nest(struct nlmsghdr *n, unsigned int maxlen, int type)
 {
 	struct rtattr *nest = NLMSG_TAIL(n);
