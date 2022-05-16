@@ -3,7 +3,7 @@
 #
 # Record routing state; used by cl-support
 #
-#TIMEOUT=90
+#TIMEOUT=120
 #DEFAULT
 #ONCORE=bgpd,eigrpd,isisd,ldpd,nhrpd,ospf6d,ospfclient,ospfd,pimd,ripd,ripngd,ssd,watchfrr,zebra,pimd
 
