@@ -20,10 +20,13 @@
 
 #include <sys/socket.h>
 
+#include <linux/netconf.h>
 #include <linux/netlink.h>
 #include <linux/nexthop.h>
 #include <linux/rtnetlink.h>
 #include <net/if_arp.h>
+#include <linux/fib_rules.h>
+#include <linux/lwtunnel.h>
 
 #include <stdio.h>
 #include <stdint.h>
@@ -88,6 +91,11 @@ const char *nlmsg_type2str(uint16_t type)
 		return "DELNEXTHOP";
 	case RTM_GETNEXTHOP:
 		return "GETNEXTHOP";
+
+	case RTM_NEWNETCONF:
+		return "RTM_NEWNETCONF";
+	case RTM_DELNETCONF:
+		return "RTM_DELNETCONF";
 
 	default:
 		return "UNKNOWN";
@@ -409,6 +417,12 @@ const char *rtm_protocol2str(int type)
 		return "MRT";
 	case RTPROT_ZEBRA:
 		return "ZEBRA";
+	case RTPROT_BGP:
+		return "BGP";
+	case RTPROT_ISIS:
+		return "ISIS";
+	case RTPROT_OSPF:
+		return "OSPF";
 	case RTPROT_BIRD:
 		return "BIRD";
 	case RTPROT_DNROUTED:
@@ -574,6 +588,117 @@ const char *nhm_rta2str(int type)
 	default:
 		return "UNKNOWN";
 	}
+}
+
+const char *frh_rta2str(int type)
+{
+	switch (type) {
+	case FRA_DST:
+		return "DST";
+	case FRA_SRC:
+		return "SRC";
+	case FRA_IIFNAME:
+		return "IIFNAME";
+	case FRA_GOTO:
+		return "GOTO";
+	case FRA_UNUSED2:
+		return "UNUSED2";
+	case FRA_PRIORITY:
+		return "PRIORITY";
+	case FRA_UNUSED3:
+		return "UNUSED3";
+	case FRA_UNUSED4:
+		return "UNUSED4";
+	case FRA_UNUSED5:
+		return "UNUSED5";
+	case FRA_FWMARK:
+		return "FWMARK";
+	case FRA_FLOW:
+		return "FLOW";
+	case FRA_TUN_ID:
+		return "TUN_ID";
+	case FRA_SUPPRESS_IFGROUP:
+		return "SUPPRESS_IFGROUP";
+	case FRA_SUPPRESS_PREFIXLEN:
+		return "SUPPRESS_PREFIXLEN";
+	case FRA_TABLE:
+		return "TABLE";
+	case FRA_FWMASK:
+		return "FWMASK";
+	case FRA_OIFNAME:
+		return "OIFNAME";
+	case FRA_PAD:
+		return "PAD";
+	case FRA_L3MDEV:
+		return "L3MDEV";
+	case FRA_UID_RANGE:
+		return "UID_RANGE";
+	case FRA_PROTOCOL:
+		return "PROTOCOL";
+	case FRA_IP_PROTO:
+		return "IP_PROTO";
+	case FRA_SPORT_RANGE:
+		return "SPORT_RANGE";
+	case FRA_DPORT_RANGE:
+		return "DPORT_RANGE";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+const char *frh_action2str(uint8_t action)
+{
+	switch (action) {
+	case FR_ACT_TO_TBL:
+		return "TO_TBL";
+	case FR_ACT_GOTO:
+		return "GOTO";
+	case FR_ACT_NOP:
+		return "NOP";
+	case FR_ACT_RES3:
+		return "RES3";
+	case FR_ACT_RES4:
+		return "RES4";
+	case FR_ACT_BLACKHOLE:
+		return "BLACKHOLE";
+	case FR_ACT_UNREACHABLE:
+		return "UNREACHABLE";
+	case FR_ACT_PROHIBIT:
+		return "PROHIBIT";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+static const char *ncm_rta2str(int type)
+{
+	switch (type) {
+	case NETCONFA_UNSPEC:
+		return "UNSPEC";
+	case NETCONFA_IFINDEX:
+		return "IFINDEX";
+	case NETCONFA_FORWARDING:
+		return "FORWARDING";
+	case NETCONFA_RP_FILTER:
+		return "RP_FILTER";
+	case NETCONFA_MC_FORWARDING:
+		return "MCAST";
+	case NETCONFA_PROXY_NEIGH:
+		return "PROXY_NEIGH";
+	case NETCONFA_IGNORE_ROUTES_WITH_LINKDOWN:
+		return "IGNORE_LINKDOWN";
+	case NETCONFA_INPUT:
+		return "MPLS";
+	case NETCONFA_BC_FORWARDING:
+		return "BCAST";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+static void dump_on_off(uint32_t ival, const char *prefix)
+{
+	zlog_debug("%s%s", prefix, (ival != 0) ? "on" : "off");
 }
 
 static inline void flag_write(int flags, int flag, const char *flagstr,
@@ -1026,6 +1151,42 @@ next_rta:
 	goto next_rta;
 }
 
+static const char *lwt_type2str(uint16_t type)
+{
+	switch (type) {
+	case LWTUNNEL_ENCAP_NONE:
+		return "NONE";
+	case LWTUNNEL_ENCAP_MPLS:
+		return "MPLS";
+	case LWTUNNEL_ENCAP_IP:
+		return "IPv4";
+	case LWTUNNEL_ENCAP_ILA:
+		return "ILA";
+	case LWTUNNEL_ENCAP_IP6:
+		return "IPv6";
+	case LWTUNNEL_ENCAP_SEG6:
+		return "SEG6";
+	case LWTUNNEL_ENCAP_BPF:
+		return "BPF";
+	case LWTUNNEL_ENCAP_SEG6_LOCAL:
+		return "SEG6_LOCAL";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+static const char *nhg_type2str(uint16_t type)
+{
+	switch (type) {
+	case NEXTHOP_GRP_TYPE_MPATH:
+		return "MULTIPATH";
+	case NEXTHOP_GRP_TYPE_RES:
+		return "RESILIENT MULTIPATH";
+	default:
+		return "UNKNOWN";
+	}
+}
+
 static void nlnh_dump(struct nhmsg *nhm, size_t msglen)
 {
 	struct rtattr *rta;
@@ -1037,6 +1198,7 @@ static void nlnh_dump(struct nhmsg *nhm, size_t msglen)
 	struct nexthop_grp *nhgrp;
 
 	rta = RTM_NHA(nhm);
+
 next_rta:
 	/* Check the header for valid length and for outbound access. */
 	if (RTA_OK(rta, msglen) == 0)
@@ -1064,9 +1226,12 @@ next_rta:
 				   nhgrp[i].weight);
 		break;
 	case NHA_ENCAP_TYPE:
+		u16v = *(uint16_t *)RTA_DATA(rta);
+		zlog_debug("      %s", lwt_type2str(u16v));
+		break;
 	case NHA_GROUP_TYPE:
 		u16v = *(uint16_t *)RTA_DATA(rta);
-		zlog_debug("      %d", u16v);
+		zlog_debug("      %s", nhg_type2str(u16v));
 		break;
 	case NHA_BLACKHOLE:
 		/* NOTHING */
@@ -1110,6 +1275,157 @@ next_rta:
 	goto next_rta;
 }
 
+static void nlrule_dump(struct fib_rule_hdr *frh, size_t msglen)
+{
+	struct rtattr *rta;
+	size_t plen;
+	uint8_t u8v;
+	uint32_t u32v;
+	int32_t s32v;
+	uint64_t u64v;
+	char dbuf[128];
+	struct fib_rule_uid_range *u_range;
+	struct fib_rule_port_range *p_range;
+
+	/* Get the first attribute and go from there. */
+	rta = RTM_RTA(frh);
+next_rta:
+	/* Check the header for valid length and for outbound access. */
+	if (RTA_OK(rta, msglen) == 0)
+		return;
+
+	plen = RTA_PAYLOAD(rta);
+	zlog_debug("    rta [len=%d (payload=%zu) type=(%d) %s]", rta->rta_len,
+		   plen, rta->rta_type, frh_rta2str(rta->rta_type));
+	switch (rta->rta_type) {
+	case FRA_DST:
+	case FRA_SRC:
+		switch (plen) {
+		case sizeof(struct in_addr):
+			zlog_debug("      %pI4",
+				   (struct in_addr *)RTA_DATA(rta));
+			break;
+		case sizeof(struct in6_addr):
+			zlog_debug("      %pI6",
+				   (struct in6_addr *)RTA_DATA(rta));
+			break;
+		default:
+			break;
+		}
+		break;
+
+	case FRA_IIFNAME:
+	case FRA_OIFNAME:
+		snprintf(dbuf, sizeof(dbuf), "%s", (char *)RTA_DATA(rta));
+		zlog_debug("        %s", dbuf);
+		break;
+
+	case FRA_GOTO:
+	case FRA_UNUSED2:
+	case FRA_PRIORITY:
+	case FRA_UNUSED3:
+	case FRA_UNUSED4:
+	case FRA_UNUSED5:
+	case FRA_FWMARK:
+	case FRA_FLOW:
+	case FRA_TABLE:
+	case FRA_FWMASK:
+		u32v = *(uint32_t *)RTA_DATA(rta);
+		zlog_debug("      %u", u32v);
+		break;
+
+	case FRA_SUPPRESS_IFGROUP:
+	case FRA_SUPPRESS_PREFIXLEN:
+		s32v = *(int32_t *)RTA_DATA(rta);
+		zlog_debug("      %d", s32v);
+		break;
+
+	case FRA_TUN_ID:
+		u64v = *(uint64_t *)RTA_DATA(rta);
+		zlog_debug("      %" PRIu64, u64v);
+		break;
+
+	case FRA_L3MDEV:
+	case FRA_PROTOCOL:
+	case FRA_IP_PROTO:
+		u8v = *(uint8_t *)RTA_DATA(rta);
+		zlog_debug("      %u", u8v);
+		break;
+
+	case FRA_UID_RANGE:
+		u_range = (struct fib_rule_uid_range *)RTA_DATA(rta);
+		if (u_range->start == u_range->end)
+			zlog_debug("      %u", u_range->start);
+		else
+			zlog_debug("      %u-%u", u_range->start, u_range->end);
+		break;
+
+	case FRA_SPORT_RANGE:
+	case FRA_DPORT_RANGE:
+		p_range = (struct fib_rule_port_range *)RTA_DATA(rta);
+		if (p_range->start == p_range->end)
+			zlog_debug("      %u", p_range->start);
+		else
+			zlog_debug("      %u-%u", p_range->start, p_range->end);
+		break;
+
+	case FRA_PAD: /* fallthrough */
+	default:
+		/* NOTHING: unhandled. */
+		break;
+	}
+
+	/* Get next pointer and start iteration again. */
+	rta = RTA_NEXT(rta, msglen);
+	goto next_rta;
+}
+
+static void nlncm_dump(const struct netconfmsg *ncm, size_t msglen)
+{
+	const struct rtattr *rta;
+	size_t plen;
+	uint32_t ival;
+
+	rta = (void *)((const char *)ncm +
+		       NLMSG_ALIGN(sizeof(struct netconfmsg)));
+
+next_rta:
+	/* Check the attr header for valid length. */
+	if (RTA_OK(rta, msglen) == 0)
+		return;
+
+	plen = RTA_PAYLOAD(rta);
+
+	zlog_debug("    rta [len=%d (payload=%zu) type=(%d) %s]", rta->rta_len,
+		   plen, rta->rta_type, ncm_rta2str(rta->rta_type));
+
+	switch (rta->rta_type) {
+	case NETCONFA_IFINDEX:
+		ival = *(uint32_t *)RTA_DATA(rta);
+		zlog_debug("      %d", (int32_t)ival);
+		break;
+
+	/* Most attrs are just on/off. */
+	case NETCONFA_FORWARDING:
+	case NETCONFA_RP_FILTER:
+	case NETCONFA_MC_FORWARDING:
+	case NETCONFA_PROXY_NEIGH:
+	case NETCONFA_IGNORE_ROUTES_WITH_LINKDOWN:
+	case NETCONFA_INPUT:
+	case NETCONFA_BC_FORWARDING:
+		ival = *(uint32_t *)RTA_DATA(rta);
+		dump_on_off(ival, "      ");
+		break;
+	default:
+		/* NOTHING: unhandled. */
+		break;
+	}
+
+	/* Get next pointer and start iteration again. */
+	rta = RTA_NEXT(rta, msglen);
+	goto next_rta;
+}
+
 void nl_dump(void *msg, size_t msglen)
 {
 	struct nlmsghdr *nlmsg = msg;
@@ -1119,7 +1435,9 @@ void nl_dump(void *msg, size_t msglen)
 	struct ndmsg *ndm;
 	struct rtmsg *rtm;
 	struct nhmsg *nhm;
+	struct netconfmsg *ncm;
 	struct ifinfomsg *ifi;
+	struct fib_rule_hdr *frh;
 	char fbuf[128];
 	char ibuf[128];
 
@@ -1151,8 +1469,7 @@ next_header:
 	case RTM_SETLINK:
 		ifi = NLMSG_DATA(nlmsg);
 		zlog_debug(
-			"  ifinfomsg [family=%d type=(%d) %s "
-			"index=%d flags=0x%04x {%s}]",
+			"  ifinfomsg [family=%d type=(%d) %s index=%d flags=0x%04x {%s}]",
 			ifi->ifi_family, ifi->ifi_type,
 			ifi_type2str(ifi->ifi_type), ifi->ifi_index,
 			ifi->ifi_flags,
@@ -1170,9 +1487,7 @@ next_header:
 	case RTM_GETROUTE:
 		rtm = NLMSG_DATA(nlmsg);
 		zlog_debug(
-			"  rtmsg [family=(%d) %s dstlen=%d srclen=%d tos=%d "
-			"table=%d protocol=(%d) %s scope=(%d) %s "
-			"type=(%d) %s flags=0x%04x {%s}]",
+			"  rtmsg [family=(%d) %s dstlen=%d srclen=%d tos=%d table=%d protocol=(%d) %s scope=(%d) %s type=(%d) %s flags=0x%04x {%s}]",
 			rtm->rtm_family, af_type2str(rtm->rtm_family),
 			rtm->rtm_dst_len, rtm->rtm_src_len, rtm->rtm_tos,
 			rtm->rtm_table, rtm->rtm_protocol,
@@ -1188,8 +1503,7 @@ next_header:
 	case RTM_DELNEIGH:
 		ndm = NLMSG_DATA(nlmsg);
 		zlog_debug(
-			"  ndm [family=%d (%s) ifindex=%d state=0x%04x {%s} "
-			"flags=0x%04x {%s} type=%d (%s)]",
+			"  ndm [family=%d (%s) ifindex=%d state=0x%04x {%s} flags=0x%04x {%s} type=%d (%s)]",
 			ndm->ndm_family, af_type2str(ndm->ndm_family),
 			ndm->ndm_ifindex, ndm->ndm_state,
 			neigh_state2str(ndm->ndm_state, ibuf, sizeof(ibuf)),
@@ -1200,12 +1514,24 @@ next_header:
 			     nlmsg->nlmsg_len - NLMSG_LENGTH(sizeof(*ndm)));
 		break;
 
+	case RTM_NEWRULE:
+	case RTM_DELRULE:
+		frh = NLMSG_DATA(nlmsg);
+		zlog_debug(
+			"  frh [family=%d (%s) dst_len=%d src_len=%d tos=%d table=%d res1=%d res2=%d action=%d (%s) flags=0x%x]",
+			frh->family, af_type2str(frh->family), frh->dst_len,
+			frh->src_len, frh->tos, frh->table, frh->res1,
+			frh->res2, frh->action, frh_action2str(frh->action),
+			frh->flags);
+		nlrule_dump(frh, nlmsg->nlmsg_len - NLMSG_LENGTH(sizeof(*frh)));
+		break;
+
+
 	case RTM_NEWADDR:
 	case RTM_DELADDR:
 		ifa = NLMSG_DATA(nlmsg);
 		zlog_debug(
-			"  ifa [family=(%d) %s prefixlen=%d "
-			"flags=0x%04x {%s} scope=%d index=%u]",
+			"  ifa [family=(%d) %s prefixlen=%d flags=0x%04x {%s} scope=%d index=%u]",
 			ifa->ifa_family, af_type2str(ifa->ifa_family),
 			ifa->ifa_prefixlen, ifa->ifa_flags,
 			if_flags2str(ifa->ifa_flags, fbuf, sizeof(fbuf)),
@@ -1218,14 +1544,21 @@ next_header:
 	case RTM_GETNEXTHOP:
 		nhm = NLMSG_DATA(nlmsg);
 		zlog_debug(
-			"  nhm [family=(%d) %s scope=(%d) %s "
-			"protocol=(%d) %s flags=0x%08x {%s}]",
+			"  nhm [family=(%d) %s scope=(%d) %s protocol=(%d) %s flags=0x%08x {%s}]",
 			nhm->nh_family, af_type2str(nhm->nh_family),
 			nhm->nh_scope, rtm_scope2str(nhm->nh_scope),
 			nhm->nh_protocol, rtm_protocol2str(nhm->nh_protocol),
 			nhm->nh_flags,
 			nh_flags2str(nhm->nh_flags, fbuf, sizeof(fbuf)));
 		nlnh_dump(nhm, nlmsg->nlmsg_len - NLMSG_LENGTH(sizeof(*nhm)));
+		break;
+
+	case RTM_NEWNETCONF:
+	case RTM_DELNETCONF:
+		ncm = NLMSG_DATA(nlmsg);
+		zlog_debug(" ncm [family=%s (%d)]",
+			   af_type2str(ncm->ncm_family), ncm->ncm_family);
+		nlncm_dump(ncm, nlmsg->nlmsg_len - NLMSG_LENGTH(sizeof(*ncm)));
 		break;
 
 	default:

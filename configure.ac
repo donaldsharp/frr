@@ -686,7 +686,7 @@ AC_ARG_ENABLE([lua],
     AS_HELP_STRING([--enable-lua], [Build Lua scripting]))
 
 AC_ARG_ENABLE([netlink-debug],
-  AS_HELP_STRING([--disable-netlink-debug], [pretty print netlink debug messages]))
+  AS_HELP_STRING([--disable-netlink-debug], [don't pretty print netlink debug messages]))
 
 if test "$enable_netlink_debug" != "no" ; then
   AC_DEFINE([NETLINK_DEBUG], [1], [Netlink extra debugging code])

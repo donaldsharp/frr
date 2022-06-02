@@ -152,7 +152,6 @@ static const struct message rttype_str[] = {{RTN_UNSPEC, "none"},
 					    {0}};
 
 extern struct thread_master *master;
-extern uint32_t nl_rcvbufsize;
 
 extern struct zebra_privs_t zserv_privs;
 
@@ -202,12 +201,11 @@ static int netlink_recvbuf(struct nlsock *nl, uint32_t newsize)
 	/* Try force option (linux >= 2.6.14) and fall back to normal set */
 	frr_with_privs(&zserv_privs) {
 		ret = setsockopt(nl->sock, SOL_SOCKET, SO_RCVBUFFORCE,
-				 &nl_rcvbufsize,
-				 sizeof(nl_rcvbufsize));
+				 &rcvbufsize, sizeof(rcvbufsize));
 	}
 	if (ret < 0)
-		ret = setsockopt(nl->sock, SOL_SOCKET, SO_RCVBUF,
-				 &nl_rcvbufsize, sizeof(nl_rcvbufsize));
+		ret = setsockopt(nl->sock, SOL_SOCKET, SO_RCVBUF, &rcvbufsize,
+				 sizeof(rcvbufsize));
 	if (ret < 0) {
 		flog_err_sys(EC_LIB_SOCKET,
 			     "Can't set %s receive buffer size: %s", nl->name,
@@ -524,7 +522,8 @@ static void netlink_install_filter(int sock, __u32 pid, __u32 dplane_pid)
 }
 
 void netlink_parse_rtattr_flags(struct rtattr **tb, int max,
-		struct rtattr *rta, int len, unsigned short flags)
+				struct rtattr *rta, int len,
+				unsigned short flags)
 {
 	unsigned short type;
 
@@ -556,6 +555,21 @@ void netlink_parse_rtattr_nested(struct rtattr **tb, int max,
 				 struct rtattr *rta)
 {
 	netlink_parse_rtattr(tb, max, RTA_DATA(rta), RTA_PAYLOAD(rta));
+}
+
+bool nl_addraw_l(struct nlmsghdr *n, unsigned int maxlen, const void *data,
+		 unsigned int len)
+{
+	if (NLMSG_ALIGN(n->nlmsg_len) + NLMSG_ALIGN(len) > maxlen) {
+		zlog_err("ERROR message exceeded bound of %d\n", maxlen);
+		return false;
+	}
+
+	memcpy(NLMSG_TAIL(n), data, len);
+	memset((uint8_t *)NLMSG_TAIL(n) + len, 0, NLMSG_ALIGN(len) - len);
+	n->nlmsg_len = NLMSG_ALIGN(n->nlmsg_len) + NLMSG_ALIGN(len);
+
+	return true;
 }
 
 bool nl_attr_put(struct nlmsghdr *n, unsigned int maxlen, int type,
@@ -642,6 +656,58 @@ struct rtnexthop *nl_attr_rtnh(struct nlmsghdr *n, unsigned int maxlen)
 void nl_attr_rtnh_end(struct nlmsghdr *n, struct rtnexthop *rtnh)
 {
 	rtnh->rtnh_len = (uint8_t *)NLMSG_TAIL(n) - (uint8_t *)rtnh;
+}
+
+bool nl_rta_put(struct rtattr *rta, unsigned int maxlen, int type,
+		const void *data, int alen)
+{
+	struct rtattr *subrta;
+	int len = RTA_LENGTH(alen);
+
+	if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(len) > maxlen) {
+		zlog_err("ERROR max allowed bound %d exceeded for rtattr",
+			 maxlen);
+		return false;
+	}
+	subrta = (struct rtattr *)(((char *)rta) + RTA_ALIGN(rta->rta_len));
+	subrta->rta_type = type;
+	subrta->rta_len = len;
+	if (alen)
+		memcpy(RTA_DATA(subrta), data, alen);
+	rta->rta_len = NLMSG_ALIGN(rta->rta_len) + RTA_ALIGN(len);
+
+	return true;
+}
+
+bool nl_rta_put16(struct rtattr *rta, unsigned int maxlen, int type,
+		  uint16_t data)
+{
+	return nl_rta_put(rta, maxlen, type, &data, sizeof(uint16_t));
+}
+
+bool nl_rta_put64(struct rtattr *rta, unsigned int maxlen, int type,
+		  uint64_t data)
+{
+	return nl_rta_put(rta, maxlen, type, &data, sizeof(uint64_t));
+}
+
+struct rtattr *nl_rta_nest(struct rtattr *rta, unsigned int maxlen, int type)
+{
+	struct rtattr *nest = RTA_TAIL(rta);
+
+	if (nl_rta_put(rta, maxlen, type, NULL, 0))
+		return NULL;
+
+	nest->rta_type |= NLA_F_NESTED;
+
+	return nest;
+}
+
+int nl_rta_nest_end(struct rtattr *rta, struct rtattr *nest)
+{
+	nest->rta_len = (uint8_t *)RTA_TAIL(rta) - (uint8_t *)nest;
+
+	return rta->rta_len;
 }
 
 const char *nl_msg_type_to_str(uint16_t msg_type)
@@ -1003,6 +1069,18 @@ int netlink_parse_info(int (*filter)(struct nlmsghdr *, ns_id_t, int),
 					return err;
 			}
 
+			/*
+			 * What is the right thing to do?  The kernel
+			 * is telling us that the dump request was interrupted
+			 * and we more than likely are out of luck and have
+			 * missed data from the kernel.  At this point in time
+			 * lets just note that this is happening.
+			 */
+			if (h->nlmsg_flags & NLM_F_DUMP_INTR)
+				flog_err(
+					EC_ZEBRA_NETLINK_BAD_SEQUENCE,
+					"netlink recvmsg: The Dump request was interrupted");
+
 			/* OK we got netlink message. */
 			if (IS_ZEBRA_DEBUG_KERNEL)
 				zlog_debug(
@@ -1135,7 +1213,7 @@ int netlink_request(struct nlsock *nl, void *req)
    netlink_socket (). */
 void kernel_init(struct zebra_ns *zns)
 {
-	uint32_t groups;
+	uint32_t groups, dplane_groups;
 #if defined SOL_NETLINK
 	int one, ret, grp;
 #endif
@@ -1165,6 +1243,10 @@ void kernel_init(struct zebra_ns *zns)
 		((uint32_t) 1 << (RTNLGRP_IPV6_RULE - 1)) |
 		((uint32_t) 1 << (RTNLGRP_NEXTHOP - 1));
 
+	dplane_groups = (RTMGRP_LINK            |
+			 RTMGRP_IPV4_IFADDR     |
+			 RTMGRP_IPV6_IFADDR);
+
 	snprintf(zns->netlink.name, sizeof(zns->netlink.name),
 		 "netlink-listen (NS %u)", zns->ns_id);
 	zns->netlink.sock = -1;
@@ -1183,12 +1265,26 @@ void kernel_init(struct zebra_ns *zns)
 		exit(-1);
 	}
 
-	snprintf(zns->netlink_dplane.name, sizeof(zns->netlink_dplane.name),
-		 "netlink-dp (NS %u)", zns->ns_id);
-	zns->netlink_dplane.sock = -1;
-	if (netlink_socket(&zns->netlink_dplane, 0, zns->ns_id) < 0) {
+	/* Outbound socket for dplane programming of the host OS. */
+	snprintf(zns->netlink_dplane_out.name,
+		 sizeof(zns->netlink_dplane_out.name), "netlink-dp (NS %u)",
+		 zns->ns_id);
+	zns->netlink_dplane_out.sock = -1;
+	if (netlink_socket(&zns->netlink_dplane_out, 0, zns->ns_id) < 0) {
 		zlog_err("Failure to create %s socket",
-			 zns->netlink_dplane.name);
+			 zns->netlink_dplane_out.name);
+		exit(-1);
+	}
+
+	/* Inbound socket for OS events coming to the dplane. */
+	snprintf(zns->netlink_dplane_in.name,
+		 sizeof(zns->netlink_dplane_in.name), "netlink-dp-in (NS %u)",
+		 zns->ns_id);
+	zns->netlink_dplane_in.sock = -1;
+	if (netlink_socket(&zns->netlink_dplane_in, dplane_groups,
+			   zns->ns_id) < 0) {
+		zlog_err("Failure to create %s socket",
+			 zns->netlink_dplane_in.name);
 		exit(-1);
 	}
 
@@ -1219,12 +1315,24 @@ void kernel_init(struct zebra_ns *zns)
 			    errno, safe_strerror(errno));
 
 	one = 1;
-	ret = setsockopt(zns->netlink_dplane.sock, SOL_NETLINK, NETLINK_EXT_ACK,
-			 &one, sizeof(one));
+	ret = setsockopt(zns->netlink_dplane_out.sock, SOL_NETLINK,
+			 NETLINK_EXT_ACK, &one, sizeof(one));
 
 	if (ret < 0)
 		zlog_notice("Registration for extended dp ACK failed : %d %s",
 			    errno, safe_strerror(errno));
+
+	/*
+	 * Trim off the payload of the original netlink message in the
+	 * acknowledgment. This option is available since Linux 4.2, so if
+	 * setsockopt fails, ignore the error.
+	 */
+	one = 1;
+	ret = setsockopt(zns->netlink_dplane_out.sock, SOL_NETLINK,
+			 NETLINK_CAP_ACK, &one, sizeof(one));
+	if (ret < 0)
+		zlog_notice(
+			"Registration for reduced ACK packet size failed, probably running an early kernel");
 #endif
 
 	/* Register kernel socket. */
@@ -1236,17 +1344,33 @@ void kernel_init(struct zebra_ns *zns)
 		zlog_err("Can't set %s socket error: %s(%d)",
 			 zns->netlink_cmd.name, safe_strerror(errno), errno);
 
-	if (fcntl(zns->netlink_dplane.sock, F_SETFL, O_NONBLOCK) < 0)
+	if (fcntl(zns->netlink_dplane_out.sock, F_SETFL, O_NONBLOCK) < 0)
 		zlog_err("Can't set %s socket error: %s(%d)",
-			 zns->netlink_dplane.name, safe_strerror(errno), errno);
+			 zns->netlink_dplane_out.name, safe_strerror(errno),
+			 errno);
+
+	if (fcntl(zns->netlink_dplane_in.sock, F_SETFL, O_NONBLOCK) < 0)
+		zlog_err("Can't set %s socket error: %s(%d)",
+			 zns->netlink_dplane_in.name, safe_strerror(errno),
+			 errno);
 
 	/* Set receive buffer size if it's set from command line */
-	if (nl_rcvbufsize)
-		netlink_recvbuf(&zns->netlink, nl_rcvbufsize);
+	if (rcvbufsize) {
+		netlink_recvbuf(&zns->netlink, rcvbufsize);
+		netlink_recvbuf(&zns->netlink_cmd, rcvbufsize);
+		netlink_recvbuf(&zns->netlink_dplane_out, rcvbufsize);
+		netlink_recvbuf(&zns->netlink_dplane_in, rcvbufsize);
+	}
 
-	netlink_install_filter(zns->netlink.sock,
+	/* Set filter for inbound sockets, to exclude events we've generated
+	 * ourselves.
+	 */
+	netlink_install_filter(zns->netlink.sock, zns->netlink_cmd.snl.nl_pid,
+			       zns->netlink_dplane_out.snl.nl_pid);
+
+	netlink_install_filter(zns->netlink_dplane_in.sock,
 			       zns->netlink_cmd.snl.nl_pid,
-			       zns->netlink_dplane.snl.nl_pid);
+			       zns->netlink_dplane_out.snl.nl_pid);
 
 	zns->t_netlink = NULL;
 
@@ -1270,13 +1394,18 @@ void kernel_terminate(struct zebra_ns *zns, bool complete)
 		zns->netlink_cmd.sock = -1;
 	}
 
+	if (zns->netlink_dplane_in.sock >= 0) {
+		close(zns->netlink_dplane_in.sock);
+		zns->netlink_dplane_in.sock = -1;
+	}
+
 	/* During zebra shutdown, we need to leave the dataplane socket
 	 * around until all work is done.
 	 */
 	if (complete) {
-		if (zns->netlink_dplane.sock >= 0) {
-			close(zns->netlink_dplane.sock);
-			zns->netlink_dplane.sock = -1;
+		if (zns->netlink_dplane_out.sock >= 0) {
+			close(zns->netlink_dplane_out.sock);
+			zns->netlink_dplane_out.sock = -1;
 		}
 	}
 }

@@ -84,10 +84,14 @@ int allow_delete = 0;
 
 bool v6_rr_semantics = true;
 
+int graceful_restart;
+
+/* Receive buffer size for kernel control sockets */
 #ifdef HAVE_NETLINK
-/* Receive buffer size for netlink socket */
-uint32_t nl_rcvbufsize = 4194304;
-#endif /* HAVE_NETLINK */
+uint32_t rcvbufsize = 4194304;
+#else
+uint32_t rcvbufsize = 128 * 1024;
+#endif
 
 #define OPTION_V6_RR_SEMANTICS 2000
 #define OPTION_ASIC_OFFLOAD    2001
@@ -101,6 +105,7 @@ const struct option longopts[] = {
 	{"ecmp", required_argument, NULL, 'e'},
 	{"retain", no_argument, NULL, 'r'},
 	{"vrfdefaultname", required_argument, NULL, 'o'},
+	{"graceful_restart", required_argument, NULL, 'K'},
 	{"asic-offload", optional_argument, NULL, OPTION_ASIC_OFFLOAD},
 #ifdef HAVE_NETLINK
 	{"vrfwnetns", no_argument, NULL, 'n'},
@@ -310,14 +315,15 @@ int main(int argc, char **argv)
 	bool asic_offload = false;
 	bool notify_on_ack = true;
 
+	graceful_restart = 0;
 	vrf_configure_backend(VRF_BACKEND_VRF_LITE);
 
 	frr_preinit(&zebra_di, argc, argv);
 
 	frr_opt_add(
-		"baz:e:o:rK:"
+		"baz:e:rK:s:"
 #ifdef HAVE_NETLINK
-		"s:n"
+		"n"
 #endif
 #if defined(HANDLE_ZAPI_FUZZING)
 		"c:"
@@ -333,11 +339,14 @@ int main(int argc, char **argv)
 		"  -e, --ecmp               Specify ECMP to use.\n"
 		"  -r, --retain             When program terminates, retain added route by zebra.\n"
 		"  -o, --vrfdefaultname     Set default VRF name.\n"
+		"  -K, --graceful_restart   Graceful restart at the kernel level, timer in seconds for expiration\n"
 		"  -A, --asic-offload       FRR is interacting with an asic underneath the linux kernel\n"
 #ifdef HAVE_NETLINK
-		"  -n, --vrfwnetns          Use NetNS as VRF backend\n"
 		"  -s, --nl-bufsize         Set netlink receive buffer size\n"
+		"  -n, --vrfwnetns          Use NetNS as VRF backend\n"
 		"      --v6-rr-semantics    Use v6 RR semantics\n"
+#else
+		"  -s,                      Set kernel socket receive buffer size\n"
 #endif /* HAVE_NETLINK */
 #if defined(HANDLE_ZAPI_FUZZING)
 		"  -c <file>                Bypass normal startup and use this file for testing of zapi\n"
@@ -392,10 +401,13 @@ int main(int argc, char **argv)
 		case 'r':
 			retain_mode = 1;
 			break;
-#ifdef HAVE_NETLINK
-		case 's':
-			nl_rcvbufsize = atoi(optarg);
+		case 'K':
+			graceful_restart = atoi(optarg);
 			break;
+		case 's':
+			rcvbufsize = atoi(optarg);
+			break;
+#ifdef HAVE_NETLINK
 		case 'n':
 			vrf_configure_backend(VRF_BACKEND_NETNS);
 			break;
