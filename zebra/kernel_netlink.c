@@ -714,7 +714,7 @@ struct rtattr *nl_rta_nest(struct rtattr *rta, unsigned int maxlen, int type)
 {
 	struct rtattr *nest = RTA_TAIL(rta);
 
-	if (nl_rta_put(rta, maxlen, type, NULL, 0))
+	if (!nl_rta_put(rta, maxlen, type, NULL, 0))
 		return NULL;
 
 	nest->rta_type |= NLA_F_NESTED;
