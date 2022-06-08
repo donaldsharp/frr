@@ -31,6 +31,7 @@
 #include "zebra/zebra_mroute.h"
 #include "zebra/rt.h"
 #include "zebra/debug.h"
+#include "zebra/zebra_trace.h"
 
 void zebra_ipmr_route_stats(ZAPI_HANDLER_ARGS)
 {
@@ -52,6 +53,11 @@ void zebra_ipmr_route_stats(ZAPI_HANDLER_ARGS)
 
 		zlog_debug("Asking for (%s,%s)[%s(%u)] mroute information",
 			   sbuf, gbuf, zvrf->vrf->name, zvrf->vrf->vrf_id);
+
+		// FIXME: Remove below trace, this for reference lttng
+		// tracepoints
+		frrtrace(1, frr_zebra, zebra_ipmr_route_stats,
+			 zvrf->vrf->vrf_id); /*zebra lttng trace*/
 	}
 
 	suc = kernel_get_ipmr_sg_stats(zvrf, &mroute);

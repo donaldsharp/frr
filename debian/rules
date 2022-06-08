@@ -88,6 +88,7 @@ override_dh_auto_configure:
 		--enable-sharpd=yes \
 		--enable-grpc=yes \
 		--enable-bgp-lttng=yes \
+		--enable-zebra-lttng=yes \
 		# end
 
 override_dh_auto_install:
