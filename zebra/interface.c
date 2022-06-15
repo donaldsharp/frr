@@ -196,9 +196,6 @@ static int if_zebra_new_hook(struct interface *ifp)
 static void if_nhg_dependents_check_valid(struct nhg_hash_entry *nhe)
 {
 	zebra_nhg_check_valid(nhe);
-	if (!CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_VALID))
-		/* Assuming uninstalled as well here */
-		UNSET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
 }
 
 static void if_down_nhg_dependents(const struct interface *ifp)
