@@ -62,7 +62,7 @@
 					<consumer_output>
 						<enabled>true</enabled>
 						<destination>
-							<path>/var/tmp/lttng-traces/frr-snapshot-onboot</path>
+							<path>/var/log/lttng-traces/frr-snapshot-onboot</path>
 						</destination>
 					</consumer_output>
 				</output>
