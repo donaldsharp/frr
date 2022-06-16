@@ -164,7 +164,7 @@ daemon_start() {
 	instopt="${inst:+-n $inst}"
 	eval args="\$${daemon}_options"
 
-	if [ "$daemon" = "bgpd" ] | [ "$daemon" = "zebra"]; then
+	if [ "$daemon" = "bgpd" ] | [ "$daemon" = "zebra" ]; then
 		lttng_preload="LD_PRELOAD=liblttng-ust-fork.so.0"
 	fi
 
