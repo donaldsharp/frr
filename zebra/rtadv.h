@@ -161,7 +161,8 @@ extern void zebra_interface_radv_disable(ZAPI_HANDLER_ARGS);
 extern void zebra_interface_radv_enable(ZAPI_HANDLER_ARGS);
 extern void rtadv_add_prefix(struct zebra_if *zif, const struct prefix_ipv6 *p);
 extern void rtadv_delete_prefix(struct zebra_if *zif, const struct prefix *p);
-
+extern void rtadv_start_interface_events(struct zebra_vrf *zvrf,
+					 struct zebra_if *zif);
 #ifdef __cplusplus
 }
 #endif
