@@ -242,9 +242,12 @@ static void ospf6_zebra_route_update(int type, struct ospf6_route *request)
 	}
 
 	/* If removing is the best path and if there's another path,
-	   treat this request as add the secondary path */
-	if (type == REM && ospf6_route_is_best(request) && request->next
-	    && ospf6_route_is_same(request, request->next)) {
+	 * treat this request as add the secondary path  - if there are
+	 * nexthops.
+	 */
+	if (type == REM && ospf6_route_is_best(request) && request->next &&
+	    ospf6_route_is_same(request, request->next) &&
+	    ospf6_route_num_nexthops(request->next) > 0) {
 		if (IS_OSPF6_DEBUG_ZEBRA(SEND))
 			zlog_debug(
 				"  Best-path removal resulted Secondary addition");
@@ -260,11 +263,15 @@ static void ospf6_zebra_route_update(int type, struct ospf6_route *request)
 		return;
 	}
 
+	/* Can't add without nexthops. */
 	nhcount = ospf6_route_num_nexthops(request);
 	if (nhcount == 0) {
-		if (IS_OSPF6_DEBUG_ZEBRA(SEND))
-			zlog_debug("  No nexthop, ignore");
-		return;
+		if (type == ADD) {
+			if (IS_OSPF6_DEBUG_ZEBRA(SEND))
+				zlog_debug("  No nexthop, ignore");
+			return;
+		} else if (IS_OSPF6_DEBUG_ZEBRA(SEND))
+			zlog_debug("  No nexthop, rem ok");
 	}
 
 	dest = &request->prefix;
@@ -274,9 +281,12 @@ static void ospf6_zebra_route_update(int type, struct ospf6_route *request)
 	api.type = ZEBRA_ROUTE_OSPF6;
 	api.safi = SAFI_UNICAST;
 	api.prefix = *dest;
-	SET_FLAG(api.message, ZAPI_MESSAGE_NEXTHOP);
 	api.nexthop_num = MIN(nhcount, MULTIPATH_NUM);
-	ospf6_route_zebra_copy_nexthops(request, api.nexthops, api.nexthop_num);
+	if (api.nexthop_num > 0) {
+		SET_FLAG(api.message, ZAPI_MESSAGE_NEXTHOP);
+		ospf6_route_zebra_copy_nexthops(request, api.nexthops,
+						api.nexthop_num);
+	}
 	SET_FLAG(api.message, ZAPI_MESSAGE_METRIC);
 	api.metric = (request->path.metric_type == 2 ? request->path.u.cost_e2
 						     : request->path.cost);
