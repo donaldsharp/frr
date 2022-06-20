@@ -215,6 +215,8 @@ struct zebra_evpn_access_bd {
 	zebra_evpn_t *zevpn;
 	/* SVI associated with the VLAN */
 	struct zebra_if *vlan_zif;
+	/* VNI count */
+	uint8_t vni_count;
 };
 
 /* multihoming information stored in zrouter */

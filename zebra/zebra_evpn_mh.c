@@ -773,6 +773,7 @@ static void zebra_evpn_acc_bd_evpn_set(struct zebra_evpn_access_bd *acc_bd,
 void zebra_evpn_vl_vxl_ref(uint16_t vid, vni_t vni_id, struct zebra_if *vxlan_zif)
 {
 	vni_t old_vni;
+	uint8_t tmp_cnt;
 	struct zebra_evpn_access_bd *acc_bd;
 	zebra_evpn_t *old_zevpn;
 	struct interface *br_if;
@@ -791,7 +792,20 @@ void zebra_evpn_vl_vxl_ref(uint16_t vid, vni_t vni_id, struct zebra_if *vxlan_zi
 	acc_bd = zebra_evpn_acc_vl_find(vid, br_if);
 	if (!acc_bd)
 		acc_bd = zebra_evpn_acc_bd_alloc_on_ref(vid, br_if);
-
+	/* Check if the current vni is active, if active then we have multiple
+	 * VNI's getting mapped to the same VLAN which is momentary hence
+	 * increment the vni count and return else continue processing as the
+	 * VNI has changed for this VLAN and needs to be updated
+	 */
+	else if (acc_bd->vxlan_zif &&
+		 zebra_vxlan_if_vni_find(acc_bd->vxlan_zif, acc_bd->vni)) {
+		tmp_cnt = acc_bd->vni_count;
+		acc_bd->vni_count++;
+		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+			zlog_debug("access_vlan %d increment VNI count: %d->%d",
+				   vid, tmp_cnt, acc_bd->vni_count);
+		return;
+	}
 	old_vni = acc_bd->vni;
 
 	if (vni_id == old_vni)
@@ -799,6 +813,7 @@ void zebra_evpn_vl_vxl_ref(uint16_t vid, vni_t vni_id, struct zebra_if *vxlan_zi
 
 	acc_bd->vni = vni_id;
 	acc_bd->vxlan_zif = vxlan_zif;
+	acc_bd->vni_count = 1;
 
 	old_zevpn = acc_bd->zevpn;
 	acc_bd->zevpn = zebra_evpn_lookup(vni_id);
@@ -821,6 +836,7 @@ void zebra_evpn_vl_vxl_deref(uint16_t vid, vni_t vni_id, struct zebra_if *vxlan_
 {
 	struct interface *br_if;
 	struct zebra_evpn_access_bd *acc_bd;
+	uint8_t tmp_cnt;
 
 	if (!vid)
 		return;
@@ -835,6 +851,14 @@ void zebra_evpn_vl_vxl_deref(uint16_t vid, vni_t vni_id, struct zebra_if *vxlan_
 	acc_bd = zebra_evpn_acc_vl_find(vid, br_if);
 	if (!acc_bd)
 		return;
+	if (acc_bd->vni_count > 1) {
+		tmp_cnt = acc_bd->vni_count;
+		acc_bd->vni_count--;
+		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+			zlog_debug("access_vlan %d decrement VNI count: %d->%d",
+				   vid, tmp_cnt, acc_bd->vni_count);
+		return;
+	}
 
 	/* clear vxlan_if only if it matches */
 	if (acc_bd->vni != vni_id)
@@ -1014,6 +1038,7 @@ static void zebra_evpn_acc_vl_json_fill(
 	if (acc_bd->mbr_zifs)
 		json_object_int_add(json, "memberIfCount",
 				listcount(acc_bd->mbr_zifs));
+	json_object_int_add(json, "vniCount", acc_bd->vni_count);
 
 	if (detail) {
 		json_object *json_mbrs;
@@ -1058,6 +1083,7 @@ static void zebra_evpn_acc_vl_show_entry_detail(struct vty *vty,
 		}
 		vty_out(vty, " Member Count: %d\n",
 				listcount(acc_bd->mbr_zifs));
+		vty_out(vty, " VNI-count: %d\n", acc_bd->vni_count);
 		vty_out(vty, " Members: \n");
 		for (ALL_LIST_ELEMENTS_RO(acc_bd->mbr_zifs, node, zif))
 			vty_out(vty, "    %s\n", zif->ifp->name);
@@ -1071,12 +1097,12 @@ static void zebra_evpn_acc_vl_show_entry(struct vty *vty,
 	if (json) {
 		zebra_evpn_acc_vl_json_fill(acc_bd, json, false);
 	} else {
-		vty_out(vty, "%-5s.%-5u %-15s %-8d %-15s %u\n",
+		vty_out(vty, "%-5s.%-5u %-15s %-8d %-15s %-15d %u \n",
 			acc_bd->bridge_zif->ifp->name, acc_bd->vid,
 			acc_bd->vlan_zif ? acc_bd->vlan_zif->ifp->name : "-",
 			acc_bd->zevpn ? acc_bd->zevpn->vni : 0,
 			acc_bd->vxlan_zif ? acc_bd->vxlan_zif->ifp->name : "-",
-			listcount(acc_bd->mbr_zifs));
+			acc_bd->vni_count, listcount(acc_bd->mbr_zifs));
 	}
 }
 
@@ -1112,8 +1138,8 @@ void zebra_evpn_acc_vl_show(struct vty *vty, bool uj)
 	wctx.detail = false;
 
 	if (!uj)
-		vty_out(vty, "%-12s %-15s %-8s %-15s %s\n", "VLAN", "SVI",
-			"L2-VNI", "VXLAN-IF", "# Members");
+		vty_out(vty, "%-12s %-15s %-8s %-15s %-15s %s\n", "VLAN", "SVI",
+			"L2-VNI", "VXLAN-IF", "VNI-count", "# Members");
 
 	hash_iterate(zmh_info->evpn_vlan_table, zebra_evpn_acc_vl_show_hash,
 			&wctx);
