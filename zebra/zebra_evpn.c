@@ -1392,9 +1392,10 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 	if (ifp)
 		zif = ifp->info;
 	if (!ifp || !if_is_operative(ifp) || !zif || !zif->brslave_info.br_if) {
-		zlog_warn(
-			"Ignoring remote MACIP ADD VNI %u, invalid interface state or info",
-			vni);
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"Ignoring remote MACIP ADD VNI %u, invalid interface state or info",
+				vni);
 		return;
 	}
 
