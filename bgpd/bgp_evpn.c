@@ -2899,10 +2899,10 @@ static int install_evpn_route_entry_in_vrf(struct bgp *bgp_vrf,
 
 	if (bgp_debug_zebra(NULL))
 		zlog_debug(
-			"... %s pi dest %p (l %d) pi %p (l %d, f 0x%x)",
-			new_pi ? "new" : "update",
-			dest, bgp_dest_to_rnode(dest)->lock,
-			pi, pi->lock, pi->flags);
+			"... %s pi dest %p (l %d) pi %p (l %d, f 0x%x) use_l3nhg %u",
+			new_pi ? "new" : "update", dest,
+			bgp_dest_to_rnode(dest)->lock, pi, pi->lock, pi->flags,
+			use_l3nhg);
 
 	if (bgp_debug_zebra(NULL))
 		zlog_debug("... %s pi rn %p (l %d) pi %p (l %d, f 0x%x)",

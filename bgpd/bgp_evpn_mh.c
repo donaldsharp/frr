@@ -2806,13 +2806,20 @@ static void bgp_evpn_l3nhg_zebra_add_v4_or_v6(struct bgp_evpn_es_vrf *es_vrf,
 		++nh_cnt;
 		if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
 			zlog_debug(
-				"%s nhg %d vtep %s l3-svi %d %s ", __func__,
-				nhg_id, inet_ntoa(es_vtep->vtep_ip),
+				"%s nhg %d vtep %s l3-svi %d %s vxlan-if %d %s",
+				__func__, nhg_id, inet_ntoa(es_vtep->vtep_ip),
 				es_vrf->bgp_vrf->l3vni_svi_ifindex,
 				(es_vrf->bgp_vrf->l3vni_svi_ifindex
 					 ? ifindex2ifname(
 						   es_vrf->bgp_vrf
 							   ->l3vni_svi_ifindex,
+						   es_vrf->bgp_vrf->vrf_id)
+					 : "NIL"),
+				es_vrf->bgp_vrf->evpn_info->vxlan_ifindex,
+				(es_vrf->bgp_vrf->evpn_info->vxlan_ifindex
+					 ? ifindex2ifname(
+						   es_vrf->bgp_vrf->evpn_info
+							   ->vxlan_ifindex,
 						   es_vrf->bgp_vrf->vrf_id)
 					 : "NIL"));
 

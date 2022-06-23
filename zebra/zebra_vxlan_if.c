@@ -201,7 +201,7 @@ static int zebra_vxlan_if_update_vni(struct interface *ifp,
 
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug(
-				"Update L3-VNI %u intf %s(%u) VLAN %u local IP %s master %u chg 0x%x is_l3svd %u",
+				"L3-VNI UPDATE %u intf %s(%u) VLAN %u local IP %s master %u chg 0x%x is_l3svd %u",
 				vni, ifp->name, ifp->ifindex, vnip->access_vlan,
 				inet_ntoa(vxl->vtep_ip),
 				zif->brslave_info.bridge_ifindex, chgflags,
