@@ -792,6 +792,7 @@ static void zl3vni_print(zebra_l3vni_t *zl3vni, void **ctx)
 				       zl3vni_vxlan_if_name(zl3vni));
 		json_object_string_add(json, "sviIntf",
 				       zl3vni_svi_if_name(zl3vni));
+		json_object_boolean_add(json, "isL3svd", zl3vni->is_l3svd);
 		json_object_string_add(json, "state", zl3vni_state2str(zl3vni));
 		json_object_string_add(json, "vrf", zl3vni_vrf_name(zl3vni));
 		json_object_string_add(
@@ -848,6 +849,7 @@ static void zl3vni_print_hash(struct hash_bucket *bucket, void *ctx[])
 		json_object_string_add(json_evpn, "type", "L3");
 		json_object_string_add(json_evpn, "tenantVrf",
 				       zl3vni_vrf_name(zl3vni));
+		json_object_boolean_add(json_evpn, "isL3svd", zl3vni->is_l3svd);
 		json_object_object_add(json, vni_str, json_evpn);
 	}
 }
