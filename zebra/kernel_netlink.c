@@ -50,6 +50,7 @@
 #include "zebra/tc_netlink.h"
 #include "zebra/netconf_netlink.h"
 #include "zebra/zebra_errors.h"
+#include "zebra/zebra_trace.h"
 
 #ifndef SO_RCVBUFFORCE
 #define SO_RCVBUFFORCE  (33)
@@ -1175,7 +1176,7 @@ int netlink_parse_info(int (*filter)(struct nlmsghdr *, ns_id_t, int),
 					h->nlmsg_type, h->nlmsg_len,
 					h->nlmsg_seq, h->nlmsg_pid);
 
-
+			frrtrace(2, frr_zebra, netlink_parse_info, h, nl);
 			/*
 			 * Ignore messages that maybe sent from
 			 * other actors besides the kernel
@@ -1239,6 +1240,8 @@ static int netlink_talk_info(int (*filter)(struct nlmsghdr *, ns_id_t,
 			nl->name, nl_msg_type_to_str(n->nlmsg_type),
 			n->nlmsg_type, n->nlmsg_len, n->nlmsg_seq,
 			n->nlmsg_flags);
+
+	frrtrace(2, frr_zebra, netlink_talk_info, n, nl);
 
 	if (netlink_send_msg(nl, n, n->nlmsg_len) == -1)
 		return -1;
