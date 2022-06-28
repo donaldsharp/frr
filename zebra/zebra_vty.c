@@ -1372,8 +1372,7 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 			json_dependants = json_object_new_array();
 		else
 			vty_out(vty, "     Dependents:");
-		frr_each(nhg_connected_tree, &nhe->nhg_dependents,
-			  rb_node_dep) {
+		frr_each (nhg_connected_tree, &nhe->nhg_dependents, rb_node_dep) {
 			if (json)
 				json_object_array_add(
 					json_dependants,
