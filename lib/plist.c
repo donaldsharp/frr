@@ -818,11 +818,10 @@ static int prefix_list_entry_match(struct prefix_list_entry *pentry,
 	return 1;
 }
 
-enum prefix_list_type prefix_list_apply_ext(
-	struct prefix_list *plist,
-	const struct prefix_list_entry **which,
-	union prefixconstptr object,
-	bool address_mode)
+enum prefix_list_type
+prefix_list_apply_ext(struct prefix_list *plist,
+		      const struct prefix_list_entry **which,
+		      union prefixconstptr object, bool address_mode)
 {
 	struct prefix_list_entry *pentry, *pbest = NULL;
 
@@ -1384,17 +1383,16 @@ DEFPY (clear_ipv6_prefix_list,
 	return vty_clear_prefix_list(vty, AFI_IP6, prefix_list, prefix_str);
 }
 
-DEFPY (debug_prefix_list_match,
-       debug_prefix_list_match_cmd,
-       "debug prefix-list WORD$prefix-list match <A.B.C.D/M|X:X::X:X/M>"
-       " [address-mode$addr_mode]",
-       DEBUG_STR
-       "Prefix-list test access\n"
-       "Name of a prefix list\n"
-       "Test prefix for prefix list result\n"
-       "Prefix to test in ip prefix-list\n"
-       "Prefix to test in ipv6 prefix-list\n"
-       "Use address matching mode (PIM RP)\n")
+DEFPY(debug_prefix_list_match, debug_prefix_list_match_cmd,
+      "debug prefix-list WORD$prefix-list match <A.B.C.D/M|X:X::X:X/M>"
+      " [address-mode$addr_mode]",
+      DEBUG_STR
+      "Prefix-list test access\n"
+      "Name of a prefix list\n"
+      "Test prefix for prefix list result\n"
+      "Prefix to test in ip prefix-list\n"
+      "Prefix to test in ipv6 prefix-list\n"
+      "Use address matching mode (PIM RP)\n")
 {
 	struct prefix_list *plist;
 	const struct prefix_list_entry *entry = NULL;
@@ -1416,7 +1414,7 @@ DEFPY (debug_prefix_list_match,
 	if (!entry)
 		vty_out(vty, "no match found\n");
 	else {
-		vty_out(vty, "matching entry #%"PRId64": %pFX", entry->seq,
+		vty_out(vty, "matching entry #%" PRId64 ": %pFX", entry->seq,
 			&entry->prefix);
 		if (entry->ge)
 			vty_out(vty, " ge %d", entry->ge);

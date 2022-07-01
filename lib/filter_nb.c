@@ -89,8 +89,8 @@ static enum nb_error prefix_list_length_validate(struct nb_cb_modify_args *args)
 	 * Check rule:
 	 * ge <= le.
 	 */
-	if (yang_dnode_exists(args->dnode, xpath_le)
-	    && yang_dnode_exists(args->dnode, xpath_ge)) {
+	if (yang_dnode_exists(args->dnode, xpath_le) &&
+	    yang_dnode_exists(args->dnode, xpath_ge)) {
 		le = yang_dnode_get_uint8(args->dnode, xpath_le);
 		ge = yang_dnode_get_uint8(args->dnode, xpath_ge);
 		if (ge > le)
