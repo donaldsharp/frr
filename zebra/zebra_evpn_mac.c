@@ -2147,6 +2147,33 @@ int zebra_evpn_mac_remote_macip_add(
 		else
 			UNSET_FLAG(mac->flags, ZEBRA_MAC_REMOTE_DEF_GW);
 
+		/* Remove the MAC from the FDB cache as it should contain the
+		 * locally-learnt MACs in sync with the kernel FDB
+		 * If the install fails then the local cache and kernel might
+		 * get out of sync */
+		vid = zebra_get_bridge_vlan_id(zevpn);
+		if (vid != 0 && zevpn->bridge_if != NULL) {
+			bmac = zebra_l2_brvlan_mac_find(zevpn->bridge_if, vid,
+							macaddr);
+			if (bmac)
+				zebra_l2_brvlan_mac_del(zevpn->bridge_if, bmac);
+			else {
+				if (IS_ZEBRA_DEBUG_VXLAN) {
+					zlog_debug(
+						"Failed to find mac %s in local cache ",
+						prefix_mac2str(macaddr, buf,
+							       sizeof(buf)));
+				}
+			}
+		} else {
+			if (IS_ZEBRA_DEBUG_VXLAN) {
+				zlog_debug(
+					"Bridge mac %s not associated with a VLAN %d",
+					prefix_mac2str(macaddr, buf,
+						       sizeof(buf)),
+					vid);
+			}
+		}
 		zebra_evpn_dup_addr_detect_for_mac(
 			zvrf, mac, mac->fwd_info.r_vtep_ip, do_dad,
 			&is_dup_detect, false);
