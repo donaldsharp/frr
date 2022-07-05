@@ -1177,6 +1177,89 @@ static int build_label_stack(struct mpls_label_stack *nh_label,
 	return num_labels;
 }
 
+static bool _netlink_nexthop_encode_label_info(const struct nexthop *nexthop,
+					       struct nlmsghdr *nlmsg,
+					       char *label_buf,
+					       size_t label_buf_size)
+{
+	mpls_lse_t out_lse[MPLS_MAX_LABELS];
+	int num_labels;
+	char buf[1024];
+	struct rtattr *rta = (void *)buf;
+	struct rtattr *nest;
+	struct mpls_label_stack *nh_label;
+	enum lsp_types_t nh_label_type;
+	struct in_addr ipv4;
+
+	nh_label = nexthop->nh_label;
+	nh_label_type = nexthop->nh_label_type;
+
+	/*
+	 * label_buf is *only* currently used within debugging.
+	 * As such when we assign it we are guarding it inside
+	 * a debug test.  If you want to change this make sure
+	 * you fix this assumption
+	 */
+	label_buf[0] = '\0';
+
+	num_labels = build_label_stack(nh_label, nh_label_type, out_lse,
+				       label_buf, label_buf_size);
+
+	rta->rta_type = NHA_ENCAP;
+	rta->rta_len = RTA_LENGTH(0);
+
+	if (num_labels && nh_label_type == ZEBRA_LSP_EVPN) {
+		nest = nl_rta_nest(rta, sizeof(buf), NHA_ENCAP);
+
+		if (!nl_rta_put64(rta, sizeof(buf), LWTUNNEL_IP_ID,
+				  htobe64((uint64_t)out_lse[0])))
+			return false;
+
+		if (nexthop->type == NEXTHOP_TYPE_IPV4_IFINDEX) {
+			if (!nl_rta_put(rta, sizeof(buf), LWTUNNEL_IP_DST,
+					&nexthop->gate.ipv4, 4))
+				return false;
+		} else if (nexthop->type == NEXTHOP_TYPE_IPV6_IFINDEX) {
+			if (IS_MAPPED_IPV6(&nexthop->gate.ipv6)) {
+				ipv4_mapped_ipv6_to_ipv4(&nexthop->gate.ipv6,
+							 &ipv4);
+				if (!nl_rta_put(rta, sizeof(buf),
+						LWTUNNEL_IP_DST, &ipv4, 4))
+					return false;
+			} else {
+				if (!nl_rta_put(rta, sizeof(buf),
+						LWTUNNEL_IP_DST,
+						&nexthop->gate.ipv6, 16))
+					return false;
+			}
+		} else {
+			if (IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug(
+					"%s: nexthop %pNHv %s must NEXTHOP_TYPE_IPV*_IFINDEX to be vxlan encapped",
+					__func__, nexthop, label_buf);
+
+			return false;
+		}
+
+		nl_rta_nest_end(rta, nest);
+
+		nl_rta_put16(rta, sizeof(buf), NHA_ENCAP_TYPE,
+			     LWTUNNEL_ENCAP_IP);
+
+		if (rta->rta_len > RTA_LENGTH(0)) {
+			nl_addraw_l(nlmsg, sizeof(buf), RTA_DATA(rta),
+				    RTA_PAYLOAD(rta));
+
+			if (IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug(
+					" nexthop %pNHv encap id %u added to netlink buffer",
+					nexthop, out_lse[0]);
+		}
+	}
+
+	return true;
+}
+
 static bool _netlink_route_encode_label_info(const struct nexthop *nexthop,
 					     struct nlmsghdr *nlmsg,
 					     size_t buflen, struct rtmsg *rtmsg,
@@ -2176,6 +2259,7 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 	int num_labels = 0;
 	uint32_t id = dplane_ctx_get_nhe_id(ctx);
 	int type = dplane_ctx_get_nhe_type(ctx);
+	const struct nexthop *nh;
 
 	if (!id) {
 		flog_err(
@@ -2204,8 +2288,11 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 		return 0;
 	}
 
+	nh = dplane_ctx_get_nhe_ng(ctx)->nexthop;
+
 	/* Cumulus only */
-	if (nexthop_group_has_label(dplane_ctx_get_nhe_ng(ctx))) {
+	if (nexthop_group_has_label(dplane_ctx_get_nhe_ng(ctx)) &&
+	    nh->nh_label_type != ZEBRA_LSP_EVPN) {
 		if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_NHG)
 			zlog_debug(
 				"%s: nhg_id %u (%s): labeled NHGs not supported, ignoring",
@@ -2298,6 +2385,13 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 
 			if (CHECK_FLAG(nh->flags, NEXTHOP_FLAG_ONLINK))
 				req->nhm.nh_flags |= RTNH_F_ONLINK;
+
+			if (nh->nh_label_type == ZEBRA_LSP_EVPN) {
+				_netlink_nexthop_encode_label_info(
+					nh, &req->n, label_buf,
+					sizeof(label_buf));
+				goto nexthop_done;
+			}
 
 			num_labels = build_label_stack(
 				nh->nh_label, nh->nh_label_type, out_lse,
@@ -3980,7 +4074,8 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	else {
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug(
-				"\tNeighbor Entry received is not on a VLAN or a BRIDGE, ignoring");
+				"\tNeighbor Entry received on link %s is not on a VLAN or a BRIDGE, ignoring",
+				ifp->name);
 		return 0;
 	}
 

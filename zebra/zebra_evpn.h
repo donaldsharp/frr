@@ -178,6 +178,7 @@ zebra_evpn_t *zebra_evpn_from_svi(struct interface *ifp,
 				  struct interface *br_if);
 struct interface *zebra_evpn_map_to_macvlan(struct interface *br_if,
 					    struct interface *svi_if);
+struct interface *zebra_evpn_map_l3svd_to_macvlan(struct interface *vxlan_if);
 void zebra_evpn_rem_mac_install_all(zebra_evpn_t *zevpn);
 void zebra_evpn_rem_mac_uninstall_all(zebra_evpn_t *zevpn);
 void zebra_evpn_read_mac_neigh(zebra_evpn_t *zevpn, struct interface *ifp);

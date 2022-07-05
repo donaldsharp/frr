@@ -792,6 +792,7 @@ static void zl3vni_print(zebra_l3vni_t *zl3vni, void **ctx)
 				       zl3vni_vxlan_if_name(zl3vni));
 		json_object_string_add(json, "sviIntf",
 				       zl3vni_svi_if_name(zl3vni));
+		json_object_boolean_add(json, "isL3svd", zl3vni->is_l3svd);
 		json_object_string_add(json, "state", zl3vni_state2str(zl3vni));
 		json_object_string_add(json, "vrf", zl3vni_vrf_name(zl3vni));
 		json_object_string_add(
@@ -848,6 +849,7 @@ static void zl3vni_print_hash(struct hash_bucket *bucket, void *ctx[])
 		json_object_string_add(json_evpn, "type", "L3");
 		json_object_string_add(json_evpn, "tenantVrf",
 				       zl3vni_vrf_name(zl3vni));
+		json_object_boolean_add(json_evpn, "isL3svd", zl3vni->is_l3svd);
 		json_object_object_add(json, vni_str, json_evpn);
 	}
 }
@@ -970,6 +972,11 @@ static int zevpn_build_vni_hash_table(struct zebra_if *zif,
 		zl3vni->local_vtep_ip = vxl->vtep_ip;
 		zl3vni->vxlan_if = ifp;
 
+		if (IS_ZEBRA_VXLAN_IF_L3SVD(zif))
+			zl3vni->is_l3svd = true;
+		else
+			zl3vni->is_l3svd = false;
+
 		/*
 		 * we need to associate with SVI.
 		 * we can associate with svi-if only after association
@@ -981,13 +988,15 @@ static int zevpn_build_vni_hash_table(struct zebra_if *zif,
 		zl3vni->mac_vlan_if = zl3vni_map_to_mac_vlan_if(zl3vni);
 
 		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug("create l3vni %u svi_if %s mac_vlan_if %s",
-				   vni, zl3vni->svi_if ? zl3vni->svi_if->name
-				   : "NIL",
-				   zl3vni->mac_vlan_if ?
-				   zl3vni->mac_vlan_if->name : "NIL");
+			zlog_debug(
+				"create l3vni %u svi_if %s mac_vlan_if %s is_l3svd %u",
+				vni,
+				zl3vni->svi_if ? zl3vni->svi_if->name : "NIL",
+				zl3vni->mac_vlan_if ? zl3vni->mac_vlan_if->name
+						    : "NIL",
+				zl3vni->is_l3svd);
 
-		if (is_l3vni_oper_up(zl3vni))
+		if (is_l3vni_oper_up(zl3vni) || is_l3svd_l3vni_oper_up(zl3vni))
 			zebra_vxlan_process_l3vni_oper_up(zl3vni);
 
 	} else {
@@ -1588,7 +1597,17 @@ static int _nh_install(zebra_l3vni_t *zl3vni, struct interface *ifp,
 	uint8_t flags;
 	int ret = 0;
 
-	if (zl3vni && !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
+		return -1;
+	if (zl3vni->is_l3svd) {
+		if (!is_l3svd_l3vni_oper_up(zl3vni)) {
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"l3svd based l3vni %u is not up skip nh_install",
+					zl3vni->vni);
+			return -1;
+		}
+	} else if (!is_l3vni_oper_up(zl3vni))
 		return -1;
 
 	if (!(n->flags & ZEBRA_NEIGH_REMOTE)
@@ -1627,7 +1646,10 @@ static int _nh_uninstall(struct interface *ifp, zebra_neigh_t *n)
  */
 static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 {
-	return _nh_install(zl3vni, zl3vni->svi_if, n);
+	if (zl3vni->is_l3svd)
+		return _nh_install(zl3vni, zl3vni->vxlan_if, n);
+	else
+		return _nh_install(zl3vni, zl3vni->svi_if, n);
 }
 
 /*
@@ -1635,7 +1657,10 @@ static int zl3vni_nh_install(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
  */
 static int zl3vni_nh_uninstall(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 {
-	return _nh_uninstall(zl3vni->svi_if, n);
+	if (zl3vni->is_l3svd)
+		return _nh_uninstall(zl3vni->vxlan_if, n);
+	else
+		return _nh_uninstall(zl3vni->svi_if, n);
 }
 
 /*
@@ -2021,6 +2046,9 @@ struct interface *zl3vni_map_to_mac_vlan_if(zebra_l3vni_t *zl3vni)
 	if (!zif)
 		return NULL;
 
+	if (IS_ZEBRA_VXLAN_IF_L3SVD(zif))
+		return zebra_evpn_map_l3svd_to_macvlan(zl3vni->vxlan_if);
+
 	return zebra_evpn_map_to_macvlan(zif->brslave_info.br_if,
 					 zl3vni->svi_if);
 }
@@ -2111,13 +2139,24 @@ static zebra_l3vni_t *zl3vni_from_svi(struct interface *ifp,
 	return zl3vni;
 }
 
-static inline void zl3vni_get_vrr_rmac(zebra_l3vni_t *zl3vni,
-				       struct ethaddr *rmac)
+static void zl3vni_get_l3svd_rmac(zebra_l3vni_t *zl3vni, struct ethaddr *rmac)
 {
 	if (!zl3vni)
 		return;
 
-	if (!is_l3vni_oper_up(zl3vni))
+	if (!is_l3svd_l3vni_oper_up(zl3vni))
+		return;
+
+	if (zl3vni->vxlan_if && if_is_operative(zl3vni->vxlan_if))
+		memcpy(rmac->octet, zl3vni->vxlan_if->hw_addr, ETH_ALEN);
+}
+
+static void zl3vni_get_vrr_rmac(zebra_l3vni_t *zl3vni, struct ethaddr *rmac)
+{
+	if (!zl3vni)
+		return;
+
+	if (!is_l3vni_oper_up(zl3vni) && !is_l3svd_l3vni_oper_up(zl3vni))
 		return;
 
 	if (zl3vni->mac_vlan_if && if_is_operative(zl3vni->mac_vlan_if))
@@ -2145,9 +2184,12 @@ static int zl3vni_send_add_to_client(zebra_l3vni_t *zl3vni)
 	zvrf = zebra_vrf_lookup_by_id(zl3vni->vrf_id);
 	assert(zvrf);
 
-	/* get the svi and vrr rmac values */
+	/* get the svi/system and vrr rmac values */
 	memset(&svi_rmac, 0, sizeof(struct ethaddr));
-	zl3vni_get_svi_rmac(zl3vni, &svi_rmac);
+	if (zl3vni->is_l3svd)
+		zl3vni_get_l3svd_rmac(zl3vni, &svi_rmac);
+	else
+		zl3vni_get_svi_rmac(zl3vni, &svi_rmac);
 	zl3vni_get_vrr_rmac(zl3vni, &vrr_rmac);
 
 	/* In absence of vrr mac use svi mac as anycast MAC value */
@@ -2166,16 +2208,22 @@ static int zl3vni_send_add_to_client(zebra_l3vni_t *zl3vni)
 	stream_put(s, &svi_rmac, sizeof(struct ethaddr));
 	stream_put_in_addr(s, &zl3vni->local_vtep_ip);
 	stream_put(s, &zl3vni->filter, sizeof(int));
-	stream_putl(s, zl3vni->svi_if->ifindex);
+	stream_putl(s, zl3vni->svi_if ? zl3vni->svi_if->ifindex : 0);
 	stream_put(s, &vrr_rmac, sizeof(struct ethaddr));
 	stream_putl(s, is_anycast_mac);
+	if (zl3vni->is_l3svd)
+		stream_putl(s,
+			    zl3vni->vxlan_if ? zl3vni->vxlan_if->ifindex : 0);
+	else
+		stream_putl(s, 0);
+	stream_putl(s, zl3vni->is_l3svd);
 
 	/* Write packet size. */
 	stream_putw_at(s, 0, stream_get_endp(s));
 
 	if (IS_ZEBRA_DEBUG_VXLAN)
 		zlog_debug(
-			"Send L3_VNI_ADD %u VRF %s RMAC %s VRR %s local-ip %s filter %s to %s",
+			"Send L3-VNI ADD %u VRF %s RMAC %s VRR %s local-ip %s filter %s is_l3svd %u to %s",
 			zl3vni->vni, vrf_id_to_name(zl3vni_vrf_id(zl3vni)),
 			prefix_mac2str(&svi_rmac, buf, sizeof(buf)),
 			prefix_mac2str(&vrr_rmac, buf1, sizeof(buf1)),
@@ -2183,7 +2231,7 @@ static int zl3vni_send_add_to_client(zebra_l3vni_t *zl3vni)
 			CHECK_FLAG(zl3vni->filter, PREFIX_ROUTES_ONLY)
 				? "prefix-routes-only"
 				: "none",
-			zebra_route_string(client->proto));
+			zl3vni->is_l3svd, zebra_route_string(client->proto));
 
 	client->l3vniadd_cnt++;
 	return zserv_send_message(client, s);
@@ -2211,7 +2259,7 @@ static int zl3vni_send_del_to_client(zebra_l3vni_t *zl3vni)
 	stream_putw_at(s, 0, stream_get_endp(s));
 
 	if (IS_ZEBRA_DEBUG_VXLAN)
-		zlog_debug("Send L3_VNI_DEL %u VRF %s to %s", zl3vni->vni,
+		zlog_debug("Send L3-VNI DEL %u VRF %s to %s", zl3vni->vni,
 			   vrf_id_to_name(zl3vni_vrf_id(zl3vni)),
 			   zebra_route_string(client->proto));
 
@@ -2433,8 +2481,22 @@ void zebra_vxlan_evpn_vrf_route_add(vrf_id_t vrf_id, const struct ethaddr *rmac,
 	struct ipaddr ipv4_vtep;
 
 	zl3vni = zl3vni_from_vrf(vrf_id);
-	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
 		return;
+	if (zl3vni->is_l3svd) {
+		if (!is_l3svd_l3vni_oper_up(zl3vni)) {
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"l3svd based l3vni %u is not up skip vrf route add",
+					zl3vni->vni);
+			return;
+		}
+	} else if (!is_l3vni_oper_up(zl3vni))
+		return;
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug("l3vni %u add nexthop: rmac %pEA vtep-ip %pIA",
+			   zl3vni->vni, rmac, vtep_ip);
 
 	/*
 	 * add the next hop neighbor -
@@ -5000,7 +5062,7 @@ void zebra_vxlan_macvlan_down(struct interface *ifp)
 	zl3vni = zl3vni_from_svi(link_ifp, link_if);
 	if (zl3vni) {
 		zl3vni->mac_vlan_if = NULL;
-		if (is_l3vni_oper_up(zl3vni))
+		if (is_l3vni_oper_up(zl3vni) || is_l3svd_l3vni_oper_up(zl3vni))
 			zebra_vxlan_process_l3vni_oper_up(zl3vni);
 	}
 }
@@ -5017,6 +5079,7 @@ void zebra_vxlan_macvlan_up(struct interface *ifp)
 	zebra_l3vni_t *zl3vni = NULL;
 	struct zebra_if *zif, *link_zif;
 	struct interface *link_ifp, *link_if;
+	struct zebra_vxlan_vni_info *vni_info;
 
 	zif = ifp->info;
 	assert(zif);
@@ -5024,15 +5087,21 @@ void zebra_vxlan_macvlan_up(struct interface *ifp)
 	link_zif = link_ifp->info;
 	assert(link_zif);
 
+	if (IS_ZEBRA_VXLAN_IF_L3SVD(link_zif)) {
+		vni_info = VNI_INFO_FROM_ZEBRA_IF(link_zif);
+		zl3vni = zl3vni_lookup(vni_info->vni.vni);
+	}
+
 	link_if = if_lookup_by_index_per_ns(zebra_ns_lookup(NS_DEFAULT),
 					    link_zif->link_ifindex);
 	zl3vni = zl3vni_from_svi(link_ifp, link_if);
+
 	if (zl3vni) {
 		/* associate with macvlan (VRR) interface */
 		zl3vni->mac_vlan_if = ifp;
 
 		/* process oper-up */
-		if (is_l3vni_oper_up(zl3vni))
+		if (is_l3vni_oper_up(zl3vni) || is_l3svd_l3vni_oper_up(zl3vni))
 			zebra_vxlan_process_l3vni_oper_up(zl3vni);
 	}
 }
@@ -5093,6 +5162,9 @@ int zebra_vxlan_process_vrf_vni_cmd(struct zebra_vrf *zvrf, vni_t vni,
 		 */
 		zl3vni->vxlan_if = zl3vni_map_to_vxlan_if(zl3vni);
 
+		if (IS_ZL3VNI_L3SVD_BACKED(zl3vni))
+			zl3vni->is_l3svd = true;
+
 		/* associate with corresponding SVI interface, we can associate
 		 * with svi-if only after vxlan interface association is
 		 * complete
@@ -5113,7 +5185,7 @@ int zebra_vxlan_process_vrf_vni_cmd(struct zebra_vrf *zvrf, vni_t vni,
 		hash_iterate(zvrf_evpn->evpn_table, zevpn_add_to_l3vni_list,
 			     zl3vni);
 
-		if (is_l3vni_oper_up(zl3vni))
+		if (is_l3vni_oper_up(zl3vni) || is_l3svd_l3vni_oper_up(zl3vni))
 			zebra_vxlan_process_l3vni_oper_up(zl3vni);
 
 	} else {
@@ -5165,7 +5237,7 @@ int zebra_vxlan_vrf_enable(struct zebra_vrf *zvrf)
 		return 0;
 
 	zl3vni->vrf_id = zvrf_id(zvrf);
-	if (is_l3vni_oper_up(zl3vni))
+	if (is_l3vni_oper_up(zl3vni) || is_l3svd_l3vni_oper_up(zl3vni))
 		zebra_vxlan_process_l3vni_oper_up(zl3vni);
 	return 0;
 }
@@ -5697,7 +5769,10 @@ ifindex_t get_l3vni_vxlan_ifindex(vrf_id_t vrf_id)
 	zebra_l3vni_t *zl3vni = NULL;
 
 	zl3vni = zl3vni_from_vrf(vrf_id);
-	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
+		return 0;
+
+	if (!is_l3vni_oper_up(zl3vni) && !is_l3svd_l3vni_oper_up(zl3vni))
 		return 0;
 
 	return zl3vni->vxlan_if->ifindex;
@@ -5709,7 +5784,12 @@ vni_t get_l3vni_vni(vrf_id_t vrf_id)
 	zebra_l3vni_t *zl3vni = NULL;
 
 	zl3vni = zl3vni_from_vrf(vrf_id);
-	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
+		return 0;
+	if (zl3vni->is_l3svd) {
+		if (!is_l3svd_l3vni_oper_up(zl3vni))
+			return 0;
+	} else if (!is_l3vni_oper_up(zl3vni))
 		return 0;
 
 	return zl3vni->vni;
@@ -5721,7 +5801,14 @@ bool is_vrf_l3vni_svd_backed(vrf_id_t vrf_id)
 	zebra_l3vni_t *zl3vni = NULL;
 
 	zl3vni = zl3vni_from_vrf(vrf_id);
-	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
+	if (!zl3vni)
+		return false;
+	if (zl3vni->is_l3svd) {
+		if (!is_l3svd_l3vni_oper_up(zl3vni))
+			return false;
+		else
+			return IS_ZL3VNI_L3SVD_BACKED(zl3vni);
+	} else if (!is_l3vni_oper_up(zl3vni))
 		return false;
 
 	return IS_ZL3VNI_SVD_BACKED(zl3vni);

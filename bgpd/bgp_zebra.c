@@ -63,6 +63,7 @@
 #include "bgpd/bgp_evpn_mh.h"
 #include "bgpd/bgp_mac.h"
 #include "bgpd/bgp_trace.h"
+#include "if.h"
 
 /* All information about zebra. */
 struct zclient *zclient = NULL;
@@ -1090,7 +1091,10 @@ static bool update_ipv4nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 	if (is_evpn) {
 		api_nh->type = NEXTHOP_TYPE_IPV4_IFINDEX;
 		SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_ONLINK);
-		api_nh->ifindex = nh_bgp->l3vni_svi_ifindex;
+		if (nh_bgp->evpn_info->vxlan_ifindex)
+			api_nh->ifindex = nh_bgp->evpn_info->vxlan_ifindex;
+		else
+			api_nh->ifindex = nh_bgp->l3vni_svi_ifindex;
 	} else if (nh_othervrf &&
 		 api_nh->gate.ipv4.s_addr == INADDR_ANY) {
 		api_nh->type = NEXTHOP_TYPE_IFINDEX;
@@ -1492,11 +1496,12 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		char label_buf[20];
 		int i;
 
-		zlog_debug("Tx route %s VRF %u %pFX metric %u distance %u tag %" ROUTE_TAG_PRI
-			   " count %d nhg 0x%x",
-			   is_add ? "add" : "delete", bgp->vrf_id,
-			   &api.prefix, api.metric, api.distance, api.tag,
-			   api.nexthop_num, nhg_id);
+		zlog_debug(
+			"Tx route %s VRF %u %pFX metric %u distance %u tag %" ROUTE_TAG_PRI
+			" count %d nhg %d",
+			is_add ? "add" : "delete", bgp->vrf_id, &api.prefix,
+			api.metric, api.distance, api.tag, api.nexthop_num,
+			nhg_id);
 		for (i = 0; i < api.nexthop_num; i++) {
 			api_nh = &api.nexthops[i];
 
@@ -2753,9 +2758,10 @@ static int bgp_zebra_process_local_l3vni(ZAPI_CALLBACK_ARGS)
 	struct ethaddr svi_rmac, vrr_rmac = {.octet = {0} };
 	struct in_addr originator_ip;
 	struct stream *s;
-	ifindex_t svi_ifindex;
+	ifindex_t svi_ifindex, vxlan_ifindex;
 	bool is_anycast_mac = false;
 	char buf1[ETHER_ADDR_STRLEN];
+	bool is_l3svd = false;
 
 	memset(&svi_rmac, 0, sizeof(struct ethaddr));
 	memset(&originator_ip, 0, sizeof(struct in_addr));
@@ -2768,15 +2774,17 @@ static int bgp_zebra_process_local_l3vni(ZAPI_CALLBACK_ARGS)
 		svi_ifindex = stream_getl(s);
 		stream_get(&vrr_rmac, s, sizeof(struct ethaddr));
 		is_anycast_mac = stream_getl(s);
+		vxlan_ifindex = stream_getl(s);
+		is_l3svd = stream_getl(s);
 
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("Rx L3-VNI ADD VRF %s VNI %u RMAC svi-mac %s vrr-mac %s filter %s svi-if %u",
-				   vrf_id_to_name(vrf_id), l3vni,
-				   prefix_mac2str(&svi_rmac, buf, sizeof(buf)),
-				   prefix_mac2str(&vrr_rmac, buf1,
-						  sizeof(buf1)),
-				   filter ? "prefix-routes-only" : "none",
-				   svi_ifindex);
+			zlog_debug(
+				"Rx L3-VNI ADD VRF %s VNI %u RMAC svi-mac %s vrr-mac %s filter %s svi-if %u, vxlan-if %u is_l3svd %u",
+				vrf_id_to_name(vrf_id), l3vni,
+				prefix_mac2str(&svi_rmac, buf, sizeof(buf)),
+				prefix_mac2str(&vrr_rmac, buf1, sizeof(buf1)),
+				filter ? "prefix-routes-only" : "none",
+				svi_ifindex, vxlan_ifindex, is_l3svd);
 
 		frrtrace(8, frr_bgp, evpn_local_l3vni_add_zrecv, l3vni, vrf_id,
 			 &svi_rmac, &vrr_rmac, filter, originator_ip,
@@ -2784,7 +2792,7 @@ static int bgp_zebra_process_local_l3vni(ZAPI_CALLBACK_ARGS)
 
 		bgp_evpn_local_l3vni_add(l3vni, vrf_id, &svi_rmac, &vrr_rmac,
 					 originator_ip, filter, svi_ifindex,
-					 is_anycast_mac);
+					 vxlan_ifindex, is_anycast_mac);
 	} else {
 		if (BGP_DEBUG(zebra, ZEBRA))
 			zlog_debug("Rx L3-VNI DEL VRF %s VNI %u",

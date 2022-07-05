@@ -107,6 +107,9 @@ static const struct message nlmsg_str[] = {{RTM_NEWROUTE, "RTM_NEWROUTE"},
 					   {RTM_NEWVLAN, "RTM_NEWVLAN"},
 					   {RTM_DELVLAN, "RTM_DELVLAN"},
 					   {RTM_GETVLAN, "RTM_GETVLAN"},
+					   {RTM_NEWTUNNEL, "RTM_NEWTUNNEL"},
+					   {RTM_DELTUNNEL, "RTM_DELTUNNEL"},
+					   {RTM_GETTUNNEL, "RTM_GETTUNNEL"},
 					   {0}};
 
 static const struct message rtproto_str[] = {
@@ -339,6 +342,9 @@ static int netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 		return netlink_vlan_change(h, ns_id, startup);
 	case RTM_DELVLAN:
 		return netlink_vlan_change(h, ns_id, startup);
+	case RTM_NEWTUNNEL:
+	case RTM_DELTUNNEL:
+		return netlink_vni_change(h, ns_id, startup);
 	default:
 		/*
 		 * If we have received this message then
@@ -708,7 +714,7 @@ struct rtattr *nl_rta_nest(struct rtattr *rta, unsigned int maxlen, int type)
 {
 	struct rtattr *nest = RTA_TAIL(rta);
 
-	if (nl_rta_put(rta, maxlen, type, NULL, 0))
+	if (!nl_rta_put(rta, maxlen, type, NULL, 0))
 		return NULL;
 
 	nest->rta_type |= NLA_F_NESTED;
