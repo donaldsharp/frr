@@ -1070,6 +1070,13 @@ void if_up(struct interface *ifp, bool install_connected)
 		zif->rtadv.inFastRexmit = 1;
 		zif->rtadv.NumFastReXmitsRemain = RTADV_NUM_FAST_REXMITS;
 	}
+
+	/*
+	 * startup the state machine, if it hasn't been already
+	 * due to a delayed ifindex on startup ordering
+	 */
+	if (zif->rtadv.AdvSendAdvertisements)
+		rtadv_start_interface_events(zvrf, zif);
 #endif
 
 	/* Install connected routes to the kernel. */
