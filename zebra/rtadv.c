@@ -45,6 +45,7 @@
 #include "zebra/zebra_vrf.h"
 #include "zebra/zebra_errors.h"
 #include "zebra/zebra_router.h"
+#include "zebra/zebra_trace.h"
 
 extern struct zebra_privs_t zserv_privs;
 
