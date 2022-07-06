@@ -33,10 +33,17 @@ else
   CONF_PIM6=--disable-pim6d
 endif
 
+DEB_BUILD_ARCH ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
+DEB_HOST_ARCH ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
+ifneq ($(DEB_BUILD_ARCH),$(DEB_HOST_ARCH))
+export PYTHON=/python_virtualenv/env3/bin/python3
+else
 export PYTHON=python3
+endif
 
 %:
-	dh $@ -Bbuild --with=sphinxdoc
+	dh $@ -Bbuild --with=sphinxdoc --builddirectory=build
 
 override_dh_auto_configure:
 	$(shell dpkg-buildflags --export=sh); \
@@ -74,10 +81,10 @@ override_dh_auto_configure:
 override_dh_auto_install:
 	dh_auto_install
 
-	sed -e '1c #!/usr/bin/python3' -i debian/tmp/usr/lib/frr/frr-reload.py
-	sed -e '1c #!/usr/bin/python3' -i debian/tmp/usr/lib/frr/generate_support_bundle.py
-	sed -e '1c #!/usr/bin/python3' -i debian/tmp/usr/lib/frr/frr_babeltrace.py
-	sed -e '1c #!/usr/bin/python3' -i debian/tmp/usr/lib/frr/ospfclient.py
+	sed -e '1c #!$(shell which $PYTHON)' -i debian/tmp/usr/lib/frr/frr-reload.py
+	sed -e '1c #!$(shell which $PYTHON)' -i debian/tmp/usr/lib/frr/generate_support_bundle.py
+	sed -e '1c #!$(shell which $PYTHON)' -i debian/tmp/usr/lib/frr/frr_babeltrace.py
+	sed -e '1c #!$(shell which $PYTHON)' -i debian/tmp/usr/lib/frr/ospfclient.py
 
 # let dh_systemd_* and dh_installinit do their thing automatically
 	cp build/tools/frr.service debian/frr.service
