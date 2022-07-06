@@ -61,6 +61,7 @@
 #include "zebra/zebra_opaque.h"
 #include "zebra/zebra_srte.h"
 #include "zebra/zebra_srv6.h"
+#include "zebra/zebra_trace.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, RE_OPAQUE, "Route Opaque Data");
 
@@ -656,6 +657,8 @@ int zsend_redistribute_route(int cmd, struct zserv *client,
 			   zebra_route_string(client->proto),
 			   zebra_route_string(api.type), api.vrf_id,
 			   &api.prefix);
+	frrtrace(3, frr_zebra, zsend_redistribute_route, cmd, client, api);
+
 	return zserv_send_message(client, s);
 }
 
