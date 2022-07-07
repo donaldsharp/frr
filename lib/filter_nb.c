@@ -48,19 +48,19 @@ static void acl_notify_route_map(struct access_list *acl, int route_map_event)
 	route_map_notify_dependencies(acl->name, route_map_event);
 }
 
-static enum nb_error prefix_list_length_validate(const struct lyd_node *dnode)
+static enum nb_error prefix_list_length_validate(struct nb_cb_modify_args *args)
 {
-	int type = yang_dnode_get_enum(dnode, "../../type");
+	int type = yang_dnode_get_enum(args->dnode, "../../type");
 	const char *xpath_le = NULL, *xpath_ge = NULL;
 	struct prefix p;
 	uint8_t le, ge;
 
 	if (type == YPLT_IPV4) {
-		yang_dnode_get_prefix(&p, dnode, "../ipv4-prefix");
+		yang_dnode_get_prefix(&p, args->dnode, "../ipv4-prefix");
 		xpath_le = "../ipv4-prefix-length-lesser-or-equal";
 		xpath_ge = "../ipv4-prefix-length-greater-or-equal";
 	} else {
-		yang_dnode_get_prefix(&p, dnode, "../ipv6-prefix");
+		yang_dnode_get_prefix(&p, args->dnode, "../ipv6-prefix");
 		xpath_le = "../ipv6-prefix-length-lesser-or-equal";
 		xpath_ge = "../ipv6-prefix-length-greater-or-equal";
 	}
@@ -69,20 +69,19 @@ static enum nb_error prefix_list_length_validate(const struct lyd_node *dnode)
 	 * Check rule:
 	 * prefix length <= le.
 	 */
-	if (yang_dnode_exists(dnode, xpath_le)) {
-		le = yang_dnode_get_uint8(dnode, xpath_le);
+	if (yang_dnode_exists(args->dnode, xpath_le)) {
+		le = yang_dnode_get_uint8(args->dnode, xpath_le);
 		if (p.prefixlen > le)
 			goto log_and_fail;
-
 	}
 
 	/*
 	 * Check rule:
-	 * prefix length < ge.
+	 * prefix length <= ge.
 	 */
-	if (yang_dnode_exists(dnode, xpath_ge)) {
-		ge = yang_dnode_get_uint8(dnode, xpath_ge);
-		if (p.prefixlen >= ge)
+	if (yang_dnode_exists(args->dnode, xpath_ge)) {
+		ge = yang_dnode_get_uint8(args->dnode, xpath_ge);
+		if (p.prefixlen > ge)
 			goto log_and_fail;
 	}
 
@@ -90,18 +89,21 @@ static enum nb_error prefix_list_length_validate(const struct lyd_node *dnode)
 	 * Check rule:
 	 * ge <= le.
 	 */
-	if (yang_dnode_exists(dnode, xpath_le) &&
-	    yang_dnode_exists(dnode, xpath_ge)) {
-		le = yang_dnode_get_uint8(dnode, xpath_le);
-		ge = yang_dnode_get_uint8(dnode, xpath_ge);
+	if (yang_dnode_exists(args->dnode, xpath_le) &&
+	    yang_dnode_exists(args->dnode, xpath_ge)) {
+		le = yang_dnode_get_uint8(args->dnode, xpath_le);
+		ge = yang_dnode_get_uint8(args->dnode, xpath_ge);
 		if (ge > le)
 			goto log_and_fail;
 	}
 
 	return NB_OK;
 
-  log_and_fail:
-	zlog_info("prefix-list: invalid prefix range for %pFX: Make sure that mask length < ge <= le", &p);
+log_and_fail:
+	snprintfrr(
+		args->errmsg, args->errmsg_len,
+		"Invalid prefix range for %pFX: Make sure that mask length <= ge <= le",
+		&p);
 	return NB_ERR_VALIDATION;
 }
 
@@ -1231,7 +1233,7 @@ static int lib_prefix_list_entry_ipv4_prefix_length_greater_or_equal_modify(
 	struct prefix_list_entry *ple;
 
 	if (args->event == NB_EV_VALIDATE &&
-	    prefix_list_length_validate(args->dnode) != NB_OK)
+	    prefix_list_length_validate(args) != NB_OK)
 		return NB_ERR_VALIDATION;
 
 	if (args->event == NB_EV_VALIDATE) {
@@ -1345,7 +1347,7 @@ static int lib_prefix_list_entry_ipv4_prefix_length_lesser_or_equal_modify(
 	struct prefix_list_entry *ple;
 
 	if (args->event == NB_EV_VALIDATE &&
-	    prefix_list_length_validate(args->dnode) != NB_OK)
+	    prefix_list_length_validate(args) != NB_OK)
 		return NB_ERR_VALIDATION;
 
 	if (args->event == NB_EV_VALIDATE) {
