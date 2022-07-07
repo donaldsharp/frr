@@ -97,7 +97,7 @@ static int bgp_holdtime_timer(struct thread *);
 static int bgp_start(struct peer *);
 
 /* Register peer with NHT */
-static int bgp_peer_reg_with_nht(struct peer *peer)
+int bgp_peer_reg_with_nht(struct peer *peer)
 {
 	int connected = 0;
 
@@ -332,6 +332,8 @@ static struct peer *peer_xfer_conn(struct peer *from_peer)
 	 * needed, even on a passive connection.
 	 */
 	bgp_peer_reg_with_nht(peer);
+	if (from_peer)
+		bgp_replace_nexthop_by_peer(from_peer, peer);
 
 	bgp_reads_on(peer);
 	bgp_writes_on(peer);
@@ -1780,6 +1782,7 @@ static int bgp_connect_success(struct peer *peer)
 		return -1;
 	}
 
+	bgp_nht_interface_events(peer);
 	bgp_reads_on(peer);
 
 	if (bgp_debug_neighbor_events(peer)) {
@@ -1808,6 +1811,12 @@ static int bgp_connect_fail(struct peer *peer)
 		peer_delete(peer);
 		return -1;
 	}
+
+	/*
+	 * If we are doing nht for a peer that ls v6 LL based
+	 * massage the event system to make things happy
+	 */
+	bgp_nht_interface_events(peer);
 
 	return (bgp_stop(peer));
 }
