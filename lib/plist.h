@@ -72,8 +72,10 @@ extern struct prefix_list *prefix_list_lookup(afi_t, const char *);
 extern enum prefix_list_type
 prefix_list_apply_ext(struct prefix_list *plist,
 		      const struct prefix_list_entry **matches,
-		      union prefixconstptr prefix, bool address_mode);
-#define prefix_list_apply(A, B) prefix_list_apply_ext((A), NULL, (B), false)
+		      union prefixconstptr prefix,
+		      bool address_mode);
+#define prefix_list_apply(A, B) \
+	prefix_list_apply_ext((A), NULL, (B), false)
 
 extern struct prefix_list *prefix_bgp_orf_lookup(afi_t, const char *);
 extern struct stream *prefix_bgp_orf_entry(struct stream *,
