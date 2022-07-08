@@ -37,7 +37,6 @@ enum prefix_list_type {
 };
 
 struct prefix_list;
-struct prefix_list_entry;
 
 struct orf_prefix {
 	uint32_t seq;
@@ -64,18 +63,12 @@ extern struct prefix_list *prefix_list_lookup(afi_t, const char *);
  *
  * If no pointer is sent in, do not return anything.
  * If it is a empty plist return a NULL pointer.
- *
- * address_mode = the "prefix" being passed in is really an address, match
- * regardless of prefix length (i.e. ge/le are ignored.)  prefix->prefixlen
- * must be /32.
  */
 extern enum prefix_list_type
-prefix_list_apply_ext(struct prefix_list *plist,
-		      const struct prefix_list_entry **matches,
-		      union prefixconstptr prefix,
-		      bool address_mode);
-#define prefix_list_apply(A, B) \
-	prefix_list_apply_ext((A), NULL, (B), false)
+prefix_list_apply_which_prefix(struct prefix_list *plist,
+			       const struct prefix **which,
+			       const void *object);
+#define prefix_list_apply(A, B) prefix_list_apply_which_prefix((A), NULL, (B))
 
 extern struct prefix_list *prefix_bgp_orf_lookup(afi_t, const char *);
 extern struct stream *prefix_bgp_orf_entry(struct stream *,
