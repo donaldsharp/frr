@@ -1,3 +1,9 @@
+frr (7.5+cl5.2.0u0) RELEASED; urgency=medium
+
+  * New Enabled: Various Bug Fixes
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Sun, 10 Jul 2022 18:28:48 -0700
+
 frr (7.5+cl5.1.0u0) RELEASED; urgency=medium
 
   * New Enabled: Various Bug Fixes
