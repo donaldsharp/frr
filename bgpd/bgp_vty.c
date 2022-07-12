@@ -11840,29 +11840,21 @@ static void bgp_show_peer(struct vty *vty, struct peer *p,
 					    + (tm.tm_hour * 3600000));
 
 		/* Configured timer values. */
+		json_object_int_add(json_neigh,
+				    "bgpTimerConfiguredHoldTimeMsecs",
+				    CHECK_FLAG(p->flags, PEER_FLAG_TIMER)
+					    ? p->holdtime * 1000
+					    : bgp->default_holdtime * 1000);
+		json_object_int_add(json_neigh,
+				    "bgpTimerConfiguredKeepAliveIntervalMsecs",
+				    CHECK_FLAG(p->flags, PEER_FLAG_TIMER)
+					    ? p->keepalive * 1000
+					    : bgp->default_keepalive * 1000);
 		json_object_int_add(json_neigh, "bgpTimerHoldTimeMsecs",
 				    p->v_holdtime * 1000);
 		json_object_int_add(json_neigh,
 				    "bgpTimerKeepAliveIntervalMsecs",
 				    p->v_keepalive * 1000);
-		if (CHECK_FLAG(p->flags, PEER_FLAG_TIMER)) {
-			json_object_int_add(json_neigh,
-					    "bgpTimerConfiguredHoldTimeMsecs",
-					    p->holdtime * 1000);
-			json_object_int_add(
-				json_neigh,
-				"bgpTimerConfiguredKeepAliveIntervalMsecs",
-				p->keepalive * 1000);
-		} else if ((bgp->default_holdtime != SAVE_BGP_HOLDTIME)
-			   || (bgp->default_keepalive != SAVE_BGP_KEEPALIVE)) {
-			json_object_int_add(json_neigh,
-					    "bgpTimerConfiguredHoldTimeMsecs",
-					    bgp->default_holdtime);
-			json_object_int_add(
-				json_neigh,
-				"bgpTimerConfiguredKeepAliveIntervalMsecs",
-				bgp->default_keepalive);
-		}
 	} else {
 		/* Administrative shutdown. */
 		if (CHECK_FLAG(p->flags, PEER_FLAG_SHUTDOWN))
@@ -11895,20 +11887,16 @@ static void bgp_show_peer(struct vty *vty, struct peer *p,
 
 		/* Configured timer values. */
 		vty_out(vty,
-			"  Hold time is %d, keepalive interval is %d seconds\n",
+			"  Hold time is %d seconds, keepalive interval is %d seconds\n",
 			p->v_holdtime, p->v_keepalive);
-		if (CHECK_FLAG(p->flags, PEER_FLAG_TIMER)) {
-			vty_out(vty, "  Configured hold time is %d",
-				p->holdtime);
-			vty_out(vty, ", keepalive interval is %d seconds\n",
-				p->keepalive);
-		} else if ((bgp->default_holdtime != SAVE_BGP_HOLDTIME)
-			   || (bgp->default_keepalive != SAVE_BGP_KEEPALIVE)) {
-			vty_out(vty, "  Configured hold time is %d",
-				bgp->default_holdtime);
-			vty_out(vty, ", keepalive interval is %d seconds\n",
-				bgp->default_keepalive);
-		}
+		vty_out(vty, "  Configured hold time is %d seconds",
+			CHECK_FLAG(p->flags, PEER_FLAG_TIMER)
+				? p->holdtime
+				: bgp->default_holdtime);
+		vty_out(vty, ", keepalive interval is %d seconds\n",
+			CHECK_FLAG(p->flags, PEER_FLAG_TIMER)
+				? p->keepalive
+				: bgp->default_keepalive);
 	}
 	/* Capability. */
 	if (p->status == Established) {
