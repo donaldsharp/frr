@@ -2585,9 +2585,9 @@ DEFPY (show_ip_pim_interface_traffic,
 	return pim_show_interface_traffic_helper(vrf, if_name, vty, !!json);
 }
 
-DEFUN (show_ip_pim_bsm_db,
+DEFPY (show_ip_pim_bsm_db,
        show_ip_pim_bsm_db_cmd,
-       "show ip pim bsm-database [vrf NAME] [json]",
+       "show ip pim bsm-database [vrf NAME] [json$json]",
        SHOW_STR
        IP_STR
        PIM_STR
@@ -2595,15 +2595,7 @@ DEFUN (show_ip_pim_bsm_db,
        VRF_CMD_HELP_STR
        JSON_STR)
 {
-	int idx = 2;
-	struct vrf *vrf = pim_cmd_lookup_vrf(vty, argv, argc, &idx);
-	bool uj = use_json(argc, argv);
-
-	if (!vrf)
-		return CMD_WARNING;
-
-	pim_show_bsm_db(vrf->info, vty, uj);
-	return CMD_SUCCESS;
+	return pim_show_bsm_db_helper(vrf, vty, !!json);
 }
 
 DEFPY (show_ip_pim_bsrp,
