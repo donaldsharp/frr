@@ -68,6 +68,7 @@
 #include "zebra/zebra_errors.h"
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_neigh_throttle.h"
+#include "zebra/zebra_trace.h"
 
 #ifndef AF_MPLS
 #define AF_MPLS 28
@@ -1840,6 +1841,8 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 	else
 		req->r.rtm_protocol = zebra2proto(dplane_ctx_get_type(ctx));
 
+	frrtrace(3, frr_zebra, netlink_route_multipath_msg_encode, p, cmd,
+		 datalen);
 	/*
 	 * blackhole routes are not RTN_UNICAST, they are
 	 * RTN_ BLACKHOLE|UNREACHABLE|PROHIBIT
@@ -2444,6 +2447,8 @@ nexthop_done:
 					   __func__, id, nh, nh->ifindex,
 					   vrf_id_to_name(nh->vrf_id),
 					   nh->vrf_id, label_buf);
+			frrtrace(2, frr_zebra, netlink_nexthop_msg_encode, nh,
+				 id);
 }
 
 		req->nhm.nh_protocol = zebra2proto(dplane_ctx_get_nhe_type(ctx));
@@ -3015,6 +3020,8 @@ static ssize_t netlink_neigh_update_msg_encode(
 				 ipa_len))
 			return 0;
 	}
+	frrtrace(7, frr_zebra, netlink_neigh_update_msg_encode, mac, ip, nhg_id,
+		 flags, state, family, type);
 
 	if (op == DPLANE_OP_MAC_INSTALL || op == DPLANE_OP_MAC_DELETE) {
 		vlanid_t vid = dplane_ctx_mac_get_vlan(ctx);
@@ -3178,6 +3185,7 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 			   prefix_mac2str(&mac, buf, sizeof(buf)),
 			   dst_present ? dst_buf : "", nhg_id, vni);
 
+	frrtrace(4, frr_zebra, netlink_macfdb_change, h, ndm, nhg_id, vni);
 	/* The interface should exist. */
 	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id),
 					ndm->ndm_ifindex);
@@ -4006,6 +4014,7 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 			   nl_msg_type_to_str(h->nlmsg_type),
 			   nl_family_to_str(ndm->ndm_family), ifp->name,
 			   ndm->ndm_ifindex, VRF_LOGNAME(vrf), ifp->vrf_id);
+		frrtrace(3, frr_zebra, netlink_ipneigh_change, h, ndm, ifp);
 		return 0;
 	}
 
@@ -4017,6 +4026,7 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 		/* Handle neighbor throttling */
 		netlink_handle_neigh_throttle(h->nlmsg_type, ndm, &ip, zns,
 					      ifp);
+		frrtrace(3, frr_zebra, netlink_ipneigh_change, h, ndm, ifp);
 
 	} else if (h->nlmsg_type == RTM_DELNEIGH) {
 		if (ndm->ndm_state & NUD_PERMANENT) {
@@ -4067,6 +4077,7 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	if (IS_ZEBRA_IF_VLAN(ifp)) {
 		link_if = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id),
 						    zif->link_ifindex);
+		frrtrace(3, frr_zebra, netlink_ipneigh_change, h, ndm, ifp);
 		if (!link_if)
 			return 0;
 	} else if (IS_ZEBRA_IF_BRIDGE(ifp))
@@ -4154,6 +4165,7 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 			   ndm->ndm_ifindex, VRF_LOGNAME(vrf), ifp->vrf_id,
 			   ipaddr2str(&ip, buf2, sizeof(buf2)));
 
+	frrtrace(3, frr_zebra, netlink_ipneigh_change, h, ndm, ifp);
 	/* Process the delete - it may result in re-adding the neighbor if it is
 	 * a valid "remote" neighbor.
 	 */
