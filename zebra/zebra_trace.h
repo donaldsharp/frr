@@ -124,10 +124,11 @@ TRACEPOINT_EVENT(
 		ns_id_t, ns_id,
 		int, startup),
 	TP_FIELDS(
-		ctf_integer_hex(intptr_t, header, header)
-		ctf_integer(uint32_t, ns_id, ns_id)
-		ctf_integer(uint32_t, startup, startup)
-		)
+	  ctf_integer(uint32_t, nhg, nhg_id)
+	  ctf_integer(uint8_t, flags, flags)
+	  ctf_integer(uint16_t, state, state)
+	  ctf_integer(uint8_t, family, family)
+	  ctf_integer(uint8_t, type, type)
 	)
 /* clang-format off */
 
