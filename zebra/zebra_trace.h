@@ -167,10 +167,6 @@ TRACEPOINT_EVENT(
 	TP_ARGS(const struct ethaddr *, mac, const struct ipaddr *, ip, uint32_t ,
 	  nhg_id, uint8_t, flags, uint16_t, state, uint8_t, family, uint8_t, type),
 	TP_FIELDS(
-	  ctf_array(unsigned char, mac, mac,
-	          sizeof(struct ethaddr))
-	  ctf_array(unsigned char, ip, ip,
-	          sizeof(struct ipaddr))
 	  ctf_integer(uint32_t, nhg, nhg_id)
 	  ctf_integer(uint8_t, flags, flags)
 	  ctf_integer(uint16_t, state, state)
