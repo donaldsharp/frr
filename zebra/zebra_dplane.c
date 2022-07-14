@@ -36,6 +36,7 @@
 #include "zebra/rt.h"
 #include "zebra/debug.h"
 #include "zebra/zebra_pbr.h"
+#include "zebra/zebra_trace.h"
 
 /* Memory type for context blocks */
 DEFINE_MTYPE_STATIC(ZEBRA, DP_CTX, "Zebra DPlane Ctx")
@@ -3752,6 +3753,7 @@ enum zebra_dplane_result dplane_vtep_add(const struct interface *ifp,
 	SET_IPADDR_V4(&addr);
 	addr.ipaddr_v4 = *ip;
 
+	frrtrace(3, frr_zebra, dplane_vtep_add, ifp, vni, ip);
 	result = neigh_update_internal(DPLANE_OP_VTEP_ADD,
 				       ifp, &mac, &addr, vni, 0, 0, 0);
 
@@ -3777,6 +3779,7 @@ enum zebra_dplane_result dplane_vtep_delete(const struct interface *ifp,
 	SET_IPADDR_V4(&addr);
 	addr.ipaddr_v4 = *ip;
 
+	frrtrace(3, frr_zebra, dplane_vtep_delete, ifp, vni, ip);
 	result = neigh_update_internal(DPLANE_OP_VTEP_DELETE,
 				       ifp, &mac, &addr, vni, 0, 0, 0);
 
