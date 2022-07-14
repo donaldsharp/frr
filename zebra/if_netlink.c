@@ -2125,7 +2125,9 @@ static void vxlan_vni_state_change(struct zebra_if *zif, uint16_t id,
 		return;
 	}
 	vni = vnip->vni; // lttng
-	frrtrace(2, frr_zebra, vxlan_vni_state_change, id, zif, vni);
+	if (zif)
+		frrtrace(3, frr_zebra, vxlan_vni_state_change, id, zif, vni,
+			 state);
 
 	switch (state) {
 	case BR_STATE_FORWARDING:

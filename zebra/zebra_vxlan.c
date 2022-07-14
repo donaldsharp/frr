@@ -59,6 +59,7 @@
 #include "zebra/zebra_evpn_vxlan.h"
 #include "zebra/zebra_router.h"
 #include "zebra/zebra_evpn_arp_nd.h"
+#include "zebra/zebra_trace.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, HOST_PREFIX, "host prefix");
 DEFINE_MTYPE_STATIC(ZEBRA, ZL3VNI, "L3 VNI hash");
@@ -4218,6 +4219,8 @@ void zebra_vxlan_remote_macip_del(ZAPI_HANDLER_ARGS)
 				inet_ntoa(vtep_ip),
 				zebra_route_string(client->proto));
 
+		frrtrace(5, frr_zebra, zebra_vxlan_remote_macip_del, &macaddr,
+			 &ip, vni, vtep_ip, ipa_len);
 		process_remote_macip_del(vni, &macaddr, ipa_len, &ip, vtep_ip);
 	}
 
@@ -4282,6 +4285,8 @@ void zebra_vxlan_remote_macip_add(ZAPI_HANDLER_ARGS)
 				flags, seq, inet_ntoa(vtep_ip), esi_buf,
 				zebra_route_string(client->proto));
 		}
+		frrtrace(6, frr_zebra, zebra_vxlan_remote_macip_add, &macaddr,
+			 &ip, vni, vtep_ip, flags, &esi);
 
 		process_remote_macip_add(vni, &macaddr, ipa_len, &ip,
 					 flags, seq, vtep_ip, &esi);
@@ -4729,7 +4734,8 @@ void zebra_vxlan_remote_vtep_add(ZAPI_HANDLER_ARGS)
 			zlog_debug("Recv VTEP_ADD %s VNI %u flood %d from %s",
 					inet_ntoa(vtep_ip), vni, flood_control,
 					zebra_route_string(client->proto));
-
+		frrtrace(3, frr_zebra, zebra_vxlan_remote_vtep_add, vtep_ip,
+			 vni, flood_control);
 		/* Locate VNI hash entry - expected to exist. */
 		zevpn = zebra_evpn_lookup(vni);
 		if (!zevpn) {
