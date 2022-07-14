@@ -58,6 +58,7 @@
 #include "zebra/zebra_evpn_vxlan.h"
 #include "zebra/zebra_router.h"
 #include "zebra/zebra_evpn_arp_nd.h"
+#include "zebra/zebra_trace.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, HOST_PREFIX, "host prefix");
 DEFINE_MTYPE_STATIC(ZEBRA, ZL3VNI, "L3 VNI hash");
@@ -4147,6 +4148,8 @@ void zebra_vxlan_remote_macip_del(ZAPI_HANDLER_ARGS)
 				ipaddr2str(&ip, buf1, sizeof(buf1)) : "",
 				&vtep_ip, zebra_route_string(client->proto));
 
+		frrtrace(5, frr_zebra, zebra_vxlan_remote_macip_del, &macaddr,
+			 &ip, vni, vtep_ip, ipa_len);
 		/* Enqueue to workqueue for processing */
 		zebra_rib_queue_evpn_rem_macip_del(vni, &macaddr, &ip, vtep_ip);
 	}
@@ -4207,6 +4210,8 @@ void zebra_vxlan_remote_macip_add(ZAPI_HANDLER_ARGS)
 				flags, seq, &vtep_ip, esi_buf,
 				zebra_route_string(client->proto));
 		}
+		frrtrace(6, frr_zebra, zebra_vxlan_remote_macip_add, &macaddr,
+			 &ip, vni, vtep_ip, flags, &esi);
 
 		/* Enqueue to workqueue for processing */
 		zebra_rib_queue_evpn_rem_macip_add(vni, &macaddr, &ip, flags,
@@ -4755,9 +4760,35 @@ void zebra_vxlan_remote_vtep_add_zapi(ZAPI_HANDLER_ARGS)
 		l += IPV4_MAX_BYTELEN + 4;
 
 		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug("Recv VTEP ADD %pI4 VNI %u flood %d from %s",
-				   &vtep_ip, vni, flood_control,
-				   zebra_route_string(client->proto));
+			zlog_debug("Recv VTEP_ADD %s VNI %u flood %d from %s",
+					inet_ntoa(vtep_ip), vni, flood_control,
+					zebra_route_string(client->proto));
+		frrtrace(3, frr_zebra, zebra_vxlan_remote_vtep_add, vtep_ip,
+			 vni, flood_control);
+		/* Locate VNI hash entry - expected to exist. */
+		zevpn = zebra_evpn_lookup(vni);
+		if (!zevpn) {
+			flog_err(
+				EC_ZEBRA_VTEP_ADD_FAILED,
+				"Failed to locate EVPN hash upon remote VTEP ADD, VNI %u",
+				vni);
+			continue;
+		}
+
+		ifp = zevpn->vxlan_if;
+		if (!ifp) {
+			flog_err(
+				EC_ZEBRA_VTEP_ADD_FAILED,
+				"VNI %u hash %p doesn't have intf upon remote VTEP ADD",
+				zevpn->vni, zevpn);
+			continue;
+		}
+
+		zif = ifp->info;
+
+		/* If down or not mapped to a bridge, we're done. */
+		if (!if_is_operative(ifp) || !zif->brslave_info.br_if)
+			continue;
 
 		/* Enqueue for processing */
 		zebra_rib_queue_evpn_rem_vtep_add(zvrf_id(zvrf), vni, vtep_ip,
