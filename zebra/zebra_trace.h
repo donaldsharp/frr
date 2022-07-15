@@ -167,6 +167,10 @@ TRACEPOINT_EVENT(
 	TP_ARGS(const struct ethaddr *, mac, const struct ipaddr *, ip, uint32_t ,
 	  nhg_id, uint8_t, flags, uint16_t, state, uint8_t, family, uint8_t, type),
 	TP_FIELDS(
+    ctf_array(unsigned char, mac, mac,
+      sizeof(struct ethaddr))
+    ctf_array(unsigned char, ip, ip,
+      sizeof(struct ipaddr))
 	  ctf_integer(uint32_t, nhg, nhg_id)
 	  ctf_integer(uint8_t, flags, flags)
 	  ctf_integer(uint16_t, state, state)
@@ -360,9 +364,13 @@ TRACEPOINT_LOGLEVEL(frr_zebra, process_remote_macip_add, TRACE_INFO)
 TRACEPOINT_EVENT(
 	frr_zebra,
 	process_remote_macip_del,
-	TP_ARGS(vni_t, vni,struct ethaddr *, macaddr,struct ipaddr *, ipaddr),
+	TP_ARGS(vni_t, vni,struct ethaddr *, mac,struct ipaddr *, ip),
   TP_FIELDS(
     ctf_string(remote_del, "Ignoring remote MACIP DEL VNI")
+    ctf_array(unsigned char, mac, mac,
+      sizeof(struct ethaddr))
+    ctf_array(unsigned char, ip, ip,
+      sizeof(struct ipaddr))
     ctf_integer(int, vni, vni)
     )
 )
@@ -372,10 +380,14 @@ TRACEPOINT_LOGLEVEL(frr_zebra, process_remote_macip_del, TRACE_INFO)
 TRACEPOINT_EVENT(
 	frr_zebra,
 	zebra_evpn_macip_send_msg_to_client,
-	TP_ARGS(vni_t, vni,struct ethaddr *, macaddr,struct ipaddr *, ip, int, state, uint16_t, cmd, 
+	TP_ARGS(vni_t, vni,struct ethaddr *, mac,struct ipaddr *, ip, int, state, uint16_t, cmd, 
 	  uint32_t, seq, int , ipa_len),
   TP_FIELDS(
     ctf_integer(int, vni, vni)
+    ctf_array(unsigned char, mac, mac,
+      sizeof(struct ethaddr))
+    ctf_array(unsigned char, ip, ip,
+      sizeof(struct ipaddr))
     ctf_integer(int, state, state)
     ctf_integer(uint16_t, cmd, cmd)
     ctf_integer(uint32_t, seq, seq)
@@ -465,9 +477,13 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_send_del_to_client, TRACE_INFO)
 TRACEPOINT_EVENT(
 	frr_zebra,
 	zebra_evpn_process_sync_macip_add,
-	TP_ARGS(zebra_evpn_t *, zevpn, struct ethaddr *, macaddr,struct ipaddr *, ipaddr, uint16_t, ipa_len),
+	TP_ARGS(zebra_evpn_t *, zevpn, struct ethaddr *, mac,struct ipaddr *, ip, uint16_t, ipa_len),
   TP_FIELDS(
     ctf_integer(int, vni, zevpn->vni)
+    ctf_array(unsigned char, mac, mac,
+      sizeof(struct ethaddr))
+    ctf_array(unsigned char, ip, ip,
+      sizeof(struct ipaddr))
     ctf_integer(uint16_t, ip_len, ipa_len)
     )
 )
