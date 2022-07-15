@@ -3020,8 +3020,10 @@ static ssize_t netlink_neigh_update_msg_encode(
 				 ipa_len))
 			return 0;
 	}
-	frrtrace(7, frr_zebra, netlink_neigh_update_msg_encode, mac, ip, nhg_id,
-		 flags, state, family, type);
+	if (mac && ip && nhg_id) {
+		frrtrace(7, frr_zebra, netlink_neigh_update_msg_encode, mac, ip,
+			 nhg_id, flags, state, family, type);
+	}
 
 	if (op == DPLANE_OP_MAC_INSTALL || op == DPLANE_OP_MAC_DELETE) {
 		vlanid_t vid = dplane_ctx_mac_get_vlan(ctx);
