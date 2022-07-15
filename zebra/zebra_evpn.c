@@ -1419,8 +1419,10 @@ static void zebra_evpn_process_sync_macip_add(struct zebra_evpn *zevpn,
 					: "",
 				sticky ? " sticky" : "",
 				remote_gw ? " remote_gw" : "");
-		frrtrace(4, frr_zebra, zebra_evpn_process_sync_macip_add, zevpn,
-			 macaddr, ipaddr, ipa_len);
+		if (macaddr && ipaddr)
+			frrtrace(4, frr_zebra,
+				 zebra_evpn_process_sync_macip_add, zevpn,
+				 macaddr, ipaddr, ipa_len);
 		return;
 	}
 
@@ -1589,23 +1591,21 @@ void zebra_evpn_rem_macip_del(vni_t vni, const struct ethaddr *macaddr,
 			zlog_debug(
 				"Ignoring remote MACIP DEL VNI %u, invalid interface state or info",
 				vni);
-		frrtrace(3, frr_zebra, process_remote_macip_del, vni, macaddr,
-			 ipaddr);
+		if (macaddr && ipaddr)
+			frrtrace(3, frr_zebra, process_remote_macip_del, vni,
+				 macaddr, ipaddr);
 		return;
 	}
 	zns = zebra_ns_lookup(NS_DEFAULT);
 	vnip = zebra_vxlan_if_vni_find(zif, vni);
 	if (!vnip) {
 		if (IS_ZEBRA_DEBUG_VXLAN)
-<<<<<<< HEAD
 			zlog_debug(
 				"VNI %u not in interface upon remote MACIP DEL",
 				vni);
-=======
-			zlog_debug("VNI %u not in interface upon remote MACIP DEL", vni);
-		frrtrace(3, frr_zebra, process_remote_macip_del, vni, macaddr,
-			 ipaddr);
->>>>>>> f8a98e6c3a... Zebra : ZAPI, EVPN Tracepoints
+		if (macaddr && ipaddr)
+			frrtrace(3, frr_zebra, process_remote_macip_del, vni,
+				 macaddr, ipaddr);
 		return;
 	}
 
@@ -1617,25 +1617,23 @@ void zebra_evpn_rem_macip_del(vni_t vni, const struct ethaddr *macaddr,
 		zlog_warn(
 			"Failed to locate MAC %pEA for neigh %pIA VNI %u upon remote MACIP DEL",
 			macaddr, ipaddr, vni);
-		frrtrace(3, frr_zebra, process_remote_macip_del, vni, macaddr,
-			 ipaddr);
+		if (macaddr && ipaddr)
+			frrtrace(3, frr_zebra, process_remote_macip_del, vni,
+				 macaddr, ipaddr);
 		return;
 	}
 
 	/* If the remote mac or neighbor doesn't exist there is nothing
 	 * more to do. Otherwise, uninstall the entry and then remove it.
 	 */
-<<<<<<< HEAD
-	if (!mac && !n)
-=======
 	if (!mac && !n) {
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug(
 				"Failed to locate MAC %pEA & Neigh %pIA VNI %u upon remote MACIP DEL",
 				macaddr, ipaddr, vni);
-		frrtrace(3, frr_zebra, process_remote_macip_del, vni, macaddr,
-			 ipaddr);
->>>>>>> f8a98e6c3a... Zebra : ZAPI, EVPN Tracepoints
+		if (macaddr && ipaddr)
+			frrtrace(3, frr_zebra, process_remote_macip_del, vni,
+				 macaddr, ipaddr);
 		return;
 
 	zvrf = zevpn->vxlan_if->vrf->info;
@@ -1648,8 +1646,9 @@ void zebra_evpn_rem_macip_del(vni_t vni, const struct ethaddr *macaddr,
 			vni, macaddr,
 			ipa_len ? " IP " : "",
 			ipa_len ? ipaddr2str(ipaddr, buf1, sizeof(buf1)) : "");
-		frrtrace(3, frr_zebra, process_remote_macip_del, vni, macaddr,
-			 ipaddr);
+		if (macaddr && ipaddr)
+			frrtrace(3, frr_zebra, process_remote_macip_del, vni,
+				 macaddr, ipaddr);
 		return;
 	}
 
@@ -1672,8 +1671,9 @@ void zebra_evpn_rem_macip_del(vni_t vni, const struct ethaddr *macaddr,
 					__func__, macaddr, mac->flags);
 			macfdb_read_specific_mac(zns, zif->brslave_info.br_if,
 						 macaddr, vnip->access_vlan);
-			frrtrace(3, frr_zebra, process_remote_macip_del, vni,
-				 macaddr, ipaddr);
+			if (macaddr && ipaddr)
+				frrtrace(3, frr_zebra, process_remote_macip_del,
+					 vni, macaddr, ipaddr);
 		}
 
 		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL)) {
