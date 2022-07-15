@@ -2294,8 +2294,7 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 	nh = dplane_ctx_get_nhe_ng(ctx)->nexthop;
 
 	/* Cumulus only */
-	if (nexthop_group_has_label(dplane_ctx_get_nhe_ng(ctx)) &&
-	    nh->nh_label_type != ZEBRA_LSP_EVPN) {
+	if (nexthop_group_has_label(dplane_ctx_get_nhe_ng(ctx))) {
 		if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_NHG)
 			zlog_debug(
 				"%s: nhg_id %u (%s): labeled NHGs not supported, ignoring",
