@@ -541,10 +541,14 @@ TRACEPOINT_EVENT(
 	process_remote_macip_del,
 	TP_ARGS(
 		vni_t, vni,
-		const struct ethaddr *, macaddr,
-		const struct ipaddr *, ipaddr),
+		const struct ethaddr *, mac,
+		const struct ipaddr *, ip),
 	TP_FIELDS(
 		ctf_string(remote_del, "Ignoring remote MACIP DEL VNI")
+		ctf_array(unsigned char, mac, mac,
+			  sizeof(struct ethaddr))
+		ctf_array(unsigned char, ip, ip,
+			  sizeof(struct ipaddr))
 		ctf_integer(int, vni, vni)
 		)
 	)
@@ -556,19 +560,23 @@ TRACEPOINT_EVENT(
 	zebra_evpn_macip_send_msg_to_client,
 	TP_ARGS(
 		vni_t, vni,
-		const struct ethaddr *, macaddr,
+		const struct ethaddr *, mac,
 		const struct ipaddr *, ip,
 		int, state,
 		uint16_t, cmd,
 		uint32_t, seq,
 		int , ipa_len),
-  TP_FIELDS(
-	  ctf_integer(int, vni, vni)
-	  ctf_integer(int, state, state)
-	  ctf_integer(uint16_t, cmd, cmd)
-	  ctf_integer(uint32_t, seq, seq)
-	  ctf_integer(int, ip_len, ipa_len)
-	  )
+	TP_FIELDS(
+		ctf_integer(int, vni, vni)
+		ctf_array(unsigned char, mac, mac,
+			  sizeof(struct ethaddr))
+		ctf_array(unsigned char, ip, ip,
+			  sizeof(struct ipaddr))
+		ctf_integer(int, state, state)
+		ctf_integer(uint16_t, cmd, cmd)
+		ctf_integer(uint32_t, seq, seq)
+		ctf_integer(int, ip_len, ipa_len)
+		)
 	)
 
 TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_macip_send_msg_to_client, TRACE_INFO)
@@ -670,11 +678,15 @@ TRACEPOINT_EVENT(
 	zebra_evpn_process_sync_macip_add,
 	TP_ARGS(
 		struct zebra_evpn *, zevpn,
-		const struct ethaddr *, macaddr,
-		const struct ipaddr *, ipaddr,
+		const struct ethaddr *, mac,
+		const struct ipaddr *, ip,
 		uint16_t, ipa_len),
 	TP_FIELDS(
 		ctf_integer(int, vni, zevpn->vni)
+		ctf_array(unsigned char, mac, mac,
+			  sizeof(struct ethaddr))
+		ctf_array(unsigned char, ip, ip,
+			  sizeof(struct ipaddr))
 		ctf_integer(uint16_t, ip_len, ipa_len)
 		)
 	)
