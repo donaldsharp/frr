@@ -53,6 +53,7 @@
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_evpn_arp_nd.h"
 #include "zebra/zebra_nhg.h"
+#include "zebra/zebra_trace.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, ZACC_BD, "Access Broadcast Domain");
 DEFINE_MTYPE_STATIC(ZEBRA, ZES, "Ethernet Segment");
@@ -3049,7 +3050,6 @@ void zebra_evpn_proc_remote_es(ZAPI_HANDLER_ARGS)
 	struct stream *s;
 	struct in_addr vtep_ip;
 	esi_t esi;
-
 	if (!is_evpn_enabled()) {
 		zlog_debug(
 				"%s: EVPN not enabled yet we received a es_add zapi call",
@@ -3063,6 +3063,8 @@ void zebra_evpn_proc_remote_es(ZAPI_HANDLER_ARGS)
 	stream_get(&esi, s, sizeof(esi_t));
 	vtep_ip.s_addr = stream_get_ipv4(s);
 
+	frrtrace(3, frr_zebra, zebra_evpn_proc_remote_es, vtep_ip, &esi,
+		 hdr->command);
 	if (hdr->command == ZEBRA_REMOTE_ES_VTEP_ADD) {
 		uint32_t zapi_flags;
 		uint8_t df_alg;
@@ -4562,6 +4564,7 @@ void zebra_evpn_proc_remote_nh(ZAPI_HANDLER_ARGS)
 		zebra_vxlan_evpn_vrf_route_del(vrf_id, &nh,
 					       (struct prefix *)&dummy_prefix);
 	}
+	frrtrace(3, frr_zebra, zebra_evpn_proc_remote_nh, &rmac, &nh, vrf_id);
 }
 
 /*****************************************************************************/

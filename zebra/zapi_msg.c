@@ -651,7 +651,17 @@ int zsend_redistribute_route(int cmd, struct zserv *client,
 			   zebra_route_string(client->proto),
 			   zebra_route_string(api.type), api.vrf_id,
 			   &api.prefix);
-	frrtrace(3, frr_zebra, zsend_redistribute_route, cmd, client, api);
+
+	char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+	char buf1[NEXTHOP_STRLEN + 2];
+	buf[0] = '\0';
+	struct nexthop *tnexthop;
+	for (tnexthop = re->nhe->nhg.nexthop; tnexthop;
+	     tnexthop = tnexthop->next) {
+		nexthop2str(tnexthop, buf1, sizeof(buf1));
+		strlcat(buf, buf1, sizeof(buf));
+	}
+	frrtrace(4, frr_zebra, zsend_redistribute_route, cmd, client, api, buf);
 
 	return zserv_send_message(client, s);
 }
@@ -1770,6 +1780,7 @@ static void zread_nhg_del(ZAPI_HANDLER_ARGS)
 	 * Delete the received nhg id
 	 */
 
+	frrtrace(2, frr_zebra, zread_nhg_del, id, proto);
 	nhe = zebra_nhg_proto_del(id);
 
 	if (nhe) {
@@ -1827,7 +1838,18 @@ static void zread_nhg_add(ZAPI_HANDLER_ARGS)
 			  "%s: Nexthop Group Creation failed", __func__);
 		return;
 	}
-
+	if (nhg && nhg->nexthop) {
+		// lttn_trace
+		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+		char buf1[NEXTHOP_STRLEN + 2];
+		buf[0] = '\0';
+		struct nexthop *nexthop;
+		for (nexthop = nhg->nexthop; nexthop; nexthop = nexthop->next) {
+			nexthop2str(nexthop, buf1, sizeof(buf1));
+			strlcat(buf, buf1, sizeof(buf));
+		}
+		frrtrace(4, frr_zebra, zread_nhg_add, id, proto, nhg, buf);
+	}
 	/*
 	 * Create the nhg
 	 */
@@ -1967,7 +1989,6 @@ static void zread_route_add(ZAPI_HANDLER_ARGS)
 		XFREE(MTYPE_RE, re);
 		return;
 	}
-
 	/*
 	 * If we have an ID, this proto owns the NHG it sent along with the
 	 * route, so we just send the ID into rib code with it.
@@ -1982,6 +2003,27 @@ static void zread_route_add(ZAPI_HANDLER_ARGS)
 		zebra_nhe_init(&nhe, afi, ng->nexthop);
 		nhe.nhg.nexthop = ng->nexthop;
 		nhe.backup_info = bnhg;
+	} else {
+		memset(&nhe, 0, sizeof(struct nhg_hash_entry));
+	}
+	// lttn_trace
+	// This should be moved as a api
+	if (nhe.nhg.nexthop) {
+		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+		char buf1[NEXTHOP_STRLEN + 2];
+		buf[0] = '\0';
+		struct nexthop *nexthop = NULL;
+		for (nexthop = nhe.nhg.nexthop; nexthop;
+		     nexthop = nexthop->next) {
+			nexthop2str(nexthop, buf1, sizeof(buf1));
+			strlcat(buf, buf1, sizeof(buf));
+		}
+
+		char lttng_buf_prefix[PREFIX_STRLEN];
+		prefix2str(&api.prefix, lttng_buf_prefix,
+			   sizeof(lttng_buf_prefix));
+		frrtrace(4, frr_zebra, zread_route_add, api, lttng_buf_prefix,
+			 vrf_id, buf);
 	}
 	ret = rib_add_multipath_nhe(afi, api.safi, &api.prefix, src_p,
 				    re, &nhe, false);
@@ -2042,6 +2084,11 @@ static void zread_route_del(ZAPI_HANDLER_ARGS)
 		zlog_debug("%s: p=(%u:%u)%pFX, msg flags=0x%x, flags=0x%x",
 			   __func__, zvrf_id(zvrf), table_id, &api.prefix,
 			   (int)api.message, api.flags);
+
+	char lttng_buf_prefix[PREFIX_STRLEN];
+	prefix2str(&api.prefix, lttng_buf_prefix, sizeof(lttng_buf_prefix));
+	frrtrace(3, frr_zebra, zread_route_del, api, lttng_buf_prefix,
+		 table_id);
 
 	rib_delete(afi, api.safi, zvrf_id(zvrf), api.type, api.instance,
 		   api.flags, &api.prefix, src_p, NULL, 0, table_id, api.metric,
