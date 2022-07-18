@@ -1174,26 +1174,25 @@ void zebra_evpn_acc_vl_show_detail(struct vty *vty, bool uj)
 	}
 }
 
-void zebra_evpn_acc_vl_show_vid(struct vty *vty, bool uj, vlanid_t vid, struct interface *br_if)
+void zebra_evpn_acc_vl_show_vid(struct vty *vty, bool uj, vlanid_t vid,
+				struct interface *br_if)
 {
 	json_object *json = NULL;
 	struct zebra_evpn_access_bd *acc_bd;
 
 	if (uj)
 		json = json_object_new_object();
+
 	acc_bd = zebra_evpn_acc_vl_find(vid, br_if);
-	if (!acc_bd) {
-		if (!json) {
-			vty_out(vty, "VLAN %s.%u not present\n", br_if->name, vid);
-			return;
-		}
+	if (acc_bd) {
+		zebra_evpn_acc_vl_show_entry_detail(vty, acc_bd, json);
+	} else {
+		if (!json)
+			vty_out(vty, "VLAN %u not present\n", vid);
 	}
-	zebra_evpn_acc_vl_show_entry_detail(vty, acc_bd, json);
-	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
-	}
+
+	if (uj)
+		vty_json(vty, json);
 }
 
 /* Initialize VLAN member bitmap on an interface. Although VLAN membership
