@@ -31,6 +31,7 @@
 #include "log.h"
 #include "vrf.h"
 #include "srcdest_table.h"
+#include "if.h"
 
 #include "zebra/rib.h"
 #include "zebra/zebra_router.h"
@@ -43,6 +44,7 @@
 #include "zebra/zapi_msg.h"
 #include "zebra/zebra_vxlan.h"
 #include "zebra/zebra_errors.h"
+#include "zebra/zebra_evpn_arp_nd.h"
 
 #define ZEBRA_PTM_SUPPORT
 
@@ -549,6 +551,9 @@ void zebra_interface_address_add_update(struct interface *ifp,
 	zebra_vxlan_add_del_gw_macip(ifp, ifc->address, 1);
 
 	router_id_add_address(ifc);
+
+	if (if_is_loopback(ifp))
+		zebra_evpn_arp_nd_failover_enable();
 
 	for (ALL_LIST_ELEMENTS(zrouter.client_list, node, nnode, client)) {
 		/* Do not send unsolicited messages to synchronous clients. */

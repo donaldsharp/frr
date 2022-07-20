@@ -53,6 +53,7 @@ struct zebra_evpn_arp_nd_stats {
 /* ARP/ND global information */
 struct zebra_evpn_arp_nd_info {
 	uint32_t flags;
+/* arp-nd-redirect socket is open */
 #define ZEBRA_EVPN_ARP_ND_FAILOVER (1 << 0)
 
 	/* number of ESs that are operationally down
