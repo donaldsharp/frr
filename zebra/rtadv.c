@@ -1216,6 +1216,12 @@ void rtadv_start_interface_events(struct zebra_vrf *zvrf, struct zebra_if *zif)
 		return;
 	}
 
+	/* Some callers may not know the right way to locate a zvrf,
+	 * so we may need to do that here.
+	 */
+	if (zvrf == NULL)
+		zvrf = rtadv_interface_get_zvrf(zif->ifp);
+
 	adv_if = adv_if_add(zvrf, zif->ifp->name);
 	if (adv_if != NULL)
 		return; /* Already added */
