@@ -158,6 +158,7 @@ struct bgp_master {
 
 	/* Should we do wait for fib install globally? */
 	bool wait_for_fib;
+	int bgp_suppress_fib_count;
 
 	/* EVPN multihoming */
 	struct bgp_evpn_mh_info *mh_info;

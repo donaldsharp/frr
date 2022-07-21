@@ -111,9 +111,6 @@ struct community_list_handler *bgp_clist;
 
 unsigned int multipath_num = MULTIPATH_NUM;
 
-/* Number of bgp instances configured for suppress fib config */
-unsigned int bgp_suppress_fib_count;
-
 static void bgp_if_finish(struct bgp *bgp);
 static void peer_drop_dynamic_neighbor(struct peer *peer);
 
@@ -430,12 +427,12 @@ void bm_wait_for_fib_set(bool set)
 
 	bm->wait_for_fib = set;
 	if (set) {
-		if (bgp_suppress_fib_count == 0)
+		if (bm->bgp_suppress_fib_count == 0)
 			send_msg = true;
-		bgp_suppress_fib_count++;
+		bm->bgp_suppress_fib_count++;
 	} else {
-		bgp_suppress_fib_count--;
-		if (bgp_suppress_fib_count == 0)
+		bm->bgp_suppress_fib_count--;
+		if (bm->bgp_suppress_fib_count == 0)
 			send_msg = true;
 	}
 
@@ -457,17 +454,17 @@ void bgp_suppress_fib_pending_set(struct bgp *bgp, bool set)
 		/* Send msg to zebra for the first instance of bgp enabled
 		 * with suppress fib
 		 */
-		if (bgp_suppress_fib_count == 0)
+		if (bm->bgp_suppress_fib_count == 0)
 			send_msg = true;
-		bgp_suppress_fib_count++;
+		bm->bgp_suppress_fib_count++;
 	} else {
 		UNSET_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_FIB_PENDING);
-		bgp_suppress_fib_count--;
+		bm->bgp_suppress_fib_count--;
 
 		/* Send msg to zebra if there are no instances enabled
 		 * with suppress fib
 		 */
-		if (bgp_suppress_fib_count == 0)
+		if (bm->bgp_suppress_fib_count == 0)
 			send_msg = true;
 	}
 	/* Send route notify request to RIB */
@@ -3366,6 +3363,9 @@ void bgp_set_evpn(struct bgp *bgp)
 	/* Increase the reference count on this new VRF */
 	if (bm->bgp_evpn)
 		bgp_lock(bm->bgp_evpn);
+
+	zebra_route_notify_send(ZEBRA_ROUTE_NOTIFY_REQUEST,
+				zclient, true);
 }
 
 /* Returns the BGP instance where EVPN is enabled, if any */

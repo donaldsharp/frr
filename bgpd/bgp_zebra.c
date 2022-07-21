@@ -2588,18 +2588,36 @@ static int bgp_zebra_route_notify_owner(int command, struct zclient *zclient,
 		break;
 	case ZAPI_ROUTE_FAIL_INSTALL:
 		new_select = NULL;
-		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("route: %pRN Failed to Install into Fib",
-				   dest);
-		UNSET_FLAG(dest->flags, BGP_NODE_FIB_INSTALL_PENDING);
-		UNSET_FLAG(dest->flags, BGP_NODE_FIB_INSTALLED);
 		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
 			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
 				new_select = pi;
 		}
-		if (new_select)
-			group_announce_route(bgp, afi, safi, dest, new_select);
-		/* Error will be logged by zebra module */
+		if (BGP_DEBUG(zebra, ZEBRA))
+			zlog_debug("route: %pRN Failed to Install into Fib",
+				   dest);
+		if (bm->bgp_suppress_fib_count) {
+			UNSET_FLAG(dest->flags, BGP_NODE_FIB_INSTALL_PENDING);
+			UNSET_FLAG(dest->flags, BGP_NODE_FIB_INSTALLED);
+
+			if (new_select)
+				group_announce_route(bgp, afi, safi, dest, new_select);
+			/* Error will be logged by zebra module */
+		}
+
+		/*
+		 * If this is an evpn route that failed to install
+		 * we probably have a situation where the interface
+		 * flapped real fast and kernel received the route
+		 * for installation right when the interface was down.
+		 * Let's just shove it right back in, as that if the
+		 * interface was down then EVPN would receive that
+		 * and remove the route from the bgp vrf table.
+		 */
+		if (new_select &&
+		    is_pi_family_evpn(new_select->extra->parent) &&
+		    CHECK_FLAG(new_select->flags, BGP_PATH_VALID) &&
+		    !CHECK_FLAG(new_select->flags, BGP_PATH_REMOVED))
+			bgp_zebra_announce(dest, &p, new_select, bgp, afi, safi);
 		break;
 	case ZAPI_ROUTE_BETTER_ADMIN_WON:
 		if (BGP_DEBUG(zebra, ZEBRA))
