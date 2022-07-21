@@ -1073,10 +1073,12 @@ void if_up(struct interface *ifp, bool install_connected)
 
 	/*
 	 * startup the state machine, if it hasn't been already
-	 * due to a delayed ifindex on startup ordering
+	 * due to a delayed ifindex on startup ordering. There is
+	 * some special rtadv logic about which zvrf to use, so
+	 * we'll let the rtadv code do what it needs to do.
 	 */
 	if (zif->rtadv.AdvSendAdvertisements)
-		rtadv_start_interface_events(zvrf, zif);
+		rtadv_start_interface_events(NULL, zif);
 #endif
 
 	/* Install connected routes to the kernel. */
