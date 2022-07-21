@@ -529,17 +529,44 @@ static void vrf_terminate_single(struct vrf *vrf)
 {
 	/* Clear configured flag and invoke delete. */
 	UNSET_FLAG(vrf->status, VRF_CONFIGURED);
-	if_terminate(vrf);
 	vrf_delete(vrf);
 }
 
 /* Terminate VRF module. */
 void vrf_terminate(void)
 {
-	struct vrf *vrf, *tmp;
+	struct vrf *vrf, *tmp, *vdef;
 
 	if (debug_vrf)
 		zlog_debug("%s: Shutting down vrf subsystem", __func__);
+
+	/*
+	 * When shutting down all vrf's FRR should go through
+	 * all the interfaces first and then shut them down
+	 * and then do other vrf specific work next( namely
+	 * evpn specific work.
+	 *
+	 * The crux of the problem is that evpn by it's very
+	 * nature is cross vrf and if we shutdown an interface
+	 * in one vrf we haven't properly torn down the information
+	 * in another vrf.  Force all interfaces off first then
+	 * clean up other data.
+	 */
+	RB_FOREACH_SAFE (vrf, vrf_id_head, &vrfs_by_id, tmp) {
+		if (vrf->vrf_id == VRF_DEFAULT)
+			continue;
+		if_terminate(vrf);
+	}
+
+	RB_FOREACH_SAFE (vrf, vrf_name_head, &vrfs_by_name, tmp) {
+		if (vrf->vrf_id == VRF_DEFAULT)
+			continue;
+		if_terminate(vrf);
+	}
+	/* Finally terminate default VRF */
+	vdef = vrf_lookup_by_id(VRF_DEFAULT);
+	if (vdef)
+		if_terminate(vdef);
 
 	RB_FOREACH_SAFE (vrf, vrf_id_head, &vrfs_by_id, tmp) {
 		if (vrf->vrf_id == VRF_DEFAULT)
@@ -556,9 +583,8 @@ void vrf_terminate(void)
 	}
 
 	/* Finally terminate default VRF */
-	vrf = vrf_lookup_by_id(VRF_DEFAULT);
-	if (vrf)
-		vrf_terminate_single(vrf);
+	if (vdef)
+		vrf_terminate_single(vdef);
 }
 
 int vrf_socket(int domain, int type, int protocol, vrf_id_t vrf_id,
