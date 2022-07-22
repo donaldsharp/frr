@@ -1240,7 +1240,10 @@ zebra_mac_t *zebra_evpn_mac_lookup(zebra_evpn_t *zevpn, struct ethaddr *mac)
 {
 	zebra_mac_t tmp;
 	zebra_mac_t *pmac;
-
+	/* Chances are the neighbor hash table may be freed.
+	 * MAC entry, not present, nothing to do */
+	if (!zevpn->mac_table)
+		return NULL;
 	memset(&tmp, 0, sizeof(tmp));
 	memcpy(&tmp.macaddr, mac, ETH_ALEN);
 	pmac = hash_lookup(zevpn->mac_table, &tmp);
