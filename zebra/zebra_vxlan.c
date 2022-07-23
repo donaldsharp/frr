@@ -3544,11 +3544,7 @@ int zebra_vxlan_clear_dup_detect_vni_ip(struct zebra_vrf *zvrf, vni_t vni,
 	}
 
 	mac = zebra_evpn_mac_lookup(zevpn, &nbr->emac);
-	if (!mac) {
-		snprintfrr(errmsg, errmsg_len,
-			   "MAC lookup empty, nothing to do\n");
-		return -1;
-	}
+
 	if (CHECK_FLAG(mac->flags, ZEBRA_MAC_DUPLICATE)) {
 		snprintfrr(
 			errmsg, errmsg_len,
