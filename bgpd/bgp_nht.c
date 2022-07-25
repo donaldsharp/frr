@@ -195,8 +195,8 @@ int bgp_find_or_add_nexthop(struct bgp *bgp_route, struct bgp *bgp_nexthop,
 		 * Gather the ifindex for if up/down events to be
 		 * tagged into this fun
 		 */
-		if (afi == AFI_IP6 &&
-		    IN6_IS_ADDR_LINKLOCAL(&peer->su.sin6.sin6_addr))
+		if (afi == AFI_IP6
+		    && IN6_IS_ADDR_LINKLOCAL(&peer->su.sin6.sin6_addr))
 			ifindex = peer->su.sin6.sin6_scope_id;
 
 		if (!sockunion2hostprefix(&peer->su, &p)) {
@@ -563,13 +563,15 @@ void bgp_parse_nexthop_update(int command, vrf_id_t vrf_id)
 	evaluate_paths(bnc);
 }
 
-static void bgp_nht_ifp_table_handle(struct bgp *bgp, struct bgp_table *table,
+static void bgp_nht_ifp_table_handle(struct bgp *bgp,
+				     struct bgp_table *table,
 				     struct interface *ifp, bool up)
 {
 	struct bgp_nexthop_cache *bnc;
 	struct bgp_dest *dest;
 
-	for (dest = bgp_table_top(table); dest; dest = bgp_route_next(dest)) {
+	for (dest = bgp_table_top(table); dest;
+	     dest = bgp_route_next(dest)) {
 		bnc = bgp_dest_get_bgp_nexthop_info(dest);
 
 		if (!bnc)
@@ -612,7 +614,8 @@ static void bgp_nht_ifp_handle(struct interface *ifp, bool up)
 
 	bgp_nht_ifp_table_handle(bgp, bgp->nexthop_cache_table[AFI_IP], ifp,
 				 up);
-	bgp_nht_ifp_table_handle(bgp, bgp->import_check_table[AFI_IP], ifp, up);
+	bgp_nht_ifp_table_handle(bgp, bgp->import_check_table[AFI_IP], ifp,
+				 up);
 	bgp_nht_ifp_table_handle(bgp, bgp->nexthop_cache_table[AFI_IP6], ifp,
 				 up);
 	bgp_nht_ifp_table_handle(bgp, bgp->import_check_table[AFI_IP6], ifp,
