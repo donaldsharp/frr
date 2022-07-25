@@ -99,38 +99,6 @@ void bgp_unlink_nexthop(struct bgp_path_info *path)
 	bgp_unlink_nexthop_check(bnc);
 }
 
-void bgp_replace_nexthop_by_peer(struct peer *from, struct peer *to)
-{
-	struct prefix pp;
-	struct prefix pt;
-	struct bgp_nexthop_cache *bncp, *bnct;
-	struct bgp_dest *dest;
-	afi_t afi;
-
-	if (!sockunion2hostprefix(&from->su, &pp))
-		return;
-
-	afi = family2afi(pp.family);
-	dest = bgp_node_lookup(from->bgp->nexthop_cache_table[afi], &pp);
-	if (!dest)
-		return;
-	bncp = bgp_dest_get_bgp_nexthop_info(dest);
-
-	if (!sockunion2hostprefix(&to->su, &pt))
-		return;
-
-	dest = bgp_node_lookup(to->bgp->nexthop_cache_table[afi], &pt);
-	if (!dest)
-		return;
-	bnct = bgp_dest_get_bgp_nexthop_info(dest);
-
-	if (bnct != bncp)
-		return;
-
-	if (bnct)
-		bnct->nht_info = to;
-}
-
 void bgp_unlink_nexthop_by_peer(struct peer *peer)
 {
 	struct prefix p;
@@ -297,16 +265,8 @@ int bgp_find_or_add_nexthop(struct bgp *bgp_route, struct bgp *bgp_nexthop,
 			(bgp_path_info_extra_get(pi))->igpmetric = bnc->metric;
 		else if (pi->extra)
 			pi->extra->igpmetric = 0;
-	} else if (peer) {
-		/*
-		 * Let's not accidently save the peer data for a peer
-		 * we are going to throw away in a second or so.
-		 * When we come back around we'll fix up this
-		 * data properly in replace_nexthop_by_peer
-		 */
-		if (CHECK_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE))
-			bnc->nht_info = (void *)peer; /* NHT peer reference */
-	}
+	} else if (peer)
+		bnc->nht_info = (void *)peer; /* NHT peer reference */
 
 	/*
 	 * We are cheating here.  Views have no associated underlying
