@@ -38,9 +38,6 @@
 
 /* BGP nexthop cache value structure. */
 struct bgp_nexthop_cache {
-	/* The ifindex of the outgoing interface *if* it's a v6 LL */
-	ifindex_t ifindex;
-
 	/* IGP route's metric. */
 	uint32_t metric;
 
