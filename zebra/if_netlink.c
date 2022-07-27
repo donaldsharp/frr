@@ -2403,6 +2403,9 @@ int netlink_vni_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	}
 	zif = (struct zebra_if *)ifp->info;
 
+	if (!IS_ZEBRA_VXLAN_IF_L3SVD(zif))
+		return 0;
+
 	rem = len;
 	for (attr = TUNNEL_RTA(tmsg); RTA_OK(attr, rem);
 	     attr = RTA_NEXT(attr, rem)) {
@@ -2450,17 +2453,13 @@ int netlink_vni_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			vni_id++;
 		} while (vni_id <= vni_end);
 
-		if (IS_ZEBRA_VXLAN_IF_SVD(zif) ||
-		    IS_ZEBRA_VXLAN_IF_L3SVD(zif)) {
-			if (h->nlmsg_type == RTM_NEWTUNNEL) {
-				if (vni_table && hashcount(vni_table))
-					zebra_vxlan_if_vni_table_add_update(
-						ifp, vni_table);
+		if (h->nlmsg_type == RTM_NEWTUNNEL) {
+			if (vni_table && hashcount(vni_table))
+				zebra_vxlan_if_vni_table_add_update(ifp,
+								    vni_table);
 
-			} else if (h->nlmsg_type == RTM_DELTUNNEL) {
-				zebra_vxlan_if_vni_del(ifp, vni_start);
-			}
-		}
+		} else if (h->nlmsg_type == RTM_DELTUNNEL)
+			zebra_vxlan_if_vni_del(ifp, vni_start);
 	}
 
 	return 0;
