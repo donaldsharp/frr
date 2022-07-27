@@ -196,14 +196,17 @@ TRACEPOINT_LOGLEVEL(frr_zebra, netlink_neigh_update_msg_encode, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       netlink_route_multipath_msg_encode,
-      TP_ARGS(const struct prefix *, p, int, cmd, size_t , datalen,
-        char *, nexthop),
+      TP_ARGS(const struct prefix *, p, int, cmd,
+	uint32_t, nhg_id,
+        char *, nexthop, size_t , datalen),
       TP_FIELDS(
         ctf_string(family, (p->family == AF_INET) ? "AF_INET" : "AF_INET6")
-        ctf_integer(unsigned int, dst_len, p->prefixlen)
+	ctf_array(unsigned char, pfx, p, sizeof(struct prefix))
+        ctf_integer(unsigned int, pfxlen, p->prefixlen)
         ctf_integer(uint8_t, cmd, cmd)
-        ctf_integer(uint32_t, datalen, datalen)
+        ctf_integer(unsigned int, nhg_id, nhg_id)
         ctf_string(nexthops, nexthop)
+        ctf_integer(uint32_t, datalen, datalen)
         )
       )
 
@@ -212,11 +215,11 @@ TRACEPOINT_LOGLEVEL(frr_zebra, netlink_route_multipath_msg_encode, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       netlink_nexthop_msg_encode,
-      TP_ARGS(const struct nexthop *, nh, uint32_t, id, char *, label_buf),
+      TP_ARGS(const struct nexthop *, nh, uint32_t, nhg_id, char *, label_buf),
       TP_FIELDS(
         ctf_integer(uint32_t, nh_index, nh->ifindex)
         ctf_integer(uint32_t, nh_vrfid, nh->vrf_id)
-        ctf_integer(uint32_t, id, id)
+        ctf_integer(uint32_t, nhg_id, nhg_id)
         ctf_string(label_buf, label_buf)
         )
       )
