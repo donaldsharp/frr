@@ -2233,11 +2233,16 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 	     && /* CUMULUS ONLY */ !nexthop_group_has_label(
 		     dplane_ctx_get_ng(ctx)))
 	    || (fpm && force_nhg)) {
+		char buf[2];
+		uint32_t nhg_id;
+
+		buf[0] = '\0';
+		nhg_id = dplane_ctx_get_nhe_id(ctx);
 
 		/* Kernel supports nexthop objects */
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug("%s: %pFX nhg_id is %u", __func__, p,
-				   dplane_ctx_get_nhe_id(ctx));
+				   nhg_id);
 
 		if (!nl_attr_put32(&req->n, datalen, RTA_NH_ID,
 				   dplane_ctx_get_nhe_id(ctx)))
@@ -2262,6 +2267,8 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 					return 0;
 			}
 		}
+		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p,
+			 cmd, nhg_id, buf, datalen);
 
 		return NLMSG_ALIGN(req->n.nlmsg_len);
 	}
@@ -2426,7 +2433,7 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 			strlcat(buf, buf1, sizeof(buf));
 		}
 		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p,
-			 cmd, datalen, buf);
+			 cmd, 0, buf, datalen);
 	}
 
 	return NLMSG_ALIGN(req->n.nlmsg_len);
