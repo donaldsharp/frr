@@ -94,7 +94,7 @@ def parse_event(event, field_parsers):
         else:
             field_info[field] = event.get(field)
     dt = datetime.datetime.fromtimestamp(event.timestamp/1000000000)
-    dt_format = dt.strftime('%Y/%m/%d %H:%M:%S')
+    dt_format = dt.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
     print(dt_format, event.name, field_info)
 ############################ common parsers - end #############################
 
