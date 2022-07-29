@@ -2453,10 +2453,13 @@ int netlink_vni_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			vni_id++;
 		} while (vni_id <= vni_end);
 
-		if (h->nlmsg_type == RTM_NEWTUNNEL) {
-			if (vni_table && hashcount(vni_table))
+		if (h->nlmsg_type == RTM_NEWTUNNEL && vni_table) {
+			if (hashcount(vni_table))
 				zebra_vxlan_if_vni_table_add_update(ifp,
 								    vni_table);
+			else if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug("%s has empty vni set",
+					   nl_msg_type_to_str(h->nlmsg_type));
 
 		} else if (h->nlmsg_type == RTM_DELTUNNEL)
 			zebra_vxlan_if_vni_del(ifp, vni_start);
