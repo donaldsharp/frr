@@ -3324,11 +3324,6 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	bmac = zebra_l2_brvlan_mac_find(br_if, vid, &mac);
 	if (bmac)
 		zebra_l2_brvlan_mac_del(br_if, bmac);
-	else
-		zlog_err(
-			"Failed to find local MAC cache for bridge %s vid %u mac %s at DEL",
-			br_if->name, vid,
-			prefix_mac2str(&mac, buf, sizeof(buf)));
 
 	return zebra_vxlan_local_mac_del(ifp, br_if, &mac, vid);
 }
