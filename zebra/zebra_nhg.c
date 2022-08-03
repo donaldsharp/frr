@@ -983,7 +983,7 @@ static struct nhg_ctx *nhg_ctx_new(void)
 	return new;
 }
 
-static void nhg_ctx_free(struct nhg_ctx **ctx)
+void nhg_ctx_free(struct nhg_ctx **ctx)
 {
 	struct nexthop *nh;
 

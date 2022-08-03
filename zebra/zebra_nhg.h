@@ -345,6 +345,9 @@ extern void zebra_nhg_sweep_table(struct hash *hash);
  */
 extern void zebra_nhg_mark_keep(void);
 
+/* Next hop group free context and delete associated labels */
+extern void nhg_ctx_free(struct nhg_ctx **ctx);
+
 /* Nexthop resolution processing */
 struct route_entry; /* Forward ref to avoid circular includes */
 extern int nexthop_active_update(struct route_node *rn, struct route_entry *re);
