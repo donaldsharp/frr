@@ -267,11 +267,17 @@ static int bgp_conditional_adv_timer(struct thread *t)
 			 * outbound policy according to advertisement state
 			 */
 			paf = peer_af_find(peer, afi, safi);
-			if (paf) {
-				SUBGRP_PEER(PAF_SUBGRP(paf))
-					->filter[afi][safi]
-					.advmap.update_type =
-					filter->advmap.update_type;
+			if (paf && (SUBGRP_PEER(PAF_SUBGRP(paf))
+					    ->filter[afi][safi]
+					    .advmap.update_type !=
+				    filter->advmap.update_type)) {
+				/* Handle change to peer advmap */
+				if (BGP_DEBUG(update, UPDATE_OUT))
+					zlog_debug(
+						"%s: advmap.update_type changed for peer %s, adjusting update_group.",
+						__func__, peer->host);
+
+				update_group_adjust_peer(paf);
 			}
 
 			/* Send regular update as per the existing policy.
