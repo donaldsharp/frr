@@ -1179,9 +1179,10 @@ int netlink_parse_info(int (*filter)(struct nlmsghdr *, ns_id_t, int),
 					nl_msg_type_to_str(h->nlmsg_type),
 					h->nlmsg_type, h->nlmsg_len,
 					h->nlmsg_seq, h->nlmsg_pid);
-			// In a scale setup, info logs are flooding and getting
-			// less
-			// value out of it, disabled for 5.2
+			/*
+			 * In a scale setup, info logs are flooding and getting
+			 * less value out of it, disabled for 5.2
+			 */
 			// frrtrace(2, frr_zebra, netlink_parse_info, h, nl);
 			/*
 			 * Ignore messages that maybe sent from
@@ -1246,8 +1247,10 @@ static int netlink_talk_info(int (*filter)(struct nlmsghdr *, ns_id_t,
 			nl->name, nl_msg_type_to_str(n->nlmsg_type),
 			n->nlmsg_type, n->nlmsg_len, n->nlmsg_seq,
 			n->nlmsg_flags);
-	// In a scale setup, info logs are flooding and getting less
-	// value out of it, disabled for 5.2
+	/*
+	 * In a scale setup, info logs are flooding and getting
+	 * less value out of it, disabled for 5.2
+	 */
 	// frrtrace(2, frr_zebra, netlink_talk_info, n, nl);
 
 	if (netlink_send_msg(nl, n, n->nlmsg_len) == -1)
