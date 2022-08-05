@@ -328,12 +328,16 @@ TRACEPOINT_EVENT(
 	frr_zebra,
 	netlink_nexthop_msg_encode,
 	TP_ARGS(
-		const struct nexthop *, nh, uint32_t, nhg_id, char *, label_buf),
+		const struct nexthop *, nh,
+		uint32_t, nhg_id,
+		char *, label_buf,
+		char *, nexthop),
 	TP_FIELDS(
 		ctf_integer(uint32_t, nh_index, nh->ifindex)
 		ctf_integer(uint32_t, nh_vrfid, nh->vrf_id)
 		ctf_integer(uint32_t, nhg_id, nhg_id)
 		ctf_string(label_buf, label_buf)
+		ctf_string(nexthops, nexthop)
 		)
 	)
 
@@ -542,7 +546,9 @@ TRACEPOINT_EVENT(
 		struct zebra_evpn *, zevpn,
 		struct zserv *, client),
 	TP_FIELDS(
+		ctf_integer(int, vni, zevpn->vni)
 		ctf_integer(int, vrfid, zevpn->vrf_id)
+		ctf_string(vtep_ip, inet_ntoa(zevpn->local_vtep_ip))
 		ctf_string(client_proto, zebra_route_string(client->proto))
 		)
 	)
@@ -650,11 +656,19 @@ TRACEPOINT_EVENT(
 		struct nlmsghdr *, h,
 		struct br_vlan_msg *, bvm,
 		ns_id_t, ns_id,
-		struct bridge_vlan_info *, vinfo),
+		struct bridge_vlan_info *, vinfo,
+		uint32_t, vrange,
+		uint8_t, state,
+		struct interface *, ifp),
 	TP_FIELDS(
-		ctf_string(h,nlmsg_type2str(h->nlmsg_type))
+		ctf_string(if_name,ifp->name)
+		ctf_string(type,nlmsg_type2str(h->nlmsg_type))
 		ctf_integer(int, ns_id, ns_id)
-		ctf_integer(int, vinfo, vinfo->vid)
+		ctf_integer(int, vid, vinfo->vid)
+		ctf_integer(uint32_t, vrange, vrange)
+		ctf_integer(int, bvm_index, bvm->ifindex)
+		ctf_integer(int, bvm_family, bvm->family)
+		ctf_integer(uint8_t, state, state)
 		)
 	)
 
