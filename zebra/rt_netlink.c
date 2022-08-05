@@ -2464,10 +2464,23 @@ nexthop_done:
 					   __func__, id, nh, nh->ifindex,
 					   vrf_id_to_name(nh->vrf_id),
 					   nh->vrf_id, label_buf);
-			if (nh)
-				frrtrace(3, frr_zebra,
+			if (nh) {
+				char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) +
+					 1];
+				char buf1[NEXTHOP_STRLEN + 2];
+				buf[0] = '\0';
+				const struct nexthop *tnexthop;
+				for (tnexthop = nh; tnexthop;
+				     tnexthop = tnexthop->next) {
+					nexthop2str(tnexthop, buf1,
+						    sizeof(buf1));
+					strlcat(buf, buf1, sizeof(buf));
+					strlcat(buf, " ", sizeof(buf));
+				}
+				frrtrace(4, frr_zebra,
 					 netlink_nexthop_msg_encode, nh, id,
-					 label_buf);
+					 label_buf, buf);
+			}
 }
 
 		req->nhm.nh_protocol = zebra2proto(dplane_ctx_get_nhe_type(ctx));
