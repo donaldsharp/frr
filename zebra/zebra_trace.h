@@ -201,7 +201,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, netlink_neigh_update_msg_encode, TRACE_INFO)
         char *, nexthop, size_t , datalen),
       TP_FIELDS(
         ctf_string(family, (p->family == AF_INET) ? "AF_INET" : "AF_INET6")
-	ctf_array(unsigned char, pfx, p, sizeof(struct prefix))
+	      ctf_array(unsigned char, pfx, p, sizeof(struct prefix))
         ctf_integer(unsigned int, pfxlen, p->prefixlen)
         ctf_integer(uint8_t, cmd, cmd)
         ctf_integer(unsigned int, nhg_id, nhg_id)
@@ -215,12 +215,14 @@ TRACEPOINT_LOGLEVEL(frr_zebra, netlink_route_multipath_msg_encode, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       netlink_nexthop_msg_encode,
-      TP_ARGS(const struct nexthop *, nh, uint32_t, nhg_id, char *, label_buf),
+      TP_ARGS(const struct nexthop *, nh, uint32_t, nhg_id, char *, label_buf,
+        char *, nexthop),
       TP_FIELDS(
         ctf_integer(uint32_t, nh_index, nh->ifindex)
         ctf_integer(uint32_t, nh_vrfid, nh->vrf_id)
         ctf_integer(uint32_t, nhg_id, nhg_id)
         ctf_string(label_buf, label_buf)
+        ctf_string(nexthops, nexthop)
         )
       )
 
@@ -368,7 +370,9 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_read_mac_neigh, TRACE_INFO)
       zebra_evpn_send_add_to_client,
       TP_ARGS(zebra_evpn_t *, zevpn, struct zserv *, client),
       TP_FIELDS(
+        ctf_integer(int, vni, zevpn->vni)
         ctf_integer(int, vrfid, zevpn->vrf_id)
+        ctf_string(vtep_ip, inet_ntoa(zevpn->local_vtep_ip))
         ctf_string(client_proto, zebra_route_string(client->proto))
         )
       )
@@ -455,11 +459,17 @@ TRACEPOINT_LOGLEVEL(frr_zebra, vxlan_vni_state_change, TRACE_INFO)
       frr_zebra,
       netlink_vlan_change,
       TP_ARGS(struct nlmsghdr *, h, struct br_vlan_msg *, bvm,
-        ns_id_t, ns_id, struct bridge_vlan_info *, vinfo),
+        ns_id_t, ns_id, struct bridge_vlan_info *, vinfo, uint32_t, vrange,
+        uint8_t, state, struct interface *, ifp),
       TP_FIELDS(
-        ctf_string(h,nlmsg_type2str(h->nlmsg_type))
+        ctf_string(if_name,ifp->name)
+        ctf_string(type,nlmsg_type2str(h->nlmsg_type))
         ctf_integer(int, ns_id, ns_id)
-        ctf_integer(int, vinfo, vinfo->vid)
+        ctf_integer(int, vid, vinfo->vid)
+        ctf_integer(uint32_t, vrange, vrange)
+        ctf_integer(int, bvm_index, bvm->ifindex)
+        ctf_integer(int, bvm_family, bvm->family)
+        ctf_integer(uint8_t, state, state)
         )
       )
 

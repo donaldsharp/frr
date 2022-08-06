@@ -2263,9 +2263,9 @@ int netlink_vlan_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 				zlog_debug("VLANDB_ENTRY: VID (%u) state=%s",
 					   vinfo->vid, port_state2str(state));
 		}
-
-		frrtrace(4, frr_zebra, netlink_vlan_change, h, bvm, ns_id,
-			 vinfo);
+		if (vinfo)
+			frrtrace(7, frr_zebra, netlink_vlan_change, h, bvm,
+				 ns_id, vinfo, vrange, state, ifp);
 		vlan_id_range_state_change(
 			ifp, vinfo->vid, (vrange ? vrange : vinfo->vid), state);
 	}
