@@ -57,6 +57,7 @@
 #include "zebra/zebra_vxlan.h"
 #include "zebra/zapi_msg.h"
 #include "zebra/zebra_dplane.h"
+#include "zebra/zebra_nhg.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, RIB_UPDATE_CTX, "Rib update context object");
 
@@ -2573,6 +2574,51 @@ void meta_queue_free(struct meta_queue *mq)
 	XFREE(MTYPE_WORK_QUEUE, mq);
 }
 
+void rib_meta_queue_free_vrf(struct meta_queue *mq, struct zebra_vrf *zvrf)
+{
+	vrf_id_t vrf_id = zvrf->vrf->vrf_id;
+	unsigned int i;
+
+	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+		zlog_debug("Freeing meta queue node's for vrf %d", vrf_id);
+
+	for (i = 0; i < MQ_SIZE; i++) {
+		struct listnode *lnode, *nnode;
+		void *data;
+		bool del;
+
+		for (ALL_LIST_ELEMENTS(mq->subq[i], lnode, nnode, data)) {
+			del = false;
+			if (i == route_info[ZEBRA_ROUTE_NHG].meta_q_map) {
+				struct nhg_ctx *ctx = NULL;
+				ctx = listgetdata(lnode);
+				if (!ctx)
+					continue;
+				if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+					zlog_debug(
+						"NHG Context id=%u dequeued from sub-queue %u",
+						ctx->id, i);
+				nhg_ctx_free(&ctx);
+				del = true;
+			} else {
+				struct route_node *rnode = data;
+				rib_dest_t *dest = rib_dest_from_rnode(rnode);
+				if (dest && rib_dest_vrf(dest) == zvrf) {
+					if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+						zlog_debug(
+							"Unlocking rnode dest_vrf %d",
+							vrf_id);
+					route_unlock_node(rnode);
+					del = true;
+				}
+			}
+			if (del) {
+				list_delete_node(mq->subq[i], lnode);
+				mq->size--;
+			}
+		}
+	}
+}
 /* initialise zebra rib work queue */
 static void rib_queue_init(void)
 {

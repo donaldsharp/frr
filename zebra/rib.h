@@ -433,6 +433,8 @@ struct nhg_ctx; /* Forward declaration */
 extern int rib_queue_nhg_add(struct nhg_ctx *ctx);
 
 extern void meta_queue_free(struct meta_queue *mq);
+extern void rib_meta_queue_free_vrf(struct meta_queue *mq,
+				    struct zebra_vrf *zvrf);
 extern int zebra_rib_labeled_unicast(struct route_entry *re);
 extern struct route_table *rib_table_ipv6;
 
