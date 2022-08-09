@@ -1467,13 +1467,14 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 							  ipa_len, ipaddr,
 							  flags, seq, esi);
 		} else {
-			char esi_str[ESI_STR_LEN];
+			if (IS_ZEBRA_DEBUG_EVPN_MH_ES) {
+				char esi_str[ESI_STR_LEN];
 
-			esi_to_str(&es->esi, es->esi_str, sizeof(es->esi_str));
-			if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
 				zlog_debug(
 					"Ignore sync-macip add; ES %s is not ready",
-					esi_str);
+					esi_to_str(esi, esi_str,
+						   sizeof(esi_str)));
+			}
 		}
 
 		return;
