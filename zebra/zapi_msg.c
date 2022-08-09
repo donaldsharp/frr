@@ -652,16 +652,12 @@ int zsend_redistribute_route(int cmd, struct zserv *client,
 			   zebra_route_string(api.type), api.vrf_id,
 			   &api.prefix);
 
-	char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
-	char buf1[NEXTHOP_STRLEN + 2];
-	buf[0] = '\0';
-	struct nexthop *tnexthop;
-	for (tnexthop = re->nhe->nhg.nexthop; tnexthop;
-	     tnexthop = tnexthop->next) {
-		nexthop2str(tnexthop, buf1, sizeof(buf1));
-		strlcat(buf, buf1, sizeof(buf));
+	if (re->nhe->nhg.nexthop) {
+		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+		frrtrace(4, frr_zebra, zsend_redistribute_route, cmd, client,
+			 api,
+			 nexthop_group2str(&(re->nhe->nhg), buf, sizeof(buf)));
 	}
-	frrtrace(4, frr_zebra, zsend_redistribute_route, cmd, client, api, buf);
 
 	return zserv_send_message(client, s);
 }
@@ -1841,14 +1837,9 @@ static void zread_nhg_add(ZAPI_HANDLER_ARGS)
 	if (nhg && nhg->nexthop) {
 		// lttn_trace
 		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
-		char buf1[NEXTHOP_STRLEN + 2];
-		buf[0] = '\0';
-		struct nexthop *nexthop;
-		for (nexthop = nhg->nexthop; nexthop; nexthop = nexthop->next) {
-			nexthop2str(nexthop, buf1, sizeof(buf1));
-			strlcat(buf, buf1, sizeof(buf));
-		}
-		frrtrace(4, frr_zebra, zread_nhg_add, id, proto, nhg, buf);
+		frrtrace(4, frr_zebra, zread_nhg_add, id, proto, nhg,
+			 nexthop_group2str((const struct nexthop_group *)nhg,
+					   buf, sizeof(buf)));
 	}
 	/*
 	 * Create the nhg
@@ -2007,23 +1998,14 @@ static void zread_route_add(ZAPI_HANDLER_ARGS)
 		memset(&nhe, 0, sizeof(struct nhg_hash_entry));
 	}
 	// lttn_trace
-	// This should be moved as a api
 	if (nhe.nhg.nexthop) {
 		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
-		char buf1[NEXTHOP_STRLEN + 2];
-		buf[0] = '\0';
-		struct nexthop *nexthop = NULL;
-		for (nexthop = nhe.nhg.nexthop; nexthop;
-		     nexthop = nexthop->next) {
-			nexthop2str(nexthop, buf1, sizeof(buf1));
-			strlcat(buf, buf1, sizeof(buf));
-		}
-
 		char lttng_buf_prefix[PREFIX_STRLEN];
+
 		prefix2str(&api.prefix, lttng_buf_prefix,
 			   sizeof(lttng_buf_prefix));
 		frrtrace(4, frr_zebra, zread_route_add, api, lttng_buf_prefix,
-			 vrf_id, buf);
+			 vrf_id, nexthop_group2str(&nhe.nhg, buf, sizeof(buf)));
 	}
 	ret = rib_add_multipath_nhe(afi, api.safi, &api.prefix, src_p,
 				    re, &nhe, false);
