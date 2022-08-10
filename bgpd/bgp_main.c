@@ -156,8 +156,11 @@ void sighup(void)
 __attribute__((__noreturn__)) void sigint(void)
 {
 	zlog_notice("Terminating on signal");
-	if (CHECK_FLAG(bm->flags, BM_FLAG_FAST_SHUTDOWN))
+
+	if (CHECK_FLAG(bm->flags, BM_FLAG_FAST_SHUTDOWN)) {
+		zlog_info("Fast-shutdown configured, exiting.");
 		exit(0);
+	}
 
 	assert(bm->terminating == false);
 	bm->terminating = true;	/* global flag that shutting down */
@@ -189,6 +192,8 @@ static __attribute__((__noreturn__)) void bgp_exit(int status)
 
 	/* it only makes sense for this to be called on a clean exit */
 	assert(status == 0);
+
+	zlog_info("BGP exiting.");
 
 	frr_early_fini();
 

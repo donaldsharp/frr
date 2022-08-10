@@ -156,8 +156,12 @@ static void sigint(void)
 	struct zserv *client;
 	static bool sigint_done;
 
-	if (zrouter.fast_shutdown)
+	zlog_info("Handling SIGINT");
+
+	if (zrouter.fast_shutdown) {
+		zlog_info("Fast-shutdown, exiting");
 		exit(0);
+	}
 
 	if (sigint_done)
 		return;
