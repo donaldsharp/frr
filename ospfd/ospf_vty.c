@@ -2588,7 +2588,7 @@ DEFUN (no_ospf_auto_cost_reference_bandwidth,
 
 DEFUN (ospf_write_multiplier,
        ospf_write_multiplier_cmd,
-       "ospf write-multiplier (1-100)",
+       "ospf write-multiplier (1-1000000)",
        "OSPF specific commands\n"
        "Write multiplier\n"
        "Maximum number of interface serviced per write\n")
@@ -2603,7 +2603,7 @@ DEFUN (ospf_write_multiplier,
 		idx_number = 1;
 
 	write_oi_count = strtol(argv[idx_number]->arg, NULL, 10);
-	if (write_oi_count < 1 || write_oi_count > 100) {
+	if (write_oi_count < 1 || write_oi_count > 1000000) {
 		vty_out(vty, "write-multiplier value is invalid\n");
 		return CMD_WARNING_CONFIG_FAILED;
 	}
@@ -2612,13 +2612,13 @@ DEFUN (ospf_write_multiplier,
 	return CMD_SUCCESS;
 }
 
-ALIAS(ospf_write_multiplier, write_multiplier_cmd, "write-multiplier (1-100)",
+ALIAS(ospf_write_multiplier, write_multiplier_cmd, "write-multiplier (1-1000000)",
       "Write multiplier\n"
       "Maximum number of interface serviced per write\n")
 
 DEFUN (no_ospf_write_multiplier,
        no_ospf_write_multiplier_cmd,
-       "no ospf write-multiplier (1-100)",
+       "no ospf write-multiplier (1-1000000)",
        NO_STR
        "OSPF specific commands\n"
        "Write multiplier\n"
@@ -2631,7 +2631,7 @@ DEFUN (no_ospf_write_multiplier,
 }
 
 ALIAS(no_ospf_write_multiplier, no_write_multiplier_cmd,
-      "no write-multiplier (1-100)", NO_STR
+      "no write-multiplier (1-1000000)", NO_STR
       "Write multiplier\n"
       "Maximum number of interface serviced per write\n")
 
