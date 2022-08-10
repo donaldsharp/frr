@@ -659,8 +659,6 @@ struct zebra_vxlan_vni * zebra_vxlan_if_vni_find(const struct zebra_if *zif, vni
 	struct zebra_vxlan_vni vni_tmp;
 
 	vni_info = VNI_INFO_FROM_ZEBRA_IF(zif);
-	if (!vni_info->vni_table)
-		return NULL;
 
 	if (IS_ZEBRA_VXLAN_IF_VNI(zif)) {
 		vnip = (struct zebra_vxlan_vni *)&vni_info->vni;
@@ -669,6 +667,13 @@ struct zebra_vxlan_vni * zebra_vxlan_if_vni_find(const struct zebra_if *zif, vni
 			vnip = NULL;
 
 		return vnip;
+	}
+
+	if (!vni_info->vni_table) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug("vxlan-if %s vni_table is NULL",
+				   zif->ifp->name);
+		return NULL;
 	}
 
 	/* For SVD, the VNI value is a required parameter. */
