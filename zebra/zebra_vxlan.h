@@ -218,7 +218,6 @@ extern int zebra_vxlan_clear_dup_detect_vni_ip(struct zebra_vrf *zvrf,
 					       char *errmsg, size_t errmsg_len);
 extern int zebra_vxlan_clear_dup_detect_vni_all(struct zebra_vrf *zvrf);
 extern int zebra_vxlan_clear_dup_detect_vni(struct zebra_vrf *zvrf, vni_t vni);
-extern void zebra_vxlan_handle_result(struct zebra_dplane_ctx *ctx);
 
 extern void zebra_evpn_init(void);
 extern void zebra_vxlan_macvlan_up(struct interface *ifp);
@@ -233,7 +232,6 @@ extern int zebra_vxlan_dp_network_mac_del(struct interface *ifp,
 
 extern void zebra_vxlan_set_accept_bgp_seq(bool set);
 extern bool zebra_vxlan_accept_bgp_seq(void);
-
 #ifdef __cplusplus
 }
 #endif

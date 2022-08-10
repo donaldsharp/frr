@@ -43,6 +43,7 @@
 #include "zebra/zebra_evpn_mac.h"
 #include "zebra/zebra_evpn_neigh.h"
 #include "zebra/zebra_trace.h"
+#include "zebra/rt.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, MAC, "EVPN MAC");
 
@@ -241,10 +242,14 @@ int zebra_evpn_rem_mac_install(zebra_evpn_t *zevpn, zebra_mac_t *mac,
 
 	res = dplane_rem_mac_add(zevpn->vxlan_if, br_ifp, vid, &mac->macaddr,
 				 vni->vni, vtep_ip, sticky, nhg_id, was_static);
-	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
-		return 0;
-	else
+
+	if (res == ZEBRA_DPLANE_REQUEST_QUEUED)
+		SET_FLAG(mac->flags, ZEBRA_MAC_QUEUED);
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
 		return -1;
+
+	return 0;
 }
 
 /*
@@ -295,11 +300,16 @@ int zebra_evpn_rem_mac_uninstall(zebra_evpn_t *zevpn, zebra_mac_t *mac,
 	ifp = zevpn->vxlan_if;
 	vtep_ip = mac->fwd_info.r_vtep_ip;
 
-	res = dplane_rem_mac_del(ifp, br_ifp, vid, &mac->macaddr, vni->vni, vtep_ip);
-	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
-		return 0;
-	else
+	res = dplane_rem_mac_del(ifp, br_ifp, vid, &mac->macaddr, vni->vni,
+				 vtep_ip);
+
+	if (res == ZEBRA_DPLANE_REQUEST_QUEUED)
+		SET_FLAG(mac->flags, ZEBRA_MAC_QUEUED);
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
 		return -1;
+
+	return 0;
 }
 
 /*
@@ -663,6 +673,10 @@ void zebra_evpn_print_mac(zebra_mac_t *mac, void *ctxt, json_object *json)
 				thread_timer_to_hhmmss(thread_buf,
 						       sizeof(thread_buf),
 						       mac->hold_timer));
+
+		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_QUEUED))
+			json_object_boolean_true_add(json_mac, "dplaneQueued");
+
 		/* print all the associated neigh */
 		if (!listcount(mac->neigh_list))
 			json_object_string_add(json_mac, "neighbors", "none");
@@ -772,6 +786,9 @@ void zebra_evpn_print_mac(zebra_mac_t *mac, void *ctxt, json_object *json)
 					timebuf, mac->dad_count);
 			}
 		}
+
+		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_QUEUED))
+			vty_out(vty, " Dplane-Queued\n");
 
 		/* print all the associated neigh */
 		vty_out(vty, " Neighbors:\n");
@@ -1330,6 +1347,7 @@ int zebra_evpn_sync_mac_dp_install(zebra_mac_t *mac, bool set_inactive,
 	vlanid_t vid;
 	struct zebra_if *zif;
 	struct interface *br_ifp;
+	enum zebra_dplane_result res;
 
 	/* If the ES-EVI doesn't exist defer install. When the ES-EVI is
 	 * created we will attempt to install the mac entry again
@@ -1424,8 +1442,15 @@ int zebra_evpn_sync_mac_dp_install(zebra_mac_t *mac, bool set_inactive,
 			set_static ? "static " : "",
 			set_inactive ? "inactive " : "");
 
-	dplane_local_mac_add(ifp, br_ifp, vid, &mac->macaddr, sticky,
-			     set_static, set_inactive);
+	res = dplane_local_mac_add(ifp, br_ifp, vid, &mac->macaddr, sticky,
+				   set_static, set_inactive);
+
+	if (res == ZEBRA_DPLANE_REQUEST_QUEUED)
+		SET_FLAG(mac->flags, ZEBRA_MAC_QUEUED);
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
+		return -1;
+
 	return 0;
 }
 
@@ -2194,6 +2219,17 @@ int zebra_evpn_add_update_local_mac(struct zebra_vrf *zvrf, zebra_evpn_t *zevpn,
 				local_inactive ? "local-inactive " : "",
 				mac->flags);
 
+		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_QUEUED)) {
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"UPD local MAC - found MAC %pEA intf %s(%u) VNI %u flags %u %s - dplane update queued",
+					&mac->macaddr, ifp->name, ifp->ifindex,
+					zevpn->vni, mac->flags,
+					(CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL)
+						 ? "is_local"
+						 : ""));
+		}
+
 		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL)) {
 			struct interface *old_ifp;
 			vlanid_t old_vid;
@@ -2574,4 +2610,153 @@ void zebra_evpn_mac_svi_add(struct interface *ifp, zebra_evpn_t *zevpn)
 	new_bgp_ready = zebra_evpn_mac_is_ready_for_bgp(mac->flags);
 	zebra_evpn_mac_send_add_del_to_client(mac, old_bgp_ready,
 					      new_bgp_ready);
+}
+
+/*
+ * Handle results for MAC dataplane operations.
+ */
+void zebra_evpn_dplane_mac_result(struct zebra_dplane_ctx *ctx)
+{
+	enum dplane_op_e op;
+	enum zebra_dplane_result status;
+	zebra_evpn_t *zevpn;
+	vni_t vni;
+	ns_id_t ns_id;
+	vlanid_t vlan;
+	bool is_sticky;
+	uint32_t nhg_id;
+	uint32_t update_flags;
+	const struct in_addr *vtep_ip;
+	ifindex_t ifindex;
+	ifindex_t br_ifindex;
+	const struct ethaddr *macaddr;
+	zebra_mac_t *mac;
+	struct zebra_ns *zns;
+	struct interface *ifp;
+	struct interface *br_ifp;
+	struct interface *vx_ifp;
+	struct zebra_if *vx_zif;
+	struct zebra_vxlan_vni *vnip;
+
+	op = dplane_ctx_get_op(ctx);
+	status = dplane_ctx_get_status(ctx);
+	ns_id = dplane_ctx_get_ns_id(ctx);
+
+	vlan = dplane_ctx_mac_get_vlan(ctx);
+	is_sticky = dplane_ctx_mac_is_sticky(ctx);
+	nhg_id = dplane_ctx_mac_get_nhg_id(ctx);
+	update_flags = dplane_ctx_mac_get_update_flags(ctx);
+	macaddr = dplane_ctx_mac_get_addr(ctx);
+	vni = dplane_ctx_mac_get_vni(ctx);
+	vtep_ip = dplane_ctx_mac_get_vtep_ip(ctx);
+	br_ifindex = dplane_ctx_mac_get_br_ifindex(ctx);
+	ifindex = dplane_ctx_get_ifindex(ctx);
+
+	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL || IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug(
+			"MAC dplane handle ctx %p, op %s, NSID %u, MAC %pEA vlan %u vni %u nhg_id %u vtep_ip %pI4 br_ifindex %u update_flags %u %s, result %s",
+			ctx, dplane_op2str(op), ns_id, macaddr, vlan, vni,
+			nhg_id, vtep_ip, br_ifindex, update_flags,
+			(is_sticky ? "sticky" : ""), dplane_res2str(status));
+
+	if (op == DPLANE_OP_MAC_DELETE)
+		goto done;
+
+	if (status != ZEBRA_DPLANE_REQUEST_SUCCESS)
+		goto done;
+
+	if (!vni)
+		goto done;
+
+	zns = zebra_ns_lookup(ns_id);
+	if (!zns) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"MAC dplane handle NSID %u, MAC %pEA vlan %u vni %u nhg_id %u vtep_ip %pI4 br_ifindex %u - no ZNS found",
+				ns_id, macaddr, vlan, vni, nhg_id, vtep_ip,
+				br_ifindex);
+
+		goto done;
+	}
+
+	ifp = if_lookup_by_index_per_ns(zns, ifindex);
+	if (!ifp) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"MAC dplane handle NSID %u, MAC %pEA vlan %u vni %u nhg_id %u vtep_ip %pI4 br_ifindex %u - no interface found",
+				ns_id, macaddr, vlan, vni, nhg_id, vtep_ip,
+				br_ifindex);
+
+		goto done;
+	}
+
+	br_ifp = if_lookup_by_index_per_ns(zns, br_ifindex);
+	if (!br_ifp) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"MAC dplane handle NSID %u, MAC %pEA vlan %u vni %u nhg_id %u vtep_ip %pI4 br_ifindex %u - no bridge interface found",
+				ns_id, macaddr, vlan, vni, nhg_id, vtep_ip,
+				br_ifindex);
+
+		goto done;
+	}
+
+	zevpn = zebra_evpn_lookup(vni);
+
+	if (!zevpn)
+		goto done;
+
+	mac = zebra_evpn_mac_lookup(zevpn, (struct ethaddr *)macaddr);
+	if (!mac) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"MAC dplane handle NSID %u, MAC %pEA vlan %u vni %u nhg_id %u vtep_ip %pI4 br_ifindex %u - no mac found",
+				ns_id, macaddr, vlan, vni, nhg_id, vtep_ip,
+				br_ifindex);
+
+		goto done;
+	}
+
+	UNSET_FLAG(mac->flags, ZEBRA_MAC_QUEUED);
+
+	vx_ifp = zevpn->vxlan_if;
+	if (!vx_ifp) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"MAC dplane handle NSID %u, MAC %pEA vlan %u vni %u nhg_id %u vtep_ip %pI4 br_ifindex %u - no vxlan interface found",
+				ns_id, macaddr, vlan, vni, nhg_id, vtep_ip,
+				br_ifindex);
+
+		goto done;
+	}
+
+	vx_zif = vx_ifp->info;
+
+	if (CHECK_FLAG(update_flags, DPLANE_MAC_REMOTE) &&
+	    !CHECK_FLAG(mac->flags, ZEBRA_MAC_REMOTE)) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"MAC dplane handle NSID %u MAC %pEA (flags 0x%x) installed remote, but found local - requesting kernel state",
+				ns_id, &mac->macaddr, mac->flags);
+
+		vnip = zebra_vxlan_if_vni_find(vx_zif, vni);
+
+		if (!vnip || !vx_zif->brslave_info.br_if ||
+		    (macfdb_read_specific_mac(zns, vx_zif->brslave_info.br_if,
+					      &mac->macaddr,
+					      vnip->access_vlan) < 0)) {
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"MAC dplane handle NSID %u MAC %pEA (flags 0x%x) br_if %s(%u) access_vlan %u - kernel Mac request failure",
+					ns_id, &mac->macaddr, mac->flags,
+					(vx_zif->brslave_info.br_if)->name,
+					(vx_zif->brslave_info.br_if)->ifindex,
+					vnip->access_vlan);
+
+			goto done;
+		}
+	}
+
+done:
+	dplane_ctx_fini(&ctx);
 }

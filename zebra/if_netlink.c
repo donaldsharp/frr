@@ -2113,6 +2113,7 @@ static void vxlan_vni_state_change(struct zebra_if *zif, uint16_t id,
 				   uint8_t state)
 {
 	struct zebra_vxlan_vni *vnip;
+	vni_t vni;
 
 	vnip = zebra_vxlan_if_vlanid_vni_find(zif, id);
 
@@ -2123,6 +2124,7 @@ static void vxlan_vni_state_change(struct zebra_if *zif, uint16_t id,
 				id, zif->ifp->name);
 		return;
 	}
+	vni = vnip->vni; // lttng
 	if (zif)
 		frrtrace(3, frr_zebra, vxlan_vni_state_change, id, zif, vni,
 			 state);

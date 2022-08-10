@@ -53,10 +53,10 @@ void macfdb_read_mcast_entry_for_vni(struct zebra_ns *zns,
 	netlink_macfdb_read_mcast_for_vni(zns, ifp, vni);
 }
 
-void macfdb_read_specific_mac(struct zebra_ns *zns, struct interface *br_if,
-			      struct ethaddr *mac, vlanid_t vid)
+int macfdb_read_specific_mac(struct zebra_ns *zns, struct interface *br_if,
+			     struct ethaddr *mac, vlanid_t vid)
 {
-netlink_macfdb_read_specific_mac(zns, br_if, mac, vid);
+	return netlink_macfdb_read_specific_mac(zns, br_if, mac, vid);
 }
 
 void neigh_read(struct zebra_ns *zns)
@@ -69,9 +69,9 @@ void neigh_read_for_vlan(struct zebra_ns *zns, struct interface *vlan_if)
 	netlink_neigh_read_for_vlan(zns, vlan_if);
 }
 
-void neigh_read_specific_ip(struct ipaddr *ip, struct interface *vlan_if)
+int neigh_read_specific_ip(struct ipaddr *ip, struct interface *vlan_if)
 {
-	netlink_neigh_read_specific_ip(ip, vlan_if);
+	return netlink_neigh_read_specific_ip(ip, vlan_if);
 }
 
 void kernel_read_pbr_rules(struct zebra_ns *zns)

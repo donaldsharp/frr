@@ -88,6 +88,8 @@ struct zebra_neigh_t_ {
 	(ZEBRA_NEIGH_LOCAL | ZEBRA_NEIGH_LOCAL_INACTIVE)
 #define ZEBRA_NEIGH_ALL_PEER_FLAGS                                             \
 	(ZEBRA_NEIGH_ES_PEER_PROXY | ZEBRA_NEIGH_ES_PEER_ACTIVE)
+/* Neigh has been queued for install into the dplane */
+#define ZEBRA_NEIGH_QUEUED 0x400
 
 	enum zebra_neigh_state state;
 

@@ -91,13 +91,12 @@ extern void macfdb_read_for_bridge(struct zebra_ns *zns, struct interface *ifp,
 				   struct interface *br_if, vlanid_t vid);
 extern void macfdb_read_mcast_entry_for_vni(struct zebra_ns *zns,
 					struct interface *ifp, vni_t vni);
-extern void macfdb_read_specific_mac(struct zebra_ns *zns,
-				     struct interface *br_if,
-				     struct ethaddr *mac, vlanid_t vid);
+extern int macfdb_read_specific_mac(struct zebra_ns *zns,
+				    struct interface *br_if,
+				    struct ethaddr *mac, vlanid_t vid);
 extern void neigh_read(struct zebra_ns *zns);
 extern void neigh_read_for_vlan(struct zebra_ns *zns, struct interface *ifp);
-extern void neigh_read_specific_ip(struct ipaddr *ip,
-				   struct interface *vlan_if);
+extern int neigh_read_specific_ip(struct ipaddr *ip, struct interface *vlan_if);
 extern void route_read(struct zebra_ns *zns);
 extern int kernel_upd_mac_nh(uint32_t nh_id, struct in_addr vtep_ip);
 extern int kernel_del_mac_nh(uint32_t nh_id);

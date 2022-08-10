@@ -94,8 +94,8 @@ void macfdb_read_mcast_entry_for_vni(struct zebra_ns *zns,
 {
 }
 
-void macfdb_read_specific_mac(struct zebra_ns *zns, struct interface *br_if,
-			      struct ethaddr *mac, vlanid_t vid)
+int macfdb_read_specific_mac(struct zebra_ns *zns, struct interface *br_if,
+			     struct ethaddr *mac, vlanid_t vid)
 {
 }
 
@@ -107,7 +107,7 @@ void neigh_read_for_vlan(struct zebra_ns *zns, struct interface *vlan_if)
 {
 }
 
-void neigh_read_specific_ip(struct ipaddr *ip, struct interface *vlan_if)
+int neigh_read_specific_ip(struct ipaddr *ip, struct interface *vlan_if)
 {
 }
 

@@ -34,6 +34,7 @@
 #include "zebra/zebra_l2.h"
 #include "zebra/interface.h"
 #include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_vxlan_if.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -211,6 +212,8 @@ void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
 			      struct in_addr vtep_ip);
 void zebra_evpn_cfg_cleanup(struct hash_bucket *bucket, void *ctxt);
 
+void zebra_evpn_dplane_mac_result(struct zebra_dplane_ctx *ctx);
+void zebra_evpn_dplane_neigh_result(struct zebra_dplane_ctx *ctx);
 #ifdef __cplusplus
 }
 #endif
