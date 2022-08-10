@@ -2157,7 +2157,9 @@ static void zl3vni_get_vrr_rmac(zebra_l3vni_t *zl3vni, struct ethaddr *rmac)
 	if (!zl3vni)
 		return;
 
-	if (!is_l3vni_oper_up(zl3vni) && !is_l3svd_l3vni_oper_up(zl3vni))
+	if (zl3vni->is_l3svd && !is_l3svd_l3vni_oper_up(zl3vni))
+		return;
+	else if (!is_l3vni_oper_up(zl3vni))
 		return;
 
 	if (zl3vni->mac_vlan_if && if_is_operative(zl3vni->mac_vlan_if))
@@ -5780,7 +5782,9 @@ ifindex_t get_l3vni_vxlan_ifindex(vrf_id_t vrf_id)
 	if (!zl3vni)
 		return 0;
 
-	if (!is_l3vni_oper_up(zl3vni) && !is_l3svd_l3vni_oper_up(zl3vni))
+	if (zl3vni->is_l3svd && !is_l3svd_l3vni_oper_up(zl3vni))
+		return 0;
+	else if (!is_l3vni_oper_up(zl3vni))
 		return 0;
 
 	return zl3vni->vxlan_if->ifindex;
