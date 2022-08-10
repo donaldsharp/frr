@@ -2211,8 +2211,19 @@ static inline void zl3vni_get_vrr_rmac(struct zebra_l3vni *zl3vni,
 	if (!zl3vni)
 		return;
 
+#if 0
+	/*
+	 * This code does not exist yet, feature is not fully
+	 * baked
+	 */
+	if (zl3vni->is_l3svd && !is_l3svd_l3vni_oper_up(zl3vni))
+		return;
+	else if (!is_l3vni_oper_up(zl3vni))
+		return;
+#else
 	if (!is_l3vni_oper_up(zl3vni))
 		return;
+#endif
 
 	if (zl3vni->mac_vlan_if && if_is_operative(zl3vni->mac_vlan_if))
 		memcpy(rmac->octet, zl3vni->mac_vlan_if->hw_addr, ETH_ALEN);
@@ -5886,8 +5897,22 @@ ifindex_t get_l3vni_vxlan_ifindex(vrf_id_t vrf_id)
 	struct zebra_l3vni *zl3vni = NULL;
 
 	zl3vni = zl3vni_from_vrf(vrf_id);
+	if (!zl3vni)
+		return 0;
+
+#if 0
+	/*
+	 * This code does not exist yet because feature
+	 * is not fully baked
+	 */
+	if (zl3vni->is_l3svd && !is_l3svd_l3vni_oper_up(zl3vni))
+		return 0;
+	else if (!is_l3vni_oper_up(zl3vni))
+		return 0;
+#else
 	if (!zl3vni || !is_l3vni_oper_up(zl3vni))
 		return 0;
+#endif
 
 	return zl3vni->vxlan_if->ifindex;
 }
