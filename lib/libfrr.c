@@ -1245,6 +1245,8 @@ void frr_fini(void)
 
 	hook_call(frr_fini);
 
+	zlog_info("FRR Fini");
+
 	vty_terminate();
 	cmd_terminate();
 	nb_terminate();
