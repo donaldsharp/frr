@@ -8622,6 +8622,8 @@ void bgp_terminate(void)
 	struct listnode *node, *nnode;
 	struct listnode *mnode, *mnnode;
 
+	zlog_info("BGP Terminating");
+
 	QOBJ_UNREG(bm);
 
 	/* Close the listener sockets first as this prevents peers from
