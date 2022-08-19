@@ -1253,6 +1253,7 @@ struct peer {
 #define PEER_FLAG_ALLOWAS_IN_ORIGIN         (1 << 25) /* allowas-in origin */
 #define PEER_FLAG_SEND_LARGE_COMMUNITY      (1 << 26) /* Send large Communities */
 #define PEER_FLAG_MAX_PREFIX_OUT            (1 << 27) /* outgoing maximum prefix */
+#define PEER_FLAG_SOO                       (1 << 30) /* soo */
 
 	enum bgp_addpath_strat addpath_type[AFI_MAX][SAFI_MAX];
 
@@ -1443,6 +1444,9 @@ struct peer {
 
 	/* allowas-in. */
 	char allowas_in[AFI_MAX][SAFI_MAX];
+
+	/* soo */
+	struct ecommunity *soo[AFI_MAX][SAFI_MAX];
 
 	/* weight */
 	unsigned long weight[AFI_MAX][SAFI_MAX];
