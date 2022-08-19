@@ -208,6 +208,7 @@ extern unsigned int ecommunity_hash_make(const void *);
 extern struct ecommunity *ecommunity_str2com(const char *, int, int);
 extern char *ecommunity_ecom2str(struct ecommunity *, int, int);
 extern void ecommunity_strfree(char **s);
+extern bool ecommunity_include(struct ecommunity *e1, struct ecommunity *e2);
 extern bool ecommunity_match(const struct ecommunity *,
 			     const struct ecommunity *);
 extern char *ecommunity_str(struct ecommunity *);
