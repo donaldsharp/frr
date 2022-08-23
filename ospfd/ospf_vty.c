@@ -3134,6 +3134,12 @@ static int show_ip_ospf_common(struct vty *vty, struct ospf *ospf,
 		/* Show refresh parameters. */
 		json_object_int_add(json_vrf, "refreshTimerMsecs",
 				    ospf->lsa_refresh_interval * 1000);
+
+		/* show administrative distance */
+		json_object_int_add(json_vrf, "preference",
+				    ospf->distance_all
+					    ? ospf->distance_all
+					    : ZEBRA_OSPF_DISTANCE_DEFAULT);
 	} else {
 		vty_out(vty, " SPF timer %s%s\n",
 			(ospf->t_spf_calc ? "due in " : "is "),
@@ -3152,6 +3158,11 @@ static int show_ip_ospf_common(struct vty *vty, struct ospf *ospf,
 		/* Show refresh parameters. */
 		vty_out(vty, " Refresh timer %d secs\n",
 			ospf->lsa_refresh_interval);
+
+		/* show administrative distance */
+		vty_out(vty, " Administrative distance %u\n",
+			ospf->distance_all ? ospf->distance_all
+					   : ZEBRA_OSPF_DISTANCE_DEFAULT);
 	}
 
 	/* Show ABR/ASBR flags. */
@@ -4232,6 +4243,16 @@ static void show_ip_ospf_neighbor_sub(struct vty *vty,
 						    nbr->priority);
 				json_object_string_add(json_neighbor, "state",
 						       msgbuf);
+				json_object_string_add(
+					json_neighbor, "converged",
+					lookup_msg(ospf_nsm_state_msg,
+						   nbr->state, NULL));
+				json_object_string_add(
+					json_neighbor, "role",
+					lookup_msg(ospf_ism_state_msg,
+						   ospf_nbr_ism_state(nbr),
+						   NULL));
+
 				json_object_int_add(json_neighbor,
 						    "deadTimeMsecs",
 						    time_store);
@@ -8980,8 +9001,8 @@ static void show_ip_ospf_route_network(struct vty *vty, struct ospf *ospf,
 		memset(buf1, 0, sizeof(buf1));
 		prefix2str(&rn->p, buf1, sizeof(buf1));
 
-		json_route = json_object_new_object();
 		if (json) {
+			json_route = json_object_new_object();
 			json_object_object_add(json, buf1, json_route);
 			json_object_to_json_string_ext(
 				json, JSON_C_TO_STRING_NOSLASHESCAPE);
@@ -9100,8 +9121,6 @@ static void show_ip_ospf_route_network(struct vty *vty, struct ospf *ospf,
 				}
 			}
 		}
-		if (!json)
-			json_object_free(json_route);
 	}
 	if (!json)
 		vty_out(vty, "\n");
@@ -9128,8 +9147,8 @@ static void show_ip_ospf_route_router(struct vty *vty, struct ospf *ospf,
 			continue;
 		int flag = 0;
 
-		json_route = json_object_new_object();
 		if (json) {
+			json_route = json_object_new_object();
 			json_object_object_add(json, inet_ntoa(rn->p.u.prefix4),
 					       json_route);
 			json_object_string_add(json_route, "routeType", "R ");
@@ -9239,8 +9258,6 @@ static void show_ip_ospf_route_router(struct vty *vty, struct ospf *ospf,
 				}
 			}
 		}
-		if (!json)
-			json_object_free(json_route);
 	}
 	if (!json)
 		vty_out(vty, "\n");
@@ -9269,8 +9286,8 @@ static void show_ip_ospf_route_external(struct vty *vty, struct ospf *ospf,
 
 		snprintf(buf1, sizeof(buf1), "%s/%d",
 			 inet_ntoa(rn->p.u.prefix4), rn->p.prefixlen);
-		json_route = json_object_new_object();
 		if (json) {
+			json_route = json_object_new_object();
 			json_object_object_add(json, buf1, json_route);
 			json_object_to_json_string_ext(
 				json, JSON_C_TO_STRING_NOSLASHESCAPE);
@@ -9283,6 +9300,8 @@ static void show_ip_ospf_route_external(struct vty *vty, struct ospf *ospf,
 						       "N E1");
 				json_object_int_add(json_route, "cost",
 						    er->cost);
+				json_object_int_add(json_route, "tag",
+						    er->u.ext.tag);
 			} else {
 				vty_out(vty,
 					"N E1 %-18s    [%d] tag: %" ROUTE_TAG_PRI
@@ -9296,6 +9315,10 @@ static void show_ip_ospf_route_external(struct vty *vty, struct ospf *ospf,
 						       "N E2");
 				json_object_int_add(json_route, "cost",
 						    er->cost);
+				json_object_int_add(json_route, "type2cost",
+						    er->u.ext.type2_cost);
+				json_object_int_add(json_route, "tag",
+						    er->u.ext.tag);
 			} else {
 				vty_out(vty,
 					"N E2 %-18s    [%d/%d] tag: %" ROUTE_TAG_PRI
@@ -9363,8 +9386,6 @@ static void show_ip_ospf_route_external(struct vty *vty, struct ospf *ospf,
 				}
 			}
 		}
-		if (!json)
-			json_object_free(json_route);
 	}
 	if (!json)
 		vty_out(vty, "\n");
