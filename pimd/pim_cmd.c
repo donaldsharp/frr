@@ -1327,8 +1327,13 @@ static void igmp_show_statistics(struct pim_instance *pim, struct vty *vty,
 {
 	struct interface *ifp;
 	struct igmp_stats rx_stats;
+	bool found_ifname = false;
+	json_object *json = NULL;
 
 	igmp_stats_init(&rx_stats);
+
+	if (uj)
+		json = json_object_new_object();
 
 	FOR_ALL_INTERFACES (pim->vrf, ifp) {
 		struct pim_interface *pim_ifp;
@@ -1343,24 +1348,30 @@ static void igmp_show_statistics(struct pim_instance *pim, struct vty *vty,
 		if (ifname && strcmp(ifname, ifp->name))
 			continue;
 
+		found_ifname = true;
+
 		for (ALL_LIST_ELEMENTS_RO(pim_ifp->igmp_socket_list, sock_node,
 					  igmp)) {
 			igmp_stats_add(&rx_stats, &igmp->rx_stats);
 		}
 	}
+	if (!found_ifname) {
+		if (uj)
+			vty_json(vty, json);
+		else
+			vty_out(vty, "%% No such interface\n");
+		return;
+	}
+
 	if (uj) {
-		json_object *json = NULL;
-		json_object *json_row = NULL;
+		json_object *json_row = json_object_new_object();
 
-		json = json_object_new_object();
-		json_row = json_object_new_object();
-
-		json_object_string_add(json_row, "name", ifname ? ifname :
-				       "global");
+		json_object_string_add(json_row, "name",
+				       ifname ? ifname : "global");
 		json_object_int_add(json_row, "queryV1", rx_stats.query_v1);
 		json_object_int_add(json_row, "queryV2", rx_stats.query_v2);
 		json_object_int_add(json_row, "queryV3", rx_stats.query_v3);
-		json_object_int_add(json_row, "leaveV3", rx_stats.leave_v2);
+		json_object_int_add(json_row, "leaveV2", rx_stats.leave_v2);
 		json_object_int_add(json_row, "reportV1", rx_stats.report_v1);
 		json_object_int_add(json_row, "reportV2", rx_stats.report_v2);
 		json_object_int_add(json_row, "reportV3", rx_stats.report_v3);
