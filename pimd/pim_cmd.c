@@ -84,6 +84,16 @@ static struct cmd_node debug_node = {
 	.config_write = pim_debug_config_write,
 };
 
+struct vty_pnc_cache_walk_data {
+	struct vty *vty;
+	struct pim_instance *pim;
+};
+
+struct json_pnc_cache_walk_data {
+	json_object *json_obj;
+	struct pim_instance *pim;
+};
+
 static struct vrf *pim_cmd_lookup_vrf(struct vty *vty, struct cmd_token *argv[],
 				      const int argc, int *idx)
 {
@@ -1530,10 +1540,10 @@ static void pim_show_interface_traffic(struct pim_instance *pim,
 					    pim_ifp->pim_ifstat_join_recv);
 			json_object_int_add(json_row, "joinTx",
 					    pim_ifp->pim_ifstat_join_send);
-			json_object_int_add(json_row, "pruneTx",
-					    pim_ifp->pim_ifstat_prune_send);
 			json_object_int_add(json_row, "pruneRx",
 					    pim_ifp->pim_ifstat_prune_recv);
+			json_object_int_add(json_row, "pruneTx",
+					    pim_ifp->pim_ifstat_prune_send);
 			json_object_int_add(json_row, "registerRx",
 					    pim_ifp->pim_ifstat_reg_recv);
 			json_object_int_add(json_row, "registerTx",
@@ -1626,6 +1636,10 @@ static void pim_show_interface_traffic_single(struct pim_instance *pim,
 					    pim_ifp->pim_ifstat_join_recv);
 			json_object_int_add(json_row, "joinTx",
 					    pim_ifp->pim_ifstat_join_send);
+			json_object_int_add(json_row, "pruneRx",
+					    pim_ifp->pim_ifstat_prune_recv);
+			json_object_int_add(json_row, "pruneTx",
+					    pim_ifp->pim_ifstat_prune_send);
 			json_object_int_add(json_row, "registerRx",
 					    pim_ifp->pim_ifstat_reg_recv);
 			json_object_int_add(json_row, "registerTx",
@@ -3611,15 +3625,24 @@ static void igmp_show_group_retransmission(struct pim_instance *pim,
 	}		  /* scan interfaces */
 }
 
-static void igmp_show_sources(struct pim_instance *pim, struct vty *vty)
+static void igmp_show_sources(struct pim_instance *pim, struct vty *vty,
+			      bool uj)
 {
 	struct interface *ifp;
 	time_t now;
+	json_object *json = NULL;
+	json_object *json_iface = NULL;
+	json_object *json_group = NULL;
+	json_object *json_source = NULL;
+	json_object *json_sources = NULL;
 
 	now = pim_time_monotonic_sec();
 
-	vty_out(vty,
-		"Interface        Address         Group           Source          Timer Fwd Uptime  \n");
+	if (uj)
+		json = json_object_new_object();
+	else
+		vty_out(vty,
+			"Interface        Address         Group           Source          Timer Fwd Uptime  \n");
 
 	/* scan interfaces */
 	FOR_ALL_INTERFACES (pim->vrf, ifp) {
@@ -3669,16 +3692,73 @@ static void igmp_show_sources(struct pim_instance *pim, struct vty *vty)
 					pim_time_uptime(
 						uptime, sizeof(uptime),
 						now - src->source_creation);
-
-					vty_out(vty,
-						"%-16s %-15s %-15s %-15s %5s %3s %8s\n",
-						ifp->name, ifaddr_str,
-						group_str, source_str, mmss,
-						IGMP_SOURCE_TEST_FORWARDING(
-							src->source_flags)
-							? "Y"
-							: "N",
-						uptime);
+					if (uj) {
+						json_object_object_get_ex(
+							json, ifp->name,
+							&json_iface);
+						if (!json_iface) {
+							json_iface =
+								json_object_new_object();
+							json_object_string_add(
+								json_iface,
+								"name",
+								ifp->name);
+							json_object_object_add(
+								json, ifp->name,
+								json_iface);
+						}
+						json_object_object_get_ex(
+							json_iface, group_str,
+							&json_group);
+						if (!json_group) {
+							json_group =
+								json_object_new_object();
+							json_object_string_add(
+								json_group,
+								"group",
+								group_str);
+							json_object_object_add(
+								json_iface,
+								group_str,
+								json_group);
+							json_sources =
+								json_object_new_array();
+							json_object_object_add(
+								json_group,
+								"sources",
+								json_sources);
+						}
+						json_source =
+							json_object_new_object();
+						json_object_string_add(
+							json_source, "source",
+							source_str);
+						json_object_string_add(
+							json_source, "timer",
+							mmss);
+						json_object_boolean_add(
+							json_source,
+							"forwarded",
+							IGMP_SOURCE_TEST_FORWARDING(
+								src->source_flags));
+						json_object_string_add(
+							json_source, "uptime",
+							uptime);
+						json_object_array_add(
+							json_sources,
+							json_source);
+					} else {
+						vty_out(vty,
+							"%-16s %-15s %-15s %-15s %5s %3s %8s\n",
+							ifp->name, ifaddr_str,
+							group_str, source_str,
+							mmss,
+							IGMP_SOURCE_TEST_FORWARDING(
+								src->source_flags)
+								? "Y"
+								: "N",
+							uptime);
+					}
 
 				} /* scan group sources */
 			}	 /* scan igmp groups */
@@ -3743,6 +3823,109 @@ static void igmp_show_source_retransmission(struct pim_instance *pim,
 			}	 /* scan igmp groups */
 		}		  /* scan igmp sockets */
 	}			  /* scan interfaces */
+}
+
+static int pim_print_vty_pnc_cache_walkcb(struct hash_bucket *bucket, void *arg)
+{
+	struct pim_nexthop_cache *pnc = bucket->data;
+	struct vty_pnc_cache_walk_data *cwd = arg;
+	struct vty *vty = cwd->vty;
+	struct pim_instance *pim = cwd->pim;
+	struct nexthop *nh_node = NULL;
+	ifindex_t first_ifindex;
+	struct interface *ifp = NULL;
+	char buf[PREFIX_STRLEN];
+
+	for (nh_node = pnc->nexthop; nh_node; nh_node = nh_node->next) {
+		first_ifindex = nh_node->ifindex;
+		ifp = if_lookup_by_index(first_ifindex, pim->vrf->vrf_id);
+
+		vty_out(vty, "%-15s ",
+			inet_ntop(AF_INET, &pnc->rpf.rpf_addr.u.prefix4, buf,
+				  sizeof(buf)));
+		vty_out(vty, "%-16s ", ifp ? ifp->name : "NULL");
+		vty_out(vty, "%pI4 ", &nh_node->gate.ipv4);
+		vty_out(vty, "\n");
+	}
+	return CMD_SUCCESS;
+}
+
+static int pim_print_json_pnc_cache_walkcb(struct hash_bucket *backet,
+					   void *arg)
+{
+	struct pim_nexthop_cache *pnc = backet->data;
+	struct json_pnc_cache_walk_data *cwd = arg;
+	struct pim_instance *pim = cwd->pim;
+	struct nexthop *nh_node = NULL;
+	ifindex_t first_ifindex;
+	struct interface *ifp = NULL;
+	char buf[PREFIX_STRLEN];
+	json_object *json_row = NULL;
+	json_object *json_ifp = NULL;
+	json_object *json_arr = NULL;
+
+	for (nh_node = pnc->nexthop; nh_node; nh_node = nh_node->next) {
+		first_ifindex = nh_node->ifindex;
+		ifp = if_lookup_by_index(first_ifindex, pim->vrf->vrf_id);
+		json_object_object_get_ex(
+			cwd->json_obj,
+			inet_ntop(AF_INET, &pnc->rpf.rpf_addr.u.prefix4, buf,
+				  sizeof(buf)),
+			&json_row);
+		if (!json_row) {
+			json_row = json_object_new_object();
+			json_object_string_add(
+				json_row, "address",
+				inet_ntop(AF_INET, &pnc->rpf.rpf_addr.u.prefix4,
+					  buf, sizeof(buf)));
+			json_object_object_add(
+				cwd->json_obj,
+				inet_ntop(AF_INET, &pnc->rpf.rpf_addr.u.prefix4,
+					  buf, sizeof(buf)),
+				json_row);
+			json_arr = json_object_new_array();
+			json_object_object_add(json_row, "nextHops", json_arr);
+		}
+		json_ifp = json_object_new_object();
+		json_object_string_add(json_ifp, "interface",
+				       ifp ? ifp->name : "NULL");
+		json_object_string_add(json_ifp, "nexthop",
+				       inet_ntop(AF_INET, &nh_node->gate.ipv4,
+						 buf, sizeof(buf)));
+		json_object_array_add(json_arr, json_ifp);
+	}
+	return CMD_SUCCESS;
+}
+
+static void pim_show_nexthop_json(struct pim_instance *pim, struct vty *vty,
+				  bool uj)
+{
+	struct vty_pnc_cache_walk_data cwd;
+	struct json_pnc_cache_walk_data jcwd;
+
+	cwd.vty = vty;
+	cwd.pim = pim;
+	jcwd.pim = pim;
+
+	if (uj) {
+		jcwd.json_obj = json_object_new_object();
+	} else {
+		vty_out(vty, "Number of registered addresses: %lu\n",
+			pim->rpf_hash->count);
+		vty_out(vty, "Address         Interface        Nexthop\n");
+		vty_out(vty, "---------------------------------------------\n");
+	}
+
+	if (uj) {
+		hash_walk(pim->rpf_hash, pim_print_json_pnc_cache_walkcb,
+			  &jcwd);
+		vty_out(vty, "%s\n",
+			json_object_to_json_string_ext(
+				jcwd.json_obj, JSON_C_TO_STRING_PRETTY));
+		json_object_free(jcwd.json_obj);
+	} else {
+		hash_walk(pim->rpf_hash, pim_print_vty_pnc_cache_walkcb, &cwd);
+	}
 }
 
 static void pim_show_bsr(struct pim_instance *pim,
@@ -4258,12 +4441,13 @@ DEFUN (show_ip_igmp_groups_retransmissions,
 
 DEFUN (show_ip_igmp_sources,
        show_ip_igmp_sources_cmd,
-       "show ip igmp [vrf NAME] sources",
+       "show ip igmp [vrf NAME] sources [json]",
        SHOW_STR
        IP_STR
        IGMP_STR
        VRF_CMD_HELP_STR
-       IGMP_SOURCE_STR)
+       IGMP_SOURCE_STR
+       JSON_STR)
 {
 	int idx = 2;
 	struct vrf *vrf = pim_cmd_lookup_vrf(vty, argv, argc, &idx);
@@ -4271,7 +4455,7 @@ DEFUN (show_ip_igmp_sources,
 	if (!vrf)
 		return CMD_WARNING;
 
-	igmp_show_sources(vrf->info, vty);
+	igmp_show_sources(vrf->info, vty, use_json(argc, argv));
 
 	return CMD_SUCCESS;
 }
@@ -5457,12 +5641,13 @@ DEFUN (show_ip_pim_rpf_vrf_all,
 
 DEFUN (show_ip_pim_nexthop,
        show_ip_pim_nexthop_cmd,
-       "show ip pim [vrf NAME] nexthop",
+       "show ip pim [vrf NAME] nexthop [json]",
        SHOW_STR
        IP_STR
        PIM_STR
        VRF_CMD_HELP_STR
-       "PIM cached nexthop rpf information\n")
+       "PIM cached nexthop rpf information\n"
+       JSON_STR)
 {
 	int idx = 2;
 	struct vrf *vrf = pim_cmd_lookup_vrf(vty, argv, argc, &idx);
@@ -5470,7 +5655,7 @@ DEFUN (show_ip_pim_nexthop,
 	if (!vrf)
 		return CMD_WARNING;
 
-	pim_show_nexthop(vrf->info, vty);
+	pim_show_nexthop_json(vrf->info, vty, use_json(argc, argv));
 
 	return CMD_SUCCESS;
 }
