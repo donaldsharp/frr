@@ -141,20 +141,26 @@ Showing ip prefix-list
 ----------------------
 
 .. index:: show ip prefix-list
-.. clicmd:: show ip prefix-list
+.. clicmd:: show ip prefix-list [json]
 
    Display all IP prefix lists.
 
+   If the ``json`` option is specified, output is displayed in JSON format.
+
 .. index:: show ip prefix-list NAME
-.. clicmd:: show ip prefix-list NAME
+.. clicmd:: show ip prefix-list NAME [json]
 
    Show IP prefix list can be used with a prefix list name.
 
+   If the ``json`` option is specified, output is displayed in JSON format.
+
 .. index:: show ip prefix-list NAME seq NUM
-.. clicmd:: show ip prefix-list NAME seq NUM
+.. clicmd:: show ip prefix-list NAME seq NUM [json]
 
    Show IP prefix list can be used with a prefix list name and sequential
    number.
+
+   If the ``json`` option is specified, output is displayed in JSON format.
 
 .. index:: show ip prefix-list NAME A.B.C.D/M
 .. clicmd:: show ip prefix-list NAME A.B.C.D/M
@@ -168,13 +174,13 @@ Showing ip prefix-list
 .. index:: show ip prefix-list NAME A.B.C.D/M first-match
 .. clicmd:: show ip prefix-list NAME A.B.C.D/M first-match
 .. index:: show ip prefix-list summary
-.. clicmd:: show ip prefix-list summary
+.. clicmd:: show ip prefix-list summary [json]
 .. index:: show ip prefix-list summary NAME
-.. clicmd:: show ip prefix-list summary NAME
+.. clicmd:: show ip prefix-list summary NAME [json]
 .. index:: show ip prefix-list detail
-.. clicmd:: show ip prefix-list detail
+.. clicmd:: show ip prefix-list detail [json]
 .. index:: show ip prefix-list detail NAME
-.. clicmd:: show ip prefix-list detail NAME
+.. clicmd:: show ip prefix-list detail NAME [json]
 
 Clear counter of ip prefix-list
 -------------------------------
