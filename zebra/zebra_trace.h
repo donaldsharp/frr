@@ -198,7 +198,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, netlink_neigh_update_msg_encode, TRACE_INFO)
       netlink_route_multipath_msg_encode,
       TP_ARGS(const struct prefix *, p, int, cmd,
 	uint32_t, nhg_id,
-        char *, nexthop, size_t , datalen),
+        const char *, nexthop, size_t , datalen),
       TP_FIELDS(
         ctf_string(family, (p->family == AF_INET) ? "AF_INET" : "AF_INET6")
 	      ctf_array(unsigned char, pfx, p, sizeof(struct prefix))
@@ -216,7 +216,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, netlink_route_multipath_msg_encode, TRACE_INFO)
       frr_zebra,
       netlink_nexthop_msg_encode,
       TP_ARGS(const struct nexthop *, nh, uint32_t, nhg_id, char *, label_buf,
-        char *, nexthop),
+        const char *, nexthop),
       TP_FIELDS(
         ctf_integer(uint32_t, nh_index, nh->ifindex)
         ctf_integer(uint32_t, nh_vrfid, nh->vrf_id)
@@ -232,7 +232,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, netlink_nexthop_msg_encode, TRACE_INFO)
       frr_zebra,
       zsend_redistribute_route,
       TP_ARGS(uint32_t, cmd, struct zserv *, client, struct zapi_route, api,
-        char *, nexthop),
+        const char *, nexthop),
       TP_FIELDS(
         ctf_string(cmd, zserv_command_string(cmd))
         ctf_string(client_proto, zebra_route_string(client->proto))
@@ -552,7 +552,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_process_sync_macip_add, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       zread_route_add,
-      TP_ARGS(struct zapi_route, api, char *, pfx, vrf_id_t , vrf_id, char *, nexthop),
+      TP_ARGS(struct zapi_route, api, char *, pfx, vrf_id_t , vrf_id, const char *, nexthop),
       TP_FIELDS(
         ctf_integer(int, api_flag, api.flags)
         ctf_integer(int, api_msg, api.message)
@@ -584,7 +584,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zread_route_del, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       zread_nhg_add,
-      TP_ARGS(uint32_t, id, uint16_t, proto, struct nexthop_group *,nhg, char *, nexthop),
+      TP_ARGS(uint32_t, id, uint16_t, proto, struct nexthop_group *,nhg, const char *, nexthop),
       TP_FIELDS(
         ctf_integer(uint32_t, id, id)
         ctf_integer(uint16_t, proto, proto)

@@ -154,6 +154,8 @@ nexthop_group_active_nexthop_num_no_recurse(const struct nexthop_group *nhg);
 
 extern bool nexthop_group_has_label(const struct nexthop_group *nhg);
 
+const char *nexthop_group2str(const struct nexthop_group *nhg, char *str,
+			      int size);
 #ifdef __cplusplus
 }
 #endif

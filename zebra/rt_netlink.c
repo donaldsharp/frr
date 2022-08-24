@@ -1934,10 +1934,10 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 	     && /* CUMULUS ONLY */ !nexthop_group_has_label(
 		     dplane_ctx_get_ng(ctx)))
 	    || (fpm && force_nhg)) {
-		char buf[2];
+		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+		const struct nexthop_group *ctxnhg = dplane_ctx_get_ng(ctx);
 		uint32_t nhg_id;
 
-		buf[0] = '\0';
 		nhg_id = dplane_ctx_get_nhe_id(ctx);
 
 		/* Kernel supports nexthop objects */
@@ -1968,8 +1968,12 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 					return 0;
 			}
 		}
-		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p,
-			 cmd, nhg_id, buf, datalen);
+		if (p) {
+			frrtrace(4, frr_zebra,
+				 netlink_route_multipath_msg_encode, p, cmd, 0,
+				 nexthop_group2str(ctxnhg, buf, sizeof(buf)),
+				 datalen);
+		}
 
 		return NLMSG_ALIGN(req->n.nlmsg_len);
 	}
@@ -2143,16 +2147,10 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 
 	if (p && nexthop) {
 		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
-		char buf1[NEXTHOP_STRLEN + 2];
-		buf[0] = '\0';
-		struct nexthop *tnexthop;
-		for (tnexthop = nexthop; tnexthop; tnexthop = tnexthop->next) {
-			nexthop2str(tnexthop, buf1, sizeof(buf1));
-			strlcat(buf, buf1, sizeof(buf));
-			strlcat(buf, " ", sizeof(buf));
-		}
+		const struct nexthop_group *ctxnhg = dplane_ctx_get_ng(ctx);
 		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p,
-			 cmd, 0, buf, datalen);
+			 cmd, 0, nexthop_group2str(ctxnhg, buf, sizeof(buf)),
+			 datalen);
 	}
 
 	return NLMSG_ALIGN(req->n.nlmsg_len);
@@ -2468,19 +2466,14 @@ nexthop_done:
 			if (nh) {
 				char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) +
 					 1];
-				char buf1[NEXTHOP_STRLEN + 2];
+				const struct nexthop_group *ctxnhg =
+					dplane_ctx_get_ng(ctx);
 				buf[0] = '\0';
-				const struct nexthop *tnexthop;
-				for (tnexthop = nh; tnexthop;
-				     tnexthop = tnexthop->next) {
-					nexthop2str(tnexthop, buf1,
-						    sizeof(buf1));
-					strlcat(buf, buf1, sizeof(buf));
-					strlcat(buf, " ", sizeof(buf));
-				}
 				frrtrace(4, frr_zebra,
 					 netlink_nexthop_msg_encode, nh, id,
-					 label_buf, buf);
+					 label_buf,
+					 nexthop_group2str(ctxnhg, buf,
+							   sizeof(buf)));
 			}
 }
 

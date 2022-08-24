@@ -1369,3 +1369,29 @@ void nexthop_group_init(void (*new)(const char *name),
 	if (delete)
 		nhg_hooks.delete = delete;
 }
+/*
+ * Copy the list of nexthops into a string.
+ * nexthop2str() adds interface index.
+ */
+const char *nexthop_group2str(const struct nexthop_group *nhg, char *str,
+			      int size)
+{
+	char buf[NEXTHOP_STRLEN + 2];
+	struct nexthop *tnexthop = NULL;
+
+	str[0] == '\0';
+	if (!nhg || !nhg->nexthop) {
+		return str;
+	}
+
+	buf[0] = '\0';
+	for (tnexthop = nhg->nexthop; tnexthop; tnexthop = tnexthop->next) {
+		nexthop2str(tnexthop, buf, sizeof(buf));
+		if (strlcat(str, buf, size) >= size)
+			break;
+		/*whitespace between each nexthop+idx*/
+		if (strlcat(str, " ", size) >= size)
+			break;
+	}
+	return str;
+}
