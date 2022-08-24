@@ -4241,7 +4241,9 @@ static int peer_flag_modify(struct peer *peer, uint32_t flag, int set)
 			if (set) {
 				bgp_zebra_initiate_radv(peer->bgp, peer);
 			} else if (peer_group_active(peer)) {
-				if (!CHECK_FLAG(peer->group->conf->flags, flag))
+				if (!CHECK_FLAG(peer->group->conf->flags,
+						flag) &&
+				    !peer->conf_if)
 					bgp_zebra_terminate_radv(peer->bgp,
 								 peer);
 			} else
@@ -4279,7 +4281,7 @@ static int peer_flag_modify(struct peer *peer, uint32_t flag, int set)
 		/* Update flag on peer-group member. */
 		COND_FLAG(member->flags, flag, set != member_invert);
 
-		if (flag == PEER_FLAG_CAPABILITY_ENHE)
+		if (flag == PEER_FLAG_CAPABILITY_ENHE && !member->conf_if)
 			set ? bgp_zebra_initiate_radv(member->bgp, member)
 			    : bgp_zebra_terminate_radv(member->bgp, member);
 
@@ -7457,19 +7459,20 @@ void bgp_terminate(void)
 	 * of a large number of peers this will ensure that no peer is left with
 	 * a dangling connection
 	 */
-	/* reverse bgp_master_init */
 	bgp_close();
-
-	if (bm->listen_sockets)
-		list_delete(&bm->listen_sockets);
-
-	for (ALL_LIST_ELEMENTS(bm->bgp, mnode, mnnode, bgp))
+	/* reverse bgp_master_init */
+	for (ALL_LIST_ELEMENTS(bm->bgp, mnode, mnnode, bgp)) {
+		bgp_close_vrf_socket(bgp);
 		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
 			if (peer->status == Established
 			    || peer->status == OpenSent
 			    || peer->status == OpenConfirm)
 				bgp_notify_send(peer, BGP_NOTIFY_CEASE,
 						BGP_NOTIFY_CEASE_PEER_UNCONFIG);
+	}
+
+	if (bm->listen_sockets)
+		list_delete(&bm->listen_sockets);
 
 	if (bm->process_main_queue)
 		work_queue_free_and_null(&bm->process_main_queue);
