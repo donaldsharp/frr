@@ -2149,6 +2149,7 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 		for (tnexthop = nexthop; tnexthop; tnexthop = tnexthop->next) {
 			nexthop2str(tnexthop, buf1, sizeof(buf1));
 			strlcat(buf, buf1, sizeof(buf));
+			strlcat(buf, " ", sizeof(buf));
 		}
 		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p,
 			 cmd, 0, buf, datalen);
