@@ -2194,7 +2194,7 @@ static void if_dump_vty_json(struct vty *vty, struct interface *ifp,
 		json_object_string_add(json_if, "lastLinkDown",
 				       zebra_if->down_last);
 
-	zebra_ptm_show_status(vty, json, ifp);
+	zebra_ptm_show_status(vty, json_if, ifp);
 
 	vrf = vrf_lookup_by_id(ifp->vrf_id);
 	json_object_string_add(json_if, "vrfName", vrf->name);
