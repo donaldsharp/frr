@@ -116,6 +116,9 @@ int quagga_sigevent_process(void)
 #endif /* SIGEVENT_BLOCK_SIGNALS */
 
 	if (sigmaster.caught > 0) {
+
+		zlog_info("%s: calling daemon handlers", __func__);
+
 		sigmaster.caught = 0;
 		/* must not read or set sigmaster.caught after here,
 		 * race condition with per-sig caught flags if one does
