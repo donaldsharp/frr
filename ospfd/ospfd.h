@@ -20,6 +20,8 @@
 #include "ospf_memory.h"
 #include "ospf_dump_api.h"
 
+#include "orr_msg.h"
+
 #define OSPF_VERSION            2
 
 /* IP TTL for OSPF protocol. */
@@ -435,6 +437,9 @@ struct ospf {
 
 	/* Per-interface write socket */
 	bool intf_socket_enabled;
+	/* BGP ORR Root node list */
+	uint32_t orr_spf_request;
+	struct list *orr_root[AFI_MAX][SAFI_MAX];
 
 	QOBJ_FIELDS;
 };
@@ -631,6 +636,9 @@ struct ospf_area {
 	uint32_t full_vls;  /* Fully adjacent virtual neighbors. */
 
 	struct ospf_area_fr_info fr_info; /* Flood reduction info. */
+
+	/* BGP-ORR Received LSAs */
+	struct ospf_lsa *router_lsa_rcvd;
 };
 
 /* OSPF config network structure. */

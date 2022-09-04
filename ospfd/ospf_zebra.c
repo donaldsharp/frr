@@ -39,6 +39,7 @@
 #include "ospfd/ospf_te.h"
 #include "ospfd/ospf_sr.h"
 #include "ospfd/ospf_ldp_sync.h"
+#include "ospfd/ospf_orr.h"
 
 DEFINE_MTYPE_STATIC(OSPFD, OSPF_EXTERNAL, "OSPF External route table");
 DEFINE_MTYPE_STATIC(OSPFD, OSPF_REDISTRIBUTE, "OSPF Redistriute");
@@ -2107,6 +2108,7 @@ static void ospf_zebra_connected(struct zclient *zclient)
 			continue;
 		(void)ospf_zebra_gr_enable(ospf, ospf->gr_info.grace_period);
 	}
+	zclient_register_opaque(zclient, ORR_IGP_METRIC_REGISTER);
 }
 
 /*
@@ -2119,6 +2121,7 @@ static int ospf_opaque_msg_handler(ZAPI_CALLBACK_ARGS)
 	struct ldp_igp_sync_if_state state;
 	struct ldp_igp_sync_announce announce;
 	struct zapi_opaque_reg_info dst;
+	struct orr_igp_metric_reg orr_reg;
 	int ret = 0;
 
 	s = zclient->ibuf;
@@ -2141,6 +2144,10 @@ static int ospf_opaque_msg_handler(ZAPI_CALLBACK_ARGS)
 	case LDP_IGP_SYNC_ANNOUNCE_UPDATE:
 		STREAM_GET(&announce, s, sizeof(announce));
 		ret = ospf_ldp_sync_announce_update(announce);
+		break;
+	case ORR_IGP_METRIC_REGISTER:
+		STREAM_GET(&orr_reg, s, sizeof(orr_reg));
+		ret = ospf_orr_igp_metric_register(orr_reg);
 		break;
 	default:
 		break;
