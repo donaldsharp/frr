@@ -87,6 +87,8 @@ enum zserv_client_capabilities {
 extern struct sockaddr_storage zclient_addr;
 extern socklen_t zclient_addr_len;
 
+#define ZAPI_ORR_FLAG_UNICAST 0x01
+
 /* Zebra message types. Please update the corresponding
  * command_types array with any changes!
  */
@@ -1320,6 +1322,10 @@ enum zapi_opaque_registry {
 	LDP_RLFA_UNREGISTER_ALL = 8,
 	/* Announce LDP labels associated to a previously registered RLFA */
 	LDP_RLFA_LABELS = 9,
+	/* Register for IGP METRIC with OSPF/ISIS */
+	ORR_IGP_METRIC_REGISTER = 10,
+	/* Send SPF data to BGP */
+	ORR_IGP_METRIC_UPDATE = 11
 };
 
 /* Send the hello message.
