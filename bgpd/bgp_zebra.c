@@ -54,11 +54,14 @@
 #include "bgpd/bgp_trace.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_lcommunity.h"
+#include "bgpd/bgp_orr.h"
 
 /* All information about zebra. */
 struct zclient *zclient = NULL;
 struct zclient *zclient_sync;
 static bool bgp_zebra_label_manager_connect(void);
+
+static int bgp_opaque_msg_handler(ZAPI_CALLBACK_ARGS);
 
 /* hook to indicate vrf status change for SNMP */
 DEFINE_HOOK(bgp_vrf_status_changed, (struct bgp *bgp, struct interface *ifp),
@@ -3377,6 +3380,7 @@ static zclient_handler *const bgp_handlers[] = {
 	[ZEBRA_SRV6_LOCATOR_DELETE] = bgp_zebra_process_srv6_locator_delete,
 	[ZEBRA_SRV6_MANAGER_GET_LOCATOR_CHUNK] =
 		bgp_zebra_process_srv6_locator_chunk,
+	[ZEBRA_OPAQUE_MESSAGE] = bgp_opaque_msg_handler,
 };
 
 static int bgp_if_new_hook(struct interface *ifp)
@@ -3992,4 +3996,34 @@ void bgp_zebra_release_label_range(uint32_t start, uint32_t end)
 	ret = lm_release_label_chunk(zclient_sync, start, end);
 	if (ret < 0)
 		zlog_warn("%s: error releasing label range!", __func__);
+}
+/*
+ * ORR messages between processes
+ */
+static int bgp_opaque_msg_handler(ZAPI_CALLBACK_ARGS)
+{
+	struct stream *s;
+	struct zapi_opaque_msg info;
+	struct orr_igp_metric_info table;
+	int ret = 0;
+
+	s = zclient->ibuf;
+
+	if (zclient_opaque_decode(s, &info) != 0) {
+		bgp_orr_debug("%s: opaque decode failed", __func__);
+		return -1;
+	}
+
+	switch (info.type) {
+	case ORR_IGP_METRIC_UPDATE:
+		STREAM_GET(&table, s, sizeof(table));
+		ret = bgg_orr_message_process(BGP_ORR_IMSG_IGP_METRIC_UPDATE,
+					      (void *)&table);
+		break;
+	default:
+		break;
+	}
+
+stream_failure:
+	return ret;
 }

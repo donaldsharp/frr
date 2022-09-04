@@ -79,6 +79,7 @@
 #include "bgpd/bgp_evpn_mh.h"
 #include "bgpd/bgp_mac.h"
 #include "bgp_trace.h"
+#include "bgpd/bgp_orr.h"
 
 DEFINE_MTYPE_STATIC(BGPD, PEER_TX_SHUTDOWN_MSG, "Peer shutdown message (TX)");
 DEFINE_QOBJ_TYPE(bgp_master);
@@ -2025,6 +2026,8 @@ bool bgp_afi_safi_peer_exists(struct bgp *bgp, afi_t afi, safi_t safi)
 void peer_as_change(struct peer *peer, as_t as, int as_specified,
 		    const char *as_str)
 {
+	afi_t afi;
+	safi_t safi;
 	enum bgp_peer_sort origtype, newtype;
 
 	/* Stop peer. */
@@ -2069,6 +2072,10 @@ void peer_as_change(struct peer *peer, as_t as, int as_specified,
 
 	/* reflector-client reset */
 	if (newtype != BGP_PEER_IBGP) {
+		FOREACH_AFI_SAFI (afi, safi)
+			UNSET_FLAG(peer->af_flags[afi][safi],
+				   PEER_FLAG_ORR_GROUP);
+
 		UNSET_FLAG(peer->af_flags[AFI_IP][SAFI_UNICAST],
 			   PEER_FLAG_REFLECTOR_CLIENT);
 		UNSET_FLAG(peer->af_flags[AFI_IP][SAFI_MULTICAST],
@@ -4117,6 +4124,7 @@ void bgp_free(struct bgp *bgp)
 	for (int i = 0; i < bgp->confed_peers_cnt; i++)
 		XFREE(MTYPE_BGP_NAME, bgp->confed_peers[i].as_pretty);
 
+	bgp_orr_cleanup(bgp);
 	XFREE(MTYPE_BGP_NAME, bgp->as_pretty);
 	XFREE(MTYPE_BGP_NAME, bgp->name);
 	XFREE(MTYPE_BGP_NAME, bgp->name_pretty);
@@ -4956,6 +4964,11 @@ static int peer_af_flag_modify(struct peer *peer, afi_t afi, safi_t safi,
 	/* Special check for reflector client.  */
 	if (flag & PEER_FLAG_REFLECTOR_CLIENT && ptype != BGP_PEER_IBGP)
 		return BGP_ERR_NOT_INTERNAL_PEER;
+
+	/* Do not remove reflector client when ORR is configured on this peer */
+	if (flag & PEER_FLAG_REFLECTOR_CLIENT && !set &&
+	    peer_orr_rrclient_check(peer, afi, safi))
+		return BGP_ERR_PEER_ORR_CONFIGURED;
 
 	/* Special check for remove-private-AS.  */
 	if (flag & PEER_FLAG_REMOVE_PRIVATE_AS && ptype == BGP_PEER_IBGP)
