@@ -398,14 +398,15 @@ static int bgpd_sync_callback(struct thread *thread)
 			safi_t safi;
 
 			for (safi = SAFI_UNICAST; safi < SAFI_MAX; safi++) {
-				if (!peer->bgp->rib[afi][safi])
+				struct bgp_table *table = bgp->rib[afi][safi];
+
+				if (!table)
 					continue;
 
 				struct bgp_dest *match;
 				struct bgp_dest *node;
 
-				match = bgp_table_subtree_lookup(
-					peer->bgp->rib[afi][safi], prefix);
+				match = bgp_table_subtree_lookup(table, prefix);
 				node = match;
 
 				while (node) {
@@ -418,6 +419,9 @@ static int bgpd_sync_callback(struct thread *thread)
 					node = bgp_route_next_until(node,
 								    match);
 				}
+
+				if (match)
+					bgp_dest_unlock_node(match);
 			}
 		}
 	}
