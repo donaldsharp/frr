@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # Frr Reloader
 # Copyright (C) 2014 Cumulus Networks, Inc.
 #
@@ -839,6 +839,30 @@ def check_for_exit_vrf(lines_to_add, lines_to_del):
     return (lines_to_add, lines_to_del)
 
 
+def bgp_move_global_cfg_line_to_add(lines_to_add):
+
+    # Move global bgp config lines like 'bgp graceful-shutdown'
+    # at the begining of the config line so they do not appear
+    # after router bgp sets of config lines as it may turn out
+    # the config line is applied at bgp instance level.
+
+    index = 0
+    lines_to_insert = []
+
+    for ctx_keys, line in lines_to_add:
+        if (
+            ctx_keys[0].startswith("bgp graceful-shutdown")
+            and not line
+        ):
+            lines_to_add.remove((ctx_keys, line))
+            lines_to_insert.append((ctx_keys, line))
+
+    for ctx_keys, line in lines_to_insert:
+        lines_to_add.insert(index, ((ctx_keys, line)))
+
+    return lines_to_add
+
+
 def bgp_delete_nbr_remote_as_line(lines_to_add):
     # Handle deletion of neighbor <nbr> remote-as line from
     # lines_to_add if the nbr is configured with peer-group and
@@ -988,6 +1012,7 @@ config line to the end of the lines_to_del list.
 def delete_move_lines(lines_to_add, lines_to_del):
 
     bgp_delete_nbr_remote_as_line(lines_to_add)
+    bgp_move_global_cfg_line_to_add(lines_to_add)
 
     del_dict = dict()
     del_nbr_dict = dict()
@@ -2098,8 +2123,12 @@ if __name__ == '__main__':
 
                     # Don't run "no" commands twice since they can error
                     # out the second time due to first deletion
-                    if x == 1 and ctx_keys[0].startswith('no '):
-                        continue
+                    # Also, do not run bgp global config knob in second run
+                    # as it may end being in different vtysh context.
+                    if x == 1:
+                        if ctx_keys[0].startswith("no ") or \
+                                ctx_keys[0].startswith("bgp graceful-shutdown"):
+                            continue
 
                     cmd = '\n'.join(lines_to_config(ctx_keys, line, False)) + '\n'
                     lines_to_configure.append(cmd)
