@@ -5748,6 +5748,7 @@ static int bgp_static_set(struct vty *vty, const char *negate,
 			/* Label index cannot be changed. */
 			if (bgp_static->label_index != label_index) {
 				vty_out(vty, "%% cannot change label-index\n");
+				bgp_dest_unlock_node(dest);
 				return CMD_WARNING_CONFIG_FAILED;
 			}
 
@@ -6413,6 +6414,7 @@ static void bgp_aggregate_install(
 			aggregate, atomic_aggregate, p);
 
 		if (!attr) {
+			bgp_dest_unlock_node(dest);
 			bgp_aggregate_delete(bgp, p, afi, safi, aggregate);
 			return;
 		}
