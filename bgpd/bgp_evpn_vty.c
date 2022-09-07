@@ -4170,6 +4170,9 @@ DEFUN (bgp_evpn_advertise_type5,
 	int idx_oly = 0;
 	bool adv_flag_changed = false;
 
+	if (bgp_vrf == NULL)
+		return CMD_WARNING;
+
 	argv_find_and_parse_afi(argv, argc, &idx_afi, &afi);
 	argv_find_and_parse_safi(argv, argc, &idx_safi, &safi);
 	argv_find_and_parse_oly_idx(argv, argc, &idx_oly, &oly);
