@@ -2508,6 +2508,7 @@ static void zebra_evpn_flush_local_mac(zebra_mac_t *mac, struct interface *ifp)
 	struct zebra_if *zif;
 	struct interface *br_ifp;
 	struct zebra_vxlan_vni *vni;
+	enum zebra_dplane_result res;
 
 	zif = ifp->info;
 	br_ifp = zif->brslave_info.br_if;
@@ -2523,7 +2524,10 @@ static void zebra_evpn_flush_local_mac(zebra_mac_t *mac, struct interface *ifp)
 	}
 
 	/* delete the local mac from the dataplane */
-	dplane_local_mac_del(ifp, br_ifp, vid, &mac->macaddr);
+	res = dplane_local_mac_del(ifp, br_ifp, vid, &mac->macaddr);
+	if (res == ZEBRA_DPLANE_REQUEST_QUEUED)
+		SET_FLAG(mac->flags, ZEBRA_MAC_QUEUED);
+
 	/* delete the local mac in zebra */
 	zebra_evpn_del_local_mac(mac->zevpn, mac, true);
 }

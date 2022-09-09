@@ -1653,12 +1653,57 @@ void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
 					 vni, macaddr, ipaddr, vtep_ip);
 		}
 
-		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL)) {
+		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL) &&
+		    zebra_evpn_mac_is_static(mac)) {
 			if (!ipa_len)
 				zebra_evpn_sync_mac_del(mac);
-		} else if (CHECK_FLAG(mac->flags, ZEBRA_NEIGH_REMOTE)) {
-			zebra_evpn_rem_mac_del(zevpn, mac);
+
+			return;
 		}
+
+		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL)) {
+			/*
+			 * We have been told to delete a remote entry
+			 * that we now have as local. Likely a MM event
+			 * has happened and we could be out of sync
+			 * with the kernel. We must fix that so we
+			 * don't leave a remote hanging around
+			 * indefinitely.
+			 */
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"%s: MAC %pIA (flags 0x%x) Remote Mac DEL, found local - requesting state from kernel",
+					__func__, &mac->macaddr, mac->flags);
+
+			if (!vnip || !zif->brslave_info.br_if ||
+			    (macfdb_read_specific_mac(
+				     zns, zif->brslave_info.br_if, macaddr,
+				     vnip->access_vlan) < 0)) {
+				if (IS_ZEBRA_DEBUG_VXLAN)
+					zlog_debug(
+						"%s: MAC %pIA (flags 0x%x) br_if %s(%u) access_vlan %u - kernel Mac request failure",
+						__func__, &mac->macaddr,
+						mac->flags,
+						(zif->brslave_info.br_if)->name,
+						(zif->brslave_info.br_if)
+							->ifindex,
+						vnip->access_vlan);
+
+				return;
+			}
+
+			if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL)) {
+				if (IS_ZEBRA_DEBUG_VXLAN)
+					zlog_debug(
+						"%s: MAC %pIA (flags 0x%x) Remote Mac DEL, actually local - ignoring",
+						__func__, &mac->macaddr,
+						mac->flags);
+				return;
+			}
+		}
+
+		/* Mac is remote as expected */
+		zebra_evpn_rem_mac_del(zevpn, mac);
 	}
 }
 

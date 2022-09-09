@@ -2279,7 +2279,6 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 	int num_labels = 0;
 	uint32_t id = dplane_ctx_get_nhe_id(ctx);
 	int type = dplane_ctx_get_nhe_type(ctx);
-	const struct nexthop *nh;
 
 	if (!id) {
 		flog_err(
@@ -2307,8 +2306,6 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 				__func__, id, zebra_route_string(type));
 		return 0;
 	}
-
-	nh = dplane_ctx_get_nhe_ng(ctx)->nexthop;
 
 	/* Cumulus only */
 	if (nexthop_group_has_label(dplane_ctx_get_nhe_ng(ctx))) {

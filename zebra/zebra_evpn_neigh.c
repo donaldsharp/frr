@@ -158,7 +158,7 @@ int zebra_evpn_rem_neigh_install(zebra_evpn_t *zevpn, zebra_neigh_t *n,
 {
 	struct interface *vlan_if;
 	int flags;
-	int ret = 0;
+	enum zebra_dplane_result res;
 
 	if (!(n->flags & ZEBRA_NEIGH_REMOTE))
 		return 0;
@@ -172,9 +172,16 @@ int zebra_evpn_rem_neigh_install(zebra_evpn_t *zevpn, zebra_neigh_t *n,
 		flags |= DPLANE_NTF_ROUTER;
 	ZEBRA_NEIGH_SET_ACTIVE(n);
 
-	dplane_rem_neigh_add(vlan_if, &n->ip, &n->emac, flags, was_static);
+	res = dplane_rem_neigh_add(vlan_if, &n->ip, &n->emac, flags,
+				   was_static);
 
-	return ret;
+	if (res == ZEBRA_DPLANE_REQUEST_QUEUED)
+		SET_FLAG(n->flags, ZEBRA_NEIGH_QUEUED);
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
+		return -1;
+
+	return 0;
 }
 
 /*
@@ -245,10 +252,9 @@ static void zebra_evpn_local_neigh_ref_mac(zebra_neigh_t *n,
 }
 
 /* sync-path that is active on an ES peer */
-static void zebra_evpn_sync_neigh_dp_install(zebra_neigh_t *n,
-					     bool set_inactive,
-					     bool force_clear_static,
-					     const char *caller)
+static int zebra_evpn_sync_neigh_dp_install(zebra_neigh_t *n, bool set_inactive,
+					    bool force_clear_static,
+					    const char *caller)
 {
 	char macbuf[ETHER_ADDR_STRLEN];
 	char ipbuf[INET6_ADDRSTRLEN];
@@ -256,6 +262,7 @@ static void zebra_evpn_sync_neigh_dp_install(zebra_neigh_t *n,
 	struct interface *ifp;
 	bool set_static;
 	bool set_router;
+	enum zebra_dplane_result res;
 
 	zns = zebra_ns_lookup(NS_DEFAULT);
 	ifp = if_lookup_by_index_per_ns(zns, n->ifindex);
@@ -268,7 +275,7 @@ static void zebra_evpn_sync_neigh_dp_install(zebra_neigh_t *n,
 				prefix_mac2str(&n->emac, macbuf,
 					       sizeof(macbuf)),
 				n->ifindex, n->flags);
-		return;
+		return 0;
 	}
 
 	if (force_clear_static)
@@ -292,8 +299,17 @@ static void zebra_evpn_sync_neigh_dp_install(zebra_neigh_t *n,
 			set_router ? " router" : "",
 			set_static ? " static" : "",
 			set_inactive ? " inactive" : "");
-	dplane_local_neigh_add(ifp, &n->ip, &n->emac, set_router, set_static,
-			       set_inactive);
+
+	res = dplane_local_neigh_add(ifp, &n->ip, &n->emac, set_router,
+				     set_static, set_inactive);
+
+	if (res == ZEBRA_DPLANE_REQUEST_QUEUED)
+		SET_FLAG(n->flags, ZEBRA_NEIGH_QUEUED);
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
+		return -1;
+
+	return 0;
 }
 
 /*
@@ -885,18 +901,35 @@ zebra_neigh_t *zebra_evpn_proc_sync_neigh_update(zebra_evpn_t *zevpn,
 static int zebra_evpn_neigh_uninstall(zebra_evpn_t *zevpn, zebra_neigh_t *n)
 {
 	struct interface *vlan_if;
+	enum zebra_dplane_result res;
 
-	if (!(n->flags & ZEBRA_NEIGH_REMOTE))
+	if (!(n->flags & ZEBRA_NEIGH_REMOTE)) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"%s: IP %pIA MAC %pEA (flags 0x%x) not remote, ignoring Neigh uninstall",
+				__func__, &n->ip, &n->emac, n->flags);
 		return 0;
+	}
 
 	vlan_if = zevpn_map_to_svi(zevpn);
-	if (!vlan_if)
+	if (!vlan_if) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"%s: IP %pIA MAC %pEA (flags 0x%x) no SVI found, ignoring Neigh uninstall",
+				__func__, &n->ip, &n->emac, n->flags);
 		return -1;
+	}
 
 	ZEBRA_NEIGH_SET_INACTIVE(n);
 	n->loc_seq = 0;
 
-	dplane_rem_neigh_delete(vlan_if, &n->ip);
+	res = dplane_rem_neigh_delete(vlan_if, &n->ip);
+
+	if (res == ZEBRA_DPLANE_REQUEST_QUEUED)
+		SET_FLAG(n->flags, ZEBRA_NEIGH_QUEUED);
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
+		return -1;
 
 	return 0;
 }
@@ -1103,7 +1136,7 @@ static inline void zebra_evpn_local_neigh_update_log(
 	char macbuf[ETHER_ADDR_STRLEN];
 	char ipbuf[INET6_ADDRSTRLEN];
 
-	if (!IS_ZEBRA_DEBUG_EVPN_MH_NEIGH)
+	if (!IS_ZEBRA_DEBUG_VXLAN)
 		return;
 
 	zlog_debug("%s neigh vni %u ip %s mac %s f 0x%x%s%s%s%s%s%s %s", pfx,
@@ -1424,6 +1457,17 @@ int zebra_evpn_local_neigh_update(zebra_evpn_t *zevpn, struct interface *ifp,
 		n->ifindex = ifp->ifindex;
 		created = true;
 	} else {
+		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_QUEUED)) {
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"dplane update for local neighbor - found %pIA MAC %pEA intf %s(%u) VNI %u flags %u %s - dplane update queued",
+					&n->ip, &n->emac, ifp->name,
+					ifp->ifindex, zevpn->vni, n->flags,
+					(CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)
+						 ? "is_local"
+						 : ""));
+		}
+
 		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)) {
 			bool mac_different;
 			bool cur_is_router;
@@ -1703,6 +1747,17 @@ int zebra_evpn_remote_neigh_update(zebra_evpn_t *zevpn, struct interface *ifp,
 	if (!n)
 		return 0;
 
+	if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_QUEUED)) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"dplane update for remote neighbor - found %pIA MAC %pEA intf %s(%u) VNI %u flags %u %s - dplane update queued",
+				&n->ip, &n->emac, ifp->name, ifp->ifindex,
+				zevpn->vni, n->flags,
+				(CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)
+					 ? "is_local"
+					 : ""));
+	}
+
 	/* If a remote entry, see if it needs to be refreshed */
 	if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE)) {
 #ifdef GNU_LINUX
@@ -1711,15 +1766,10 @@ int zebra_evpn_remote_neigh_update(zebra_evpn_t *zevpn, struct interface *ifp,
 						     false /*was_static*/);
 #endif
 	} else {
-		/* We got a "remote" neighbor notification for an entry
-		 * we think is local. This can happen in a multihoming
-		 * scenario - but only if the MAC is already "remote".
-		 * Just mark our entry as "remote".
-		 */
 		zmac = zebra_evpn_mac_lookup(zevpn, macaddr);
-		if (!zmac || !CHECK_FLAG(zmac->flags, ZEBRA_MAC_REMOTE)) {
+		if (!zmac) {
 			zlog_debug(
-				"Ignore remote neigh %s (MAC %s) on L2-VNI %u - MAC unknown or local",
+				"Ignore remote neigh %s (MAC %s) on L2-VNI %u - MAC unknown",
 				ipaddr2str(&n->ip, buf2, sizeof(buf2)),
 				prefix_mac2str(macaddr, buf, sizeof(buf)),
 				zevpn->vni);
@@ -1866,6 +1916,10 @@ void zebra_evpn_print_neigh(zebra_neigh_t *n, void *ctxt, json_object *json)
 		if (!sync_info)
 			vty_out(vty, " -");
 		vty_out(vty, "\n");
+
+		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_QUEUED))
+			vty_out(vty, " Dplane-Queued\n");
+
 	} else {
 		json_object_string_add(json, "ip", buf2);
 		json_object_string_add(json, "type", type_str);
@@ -1883,6 +1937,8 @@ void zebra_evpn_print_neigh(zebra_neigh_t *n, void *ctxt, json_object *json)
 				thread_timer_to_hhmmss(thread_buf,
 						       sizeof(thread_buf),
 						       n->hold_timer));
+		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_QUEUED))
+			json_object_boolean_true_add(json, "dplaneQueued");
 	}
 	if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE)) {
 		if (n->mac->es) {
@@ -2330,11 +2386,11 @@ void zebra_evpn_neigh_remote_uninstall(zebra_evpn_t *zevpn,
 				       zebra_mac_t *mac, struct ipaddr *ipaddr)
 {
 	char buf1[INET6_ADDRSTRLEN];
+	struct interface *vlan_if;
 
 	if (zvrf->dad_freeze && CHECK_FLAG(n->flags, ZEBRA_NEIGH_DUPLICATE)
 	    && CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE)
 	    && (memcmp(n->emac.octet, mac->macaddr.octet, ETH_ALEN) == 0)) {
-		struct interface *vlan_if;
 
 		vlan_if = zevpn_map_to_svi(zevpn);
 		if (IS_ZEBRA_DEBUG_VXLAN)
@@ -2353,13 +2409,61 @@ void zebra_evpn_neigh_remote_uninstall(zebra_evpn_t *zevpn,
 	 * Do the delete only if the MAC matches.
 	 */
 	if (!memcmp(n->emac.octet, mac->macaddr.octet, ETH_ALEN)) {
-		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"%s: IP %pIA MAC %pEA (flags 0x%x) Neigh DEL",
+				__func__, &n->ip, &n->emac, n->flags);
+
+		/* Check if sync route */
+		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL) &&
+		    zebra_evpn_neigh_is_static(n)) {
 			zebra_evpn_sync_neigh_del(n);
-		} else if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE)) {
-			zebra_evpn_neigh_uninstall(zevpn, n);
-			zebra_evpn_neigh_del(zevpn, n);
-			zebra_evpn_deref_ip2mac(zevpn, mac);
+			return;
 		}
+
+		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)) {
+			/*
+			 * We have been told to delete a remote entry
+			 * that we now have as local. Likely a MM event
+			 * has happened and we could be out of sync
+			 * with the kernel. We must fix that so we
+			 * don't leave a remote hanging around
+			 * indefinitely.
+			 */
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"%s: IP %pIA MAC %pEA (flags 0x%x) Remote Neigh DEL, found local - requesting state from kernel",
+					__func__, &n->ip, &n->emac, n->flags);
+
+			vlan_if = zevpn_map_to_svi(zevpn);
+			if (!vlan_if ||
+			    (neigh_read_specific_ip(&n->ip, vlan_if) < 0)) {
+				if (IS_ZEBRA_DEBUG_VXLAN)
+					zlog_debug(
+						"%s: IP %pIA MAC %pEA (flags 0x%x) vlan_if %s - kernel Neigh request failure",
+						__func__, &n->ip, &n->emac,
+						n->flags,
+						vlan_if ? vlan_if->name
+							: "Unknown");
+				return;
+			}
+
+			if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)) {
+				if (IS_ZEBRA_DEBUG_VXLAN)
+					zlog_debug(
+						"%s: IP %pIA MAC %pEA (flags 0x%x) Remote Neigh DEL, actually local - ignoring",
+						__func__, &n->ip, &n->emac,
+						n->flags);
+				return;
+			}
+		}
+
+
+		/* Neigh is remote as expeted */
+		zebra_evpn_neigh_uninstall(zevpn, n);
+		zebra_evpn_neigh_del(zevpn, n);
+		zebra_evpn_deref_ip2mac(zevpn, mac);
+
 	} else {
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug(
@@ -2459,4 +2563,123 @@ int zebra_evpn_neigh_del_ip(zebra_evpn_t *zevpn, struct ipaddr *ip)
 		zebra_evpn_mac_del(zevpn, zmac);
 
 	return 0;
+}
+
+/*
+ * Handle results for NEIGH dataplane operations.
+ */
+void zebra_evpn_dplane_neigh_result(struct zebra_dplane_ctx *ctx)
+{
+	enum dplane_op_e op;
+	enum zebra_dplane_result status;
+	char buf2[INET6_ADDRSTRLEN];
+	zebra_neigh_t *neigh = NULL;
+	struct ipaddr *ipaddr;
+	zebra_evpn_t *zevpn;
+	ns_id_t ns_id;
+	uint32_t flags;
+	uint32_t update_flags;
+	uint16_t state;
+	struct zebra_ns *zns;
+	struct interface *ifp;
+	struct interface *vlan_if;
+	struct interface *link_if;
+	struct zebra_if *zif;
+
+	op = dplane_ctx_get_op(ctx);
+	status = dplane_ctx_get_status(ctx);
+	ipaddr = (struct ipaddr *)dplane_ctx_neigh_get_ipaddr(ctx);
+	ns_id = dplane_ctx_get_ns_id(ctx);
+	ifindex_t ifindex = dplane_ctx_get_ifindex(ctx);
+	vni_t vni = dplane_ctx_neigh_get_vni(ctx);
+	flags = dplane_ctx_neigh_get_flags(ctx);
+	update_flags = dplane_ctx_neigh_get_update_flags(ctx);
+	state = dplane_ctx_neigh_get_state(ctx);
+
+	ipaddr2str(ipaddr, buf2, sizeof(buf2));
+
+	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL || IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug(
+			"Neigh dplane handle ctx %p, op %s, NSID %u, IP %pIA IFindex %u vni %u flags: %u update_flags: %u, state: %u, result %s",
+			ctx, dplane_op2str(op), ns_id, ipaddr, ifindex, vni,
+			flags, update_flags, state, dplane_res2str(status));
+
+	if (op == DPLANE_OP_NEIGH_DELETE)
+		goto done;
+
+	if (status != ZEBRA_DPLANE_REQUEST_SUCCESS)
+		goto done;
+
+	zns = zebra_ns_lookup(ns_id);
+	if (!zns) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"Neigh dplane handle NSID %u, IP %pIA IFindex %u vni %u - no ZNS found",
+				ns_id, ipaddr, ifindex, vni);
+
+		goto done;
+	}
+
+	ifp = if_lookup_by_index_per_ns(zns, ifindex);
+	if (!ifp) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"Neigh dplane handle NSID %u, IP %pIA IFindex %u vni %u - no ifp found",
+				ns_id, ipaddr, ifindex, vni);
+
+		goto done;
+	}
+
+	zif = ifp->info;
+
+	/* Try the VNI first */
+	zevpn = zebra_evpn_lookup(vni);
+
+	if (!zevpn) {
+		link_if = ifp;
+
+		if (IS_ZEBRA_IF_VLAN(ifp))
+			link_if = zif->link;
+
+		zevpn = zebra_evpn_from_svi(ifp, link_if);
+	}
+
+	if (!zevpn)
+		goto done;
+
+	neigh = zebra_evpn_neigh_lookup(zevpn, ipaddr);
+	if (!neigh) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"Neigh dplane handle NSID %u, IP %pIA IFindex %u vni %u - no neigh found",
+				ns_id, ipaddr, ifindex, vni);
+
+		goto done;
+	}
+
+	UNSET_FLAG(neigh->flags, ZEBRA_NEIGH_QUEUED);
+
+	if (CHECK_FLAG(update_flags, DPLANE_NEIGH_REMOTE) &&
+	    !CHECK_FLAG(neigh->flags, ZEBRA_NEIGH_REMOTE)) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"Neigh dplane handle NSID %u IP %pIA MAC %pEA (flags 0x%x) installed remote, but found local - requesting kernel state",
+				ns_id, &neigh->ip, &neigh->emac, neigh->flags);
+
+		vlan_if = zevpn_map_to_svi(zevpn);
+		if (!vlan_if ||
+		    (neigh_read_specific_ip(&neigh->ip, vlan_if) < 0)) {
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"Neigh dplane handle NSID %u IP %pIA MAC %pEA (flags 0x%x) vlan_if %s - kernel Neigh request failure",
+					ns_id, &neigh->ip, &neigh->emac,
+					neigh->flags,
+					vlan_if ? vlan_if->name : "Unknown");
+
+			goto done;
+		}
+	}
+
+done:
+	dplane_ctx_fini(&ctx);
 }

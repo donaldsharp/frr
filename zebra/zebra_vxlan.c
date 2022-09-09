@@ -1281,10 +1281,11 @@ static int zl3vni_rmac_install(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac)
 			     &zrmac->macaddr,
 			     vni->vni, zrmac->fwd_info.r_vtep_ip, 0, 0,
 				 false /*was_static*/);
-	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
-		return 0;
-	else
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
 		return -1;
+
+	return 0;
 }
 
 /*
@@ -1329,12 +1330,13 @@ static int zl3vni_rmac_uninstall(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac)
 	else
 		vid = 0;
 
-	res = dplane_rem_mac_del(zl3vni->vxlan_if, br_ifp, vid,
-			     &zrmac->macaddr, vni->vni, zrmac->fwd_info.r_vtep_ip);
-	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
-		return 0;
-	else
+	res = dplane_rem_mac_del(zl3vni->vxlan_if, br_ifp, vid, &zrmac->macaddr,
+				 vni->vni, zrmac->fwd_info.r_vtep_ip);
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
 		return -1;
+
+	return 0;
 }
 
 /* handle rmac add */
@@ -1596,7 +1598,7 @@ static int _nh_install(zebra_l3vni_t *zl3vni, struct interface *ifp,
 		       zebra_neigh_t *n)
 {
 	uint8_t flags;
-	int ret = 0;
+	enum zebra_dplane_result res;
 
 	if (!zl3vni)
 		return -1;
@@ -1619,10 +1621,16 @@ static int _nh_install(zebra_l3vni_t *zl3vni, struct interface *ifp,
 	if (n->flags & ZEBRA_NEIGH_ROUTER_FLAG)
 		flags |= DPLANE_NTF_ROUTER;
 
-	dplane_rem_neigh_add(ifp, &n->ip, &n->emac, flags,
-			     false /*was_static*/);
+	res = dplane_rem_neigh_add(ifp, &n->ip, &n->emac, flags,
+				   false /*was_static*/);
 
-	return ret;
+	if (res == ZEBRA_DPLANE_REQUEST_QUEUED)
+		SET_FLAG(n->flags, ZEBRA_NEIGH_QUEUED);
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
+		return -1;
+
+	return 0;
 }
 
 /*
@@ -1630,6 +1638,8 @@ static int _nh_install(zebra_l3vni_t *zl3vni, struct interface *ifp,
  */
 static int _nh_uninstall(struct interface *ifp, zebra_neigh_t *n)
 {
+	enum zebra_dplane_result res;
+
 	if (!(n->flags & ZEBRA_NEIGH_REMOTE)
 	    || !(n->flags & ZEBRA_NEIGH_REMOTE_NH))
 		return 0;
@@ -1637,7 +1647,13 @@ static int _nh_uninstall(struct interface *ifp, zebra_neigh_t *n)
 	if (!ifp || !if_is_operative(ifp))
 		return 0;
 
-	dplane_rem_neigh_delete(ifp, &n->ip);
+	res = dplane_rem_neigh_delete(ifp, &n->ip);
+
+	if (res == ZEBRA_DPLANE_REQUEST_QUEUED)
+		SET_FLAG(n->flags, ZEBRA_NEIGH_QUEUED);
+
+	if (res == ZEBRA_DPLANE_REQUEST_FAILURE)
+		return -1;
 
 	return 0;
 }
@@ -6176,15 +6192,6 @@ static int zebra_evpn_cfg_clean_up(struct zserv *client)
 		return zebra_evpn_pim_cfg_clean_up(client);
 
 	return 0;
-}
-
-/*
- * Handle results for vxlan dataplane operations.
- */
-extern void zebra_vxlan_handle_result(struct zebra_dplane_ctx *ctx)
-{
-	/* TODO -- anything other than freeing the context? */
-	dplane_ctx_fini(&ctx);
 }
 
 /* Config knob for accepting lower sequence numbers */

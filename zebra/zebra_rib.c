@@ -55,6 +55,7 @@
 #include "zebra/zebra_routemap.h"
 #include "zebra/zebra_vrf.h"
 #include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_evpn.h"
 #include "zebra/zapi_msg.h"
 #include "zebra/zebra_dplane.h"
 #include "zebra/zebra_nhg.h"
@@ -3893,7 +3894,6 @@ done:
 	return 0;
 }
 
-
 /*
  * Handle results from the dataplane system. Dequeue update context
  * structs, dispatch to appropriate internal handlers.
@@ -3997,7 +3997,13 @@ static int rib_process_dplane_results(struct thread *thread)
 
 			case DPLANE_OP_MAC_INSTALL:
 			case DPLANE_OP_MAC_DELETE:
-				zebra_vxlan_handle_result(ctx);
+				zebra_evpn_dplane_mac_result(ctx);
+				break;
+
+			case DPLANE_OP_NEIGH_INSTALL:
+			case DPLANE_OP_NEIGH_UPDATE:
+			case DPLANE_OP_NEIGH_DELETE:
+				zebra_evpn_dplane_neigh_result(ctx);
 				break;
 
 			case DPLANE_OP_RULE_ADD:
@@ -4015,9 +4021,6 @@ static int rib_process_dplane_results(struct thread *thread)
 			/* Some op codes not handled here */
 			case DPLANE_OP_ADDR_INSTALL:
 			case DPLANE_OP_ADDR_UNINSTALL:
-			case DPLANE_OP_NEIGH_INSTALL:
-			case DPLANE_OP_NEIGH_UPDATE:
-			case DPLANE_OP_NEIGH_DELETE:
 			case DPLANE_OP_VTEP_ADD:
 			case DPLANE_OP_VTEP_DELETE:
 			case DPLANE_OP_BR_PORT_UPDATE:

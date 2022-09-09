@@ -81,6 +81,7 @@ struct zebra_mac_t_ {
 #define ZEBRA_MAC_LOCAL_INACTIVE 0x800
 /* The MAC entry was created because of advertise_svi_mac */
 #define ZEBRA_MAC_SVI 0x1000
+#define ZEBRA_MAC_QUEUED 0x2000
 
 #define ZEBRA_MAC_ALL_LOCAL_FLAGS (ZEBRA_MAC_LOCAL | ZEBRA_MAC_LOCAL_INACTIVE)
 #define ZEBRA_MAC_ALL_PEER_FLAGS                                               \
