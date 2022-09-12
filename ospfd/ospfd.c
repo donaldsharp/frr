@@ -866,6 +866,7 @@ static void ospf_finish_final(struct ospf *ospf)
 	EVENT_OFF(ospf->t_write);
 	EVENT_OFF(ospf->t_spf_calc);
 	EVENT_OFF(ospf->t_ase_calc);
+	EVENT_OFF(ospf->t_orr_calc);
 	EVENT_OFF(ospf->t_maxage);
 	EVENT_OFF(ospf->t_maxage_walker);
 	EVENT_OFF(ospf->t_deferred_shutdown);

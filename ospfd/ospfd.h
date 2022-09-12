@@ -272,6 +272,7 @@ struct ospf {
 	struct event *t_distribute_update; /* Distirbute list update timer. */
 	struct event *t_spf_calc;	   /* SPF calculation timer. */
 	struct event *t_ase_calc;	   /* ASE calculation timer. */
+	struct event *t_orr_calc;	   /* ORR calculation timer. */
 	struct event *t_opaque_lsa_self; /* Type-11 Opaque-LSAs origin event. */
 	struct event *t_sr_update;	 /* Segment Routing update timer */
 
