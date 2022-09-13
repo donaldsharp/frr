@@ -464,6 +464,17 @@ static int frr_csm_cb(int len, void *buf)
 	if (!csm_rcu_set) {
 		csm_pthread = pthread_self();
 		rcu_thread_start(csm_rcu_thread);
+
+		/*
+		 * The RCU mechanism for each pthread is initialized in a
+		 * "locked" state. That's ok for pthreads using the
+		 * frr_pthread,thread_fetch event loop, because that event
+		 * loop unlocks regularly.
+		 * For foreign pthreads, the lock needs to be unlocked so
+		 * that the background rcu pthread can run.
+		 */
+		rcu_read_unlock();
+
 		csm_rcu_set = true;
 	}
 
