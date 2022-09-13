@@ -4017,6 +4017,9 @@ DEFUN (bgp_evpn_advertise_type5,
 	int ret = 0;
 	int rmap_changed = 0;
 
+	if (bgp_vrf == NULL)
+		return CMD_WARNING;
+
 	argv_find_and_parse_afi(argv, argc, &idx_afi, &afi);
 	argv_find_and_parse_safi(argv, argc, &idx_safi, &safi);
 	ret = argv_find(argv, argc, "route-map", &idx_rmap);
@@ -4215,6 +4218,9 @@ DEFPY (bgp_evpn_advertise_pip_ip_mac,
 {
 	struct bgp *bgp_vrf = VTY_GET_CONTEXT(bgp); /* bgp vrf instance */
 	struct bgp *bgp_evpn = NULL;
+
+	if (bgp_vrf == NULL)
+		return CMD_WARNING;
 
 	if (IS_EVPN_CONFIGURABLE(bgp_vrf)) {
 		vty_out(vty,
