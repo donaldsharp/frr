@@ -109,6 +109,11 @@ void zebra_evpn_print(struct zebra_evpn *zevpn, void **ctxt)
 	} else {
 		json_object_int_add(json, "vni", zevpn->vni);
 		json_object_string_add(json, "type", "L2");
+
+		json_object_int_add(json, "vlan", zevpn->vid);
+		json_object_string_add(json, "bridge",
+				       zevpn->bridge_if ? zevpn->bridge_if->name : "");
+
 #if CONFDATE > 20240210
 CPP_NOTICE("Drop `vrf` from JSON output")
 #endif
