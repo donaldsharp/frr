@@ -1411,6 +1411,10 @@ static int zl3vni_remote_rmac_add(zebra_l3vni_t *zl3vni,
 
 			zrmac->fwd_info.r_vtep_ip = ipv4_vtep.ipaddr_v4;
 
+			/* Send RMAC for FPM processing */
+			hook_call(zebra_rmac_update, zrmac, zl3vni, false,
+				  "RMAC changed");
+
 			/* install rmac in kernel */
 			zl3vni_rmac_install(zl3vni, zrmac);
 		}
@@ -1461,6 +1465,10 @@ static void zl3vni_remote_rmac_del(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac,
 					zl3vni->vni, &ipv4_vtep,
 					&zrmac->fwd_info.r_vtep_ip,
 					&zrmac->macaddr);
+
+			/* Send RMAC for FPM processing */
+			hook_call(zebra_rmac_update, zrmac, zl3vni, false,
+				  "RMAC changed");
 
 			/* install rmac in kernel */
 			zl3vni_rmac_install(zl3vni, zrmac);
