@@ -2614,9 +2614,6 @@ void zebra_vxlan_print_specific_rmac_l3vni(struct vty *vty, vni_t l3vni,
 		return;
 	}
 
-	if (use_json)
-		json = json_object_new_object();
-
 	zl3vni = zl3vni_lookup(l3vni);
 	if (!zl3vni) {
 		if (use_json)
@@ -2636,6 +2633,9 @@ void zebra_vxlan_print_specific_rmac_l3vni(struct vty *vty, vni_t l3vni,
 				l3vni);
 		return;
 	}
+
+	if (use_json)
+		json = json_object_new_object();
 
 	zl3vni_print_rmac(zrmac, vty, json);
 
