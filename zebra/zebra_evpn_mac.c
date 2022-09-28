@@ -2522,7 +2522,7 @@ int zebra_evpn_del_local_mac(struct zebra_evpn *zevpn, struct zebra_mac *mac,
 
 	/* Remove MAC from BGP. */
 	zebra_evpn_mac_send_del_to_client(zevpn->vni, &mac->macaddr, mac->flags,
-					  false /* force */);
+					  true /* force */);
 
 	zebra_evpn_es_mac_deref_entry(mac);
 
