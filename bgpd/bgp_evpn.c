@@ -2188,9 +2188,9 @@ static int update_evpn_route(struct bgp *bgp, struct bgpevpn *vpn,
 		memcpy(&attr.esi, esi, sizeof(esi_t));
 		/* ES should not be marked local if ESI is in bypass */
 		if (bgp_evpn_is_esi_local_and_non_bypass(esi))
-			attr.es_flags |= ATTR_ES_IS_LOCAL;
+			SET_FLAG(attr.es_flags, ATTR_ES_IS_LOCAL);
 		else
-			attr.es_flags &= ~ATTR_ES_IS_LOCAL;
+			UNSET_FLAG(attr.es_flags, ATTR_ES_IS_LOCAL);
 	}
 
 	/* PMSI is only needed for type-3 routes */
@@ -2492,9 +2492,9 @@ void bgp_evpn_update_type2_route_entry(struct bgp *bgp, struct bgpevpn *vpn,
 	 * The es_flags need to align with the local ES status
 	 */
 	if (bgp_evpn_is_esi_local_and_non_bypass(&attr.esi))
-		attr.es_flags |= ATTR_ES_IS_LOCAL;
+		SET_FLAG(attr.es_flags, ATTR_ES_IS_LOCAL);
 	else
-		attr.es_flags &= ~ATTR_ES_IS_LOCAL;
+		UNSET_FLAG(attr.es_flags, ATTR_ES_IS_LOCAL);
 	bgp_evpn_get_rmac_nexthop(vpn, &evp, &attr, local_pi->extra->evpn->af_flags);
 	vni2label(vpn->vni, &(attr.label));
 	/* Add L3 VNI RTs and RMAC for non IPv6 link-local if
@@ -4725,9 +4725,9 @@ static int process_type2_route(struct peer *peer, afi_t afi, safi_t safi,
 		STREAM_GET(&attr->esi, pkt, sizeof(esi_t));
 
 		if (bgp_evpn_is_esi_local_and_non_bypass(&attr->esi))
-			attr->es_flags |= ATTR_ES_IS_LOCAL;
+			SET_FLAG(attr->es_flags, ATTR_ES_IS_LOCAL);
 		else
-			attr->es_flags &= ~ATTR_ES_IS_LOCAL;
+			UNSET_FLAG(attr->es_flags, ATTR_ES_IS_LOCAL);
 	} else {
 		STREAM_FORWARD_GETP(pkt, sizeof(esi_t));
 	}
