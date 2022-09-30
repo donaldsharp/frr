@@ -2087,9 +2087,9 @@ static void bgp_evpn_mac_update_on_es_local_chg(struct bgp_evpn_es *es,
 
 		attr_tmp = *pi->attr;
 		if (is_local)
-			attr_tmp.es_flags |= ATTR_ES_IS_LOCAL;
+			SET_FLAG(attr_tmp.es_flags, ATTR_ES_IS_LOCAL);
 		else
-			attr_tmp.es_flags &= ~ATTR_ES_IS_LOCAL;
+			UNSET_FLAG(attr_tmp.es_flags, ATTR_ES_IS_LOCAL);
 		attr_new = bgp_attr_intern(&attr_tmp);
 		bgp_attr_unintern(&pi->attr);
 		pi->attr = attr_new;
