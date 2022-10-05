@@ -3972,6 +3972,15 @@ DEFUN (show_zebra,
 	if (zrouter.asic_offloaded)
 		vty_out(vty, "Asic Offload is being used\n");
 
+	/*
+	 * Do not display this unless someone is actually using it
+	 *
+	 * Why this distinction?  I think this is effectively dead code
+	 * and should not be exposed.  Maybe someone proves me wrong.
+	 */
+	if (zrouter.asic_notification_nexthop_control)
+		vty_out(vty, "ASIC offload and nexthop control is being used");
+
 	vty_out(vty,
 		"                            Route      Route      Neighbor   LSP        LSP\n");
 	vty_out(vty,

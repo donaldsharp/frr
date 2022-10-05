@@ -209,6 +209,14 @@ struct zebra_router {
 	 */
 	bool asic_offloaded;
 	bool notify_on_ack;
+
+	/*
+	 * If the asic is notifying us about successful nexthop
+	 * allocation/control.  Some developers have made their
+	 * asic take control of how many nexthops/ecmp they can
+	 * have and will report what is successfull or not
+	 */
+	bool asic_notification_nexthop_control;
 };
 
 #define GRACEFUL_RESTART_TIME 60
