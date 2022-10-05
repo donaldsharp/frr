@@ -466,13 +466,6 @@ static int fpm_read(struct thread *t)
 	/* Let's ignore the input at the moment. */
 	rv = stream_read_try(fnc->ibuf, fnc->socket,
 			     STREAM_WRITEABLE(fnc->ibuf));
-	/* We've got an interruption. */
-	if (rv == -2) {
-		/* Schedule next read. */
-		thread_add_read(fnc->fthread->master, fpm_read, fnc,
-				fnc->socket, &fnc->t_read);
-		return 0;
-	}
 	if (rv == 0) {
 		atomic_fetch_add_explicit(&fnc->counters.connection_closes, 1,
 					  memory_order_relaxed);
@@ -491,14 +484,20 @@ static int fpm_read(struct thread *t)
 		FPM_RECONNECT(fnc);
 		return 0;
 	}
+
+	/* Schedule the next read */
+	thread_add_read(fnc->fthread->master, fpm_read, fnc, fnc->socket,
+			&fnc->t_read);
+
+	/* We've got an interruption. */
+	if (rv == -2)
+		return 0;
+
 	stream_reset(fnc->ibuf);
 
 	/* Account all bytes read. */
 	atomic_fetch_add_explicit(&fnc->counters.bytes_read, rv,
 				  memory_order_relaxed);
-
-	thread_add_read(fnc->fthread->master, fpm_read, fnc, fnc->socket,
-			&fnc->t_read);
 
 	return 0;
 }
