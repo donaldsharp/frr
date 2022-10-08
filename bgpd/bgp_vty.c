@@ -10179,15 +10179,16 @@ int bgp_show_summary_vty(struct vty *vty, const char *name, afi_t afi,
 }
 
 /* `show [ip] bgp summary' commands. */
-DEFUN (show_ip_bgp_summary,
+DEFPY (show_ip_bgp_summary,
        show_ip_bgp_summary_cmd,
-       "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]] summary [established|failed] [json]",
+       "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]] [all$all] summary [established|failed] [json$uj]",
        SHOW_STR
        IP_STR
        BGP_STR
        BGP_INSTANCE_HELP_STR
        BGP_AFI_HELP_STR
        BGP_SAFI_WITH_LABEL_HELP_STR
+       "Display the entries for all address families\n"
        "Summary of BGP neighbor status\n"
        "Show only sessions in Established state\n"
        "Show only sessions not in Established state\n"
@@ -10202,7 +10203,7 @@ DEFUN (show_ip_bgp_summary,
 	int idx = 0;
 
 	/* show [ip] bgp */
-	if (argv_find(argv, argc, "ip", &idx))
+	if (!all && argv_find(argv, argc, "ip", &idx))
 		afi = AFI_IP;
 	/* [<vrf> VIEWVRFNAME] */
 	if (argv_find(argv, argc, "vrf", &idx)) {
@@ -10221,8 +10222,6 @@ DEFUN (show_ip_bgp_summary,
 		show_failed = true;
 	if (argv_find(argv, argc, "established", &idx))
 		show_established = true;
-
-	bool uj = use_json(argc, argv);
 
 	return bgp_show_summary_vty(vty, vrf, afi, safi, show_failed,
 				    show_established, uj);
@@ -12859,6 +12858,12 @@ static void bgp_show_peer(struct vty *vty, struct peer *p,
 			vty_out(vty, "Local host: %s, Local port: %d\n",
 				sockunion2str(p->su_local, buf1, SU_ADDRSTRLEN),
 				ntohs(p->su_local->sin.sin_port));
+	} else {
+		if (use_json) {
+			json_object_string_add(json_neigh, "hostLocal",
+					       "Unknown");
+			json_object_int_add(json_neigh, "portLocal", -1);
+		}
 	}
 
 	/* Remote address. */
@@ -12874,6 +12879,12 @@ static void bgp_show_peer(struct vty *vty, struct peer *p,
 				sockunion2str(p->su_remote, buf1,
 					      SU_ADDRSTRLEN),
 				ntohs(p->su_remote->sin.sin_port));
+	} else {
+		if (use_json) {
+			json_object_string_add(json_neigh, "hostForeign",
+					       "Unknown");
+			json_object_int_add(json_neigh, "portForeign", -1);
+		}
 	}
 
 	/* Nexthop display. */
