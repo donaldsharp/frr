@@ -9843,12 +9843,7 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 			json_object_boolean_true_add(json_path, "fibInstalled");
 		if (CHECK_FLAG(bn->flags, BGP_NODE_FIB_INSTALL_PENDING))
 			json_object_boolean_true_add(json_path, "fibPending");
-	}
 
-	/* We've constructed the json object for this path, add it to the json
-	 * array of paths
-	 */
-	if (json_paths) {
 		if (json_nexthop_global || json_nexthop_ll) {
 			json_nexthops = json_object_new_array();
 
@@ -9873,21 +9868,6 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 #define BGP_SHOW_DAMP_HEADER "   Network          From             Reuse    Path\n"
 #define BGP_SHOW_FLAP_HEADER "   Network          From            Flaps Duration Reuse    Path\n"
 
-static int bgp_show_prefix_list(struct vty *vty, struct bgp *bgp,
-				const char *prefix_list_str, afi_t afi,
-				safi_t safi, enum bgp_show_type type);
-static int bgp_show_filter_list(struct vty *vty, struct bgp *bgp,
-				const char *filter, afi_t afi, safi_t safi,
-				enum bgp_show_type type);
-static int bgp_show_route_map(struct vty *vty, struct bgp *bgp,
-			      const char *rmap_str, afi_t afi, safi_t safi,
-			      enum bgp_show_type type);
-static int bgp_show_community_list(struct vty *vty, struct bgp *bgp,
-				   const char *com, int exact, afi_t afi,
-				   safi_t safi);
-static int bgp_show_prefix_longer(struct vty *vty, struct bgp *bgp,
-				  const char *prefix, afi_t afi, safi_t safi,
-				  enum bgp_show_type type);
 static int bgp_show_regexp(struct vty *vty, struct bgp *bgp, const char *regstr,
 			   afi_t afi, safi_t safi, enum bgp_show_type type,
 			   bool use_json);
@@ -10965,13 +10945,16 @@ DEFUN (show_ip_bgp_large_community_list,
 	bool exact_match = 0;
 	struct bgp *bgp = NULL;
 	bool uj = use_json(argc, argv);
+	uint8_t show_flags = 0;
 
-        if (uj)
-                argc--;
+	if (uj) {
+		argc--;
+		SET_FLAG(show_flags, BGP_SHOW_OPT_JSON);
+	}
 
-        bgp_vty_find_and_parse_afi_safi_bgp(vty, argv, argc, &idx, &afi, &safi,
-                                            &bgp, uj);
-        if (!idx)
+	bgp_vty_find_and_parse_afi_safi_bgp(vty, argv, argc, &idx, &afi, &safi,
+					    &bgp, uj);
+	if (!idx)
                 return CMD_WARNING;
 
 	argv_find(argv, argc, "large-community-list", &idx);
@@ -11174,38 +11157,30 @@ DEFPY(show_ip_bgp, show_ip_bgp_cmd,
       "show [ip] bgp [<view|vrf> VIEWVRFNAME] [" BGP_AFI_CMD_STR
       " [" BGP_SAFI_WITH_LABEL_CMD_STR
       "]]\
-          <dampening <parameters>\
-           |route-map WORD\
-           |prefix-list WORD\
-           |filter-list WORD\
-           |community-list <(1-500)|WORD> [exact-match]\
-           |A.B.C.D/M longer-prefixes\
-           |X:X::X:X/M longer-prefixes\
+          <[all$all] dampening <parameters>\
          >",
       SHOW_STR IP_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AFI_HELP_STR
 	      BGP_SAFI_WITH_LABEL_HELP_STR
+      "Display the entries for all address families\n"
       "Display detailed information about dampening\n"
-      "Display detail of configured dampening parameters\n"
-      "Display routes matching the route-map\n"
-      "A route-map to match on\n"
-      "Display routes conforming to the prefix-list\n"
-      "Prefix-list name\n"
-      "Display routes conforming to the filter-list\n"
-      "Regular expression access list name\n"
-      "Display routes matching the community-list\n"
-      "community-list number\n"
-      "community-list name\n"
-      "Exact match of the communities\n"
-      "IPv4 prefix\n"
-      "Display route and more specific routes\n"
-      "IPv6 prefix\n"
-      "Display route and more specific routes\n")
+      "Display detail of configured dampening parameters\n")
 {
 	afi_t afi = AFI_IP6;
 	safi_t safi = SAFI_UNICAST;
-	int exact_match = 0;
 	struct bgp *bgp = NULL;
 	int idx = 0;
+	uint16_t show_flags = 0;
+
+	/* [<ipv4|ipv6> [all]] */
+	if (all) {
+		SET_FLAG(show_flags, BGP_SHOW_OPT_AFI_ALL);
+
+		if (argv_find(argv, argc, "ipv4", &idx))
+			SET_FLAG(show_flags, BGP_SHOW_OPT_AFI_IP);
+
+		if (argv_find(argv, argc, "ipv6", &idx))
+			SET_FLAG(show_flags, BGP_SHOW_OPT_AFI_IP6);
+	}
 
 	bgp_vty_find_and_parse_afi_safi_bgp(vty, argv, argc, &idx, &afi, &safi,
 					    &bgp, false);
@@ -11214,34 +11189,9 @@ DEFPY(show_ip_bgp, show_ip_bgp_cmd,
 
 	if (argv_find(argv, argc, "dampening", &idx)) {
 		if (argv_find(argv, argc, "parameters", &idx))
-			return bgp_show_dampening_parameters(vty, afi, safi);
+			return bgp_show_dampening_parameters(vty, afi, safi,
+							     show_flags);
 	}
-
-	if (argv_find(argv, argc, "prefix-list", &idx))
-		return bgp_show_prefix_list(vty, bgp, argv[idx + 1]->arg, afi,
-					    safi, bgp_show_type_prefix_list);
-
-	if (argv_find(argv, argc, "filter-list", &idx))
-		return bgp_show_filter_list(vty, bgp, argv[idx + 1]->arg, afi,
-					    safi, bgp_show_type_filter_list);
-
-	if (argv_find(argv, argc, "route-map", &idx))
-		return bgp_show_route_map(vty, bgp, argv[idx + 1]->arg, afi,
-					  safi, bgp_show_type_route_map);
-
-	if (argv_find(argv, argc, "community-list", &idx)) {
-		const char *clist_number_or_name = argv[++idx]->arg;
-		if (++idx < argc && strmatch(argv[idx]->text, "exact-match"))
-			exact_match = 1;
-		return bgp_show_community_list(vty, bgp, clist_number_or_name,
-					       exact_match, afi, safi);
-	}
-	/* prefix-longer */
-	if (argv_find(argv, argc, "A.B.C.D/M", &idx)
-	    || argv_find(argv, argc, "X:X::X:X/M", &idx))
-		return bgp_show_prefix_longer(vty, bgp, argv[idx]->arg, afi,
-					      safi,
-					      bgp_show_type_prefix_longer);
 
 	return CMD_WARNING;
 }
@@ -11250,6 +11200,7 @@ DEFPY(show_ip_bgp, show_ip_bgp_cmd,
 DEFPY (show_ip_bgp_json,
        show_ip_bgp_json_cmd,
        "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]]\
+          [all$all]\
           [cidr-only\
           |dampening <flap-statistics|dampened-paths>\
           |community [AA:NN|local-AS|no-advertise|no-export\
@@ -11257,6 +11208,12 @@ DEFPY (show_ip_bgp_json,
                      |accept-own|accept-own-nexthop|route-filter-v6\
                      |route-filter-v4|route-filter-translated-v6\
                      |route-filter-translated-v4] [exact-match]\
+	  |community-list <(1-500)|COMMUNITY_LIST_NAME> [exact-match]\
+	  |filter-list AS_PATH_FILTER_NAME\
+	  |prefix-list WORD\
+	  |route-map WORD\
+	  |A.B.C.D/M longer-prefixes\
+	  |X:X::X:X/M longer-prefixes\
           ] [json$uj [detail$detail] | wide$wide]",
        SHOW_STR
        IP_STR
@@ -11264,6 +11221,7 @@ DEFPY (show_ip_bgp_json,
        BGP_INSTANCE_HELP_STR
        BGP_AFI_HELP_STR
        BGP_SAFI_WITH_LABEL_HELP_STR
+       "Display the entries for all address families\n"
        "Display only routes with non-natural netmasks\n"
        "Display detailed information about dampening\n"
        "Display flap statistics of routes\n"
@@ -11285,6 +11243,20 @@ DEFPY (show_ip_bgp_json,
        "RT translated VPNv6 route filtering (well-known community)\n"
        "RT translated VPNv4 route filtering (well-known community)\n"
        "Exact match of the communities\n"
+       "Community-list number\n"
+       "Community-list name\n"
+       "Display routes matching the community-list\n"
+       "Exact match of the communities\n"
+       "Display routes conforming to the filter-list\n"
+       "Regular expression access list name\n"
+       "Display routes conforming to the prefix-list\n"
+       "Prefix-list name\n"
+       "Display routes matching the route-map\n"
+       "A route-map to match on\n"
+       "IPv4 prefix\n"
+       "Display route and more specific routes\n"
+       "IPv6 prefix\n"
+       "Display route and more specific routes\n"
        JSON_STR
        "Display detailed version of JSON output\n"
        "Increase table width for longer prefixes\n")
@@ -11292,13 +11264,13 @@ DEFPY (show_ip_bgp_json,
 	afi_t afi = AFI_IP6;
 	safi_t safi = SAFI_UNICAST;
 	enum bgp_show_type sh_type = bgp_show_type_normal;
+	void *output_arg = NULL;
 	struct bgp *bgp = NULL;
 	int idx = 0;
 	int exact_match = 0;
 	char *community = NULL;
 	bool first = true;
 	uint8_t show_flags = 0;
-	bool all = false;
 
 	if (uj) {
 		argc--;
@@ -11307,6 +11279,17 @@ DEFPY (show_ip_bgp_json,
 
 	if (detail)
 		SET_FLAG(show_flags, BGP_SHOW_OPT_DETAIL);
+
+	/* [<ipv4|ipv6> [all]] */
+	if (all) {
+		SET_FLAG(show_flags, BGP_SHOW_OPT_AFI_ALL);
+
+		if (argv_find(argv, argc, "ipv4", &idx))
+			SET_FLAG(show_flags, BGP_SHOW_OPT_AFI_IP);
+
+		if (argv_find(argv, argc, "ipv6", &idx))
+			SET_FLAG(show_flags, BGP_SHOW_OPT_AFI_IP6);
+	}
 
 	if (wide)
 		SET_FLAG(show_flags, BGP_SHOW_OPT_WIDE);
@@ -11347,6 +11330,91 @@ DEFPY (show_ip_bgp_json,
 			sh_type = bgp_show_type_community_all;
 	}
 
+	if (argv_find(argv, argc, "community-list", &idx)) {
+		const char *clist_number_or_name = argv[++idx]->arg;
+		struct community_list *list;
+
+		if (argv_find(argv, argc, "exact-match", &idx))
+			exact_match = 1;
+
+		list = community_list_lookup(bgp_clist, clist_number_or_name, 0,
+					     COMMUNITY_LIST_MASTER);
+
+		if (list == NULL) {
+			vty_out(vty,
+				"%% %s is not a valid community-list name\n",
+				clist_number_or_name);
+			return CMD_WARNING;
+		}
+
+		if (exact_match)
+			sh_type = bgp_show_type_community_list_exact;
+		else
+			sh_type = bgp_show_type_community_list;
+		output_arg = list;
+	}
+
+	if (argv_find(argv, argc, "filter-list", &idx)) {
+		const char *filter = argv[++idx]->arg;
+		struct as_list *as_list;
+
+		as_list = as_list_lookup(filter);
+		if (as_list == NULL) {
+			vty_out(vty,
+				"%% %s is not a valid AS-path access-list name\n",
+				filter);
+			return CMD_WARNING;
+		}
+
+		sh_type = bgp_show_type_filter_list;
+		output_arg = as_list;
+	}
+
+	if (argv_find(argv, argc, "prefix-list", &idx)) {
+		const char *prefix_list_str = argv[++idx]->arg;
+		struct prefix_list *plist;
+
+		plist = prefix_list_lookup(afi, prefix_list_str);
+		if (plist == NULL) {
+			vty_out(vty, "%% %s is not a valid prefix-list name\n",
+				prefix_list_str);
+			return CMD_WARNING;
+		}
+
+		sh_type = bgp_show_type_prefix_list;
+		output_arg = plist;
+	}
+
+	if (argv_find(argv, argc, "route-map", &idx)) {
+		const char *rmap_str = argv[++idx]->arg;
+		struct route_map *rmap;
+
+		rmap = route_map_lookup_by_name(rmap_str);
+		if (!rmap) {
+			vty_out(vty, "%% %s is not a valid route-map name\n",
+				rmap_str);
+			return CMD_WARNING;
+		}
+
+		sh_type = bgp_show_type_route_map;
+		output_arg = rmap;
+	}
+
+	/* prefix-longer */
+	if (argv_find(argv, argc, "A.B.C.D/M", &idx) ||
+	    argv_find(argv, argc, "X:X::X:X/M", &idx)) {
+		const char *prefix_str = argv[idx]->arg;
+		struct prefix p;
+
+		if (!str2prefix(prefix_str, &p)) {
+			vty_out(vty, "%% Malformed Prefix\n");
+			return CMD_WARNING;
+		}
+
+		sh_type = bgp_show_type_prefix_longer;
+		output_arg = &p;
+	}
+
 	if (!all) {
 		/* show bgp: AFI_IP6, show ip bgp: AFI_IP */
 		if (community)
@@ -11354,8 +11422,8 @@ DEFPY (show_ip_bgp_json,
 						  exact_match, afi, safi,
 						  show_flags);
 		else
-			return bgp_show(vty, bgp, afi, safi, sh_type, NULL,
-					show_flags);
+			return bgp_show(vty, bgp, afi, safi, sh_type,
+					output_arg, show_flags);
 	} else {
 		/* show <ip> bgp ipv4 all: AFI_IP, show <ip> bgp ipv6 all:
 		 * AFI_IP6 */
@@ -11396,7 +11464,7 @@ DEFPY (show_ip_bgp_json,
 							   safi, show_flags);
 				else
 					bgp_show(vty, bgp, afi, safi, sh_type,
-						 NULL, show_flags);
+						 output_arg, show_flags);
 				if (uj)
 					vty_out(vty, "}\n");
 			}
@@ -11431,7 +11499,7 @@ DEFPY (show_ip_bgp_json,
 							   safi, show_flags);
 				else
 					bgp_show(vty, bgp, afi, safi, sh_type,
-						 NULL, show_flags);
+						 output_arg, show_flags);
 				if (uj)
 					vty_out(vty, "}\n");
 			}
@@ -11613,56 +11681,6 @@ static int bgp_show_regexp(struct vty *vty, struct bgp *bgp, const char *regstr,
 	return rc;
 }
 
-static int bgp_show_prefix_list(struct vty *vty, struct bgp *bgp,
-				const char *prefix_list_str, afi_t afi,
-				safi_t safi, enum bgp_show_type type)
-{
-	struct prefix_list *plist;
-	uint8_t show_flags = 0;
-
-	plist = prefix_list_lookup(afi, prefix_list_str);
-	if (plist == NULL) {
-		vty_out(vty, "%% %s is not a valid prefix-list name\n",
-			prefix_list_str);
-		return CMD_WARNING;
-	}
-
-	return bgp_show(vty, bgp, afi, safi, type, plist, show_flags);
-}
-
-static int bgp_show_filter_list(struct vty *vty, struct bgp *bgp,
-				const char *filter, afi_t afi, safi_t safi,
-				enum bgp_show_type type)
-{
-	struct as_list *as_list;
-	uint8_t show_flags = 0;
-
-	as_list = as_list_lookup(filter);
-	if (as_list == NULL) {
-		vty_out(vty, "%% %s is not a valid AS-path access-list name\n",
-			filter);
-		return CMD_WARNING;
-	}
-
-	return bgp_show(vty, bgp, afi, safi, type, as_list, show_flags);
-}
-
-static int bgp_show_route_map(struct vty *vty, struct bgp *bgp,
-			      const char *rmap_str, afi_t afi, safi_t safi,
-			      enum bgp_show_type type)
-{
-	struct route_map *rmap;
-	uint8_t show_flags = 0;
-
-	rmap = route_map_lookup_by_name(rmap_str);
-	if (!rmap) {
-		vty_out(vty, "%% %s is not a valid route-map name\n", rmap_str);
-		return CMD_WARNING;
-	}
-
-	return bgp_show(vty, bgp, afi, safi, type, rmap, show_flags);
-}
-
 static int bgp_show_community(struct vty *vty, struct bgp *bgp,
 			      const char *comstr, int exact, afi_t afi,
 			      safi_t safi, uint8_t show_flags)
@@ -11682,46 +11700,6 @@ static int bgp_show_community(struct vty *vty, struct bgp *bgp,
 		       com, show_flags);
 	community_free(&com);
 
-	return ret;
-}
-
-static int bgp_show_community_list(struct vty *vty, struct bgp *bgp,
-				   const char *com, int exact, afi_t afi,
-				   safi_t safi)
-{
-	struct community_list *list;
-	uint8_t show_flags = 0;
-
-	list = community_list_lookup(bgp_clist, com, 0, COMMUNITY_LIST_MASTER);
-	if (list == NULL) {
-		vty_out(vty, "%% %s is not a valid community-list name\n", com);
-		return CMD_WARNING;
-	}
-
-	return bgp_show(vty, bgp, afi, safi,
-			(exact ? bgp_show_type_community_list_exact
-			       : bgp_show_type_community_list),
-			list, show_flags);
-}
-
-static int bgp_show_prefix_longer(struct vty *vty, struct bgp *bgp,
-				  const char *prefix, afi_t afi, safi_t safi,
-				  enum bgp_show_type type)
-{
-	int ret;
-	struct prefix *p;
-	uint8_t show_flags = 0;
-
-	p = prefix_new();
-
-	ret = str2prefix(prefix, p);
-	if (!ret) {
-		vty_out(vty, "%% Malformed Prefix\n");
-		return CMD_WARNING;
-	}
-
-	ret = bgp_show(vty, bgp, afi, safi, type, p, show_flags);
-	prefix_free(&p);
 	return ret;
 }
 
@@ -12737,7 +12715,11 @@ static void show_adj_route(struct vty *vty, struct peer *peer, afi_t afi,
 	}
 
 	if (use_json) {
-		json_object_object_add(json, "advertisedRoutes", json_ar);
+		if (type == bgp_show_adj_route_advertised)
+			json_object_object_add(json, "advertisedRoutes",
+					       json_ar);
+		else
+			json_object_object_add(json, "receivedRoutes", json_ar);
 		json_object_int_add(json, "totalPrefixCounter", output_count);
 		json_object_int_add(json, "filteredPrefixCounter",
 				    filtered_count);
@@ -12859,13 +12841,14 @@ DEFPY (show_ip_bgp_instance_neighbor_bestpath_route,
 
 DEFPY (show_ip_bgp_instance_neighbor_advertised_route,
        show_ip_bgp_instance_neighbor_advertised_route_cmd,
-       "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]] neighbors <A.B.C.D|X:X::X:X|WORD> <advertised-routes|received-routes|filtered-routes> [route-map WORD] [json$uj | wide$wide]",
+       "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]] [all$all] neighbors <A.B.C.D|X:X::X:X|WORD> <advertised-routes|received-routes|filtered-routes> [route-map WORD] [json$uj | wide$wide]",
        SHOW_STR
        IP_STR
        BGP_STR
        BGP_INSTANCE_HELP_STR
        BGP_AFI_HELP_STR
        BGP_SAFI_WITH_LABEL_HELP_STR
+       "Display the entries for all address families\n"
        "Detailed information on TCP and BGP neighbor connections\n"
        "Neighbor to display information about\n"
        "Neighbor to display information about\n"
@@ -12888,7 +12871,6 @@ DEFPY (show_ip_bgp_instance_neighbor_advertised_route,
 	int idx = 0;
 	bool first = true;
 	uint8_t show_flags = 0;
-	bool all = false;
 
 	if (uj) {
 		argc--;
@@ -13122,7 +13104,7 @@ DEFUN (show_ip_bgp_flowspec_routes_detailed,
 	struct bgp *bgp = NULL;
 	int idx = 0;
 	bool uj = use_json(argc, argv);
-	uint8_t show_flags = 0;
+	uint16_t show_flags = BGP_SHOW_OPT_DETAIL;
 
 	if (uj) {
 		argc--;
