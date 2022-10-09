@@ -98,6 +98,44 @@ void bgp_unlink_nexthop(struct bgp_path_info *path)
 	bgp_unlink_nexthop_check(bnc);
 }
 
+/*
+ * Returns the bnc whose bnc->nht_info matches the LL peer by
+ * looping through the IPv6 nexthop table
+ */
+static struct bgp_nexthop_cache *
+bgp_find_nexthop_matching_peer(struct peer *peer)
+{
+	struct bgp_dest *dest;
+	struct bgp_nexthop_cache *bnc;
+
+	for (dest = bgp_table_top(peer->bgp->nexthop_cache_table[AFI_IP6]);
+	     dest; dest = bgp_route_next(dest)) {
+		bnc = bgp_dest_get_bgp_nexthop_info(dest);
+		if (!bnc)
+			continue;
+
+		if (bnc->nht_info == peer) {
+			if (BGP_DEBUG(nht, NHT)) {
+				char buf[PREFIX2STR_BUFFER];
+				zlog_debug(
+					"Found bnc: %s(%p) for peer: %s(%s) %p",
+					bnc_str(bnc, buf, PREFIX2STR_BUFFER),
+					bnc, peer->host, peer->bgp->name_pretty,
+					peer);
+			}
+			bgp_dest_unlock_node(dest);
+			return bnc;
+		}
+	}
+
+	if (BGP_DEBUG(nht, NHT))
+		zlog_debug(
+			"Could not find bnc for peer %s(%s) %p in v6 nexthop table",
+			peer->host, peer->bgp->name_pretty, peer);
+
+	return NULL;
+}
+
 void bgp_unlink_nexthop_by_peer(struct peer *peer)
 {
 	struct prefix p;
@@ -105,12 +143,24 @@ void bgp_unlink_nexthop_by_peer(struct peer *peer)
 	struct bgp_nexthop_cache *bnc;
 	afi_t afi = family2afi(peer->su.sa.sa_family);
 
-	if (!sockunion2hostprefix(&peer->su, &p))
-		return;
+	if (!sockunion2hostprefix(&peer->su, &p)) {
+		/*
+		 * In scenarios where unnumbered BGP session is brought
+		 * down by shutting down the interface before unconfiguring
+		 * the BGP neighbor, neighbor information in peer->su.sa
+		 * will be cleared when the interface is shutdown. So
+		 * during the deletion of unnumbered bgp peer, above check
+		 * will return true. Therefore, in this case,BGP needs to
+		 * find the bnc whose bnc->nht_info matches the
+		 * peer being deleted and free it.
+		 */
+		bnc = bgp_find_nexthop_matching_peer(peer);
+	} else {
+		dest = bgp_node_get(peer->bgp->nexthop_cache_table[afi], &p);
 
-	dest = bgp_node_get(peer->bgp->nexthop_cache_table[afi], &p);
+		bnc = bgp_dest_get_bgp_nexthop_info(dest);
+	}
 
-	bnc = bgp_dest_get_bgp_nexthop_info(dest);
 	if (!bnc)
 		return;
 
@@ -277,6 +327,15 @@ void bgp_delete_connected_nexthop(afi_t afi, struct peer *peer)
 	if (!peer)
 		return;
 
+	/*
+	 * In case the below check evaluates true and if
+	 * the bnc has not been freed at this point, then
+	 * we might have to do something similar to what's
+	 * done in bgp_unlink_nexthop_by_peer(). Since
+	 * bgp_unlink_nexthop_by_peer() loops through the
+	 * nodes of V6 nexthop cache to find the bnc, it is
+	 * currently not being called here.
+	 */
 	if (!sockunion2hostprefix(&peer->su, &p))
 		return;
 
