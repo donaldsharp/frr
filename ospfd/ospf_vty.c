@@ -2586,12 +2586,11 @@ DEFUN (no_ospf_auto_cost_reference_bandwidth,
 	return CMD_SUCCESS;
 }
 
-DEFUN (ospf_write_multiplier,
-       ospf_write_multiplier_cmd,
-       "ospf write-multiplier (1-100)",
-       "OSPF specific commands\n"
-       "Write multiplier\n"
-       "Maximum number of interface serviced per write\n")
+DEFUN(ospf_write_multiplier, ospf_write_multiplier_cmd,
+      "ospf write-multiplier (1-1000000)",
+      "OSPF specific commands\n"
+      "Write multiplier\n"
+      "Maximum number of interface serviced per write\n")
 {
 	VTY_DECLVAR_INSTANCE_CONTEXT(ospf, ospf);
 	int idx_number;
@@ -2603,7 +2602,7 @@ DEFUN (ospf_write_multiplier,
 		idx_number = 1;
 
 	write_oi_count = strtol(argv[idx_number]->arg, NULL, 10);
-	if (write_oi_count < 1 || write_oi_count > 100) {
+	if (write_oi_count < 1 || write_oi_count > 1000000) {
 		vty_out(vty, "write-multiplier value is invalid\n");
 		return CMD_WARNING_CONFIG_FAILED;
 	}
@@ -2612,17 +2611,17 @@ DEFUN (ospf_write_multiplier,
 	return CMD_SUCCESS;
 }
 
-ALIAS(ospf_write_multiplier, write_multiplier_cmd, "write-multiplier (1-100)",
+ALIAS(ospf_write_multiplier, write_multiplier_cmd,
+      "write-multiplier (1-1000000)",
       "Write multiplier\n"
       "Maximum number of interface serviced per write\n")
 
-DEFUN (no_ospf_write_multiplier,
-       no_ospf_write_multiplier_cmd,
-       "no ospf write-multiplier (1-100)",
-       NO_STR
-       "OSPF specific commands\n"
-       "Write multiplier\n"
-       "Maximum number of interface serviced per write\n")
+DEFUN(no_ospf_write_multiplier, no_ospf_write_multiplier_cmd,
+      "no ospf write-multiplier (1-1000000)",
+      NO_STR
+      "OSPF specific commands\n"
+      "Write multiplier\n"
+      "Maximum number of interface serviced per write\n")
 {
 	VTY_DECLVAR_INSTANCE_CONTEXT(ospf, ospf);
 
@@ -2631,9 +2630,33 @@ DEFUN (no_ospf_write_multiplier,
 }
 
 ALIAS(no_ospf_write_multiplier, no_write_multiplier_cmd,
-      "no write-multiplier (1-100)", NO_STR
+      "no write-multiplier (1-1000000)",
+      NO_STR
       "Write multiplier\n"
       "Maximum number of interface serviced per write\n")
+
+DEFPY_HIDDEN(ospf_disable_proactive_ping, ospf_disable_proactive_ping_cmd,
+	     "ospf disable-proactive-ping",
+	     "OSPF specific commands\n"
+	     "Disable ping for proactive ARP resolution\n")
+{
+	VTY_DECLVAR_INSTANCE_CONTEXT(ospf, ospf);
+
+	ospf->disable_proactive_ping = true;
+	return CMD_SUCCESS;
+}
+
+DEFPY_HIDDEN(no_ospf_disable_proactive_ping, no_ospf_disable_proactive_ping_cmd,
+	     "no ospf disable-proactive-ping",
+	     NO_STR
+	     "OSPF specific commands\n"
+	     "Disable ping for proactive ARP resolution\n")
+{
+	VTY_DECLVAR_INSTANCE_CONTEXT(ospf, ospf);
+
+	ospf->disable_proactive_ping = false;
+	return CMD_SUCCESS;
+}
 
 static const char *const ospf_abr_type_descr_str[] = {
 	"Unknown", "Standard (RFC2328)", "Alternative IBM",
@@ -3131,6 +3154,13 @@ static int show_ip_ospf_common(struct vty *vty, struct ospf *ospf,
 		/* Show write multiplier values */
 		json_object_int_add(json_vrf, "writeMultiplier",
 				    ospf->write_oi_count);
+		/* Show proactive ping status */
+		if (ospf->disable_proactive_ping)
+			json_object_boolean_true_add(json_vrf,
+						     "disableProactivePing");
+		else
+			json_object_boolean_false_add(json_vrf,
+						      "disableProactivePing");
 		/* Show refresh parameters. */
 		json_object_int_add(json_vrf, "refreshTimerMsecs",
 				    ospf->lsa_refresh_interval * 1000);
@@ -3154,6 +3184,10 @@ static int show_ip_ospf_common(struct vty *vty, struct ospf *ospf,
 		/* Show write multiplier values */
 		vty_out(vty, " Write Multiplier set to %d \n",
 			ospf->write_oi_count);
+
+		/* Show proactive ping status */
+		vty_out(vty, " Disable proactive ping: %s\n",
+			ospf->disable_proactive_ping ? "true" : "false");
 
 		/* Show refresh parameters. */
 		vty_out(vty, " Refresh timer %d secs\n",
@@ -10940,6 +10974,10 @@ void ospf_vty_init(void)
 	install_element(OSPF_NODE, &write_multiplier_cmd);
 	install_element(OSPF_NODE, &no_ospf_write_multiplier_cmd);
 	install_element(OSPF_NODE, &no_write_multiplier_cmd);
+
+	/* disable proactive ping commands */
+	install_element(OSPF_NODE, &ospf_disable_proactive_ping_cmd);
+	install_element(OSPF_NODE, &no_ospf_disable_proactive_ping_cmd);
 
 	/* Init interface related vty commands. */
 	ospf_vty_if_init();

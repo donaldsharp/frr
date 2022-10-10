@@ -252,6 +252,7 @@ struct ospf {
 	struct thread *t_default_routemap_timer;
 
 	int write_oi_count; /* Num of packets sent per thread invocation */
+	bool disable_proactive_ping;
 	struct thread *t_read;
 	int fd;
 	struct stream *ibuf;

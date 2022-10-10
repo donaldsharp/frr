@@ -4335,6 +4335,9 @@ void ospf_proactively_arp(struct ospf_neighbor *nbr)
 	char ping_nbr[OSPF_PING_NBR_STR_MAX];
 	int ret;
 
+	if (nbr->oi->ospf->disable_proactive_ping)
+		return;
+
 	if (!nbr)
 		return;
 
