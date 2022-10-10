@@ -1226,7 +1226,9 @@ static int evpn_zebra_install(struct bgp *bgp, struct bgpevpn *vpn,
 				SET_FLAG(flags, ZEBRA_MACIP_TYPE_ROUTER_FLAG);
 
 			seq = mac_mobility_seqnum(pi->attr);
-			/* if local ES notify zebra that this is a sync path */
+			/* If local ES notify zebra that this is a sync path.
+			 * ES is non-local while in LACP Bypass.
+			 */
 			if (bgp_evpn_attr_is_local_es(pi->attr)) {
 				SET_FLAG(flags, ZEBRA_MACIP_TYPE_SYNC_PATH);
 				if (bgp_evpn_attr_is_proxy(pi->attr))
@@ -1237,27 +1239,33 @@ static int evpn_zebra_install(struct bgp *bgp, struct bgpevpn *vpn,
 			if (!bgp_evpn_attr_is_sync(pi->attr))
 				return 0;
 
-			/* if a local path is being turned around and sent
-			 * to zebra it is because it is a sync path on
-			 * a local ES
+			/* If local ES notify zebra that this is a sync path.
+			 * ES is non-local while in LACP Bypass.
 			 */
-			SET_FLAG(flags, ZEBRA_MACIP_TYPE_SYNC_PATH);
-			/* supply the highest peer seq number to zebra
-			 * for MM seq syncing
-			 */
-			seq = bgp_evpn_attr_get_sync_seq(pi->attr);
-			/* if any of the paths from the peer have the ROUTER
-			 * flag set install the local entry as a router entry
-			 */
-			if (is_evpn_prefix_ipaddr_v6(p) &&
-					(pi->attr->es_flags &
-					 ATTR_ES_PEER_ROUTER))
-				SET_FLAG(flags,
-						ZEBRA_MACIP_TYPE_ROUTER_FLAG);
+			if (bgp_evpn_attr_is_local_es(pi->attr)) {
+				/* if a local path is being turned around and
+				 * sent to zebra it is because it is a sync path
+				 * on a local ES
+				 */
+				SET_FLAG(flags, ZEBRA_MACIP_TYPE_SYNC_PATH);
+				/* supply the highest peer seq number to zebra
+				 * for MM seq syncing
+				 */
+				seq = bgp_evpn_attr_get_sync_seq(pi->attr);
+				/* if any of the paths from the peer have the
+				 * ROUTER flag set install the local entry as a
+				 * router entry
+				 */
+				if (is_evpn_prefix_ipaddr_v6(p) &&
+				    (pi->attr->es_flags & ATTR_ES_PEER_ROUTER))
+					SET_FLAG(flags,
+						 ZEBRA_MACIP_TYPE_ROUTER_FLAG);
 
-			if (!(pi->attr->es_flags & ATTR_ES_PEER_ACTIVE))
-				SET_FLAG(flags,
-						ZEBRA_MACIP_TYPE_PROXY_ADVERT);
+				if (!(pi->attr->es_flags & ATTR_ES_PEER_ACTIVE))
+					SET_FLAG(flags,
+						 ZEBRA_MACIP_TYPE_PROXY_ADVERT);
+			} else
+				seq = mac_mobility_seqnum(pi->attr);
 		}
 
 		ret = bgp_zebra_send_remote_macip(
@@ -2084,7 +2092,11 @@ static int update_evpn_route(struct bgp *bgp, struct bgpevpn *vpn,
 
 	if (esi && bgp_evpn_is_esi_valid(esi)) {
 		memcpy(&attr.esi, esi, sizeof(esi_t));
-		attr.es_flags |= ATTR_ES_IS_LOCAL;
+		/* ES should not be marked local if ESI is in bypass */
+		if (bgp_evpn_is_esi_local_and_non_bypass(esi))
+			SET_FLAG(attr.es_flags, ATTR_ES_IS_LOCAL);
+		else
+			UNSET_FLAG(attr.es_flags, ATTR_ES_IS_LOCAL);
 	}
 
 	/* PMSI is only needed for type-3 routes */
@@ -2370,6 +2382,13 @@ void bgp_evpn_update_type2_route_entry(struct bgp *bgp, struct bgpevpn *vpn,
 			attr.router_flag = 1;
 	}
 	memcpy(&attr.esi, &local_pi->attr->esi, sizeof(esi_t));
+	/* We are evaluating a change in local/non-local status.
+	 * The es_flags need to align with the local ES status
+	 */
+	if (bgp_evpn_is_esi_local_and_non_bypass(&attr.esi))
+		SET_FLAG(attr.es_flags, ATTR_ES_IS_LOCAL);
+	else
+		UNSET_FLAG(attr.es_flags, ATTR_ES_IS_LOCAL);
 	bgp_evpn_get_rmac_nexthop(vpn, &evp, &attr, local_pi->extra->af_flags);
 	vni2label(vpn->vni, &(attr.label));
 	/* Add L3 VNI RTs and RMAC for non IPv6 link-local if
@@ -4402,9 +4421,9 @@ static int process_type2_route(struct peer *peer, afi_t afi, safi_t safi,
 	if (attr) {
 		memcpy(&attr->esi, pfx, sizeof(esi_t));
 		if (bgp_evpn_is_esi_local_and_non_bypass(&attr->esi))
-			attr->es_flags |= ATTR_ES_IS_LOCAL;
+			SET_FLAG(attr->es_flags, ATTR_ES_IS_LOCAL);
 		else
-			attr->es_flags &= ~ATTR_ES_IS_LOCAL;
+			UNSET_FLAG(attr->es_flags, ATTR_ES_IS_LOCAL);
 	}
 	pfx += sizeof(esi_t);
 
