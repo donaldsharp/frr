@@ -307,6 +307,9 @@ struct rtadv_prefix {
 #ifndef ND_OPT_HA_INFORMATION
 #define ND_OPT_HA_INFORMATION	8   /* HA Information Option */
 #endif
+#ifndef ND_OPT_ROUTE_INFORMATION /* RFC 4191 */
+#define ND_OPT_ROUTE_INFORMATION 24
+#endif
 
 #ifndef HAVE_STRUCT_ND_OPT_ADV_INTERVAL
 struct nd_opt_adv_interval { /* Advertisement interval option */
@@ -332,6 +335,20 @@ struct nd_opt_homeagent_info { /* Home Agent info */
 	uint16_t nd_opt_hai_reserved;
 	uint16_t nd_opt_hai_preference;
 	uint16_t nd_opt_hai_lifetime;
+} __attribute__((__packed__));
+#endif
+
+/*
+ * See RFC 4191 section 2.3
+ */
+#ifndef HAVE_STRUCT_ND_OPT_ROUTE_INFORMATION
+struct nd_opt_route_information {
+	uint8_t nd_opt_ri_type;
+	uint8_t nd_opt_ri_len;
+	uint8_t nd_opt_ri_plen;
+	uint8_t nd_opt_ri_flags;
+	uint32_t nd_opt_ri_route_lifetime;
+	/* Followed by one prefix or ip address */
 } __attribute__((__packed__));
 #endif
 

@@ -335,6 +335,21 @@ static void rtadv_send_packet(int sock, struct interface *ifp,
 		len += sizeof(struct nd_opt_adv_interval);
 	}
 
+	/* Fill in optional Route Information if available */
+	if (0) {
+		struct nd_opt_route_information *ndopt_ri =
+			(struct nd_opt_route_information *)(buf + len);
+
+		ndopt_ri->nd_opt_ri_type = ND_OPT_ROUTE_INFORMATION;
+		ndopt_ri->nd_opt_ri_len = 0;   /* This needs to be corrected */
+		ndopt_ri->nd_opt_ri_plen = 0;  /* This needs to be corrected */
+		ndopt_ri->nd_opt_ri_flags = 0; /* All zeros but set the pref */
+		/* Set the route lifetime */
+		ndopt_ri->nd_opt_ri_route_lifetime = 0;
+		/* Write the prefix now */
+		len += sizeof(struct nd_opt_route_information);
+		/* Add to the len the prefix length as well when we write it */
+	}
 	/* Fill in prefix. */
 	frr_each (rtadv_prefixes, zif->rtadv.prefixes, rprefix) {
 		struct nd_opt_prefix_info *pinfo;
@@ -604,11 +619,28 @@ static const char *rtadv_optionalhdr2str(uint8_t opt_type)
 		return "Optional Advertisement Interval";
 	case ND_OPT_HOME_AGENT_INFO:
 		return "Optional Home Agent Information";
+	case ND_OPT_ROUTE_INFORMATION:
+		return "Optional Route Information";
 	}
 
 	return "Unknown Optional Type";
 }
 
+static void rtadv_handle_route_information_type(struct interface *ifp,
+						struct nd_opt_hdr *hdr,
+						uint8_t *optional, uint32_t len)
+{
+	/* struct nd_opt_route_information hdr_ri = optional; */
+
+	/*
+	 * Don't forget to decode the prefix
+	 * Also save the data in the appropriate place in side of zebra
+	 */
+
+	if (IS_ZEBRA_DEBUG_PACKET)
+		zlog_debug("%s:Received %s for processing", __func__,
+			   rtadv_optionalhdr2str(hdr->nd_opt_type));
+}
 /*
  * This function processes optional attributes off of
  * end of a RA packet received.  At this point in
@@ -631,6 +663,10 @@ static void rtadv_process_optional(uint8_t *optional, unsigned int len,
 			mac = (char *)(optional+2);
 			if_nbr_mac_to_ipv4ll_neigh_update(ifp, mac,
 							  &addr->sin6_addr, 1);
+			break;
+		case ND_OPT_ROUTE_INFORMATION:
+			rtadv_handle_route_information_type(ifp, opt_hdr,
+							    optional, len);
 			break;
 		default:
 			if (IS_ZEBRA_DEBUG_PACKET)
