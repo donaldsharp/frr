@@ -4121,7 +4121,7 @@ DEFUN (match_evpn_default_route,
        EVPN_HELP_STR
        "default EVPN type-5 route\n")
 {
-	return bgp_route_match_add(vty, "evpn default-route", NULL,
+	return bgp_route_match_add(vty, "evpn default-route", "",
 				   RMAP_EVENT_MATCH_ADDED);
 }
 
@@ -4133,7 +4133,7 @@ DEFUN (no_match_evpn_default_route,
        EVPN_HELP_STR
        "default EVPN type-5 route\n")
 {
-	return bgp_route_match_delete(vty, "evpn default-route", NULL,
+	return bgp_route_match_delete(vty, "evpn default-route", "",
 				      RMAP_EVENT_MATCH_DELETED);
 }
 
