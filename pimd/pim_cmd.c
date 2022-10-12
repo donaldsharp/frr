@@ -3824,6 +3824,13 @@ static void igmp_show_sources(struct pim_instance *pim, struct vty *vty,
 			}	 /* scan igmp groups */
 		}		  /* scan igmp sockets */
 	}			  /* scan interfaces */
+
+	if (uj) {
+		vty_out(vty, "%s\n",
+			json_object_to_json_string_ext(
+				json, JSON_C_TO_STRING_PRETTY));
+		json_object_free(json);
+	}
 }
 
 static void igmp_show_source_retransmission(struct pim_instance *pim,
