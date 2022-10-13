@@ -682,8 +682,10 @@ static void bgp_write_notify(struct peer *peer)
  * @param data      Data portion
  * @param datalen   length of data portion
  */
-void bgp_notify_send_with_data(struct peer *peer, uint8_t code,
-			       uint8_t sub_code, uint8_t *data, size_t datalen)
+static void bgp_notify_send_internal(struct peer *peer, uint8_t code,
+				     uint8_t sub_code, uint8_t *data,
+				     size_t datalen, bool use_curr)
+
 {
 	struct stream *s;
 
@@ -715,8 +717,11 @@ void bgp_notify_send_with_data(struct peer *peer, uint8_t code,
 	 * If possible, store last packet for debugging purposes. This check is
 	 * in place because we are sometimes called with a doppelganger peer,
 	 * who tends to have a plethora of fields nulled out.
+	 *
+	 * Some callers should not attempt this - the io pthread for example
+	 * should not touch internals of the peer struct.
 	 */
-	if (peer->curr) {
+	if (use_curr && peer->curr) {
 		size_t packetsize = stream_get_endp(peer->curr);
 		assert(packetsize <= sizeof(peer->last_reset_cause));
 		memcpy(peer->last_reset_cause, peer->curr->data, packetsize);
@@ -799,8 +804,29 @@ void bgp_notify_send_with_data(struct peer *peer, uint8_t code,
  */
 void bgp_notify_send(struct peer *peer, uint8_t code, uint8_t sub_code)
 {
-	bgp_notify_send_with_data(peer, code, sub_code, NULL, 0);
+	bgp_notify_send_internal(peer, code, sub_code, NULL, 0, true);
 }
+
+/*
+ * Enqueue notification; called from the main pthread, peer object access is ok.
+ */
+void bgp_notify_send_with_data(struct peer *peer, uint8_t code,
+			       uint8_t sub_code, uint8_t *data, size_t datalen)
+{
+	bgp_notify_send_internal(peer, code, sub_code, data, datalen, true);
+}
+
+/*
+ * For use by the io pthread, queueing a notification but avoiding access to
+ * the peer object.
+ */
+void bgp_notify_io_invalid(struct peer *peer, uint8_t code, uint8_t sub_code,
+			   uint8_t *data, size_t datalen)
+{
+	/* Avoid touching the peer object */
+	bgp_notify_send_internal(peer, code, sub_code, data, datalen, false);
+}
+
 
 /*
  * Creates BGP Route Refresh packet and appends it to the peer's output queue.
