@@ -1,3 +1,9 @@
+frr (7.5+cl5.3.0u0) UNRELEASED; urgency=medium
+
+  * Updating version for CL5.3.0
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Fri, 14 Oct 2022 11:16:32 -0700
+
 frr (7.5+cl5.2.0u0) RELEASED; urgency=medium
 
   * New Enabled: Various Bug Fixes
