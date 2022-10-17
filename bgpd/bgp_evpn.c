@@ -1063,7 +1063,8 @@ static void build_evpn_type5_route_extcomm(struct bgp *bgp_vrf,
  * type-2 routes.
  */
 static void build_evpn_route_extcomm(struct bgpevpn *vpn, struct attr *attr,
-				     int add_l3_ecomm)
+				     int add_l3_ecomm,
+				     struct ecommunity *macvrf_soo)
 {
 	struct ecommunity ecom_encap;
 	struct ecommunity ecom_sticky;
@@ -1147,6 +1148,11 @@ static void build_evpn_route_extcomm(struct bgpevpn *vpn, struct attr *attr,
 		attr->ecommunity = ecommunity_merge(attr->ecommunity,
 						   &ecom_na);
 	}
+
+	/* Add MAC-VRF SoO, if configured */
+	if (macvrf_soo)
+		attr->ecommunity =
+			ecommunity_merge(attr->ecommunity, macvrf_soo);
 
 	attr->flag |= ATTR_FLAG_BIT(BGP_ATTR_EXT_COMMUNITIES);
 }
@@ -2076,6 +2082,7 @@ static int update_evpn_route(struct bgp *bgp, struct bgpevpn *vpn,
 	int route_change;
 	bool old_is_sync = false;
 	bool mac_only = false;
+	struct ecommunity *macvrf_soo = NULL;
 
 	memset(&attr, 0, sizeof(struct attr));
 
@@ -2138,8 +2145,11 @@ static int update_evpn_route(struct bgp *bgp, struct bgpevpn *vpn,
 	add_l3_ecomm = bgp_evpn_route_add_l3_ecomm_ok(
 		vpn, p, (attr.es_flags & ATTR_ES_IS_LOCAL) ? &attr.esi : NULL);
 
+	if (bgp->evpn_info)
+		macvrf_soo = bgp->evpn_info->soo;
+
 	/* Set up extended community. */
-	build_evpn_route_extcomm(vpn, &attr, add_l3_ecomm);
+	build_evpn_route_extcomm(vpn, &attr, add_l3_ecomm, macvrf_soo);
 
 	/* First, create (or fetch) route node within the VNI.
 	 * NOTE: There is no RD here.
@@ -2345,6 +2355,7 @@ void bgp_evpn_update_type2_route_entry(struct bgp *bgp, struct bgpevpn *vpn,
 	struct prefix_evpn evp;
 	int route_change;
 	bool old_is_sync = false;
+	struct ecommunity *macvrf_soo = NULL;
 
 	if (CHECK_FLAG(local_pi->flags, BGP_PATH_REMOVED))
 		return;
@@ -2399,8 +2410,11 @@ void bgp_evpn_update_type2_route_entry(struct bgp *bgp, struct bgpevpn *vpn,
 		vpn, &evp,
 		(attr.es_flags & ATTR_ES_IS_LOCAL) ? &attr.esi : NULL);
 
+	if (bgp->evpn_info)
+		macvrf_soo = bgp->evpn_info->soo;
+
 	/* Set up extended community. */
-	build_evpn_route_extcomm(vpn, &attr, add_l3_ecomm);
+	build_evpn_route_extcomm(vpn, &attr, add_l3_ecomm, macvrf_soo);
 	seq = mac_mobility_seqnum(local_pi->attr);
 
 	if (bgp_debug_zebra(NULL)) {
@@ -3406,7 +3420,7 @@ static int is_route_matching_for_vrf(struct bgp *bgp_vrf,
 
 /*
  * Given a route entry and a VNI, see if this route entry should be
- * imported into the VNI i.e., RTs match.
+ * imported into the VNI, i.e. RTs match + Site-of-Origin check passes.
  */
 static int is_route_matching_for_vni(struct bgp *bgp, struct bgpevpn *vpn,
 				     struct bgp_path_info *pi)
@@ -3469,6 +3483,51 @@ static int is_route_matching_for_vni(struct bgp *bgp, struct bgpevpn *vpn,
 	}
 
 	return 0;
+}
+
+static bool route_matches_macvrf_soo(struct bgp_path_info *pi,
+				     const struct prefix_evpn *evp)
+{
+	struct bgp *bgp_evpn = bgp_get_evpn();
+	struct attr *attr = pi->attr;
+	struct ecommunity *ecom, *macvrf_soo;
+
+	if (!CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_EXT_COMMUNITIES)))
+		return false;
+
+	ecom = attr->ecommunity;
+	if (!ecom || !ecom->size)
+		return false;
+
+	if (!bgp_evpn->evpn_info)
+		return false;
+
+	/* We only stamp the mac-vrf soo on routes from our local L2VNI.
+	 * No need to filter additional EVPN routes that originated outside
+	 * the MAC-VRF/L2VNI.
+	 */
+	if (evp->prefix.route_type != BGP_EVPN_MAC_IP_ROUTE &&
+	    evp->prefix.route_type != BGP_EVPN_IMET_ROUTE)
+		return false;
+
+	macvrf_soo = bgp_evpn->evpn_info->soo;
+
+	/* Fail import check if route is carrying the MAC-VRF SoO */
+	if (soo_in_ecom(ecom, macvrf_soo)) {
+		if (bgp_debug_zebra(NULL)) {
+			char *ecom_str;
+
+			ecom_str = ecommunity_ecom2str(
+				macvrf_soo, ECOMMUNITY_FORMAT_ROUTE_MAP, 0);
+			zlog_debug(
+				"import of evpn prefix %pFX skipped, local mac-vrf soo %s",
+				evp, ecom_str);
+			ecommunity_strfree(&ecom_str);
+		}
+		return true;
+	}
+
+	return false;
 }
 
 /* This API will scan evpn routes for checking attribute's rmac
@@ -3535,7 +3594,8 @@ bgp_evpn_skip_vrf_import_of_local_es(struct bgp *bgp_vrf,
 
 /*
  * Install or uninstall a mac-ip route in the provided vrf if
- * there is a rt match
+ * there is a rt match. Don't install if the route is local, i.e. the
+ * route is carrying an ESI or MAC-VRF SoO that's configured locally.
  */
 int bgp_evpn_route_entry_install_if_vrf_match(struct bgp *bgp_vrf,
 					      struct bgp_path_info *pi,
@@ -3559,9 +3619,12 @@ int bgp_evpn_route_entry_install_if_vrf_match(struct bgp *bgp_vrf,
 			return 0;
 
 		/* don't import hosts that are locally attached */
-		if (install
-		    && !bgp_evpn_skip_vrf_import_of_local_es(bgp_vrf, evp, pi,
-							     install))
+		if (install && (bgp_evpn_skip_vrf_import_of_local_es(
+					bgp_vrf, evp, pi, install) ||
+				route_matches_macvrf_soo(pi, evp)))
+			return 0;
+
+		if (install)
 			ret = install_evpn_route_entry_in_vrf(bgp_vrf, evp, pi);
 		else
 			ret = uninstall_evpn_route_entry_in_vrf(bgp_vrf, evp,
@@ -3688,27 +3751,32 @@ static int install_uninstall_routes_for_vni(struct bgp *bgp,
 				      && pi->sub_type == BGP_ROUTE_NORMAL))
 					continue;
 
-				if (is_route_matching_for_vni(bgp, vpn, pi)) {
-					if (install)
-						ret = install_evpn_route_entry(
-							bgp, vpn, evp, pi);
-					else
-						ret = uninstall_evpn_route_entry(
-							bgp, vpn, evp, pi);
+				if (!is_route_matching_for_vni(bgp, vpn, pi))
+					continue;
 
-					if (ret) {
-						flog_err(
-							EC_BGP_EVPN_FAIL,
-							"%u: Failed to %s EVPN %s route in VNI %u",
-							bgp->vrf_id,
-							install ? "install"
-								: "uninstall",
-							rtype == BGP_EVPN_MAC_IP_ROUTE
-								? "MACIP"
-								: "IMET",
-							vpn->vni);
-						return ret;
-					}
+				if (install) {
+					if (route_matches_macvrf_soo(pi, evp))
+						continue;
+
+					ret = install_evpn_route_entry(bgp, vpn,
+								       evp, pi);
+				} else
+					ret = uninstall_evpn_route_entry(
+						bgp, vpn, evp, pi);
+
+				if (ret) {
+					flog_err(
+						EC_BGP_EVPN_FAIL,
+						"%u: Failed to %s EVPN %s route in VNI %u",
+						bgp->vrf_id,
+						install ? "install"
+							: "uninstall",
+						rtype == BGP_EVPN_MAC_IP_ROUTE
+							? "MACIP"
+							: "IMET",
+						vpn->vni);
+
+					return ret;
 				}
 			}
 		}
@@ -3870,6 +3938,7 @@ static int install_uninstall_route_in_vnis(struct bgp *bgp, afi_t afi,
 	return 0;
 }
 
+
 /*
  * Install or uninstall route for appropriate VNIs/ESIs.
  */
@@ -3909,6 +3978,12 @@ static int bgp_evpn_install_uninstall_table(struct bgp *bgp, afi_t afi,
 	ecom = attr->ecommunity;
 	if (!ecom || !ecom->size)
 		return -1;
+
+	/* Filter routes carrying a Site-of-Origin that matches our
+	 * local MAC-VRF SoO.
+	 */
+	if (import && route_matches_macvrf_soo(pi, evp))
+		return 0;
 
 	/* An EVPN route belongs to a VNI or a VRF or an ESI based on the RTs
 	 * attached to the route */
@@ -5382,6 +5457,67 @@ void bgp_evpn_handle_rd_change(struct bgp *bgp, struct bgpevpn *vpn,
 }
 
 /*
+ * Handle change to the global MAC-VRF Site-of-Origin:
+ *   - Unimport routes with new SoO from VNI/VRF
+ *   - Import routes with old SoO into VNI/VRF
+ *   - Update SoO on local VNI routes + re-advertise
+ */
+static void bgp_evpn_update_vni_macvrf_soo(struct hash_bucket *bucket,
+					   struct bgp *bgp)
+{
+	struct bgpevpn *vpn;
+
+	if (bucket) {
+		/* L2VNI */
+		vpn = (struct bgpevpn *)bucket->data;
+		if (is_vni_live(vpn)) {
+			/* TODO: handle updates more gracefully */
+			bgp_evpn_uninstall_routes(bgp, vpn);
+			bgp_evpn_install_routes(bgp, vpn);
+			update_routes_for_vni(bgp, vpn);
+		}
+	} else {
+		/* L3VNI */
+		if (is_l3vni_live(bgp)) {
+			/* TODO: handle updates more gracefully */
+			uninstall_routes_for_vrf(bgp);
+			install_routes_for_vrf(bgp);
+		}
+	}
+}
+
+/* global "mac-vrf soo" vty handler */
+void bgp_evpn_handle_global_macvrf_soo_change(struct bgp *bgp,
+					      struct ecommunity *new_soo)
+{
+	struct ecommunity *old_soo;
+	struct listnode *node, *nnode;
+	struct bgp *tmp_bgp_vrf;
+
+	old_soo = bgp->evpn_info->soo;
+
+	/* cleanup and bail out if old/new soo are the same */
+	if (ecommunity_match(old_soo, new_soo)) {
+		ecommunity_free(&new_soo);
+		return;
+	}
+
+	/* clear old soo + set new soo */
+	ecommunity_free(&bgp->evpn_info->soo);
+	bgp->evpn_info->soo = new_soo;
+
+	/* walk L2VNIs */
+	hash_iterate(bgp->vnihash,
+		     (void (*)(struct hash_bucket *,
+			       void *))bgp_evpn_update_vni_macvrf_soo,
+		     bgp);
+
+	/* walk L3VNIs */
+	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, tmp_bgp_vrf))
+		bgp_evpn_update_vni_macvrf_soo(NULL, tmp_bgp_vrf);
+}
+
+/*
  * Install routes for this VNI. Invoked upon change to Import RT.
  */
 int bgp_evpn_install_routes(struct bgp *bgp, struct bgpevpn *vpn)
@@ -6591,7 +6727,10 @@ void bgp_evpn_cleanup(struct bgp *bgp)
 	list_delete(&bgp->vrf_export_rtl);
 	list_delete(&bgp->l2vnis);
 
-	XFREE(MTYPE_BGP_EVPN_INFO, bgp->evpn_info);
+	if (bgp->evpn_info) {
+		ecommunity_free(&bgp->evpn_info->soo);
+		XFREE(MTYPE_BGP_EVPN_INFO, bgp->evpn_info);
+	}
 }
 
 /*
@@ -6701,6 +6840,7 @@ static int bgp_evpn_update_vpn_route_attribute(struct bgp *bgp,
 	afi_t afi = AFI_L2VPN;
 	safi_t safi = SAFI_EVPN;
 	int route_changed;
+	struct ecommunity *macvrf_soo = NULL;
 
 	bgp_attr_default_set(&attr_new, BGP_ORIGIN_IGP);
 	attr_new.nexthop = vpn->originator_ip;
@@ -6722,8 +6862,11 @@ static int bgp_evpn_update_vpn_route_attribute(struct bgp *bgp,
 	 */
 	add_l3_ecomm = bgp_evpn_route_add_l3_ecomm_ok(vpn, evp, NULL);
 
+	if (bgp->evpn_info)
+		macvrf_soo = bgp->evpn_info->soo;
+
 	/* Set up extended community. */
-	build_evpn_route_extcomm(vpn, &attr_new, add_l3_ecomm);
+	build_evpn_route_extcomm(vpn, &attr_new, add_l3_ecomm, macvrf_soo);
 
 	seq = mac_mobility_seqnum(pi->attr);
 
