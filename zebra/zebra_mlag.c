@@ -541,6 +541,7 @@ void zebra_mlag_client_unregister(ZAPI_HANDLER_ARGS)
 			"Client De-Registered successfully for MLAG Updates");
 }
 
+/*
 DEFPY (test_mlag,
        test_mlag_cmd,
        "test zebra mlag <none$none|primary$primary|secondary$secondary>",
@@ -550,6 +551,7 @@ DEFPY (test_mlag,
        "Mlag is not setup on the machine\n"
        "Mlag is setup to be primary\n"
        "Mlag is setup to be the secondary\n")
+       */
 /*
  * Does following things.
  * 1) allocated new local stream, and copies the client data and enqueue
