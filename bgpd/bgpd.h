@@ -177,6 +177,8 @@ struct bgp_master {
 	/* DSCP value for TCP sessions */
 	uint8_t tcp_dscp;
 
+	uint64_t inq_limit;
+
 	QOBJ_FIELDS;
 };
 DECLARE_QOBJ_TYPE(bgp_master);
@@ -1591,6 +1593,9 @@ struct peer {
 	_Atomic uint32_t refresh_out;     /* Route Refresh output count */
 	_Atomic uint32_t dynamic_cap_in;  /* Dynamic Capability input count.  */
 	_Atomic uint32_t dynamic_cap_out; /* Dynamic Capability output count. */
+
+	_Atomic uint64_t bytes_in; /* Bytes read */
+	_Atomic uint32_t streams_created;
 
 	uint32_t stat_pfx_filter;
 	uint32_t stat_pfx_aspath_loop;

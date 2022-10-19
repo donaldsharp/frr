@@ -188,6 +188,11 @@ static void bgp_process_reads(struct thread *thread)
 
 	struct frr_pthread *fpt = bgp_pth_io;
 
+	if (peer->ibuf->count >= bm->inq_limit) {
+		thread_add_read(fpt->master, bgp_process_reads, peer, peer->fd,
+				&peer->t_read);
+		return;
+	}
 	frr_with_mutex (&peer->io_mtx) {
 		status = bgp_read(peer, &code);
 	}
@@ -251,6 +256,8 @@ static void bgp_process_reads(struct thread *thread)
 				stream_fifo_push(peer->ibuf, pkt);
 			}
 
+			atomic_fetch_add_explicit(&peer->streams_created, 1,
+						  memory_order_relaxed);
 			added_pkt = true;
 		} else
 			break;
@@ -464,10 +471,26 @@ static uint16_t bgp_read(struct peer *peer, int *code_p)
 {
 	size_t readsize; // how many bytes we want to read
 	ssize_t nbytes;  // how many bytes we actually read
+	ssize_t avg_pkt_size;
+	uint32_t streams_created;
+	uint64_t bytes_read;
 	uint16_t status = 0;
+
+	bytes_read =
+		atomic_load_explicit(&peer->bytes_in, memory_order_relaxed);
+	streams_created = atomic_load_explicit(&peer->streams_created,
+					       memory_order_relaxed);
+	if (streams_created) {
+		avg_pkt_size = bytes_read / streams_created;
+		if (avg_pkt_size == 0)
+			avg_pkt_size = sizeof(peer->ibuf_scratch);
+	}
 
 	readsize =
 		MIN(ringbuf_space(peer->ibuf_work), sizeof(peer->ibuf_scratch));
+
+	readsize = MIN(readsize, avg_pkt_size);
+
 	nbytes = read(peer->fd, peer->ibuf_scratch, readsize);
 
 	/* EAGAIN or EWOULDBLOCK; come back later */
@@ -499,6 +522,8 @@ static uint16_t bgp_read(struct peer *peer, int *code_p)
 	} else {
 		assert(ringbuf_put(peer->ibuf_work, peer->ibuf_scratch, nbytes)
 		       == (size_t)nbytes);
+		atomic_fetch_add_explicit(&peer->bytes_in, nbytes,
+					  memory_order_relaxed);
 	}
 
 	return status;
