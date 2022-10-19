@@ -3752,18 +3752,6 @@ int zebra_vxlan_handle_kernel_neigh_update(struct interface *ifp,
 			local_inactive ? "local_inactive " : "",
 			dp_static ? "peer_sync " : "", zevpn->vni);
 
-	if (state & NUD_PERMANENT) {
-		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug(
-				"Add/Update neighbor %s MAC %s intf %s(%u) state 0x%x L2-VNI %u; ignored-perm",
-				ipaddr2str(ip, buf2, sizeof(buf2)),
-					prefix_mac2str(macaddr, buf,
-				sizeof(buf)), ifp->name,
-				ifp->ifindex, state,
-				zvni->vni);
-		return 0;
-	}
-
 	/* Is this about a local neighbor or a remote one? */
 	if (!is_ext)
 		return zebra_evpn_local_neigh_update(zevpn, ifp, ip, macaddr,
