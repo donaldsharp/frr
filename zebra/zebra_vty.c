@@ -512,7 +512,8 @@ static void vty_show_ip_route_detail(struct vty *vty, struct route_node *rn,
  */
 static void show_route_nexthop_helper(struct vty *vty,
 				      const struct route_entry *re,
-				      const struct nexthop *nexthop)
+				      const struct nexthop *nexthop,
+				      json_object *json)
 {
 	char buf[MPLS_LABEL_STRLEN];
 	int i;
@@ -520,39 +521,81 @@ static void show_route_nexthop_helper(struct vty *vty,
 	switch (nexthop->type) {
 	case NEXTHOP_TYPE_IPV4:
 	case NEXTHOP_TYPE_IPV4_IFINDEX:
-		vty_out(vty, " via %s", inet_ntoa(nexthop->gate.ipv4));
-		if (nexthop->ifindex)
-			vty_out(vty, ", %s",
-				ifindex2ifname(nexthop->ifindex,
-					       nexthop->vrf_id));
+		if (json)
+			json_object_string_addf(json, "ip", "%pI4",
+						&nexthop->gate.ipv4);
+		else
+			vty_out(vty, " via %s",
+				inet_ntop(AF_INET, &nexthop->gate.ipv4, buf,
+					  sizeof(buf)));
+		if (nexthop->ifindex) {
+			if (json)
+				json_object_string_add(
+					json, "interfaceName",
+					ifindex2ifname(nexthop->ifindex,
+						       nexthop->vrf_id));
+			else
+				vty_out(vty, ", %s",
+					ifindex2ifname(nexthop->ifindex,
+						       nexthop->vrf_id));
+		}
 		break;
 	case NEXTHOP_TYPE_IPV6:
 	case NEXTHOP_TYPE_IPV6_IFINDEX:
-		vty_out(vty, " via %s",
-			inet_ntop(AF_INET6, &nexthop->gate.ipv6, buf,
-				  sizeof(buf)));
-		if (nexthop->ifindex)
-			vty_out(vty, ", %s",
-				ifindex2ifname(nexthop->ifindex,
-					       nexthop->vrf_id));
+		if (json)
+			json_object_string_addf(json, "ip", "%pI6",
+						&nexthop->gate.ipv6);
+		else
+			vty_out(vty, " via %s",
+				inet_ntop(AF_INET6, &nexthop->gate.ipv6, buf,
+					  sizeof(buf)));
+		if (nexthop->ifindex) {
+			if (json)
+				json_object_string_add(
+					json, "interfaceName",
+					ifindex2ifname(nexthop->ifindex,
+						       nexthop->vrf_id));
+			else
+				vty_out(vty, ", %s",
+					ifindex2ifname(nexthop->ifindex,
+						       nexthop->vrf_id));
+		}
 		break;
 
 	case NEXTHOP_TYPE_IFINDEX:
-		vty_out(vty, " is directly connected, %s",
-			ifindex2ifname(nexthop->ifindex,
-				       nexthop->vrf_id));
+		if (json)
+			json_object_string_add(json, "directlyConnected",
+					       ifindex2ifname(nexthop->ifindex,
+							      nexthop->vrf_id));
+		else
+			vty_out(vty, " is directly connected, %s",
+				ifindex2ifname(nexthop->ifindex,
+					       nexthop->vrf_id));
 		break;
 	case NEXTHOP_TYPE_BLACKHOLE:
-		vty_out(vty, " unreachable");
+		if (!json)
+			vty_out(vty, " unreachable");
+		else
+			json_object_boolean_true_add(json, "unreachable");
 		switch (nexthop->bh_type) {
 		case BLACKHOLE_REJECT:
-			vty_out(vty, " (ICMP unreachable)");
+			if (json)
+				json_object_boolean_true_add(json, "reject");
+			else
+				vty_out(vty, " (ICMP unreachable)");
 			break;
 		case BLACKHOLE_ADMINPROHIB:
-			vty_out(vty, " (ICMP admin-prohibited)");
+			if (json)
+				json_object_boolean_true_add(
+					json, "admin-prohibited");
+			else
+				vty_out(vty, " (ICMP admin-prohibited)");
 			break;
 		case BLACKHOLE_NULL:
-			vty_out(vty, " (blackhole)");
+			if (json)
+				json_object_boolean_true_add(json, "blackhole");
+			else
+				vty_out(vty, " (blackhole)");
 			break;
 		case BLACKHOLE_UNSPEC:
 			break;
@@ -566,36 +609,65 @@ static void show_route_nexthop_helper(struct vty *vty,
 	    (nexthop->type != NEXTHOP_TYPE_BLACKHOLE)) {
 		struct vrf *vrf = vrf_lookup_by_id(nexthop->vrf_id);
 
-		if (vrf)
-			vty_out(vty, " (vrf %s)", vrf->name);
-		else
-			vty_out(vty, " (vrf UNKNOWN)");
+		if (vrf) {
+			if (json)
+				json_object_string_add(json, "vrf", vrf->name);
+			else
+				vty_out(vty, " (vrf %s)", vrf->name);
+		} else {
+			if (json)
+				json_object_string_add(json, "vrf", "UNKNOWN");
+			else
+				vty_out(vty, " (vrf UNKNOWN)");
+		}
 	}
 
-	if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE))
-		vty_out(vty, " inactive");
+	if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE)) {
+		if (json)
+			json_object_boolean_false_add(json, "active");
+		else
+			vty_out(vty, " inactive");
+	}
 
-	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK))
-		vty_out(vty, " onlink");
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK)) {
+		if (json)
+			json_object_boolean_true_add(json, "onlink");
+		else
+			vty_out(vty, " onlink");
+	}
 
-	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
-		vty_out(vty, " (recursive)");
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE)) {
+		if (json)
+			json_object_boolean_true_add(json, "recursive");
+		else
+			vty_out(vty, " (recursive)");
+	}
 
 	switch (nexthop->type) {
 	case NEXTHOP_TYPE_IPV4:
 	case NEXTHOP_TYPE_IPV4_IFINDEX:
 		if (nexthop->src.ipv4.s_addr) {
 			if (inet_ntop(AF_INET, &nexthop->src.ipv4, buf,
-				      sizeof(buf)))
-				vty_out(vty, ", src %s", buf);
+				      sizeof(buf))) {
+				if (json)
+					json_object_string_add(json, "source",
+							       buf);
+				else
+					vty_out(vty, ", src %s", buf);
+			}
 		}
 		break;
 	case NEXTHOP_TYPE_IPV6:
 	case NEXTHOP_TYPE_IPV6_IFINDEX:
 		if (!IPV6_ADDR_SAME(&nexthop->src.ipv6, &in6addr_any)) {
 			if (inet_ntop(AF_INET6, &nexthop->src.ipv6, buf,
-				      sizeof(buf)))
-				vty_out(vty, ", src %s", buf);
+				      sizeof(buf))) {
+				if (json)
+					json_object_string_add(json, "source",
+							       buf);
+				else
+					vty_out(vty, ", src %s", buf);
+			}
 		}
 		break;
 	default:
@@ -604,20 +676,49 @@ static void show_route_nexthop_helper(struct vty *vty,
 
 	/* Label information */
 	if (nexthop->nh_label && nexthop->nh_label->num_labels) {
-		vty_out(vty, ", label %s",
-			mpls_label2str(nexthop->nh_label->num_labels,
-				       nexthop->nh_label->label, buf,
-				       sizeof(buf), nexthop->nh_label_type, 1));
+		if (json)
+			json_object_string_add(
+				json, "label",
+				mpls_label2str(nexthop->nh_label->num_labels,
+					       nexthop->nh_label->label, buf,
+					       sizeof(buf),
+					       nexthop->nh_label_type, 1));
+		else
+			vty_out(vty, ", label %s",
+				mpls_label2str(nexthop->nh_label->num_labels,
+					       nexthop->nh_label->label, buf,
+					       sizeof(buf),
+					       nexthop->nh_label_type, 1));
 	}
 
-	if (nexthop->weight)
-		vty_out(vty, ", weight %u", nexthop->weight);
+	if (nexthop->weight) {
+		if (json)
+			json_object_int_add(json, "weight", nexthop->weight);
+		else
+			vty_out(vty, ", weight %u", nexthop->weight);
+	}
 
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_HAS_BACKUP)) {
-		vty_out(vty, ", backup %d", nexthop->backup_idx[0]);
-
-		for (i = 1; i < nexthop->backup_num; i++)
-			vty_out(vty, ",%d", nexthop->backup_idx[i]);
+		if (json) {
+			if (nexthop->backup_num > 0) {
+				json_object *json_backup =
+					json_object_new_array();
+				for (i = 0; i < nexthop->backup_num; i++) {
+					json_object_array_add(
+						json_backup,
+						json_object_new_int(
+							nexthop->backup_idx
+								[i]));
+				}
+				json_object_object_add(json, "backupIndex",
+						       json_backup);
+			}
+		} else {
+			vty_out(vty, ", backup %d", nexthop->backup_idx[0]);
+			for (i = 1; i < nexthop->backup_num; i++) {
+				vty_out(vty, ",%d", nexthop->backup_idx[i]);
+			}
+		}
 	}
 }
 
@@ -1010,7 +1111,7 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 				len - 3 + (2 * nexthop_level(nexthop)), ' ');
 		}
 
-		show_route_nexthop_helper(vty, re, nexthop);
+		show_route_nexthop_helper(vty, re, nexthop, NULL);
 		vty_out(vty, ", %s\n", up_str);
 	}
 
@@ -1041,7 +1142,7 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 		vty_out(vty, "  b%c %*c",
 			(star_p ? '*' : ' '),
 			len - 3 + (2 * nexthop_level(nexthop)),	' ');
-		show_route_nexthop_helper(vty, re, nexthop);
+		show_route_nexthop_helper(vty, re, nexthop, NULL);
 		vty_out(vty, "\n");
 	}
 
@@ -1318,114 +1419,290 @@ DEFUN (ip_nht_default_route,
 	return CMD_SUCCESS;
 }
 
-static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe)
+static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
+				   json_object *json_nhe_hdr)
 {
 	struct nexthop *nexthop = NULL;
 	struct nhg_connected *rb_node_dep = NULL;
 	struct vrf *nhe_vrf = vrf_lookup_by_id(nhe->vrf_id);
 	struct nexthop_group *backup_nhg;
+	json_object *json_dependants = NULL;
+	json_object *json_depends = NULL;
+	json_object *json_nexthop_array = NULL;
+	json_object *json_nexthops = NULL;
+	json_object *json = NULL;
+	json_object *json_backup_nexthop_array = NULL;
+	json_object *json_backup_nexthops = NULL;
+	char json_buf[100];
 
-	vty_out(vty, "ID: %u (%s)\n", nhe->id, zebra_route_string(nhe->type));
-	vty_out(vty, "     RefCnt: %d\n", nhe->refcnt);
+	if (json_nhe_hdr) {
+		json = json_object_new_object();
+		snprintf(json_buf, sizeof(json_buf), "%u", nhe->id);
+		json_object_string_add(json, "type",
+				       zebra_route_string(nhe->type));
+		json_object_int_add(json, "refCount", nhe->refcnt);
+	} else {
+		vty_out(vty, "ID: %u (%s)\n", nhe->id,
+			zebra_route_string(nhe->type));
+		vty_out(vty, "     RefCnt: %d\n", nhe->refcnt);
+	}
 
-	if (nhe_vrf)
-		vty_out(vty, "     VRF: %s AFI: %s\n", nhe_vrf->name,
-			afi2str(nhe->afi));
-	else
-		vty_out(vty, "     VRF: UNKNOWN AFI: %s\n",
-			afi2str(nhe->afi));
+	if (nhe_vrf) {
+		if (json) {
+			json_object_string_add(json, "vrf", nhe_vrf->name);
+			if (nhe->afi == AFI_UNSPEC)
+				json_object_string_add(json, "afi",
+						       "unspecified");
+			else
+				json_object_string_add(json, "afi",
+						       afi2str(nhe->afi));
+		} else {
+			vty_out(vty, "     VRF: %s AFI: %s\n", nhe_vrf->name,
+				afi2str(nhe->afi));
+		}
+	} else {
+		if (json) {
+			json_object_string_add(json, "vrf", "unknown");
+			if (nhe->afi == AFI_UNSPEC)
+				json_object_string_add(json, "afi",
+						       "unspecified");
+			else
+				json_object_string_add(json, "afi",
+						       afi2str(nhe->afi));
+		} else {
+			vty_out(vty, "     VRF: UNKNOWN AFI: %s\n",
+				afi2str(nhe->afi));
+		}
+	}
 
 	if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_VALID)) {
-		vty_out(vty, "     Valid");
-		if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED))
-			vty_out(vty, ", Installed");
-		vty_out(vty, "\n");
+		if (json)
+			json_object_boolean_true_add(json, "valid");
+		else
+			vty_out(vty, "     Valid");
+
+		if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED)) {
+			if (json)
+				json_object_boolean_true_add(json, "installed");
+			else
+				vty_out(vty, ", Installed");
+		}
+		if (!json)
+			vty_out(vty, "\n");
 	}
-	if (nhe->ifp)
-		vty_out(vty, "     Interface Index: %d\n", nhe->ifp->ifindex);
+	if (nhe->ifp) {
+		if (json)
+			json_object_int_add(json, "interfaceIndex",
+					    nhe->ifp->ifindex);
+		else
+			vty_out(vty, "     Interface Index: %d\n",
+				nhe->ifp->ifindex);
+	}
 
 	if (!zebra_nhg_depends_is_empty(nhe)) {
-		vty_out(vty, "     Depends:");
-		frr_each(nhg_connected_tree, &nhe->nhg_depends, rb_node_dep) {
-			vty_out(vty, " (%u)", rb_node_dep->nhe->id);
+		if (json) {
+			json_depends = json_object_new_array();
+		} else {
+			vty_out(vty, "     Depends:");
 		}
-		vty_out(vty, "\n");
+		frr_each(nhg_connected_tree, &nhe->nhg_depends, rb_node_dep) {
+			if (json_depends)
+				json_object_array_add(
+					json_depends,
+					json_object_new_int(
+						rb_node_dep->nhe->id));
+			else
+				vty_out(vty, " (%u)", rb_node_dep->nhe->id);
+		}
+		if (!json_depends)
+			vty_out(vty, "\n");
+		else
+			json_object_object_add(json, "depends", json_depends);
 	}
 
 	/* Output nexthops */
-	for (ALL_NEXTHOPS(nhe->nhg, nexthop)) {
-		if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
-			vty_out(vty, "          ");
-		else
-			/* Make recursive nexthops a bit more clear */
-			vty_out(vty, "       ");
+	if (json)
+		json_nexthop_array = json_object_new_array();
 
-		show_route_nexthop_helper(vty, NULL, nexthop);
+
+	for (ALL_NEXTHOPS(nhe->nhg, nexthop)) {
+
+		if (json_nexthop_array)
+			json_nexthops = json_object_new_object();
+
+		if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE)) {
+			if (!json)
+				vty_out(vty, "          ");
+		} else {
+			/* Make recursive nexthops a bit more clear */
+			if (!json)
+				vty_out(vty, "       ");
+		}
+
+		show_route_nexthop_helper(vty, NULL, nexthop, json_nexthops);
 
 		if (nhe->backup_info == NULL || nhe->backup_info->nhe == NULL) {
 			if (CHECK_FLAG(nexthop->flags,
-				       NEXTHOP_FLAG_HAS_BACKUP))
-				vty_out(vty, " [backup %d]",
-					nexthop->backup_idx[0]);
+				       NEXTHOP_FLAG_HAS_BACKUP)) {
+				if (json)
+					json_object_int_add(
+						json_nexthops, "backup",
+						nexthop->backup_idx[0]);
+				else
+					vty_out(vty, " [backup %d]",
+						nexthop->backup_idx[0]);
+			}
 
-			vty_out(vty, "\n");
+			if (!json)
+				vty_out(vty, "\n");
+			else
+				json_object_array_add(json_nexthop_array,
+						      json_nexthops);
+
 			continue;
 		}
 
 		/* TODO -- print more useful backup info */
 		if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_HAS_BACKUP)) {
 			int i;
-
-			vty_out(vty, "[backup");
-			for (i = 0; i < nexthop->backup_num; i++)
-				vty_out(vty, " %d", nexthop->backup_idx[i]);
-
-			vty_out(vty, "]");
+			if (json) {
+				json_object *json_backup_idx =
+					json_object_new_array();
+				for (i = 0; i < nexthop->backup_num; i++) {
+					json_object_array_add(
+						json_backup_idx,
+						json_object_new_int(
+							nexthop->backup_idx
+								[i]));
+				}
+				json_object_object_add(json_nexthops,
+						       "backupIndex",
+						       json_backup_idx);
+			} else {
+				vty_out(vty, "[backup");
+				for (i = 0; i < nexthop->backup_num; i++)
+					vty_out(vty, " %d",
+						nexthop->backup_idx[i]);
+				vty_out(vty, "]");
+			}
 		}
 
-		vty_out(vty, "\n");
+		if (!json)
+			vty_out(vty, "\n");
+		else
+			json_object_array_add(json_nexthop_array,
+					      json_nexthops);
+	}
+
+
+	if (json) {
+		json_object_object_add(json, "nexthops", json_nexthop_array);
 	}
 
 	/* Output backup nexthops (if any) */
 	backup_nhg = zebra_nhg_get_backup_nhg(nhe);
 	if (backup_nhg) {
-		vty_out(vty, "     Backups:\n");
+		if (json)
+			json_backup_nexthop_array = json_object_new_array();
+		else
+			vty_out(vty, "     Backups:\n");
 
 		for (ALL_NEXTHOPS_PTR(backup_nhg, nexthop)) {
-			if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
-				vty_out(vty, "          ");
-			else
-				/* Make recursive nexthops a bit more clear */
-				vty_out(vty, "       ");
+			if (json_backup_nexthop_array)
+				json_backup_nexthops = json_object_new_object();
 
-			show_route_nexthop_helper(vty, NULL, nexthop);
-			vty_out(vty, "\n");
+			if (!CHECK_FLAG(nexthop->flags,
+					NEXTHOP_FLAG_RECURSIVE)) {
+				if (!json)
+					vty_out(vty, "          ");
+				else
+					json_object_boolean_false_add(
+						json_backup_nexthops,
+						"recursive");
+			} else {
+				/* Make recursive nexthops a bit more clear */
+				if (!json)
+					vty_out(vty, "       ");
+				else
+					json_object_boolean_true_add(
+						json_backup_nexthops,
+						"recursive");
+			}
+
+			show_route_nexthop_helper(vty, NULL, nexthop,
+						  json_backup_nexthops);
+			if (!json)
+				vty_out(vty, "\n");
+			else
+				json_object_array_add(json_nexthop_array,
+						      json_nexthops);
 		}
+
+		if (json)
+			json_object_object_add(json, "backupNexthops",
+					       json_backup_nexthop_array);
 	}
 
 	if (!zebra_nhg_dependents_is_empty(nhe)) {
-		vty_out(vty, "     Dependents:");
+		if (json)
+			json_dependants = json_object_new_array();
+		else
+			vty_out(vty, "     Dependents:");
 		frr_each(nhg_connected_tree, &nhe->nhg_dependents,
 			 rb_node_dep) {
-			vty_out(vty, " (%u)", rb_node_dep->nhe->id);
+			if (json)
+				json_object_array_add(
+					json_dependants,
+					json_object_new_int(
+						rb_node_dep->nhe->id));
+			else
+				vty_out(vty, " (%u)", rb_node_dep->nhe->id);
 		}
-		vty_out(vty, "\n");
+		if (json)
+			json_object_object_add(json, "dependents",
+					       json_dependants);
+		else
+			vty_out(vty, "\n");
 	}
 
+	if (json_nhe_hdr) {
+		json_object_object_add(json_nhe_hdr, json_buf, json);
+	}
 }
 
-static int show_nexthop_group_id_cmd_helper(struct vty *vty, uint32_t id)
+static int show_nexthop_group_id_cmd_helper(struct vty *vty, uint32_t id,
+					    json_object *json)
 {
 	struct nhg_hash_entry *nhe = NULL;
 
 	nhe = zebra_nhg_lookup_id(id);
 
 	if (nhe)
-		show_nexthop_group_out(vty, nhe);
+		show_nexthop_group_out(vty, nhe, json);
 	else {
-		vty_out(vty, "Nexthop Group ID: %u does not exist\n", id);
+		if (json) {
+			char warning_msg[100];
+
+			snprintf(warning_msg, sizeof(warning_msg),
+				 "Nexthop Group ID: %u does not exist", id);
+			json_object_string_add(json, "warning", warning_msg);
+
+			vty_out(vty, "%s\n", json_object_to_json_string(json));
+			json_object_free(json);
+		} else {
+			vty_out(vty, "Nexthop Group ID: %u does not exist\n",
+				id);
+		}
 		return CMD_WARNING;
 	}
+
+	if (json) {
+		vty_out(vty, "%s\n",
+			json_object_to_json_string_ext(
+				json, JSON_C_TO_STRING_PRETTY));
+		json_object_free(json);
+	}
+
 	return CMD_SUCCESS;
 }
 
@@ -1436,6 +1713,7 @@ struct nhe_show_context {
 	vrf_id_t vrf_id;
 	afi_t afi;
 	int type;
+	json_object *json;
 };
 
 static int nhe_show_walker(struct hash_bucket *bucket, void *arg)
@@ -1454,7 +1732,7 @@ static int nhe_show_walker(struct hash_bucket *bucket, void *arg)
 	if (ctx->type && nhe->type != ctx->type)
 		goto done;
 
-	show_nexthop_group_out(ctx->vty, nhe);
+	show_nexthop_group_out(ctx->vty, nhe, ctx->json);
 
 done:
 	return HASHWALK_CONTINUE;
@@ -1462,7 +1740,7 @@ done:
 
 static void show_nexthop_group_cmd_helper(struct vty *vty,
 					  struct zebra_vrf *zvrf, afi_t afi,
-					  int type)
+					  int type, json_object *json)
 {
 	struct nhe_show_context ctx;
 
@@ -1470,6 +1748,7 @@ static void show_nexthop_group_cmd_helper(struct vty *vty,
 	ctx.afi = afi;
 	ctx.vrf_id = zvrf->vrf->vrf_id;
 	ctx.type = type;
+	ctx.json = json;
 
 	hash_walk(zrouter.nhgs_id, nhe_show_walker, &ctx);
 }
@@ -1487,7 +1766,7 @@ static void if_nexthop_group_dump_vty(struct vty *vty, struct interface *ifp)
 		frr_each(nhg_connected_tree, &zebra_if->nhg_dependents,
 			 rb_node_dep) {
 			vty_out(vty, "   ");
-			show_nexthop_group_out(vty, rb_node_dep->nhe);
+			show_nexthop_group_out(vty, rb_node_dep->nhe, NULL);
 		}
 	}
 }
@@ -1526,29 +1805,36 @@ DEFPY (show_interface_nexthop_group,
 	return CMD_SUCCESS;
 }
 
-DEFPY (show_nexthop_group,
-       show_nexthop_group_cmd,
-       "show nexthop-group rib <(0-4294967295)$id|[singleton <ip$v4|ipv6$v6>] [<kernel|zebra|bgp|sharp>$type_str] [vrf <NAME$vrf_name|all$vrf_all>]>",
-       SHOW_STR
-       "Show Nexthop Groups\n"
-       "RIB information\n"
-       "Nexthop Group ID\n"
-       "Show Singleton Nexthop-Groups\n"
-       IP_STR
-       IP6_STR
-       "Kernel (not installed via the zebra RIB)\n"
-       "Zebra (implicitly created by zebra)\n"
-       "Border Gateway Protocol (BGP)\n"
-       "Super Happy Advanced Routing Protocol (SHARP)\n"
-       VRF_FULL_CMD_HELP_STR)
+DEFPY(show_nexthop_group,
+      show_nexthop_group_cmd,
+      "show nexthop-group rib <(0-4294967295)$id|[singleton <ip$v4|ipv6$v6>] [<kernel|zebra|bgp|sharp>$type_str] [vrf <NAME$vrf_name|all$vrf_all>]> [json]",
+      SHOW_STR
+      "Show Nexthop Groups\n"
+      "RIB information\n"
+      "Nexthop Group ID\n"
+      "Show Singleton Nexthop-Groups\n"
+      IP_STR
+      IP6_STR
+      "Kernel (not installed via the zebra RIB)\n"
+      "Zebra (implicitly created by zebra)\n"
+      "Border Gateway Protocol (BGP)\n"
+      "Super Happy Advanced Routing Protocol (SHARP)\n"
+      VRF_FULL_CMD_HELP_STR
+      JSON_STR)
 {
 
 	struct zebra_vrf *zvrf = NULL;
 	afi_t afi = AFI_UNSPEC;
 	int type = 0;
+	u_char uj = use_json(argc, argv);
+	json_object *json = NULL;
+	json_object *json_vrf = NULL;
+
+	if (uj)
+		json = json_object_new_object();
 
 	if (id)
-		return show_nexthop_group_id_cmd_helper(vty, id);
+		return show_nexthop_group_id_cmd_helper(vty, id, json);
 
 	if (v4)
 		afi = AFI_IP;
@@ -1564,8 +1850,16 @@ DEFPY (show_nexthop_group,
 	}
 
 	if (!vrf_is_backend_netns() && (vrf_name || vrf_all)) {
-		vty_out(vty,
-			"VRF subcommand does not make any sense in l3mdev based vrf's\n");
+		if (uj) {
+			json_object_string_add(
+				json, "warning",
+				"VRF subcommand does not make any sense in l3mdev based vrf's");
+			vty_out(vty, "%s\n", json_object_to_json_string(json));
+			json_object_free(json);
+		} else {
+			vty_out(vty,
+				"VRF subcommand does not make any sense in l3mdev based vrf's\n");
+		}
 		return CMD_WARNING;
 	}
 
@@ -1578,9 +1872,23 @@ DEFPY (show_nexthop_group,
 			zvrf = vrf->info;
 			if (!zvrf)
 				continue;
+			if (uj) {
+				json_vrf = json_object_new_object();
+			} else
+				vty_out(vty, "VRF: %s\n", vrf->name);
 
-			vty_out(vty, "VRF: %s\n", vrf->name);
-			show_nexthop_group_cmd_helper(vty, zvrf, afi, type);
+			show_nexthop_group_cmd_helper(vty, zvrf, afi, type,
+						      json_vrf);
+			if (uj)
+				json_object_object_add(json, vrf->name,
+						       json_vrf);
+		}
+
+		if (uj) {
+			vty_out(vty, "%s\n",
+				json_object_to_json_string_ext(
+					json, JSON_C_TO_STRING_PRETTY));
+			json_object_free(json);
 		}
 
 		return CMD_SUCCESS;
@@ -1592,13 +1900,31 @@ DEFPY (show_nexthop_group,
 		zvrf = zebra_vrf_lookup_by_name(VRF_DEFAULT_NAME);
 
 	if (!zvrf) {
-		vty_out(vty, "%% VRF '%s' specified does not exist\n",
-			vrf_name);
+		if (uj) {
+			char warning_msg[100];
+
+			snprintf(warning_msg, sizeof(warning_msg),
+				 "%% VRF '%s' specified does not exist",
+				 vrf_name);
+			json_object_string_add(json, "warning", warning_msg);
+
+			vty_out(vty, "%s\n", json_object_to_json_string(json));
+			json_object_free(json);
+		} else {
+			vty_out(vty, "%% VRF '%s' specified does not exist\n",
+				vrf_name);
+		}
 		return CMD_WARNING;
 	}
 
-	show_nexthop_group_cmd_helper(vty, zvrf, afi, type);
+	show_nexthop_group_cmd_helper(vty, zvrf, afi, type, json);
 
+	if (uj) {
+		vty_out(vty, "%s\n",
+			json_object_to_json_string_ext(
+				json, JSON_C_TO_STRING_PRETTY));
+		json_object_free(json);
+	}
 	return CMD_SUCCESS;
 }
 
