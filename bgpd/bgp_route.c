@@ -10553,24 +10553,6 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 		} else {
 			vty_out(vty, "      Extended Community: %s\n",
 				bgp_attr_get_ecommunity(attr)->str);
-		if (CHECK_FLAG(path->flags, BGP_PATH_SELECTED)) {
-			if (json_paths) {
-				if (!json_bestpath)
-					json_bestpath =
-						json_object_new_object();
-				json_object_boolean_true_add(json_bestpath,
-							     "overall");
-				json_object_string_add(json_bestpath,
-						       "selectionReason",
-						       bgp_path_selection_reason2str(bn->reason));
-			} else {
-				vty_out(vty, ", best");
-				/* Once internal testing is cleared up
-				 * remove this comment
-				 * vty_out(vty, " (%s)",
-				 * bgp_path_selection_reason2str(bn->reason));
-				 */
-			}
 		}
 	}
 
