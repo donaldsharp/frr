@@ -758,81 +758,7 @@ static void pim_mlag_process_mroute_add(struct mlag_mroute_add msg)
 
 	++router->mlag_stats.msg.mroute_add_rx;
 
-	if (!msg.intf_name[0]) {
-		pim_mlag_up_remote_add(&msg);
-		return;
-	}
-
-	vrf = vrf_lookup_by_name(msg.vrf_name);
-	if (vrf)
-		ifp = if_lookup_by_name(msg.intf_name, vrf->vrf_id);
-
-	if (!vrf || !ifp || !ifp->info) {
-		if (PIM_DEBUG_MLAG)
-			zlog_debug(
-				"%s: Invalid params...vrf:%p, ifp,%p, "
-				"pim_ifp:%p",
-				__FUNCTION__, vrf, ifp, ifp->info);
-		return;
-	}
-
-	memset(&sg, 0, sizeof(struct prefix_sg));
-	sg.src.s_addr = ntohl(msg.source_ip);
-	sg.grp.s_addr = ntohl(msg.group_ip);
-
-	ch = pim_ifchannel_find(ifp, &sg);
-	if (ch) {
-		if (PIM_DEBUG_MLAG)
-			zlog_debug("%s: Updating ifchannel-%s peer mlag params",
-				   __FUNCTION__, ch->sg_str);
-		ch->mlag_peer_cost_to_rp = msg.cost_to_rp;
-		ch->mlag_peer_is_dr = msg.am_i_dr;
-		ch->mlag_peer_is_dual_active = msg.am_i_dual_active;
-		pim_mlag_calculate_df_for_ifchannel(ch);
-	} else {
-		if (PIM_DEBUG_MLAG)
-			zlog_debug("%s: failed to find if-channel...",
-				   __FUNCTION__);
-	}
-=======
-	if (!msg.intf_name[0] ||
-		!strcmp(msg.intf_name, PIM_VXLAN_TERM_DEV_NAME)) {
-		pim_mlag_up_remote_add(&msg);
-		return;
-	}
-
-	vrf = vrf_lookup_by_name(msg.vrf_name);
-	if (vrf)
-		ifp = if_lookup_by_name(msg.intf_name, vrf->vrf_id);
-
-	if (!vrf || !ifp || !ifp->info) {
-		if (PIM_DEBUG_MLAG)
-			zlog_debug(
-				"%s: Invalid params...vrf:%p, ifp,%p, "
-				"pim_ifp:%p",
-				__FUNCTION__, vrf, ifp, ifp->info);
-		return;
-	}
-
-	memset(&sg, 0, sizeof(struct prefix_sg));
-	sg.src.s_addr = ntohl(msg.source_ip);
-	sg.grp.s_addr = ntohl(msg.group_ip);
-
-	ch = pim_ifchannel_find(ifp, &sg);
-	if (ch) {
-		if (PIM_DEBUG_MLAG)
-			zlog_debug("%s: Updating ifchannel-%s peer mlag params",
-				   __FUNCTION__, ch->sg_str);
-		ch->mlag_peer_cost_to_rp = msg.cost_to_rp;
-		ch->mlag_peer_is_dr = msg.am_i_dr;
-		ch->mlag_peer_is_dual_active = msg.am_i_dual_active;
-		pim_mlag_calculate_df_for_ifchannel(ch);
-	} else {
-		if (PIM_DEBUG_MLAG)
-			zlog_debug("%s: failed to find if-channel...",
-				   __FUNCTION__);
-	}
->>>>>>> 992c71618... [CUMULUS] pimd: temporarily use a special intf name for pim upstream syncing
+	pim_mlag_up_peer_add(&msg);
 }
 
 static void pim_mlag_process_mroute_del(struct mlag_mroute_del msg)
@@ -861,7 +787,7 @@ static void pim_mlag_process_mroute_del(struct mlag_mroute_del msg)
 
 	if (!msg.intf_name[0] ||
 		!strcmp(msg.intf_name, PIM_VXLAN_TERM_DEV_NAME)) {
-		pim_mlag_up_remote_del(&msg);
+		pim_mlag_up_peer_del(&msg);
 		return;
 	}
 }
