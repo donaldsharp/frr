@@ -51,6 +51,11 @@ enum nh_encap_type {
 /* Backup index value is limited */
 #define NEXTHOP_BACKUP_IDX_MAX 255
 
+struct vxlan_nh_encap {
+	vni_t vni;
+	struct ethaddr rmac;
+};
+
 /* Nexthop structure. */
 struct nexthop {
 	struct nexthop *next;
@@ -122,7 +127,7 @@ struct nexthop {
 	/* Encapsulation information. */
 	enum nh_encap_type nh_encap_type;
 	union {
-		vni_t vni;
+		struct vxlan_nh_encap encap_data;
 	} nh_encap;
 
 	/* EVPN router's MAC.

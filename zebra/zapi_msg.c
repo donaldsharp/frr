@@ -1583,6 +1583,8 @@ static struct nexthop *nexthop_from_zapi(const struct zapi_nexthop *api_nh,
 		 * the nexthop and associated MAC need to be installed.
 		 */
 		if (CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN)) {
+			memcpy(&(nexthop->nh_encap.encap_data.rmac),
+				   &api_nh->rmac, ETH_ALEN);
 			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_EVPN);
 			nexthop->rmac = api_nh->rmac;
 		}
@@ -1612,6 +1614,8 @@ static struct nexthop *nexthop_from_zapi(const struct zapi_nexthop *api_nh,
 		 * the nexthop and associated MAC need to be installed.
 		 */
 		if (CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN)) {
+			memcpy(&(nexthop->nh_encap.encap_data.rmac),
+				   &api_nh->rmac, ETH_ALEN);
 			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_EVPN);
 			nexthop->rmac = api_nh->rmac;
 		}
