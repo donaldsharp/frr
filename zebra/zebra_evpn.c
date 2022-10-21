@@ -104,13 +104,15 @@ int advertise_svi_macip_enabled(zebra_evpn_t *zevpn)
  */
 void zebra_evpn_print(zebra_evpn_t *zevpn, void **ctxt)
 {
-	struct vty *vty;
-	zebra_vtep_t *zvtep;
-	uint32_t num_macs;
-	uint32_t num_neigh;
+	struct vty *vty = NULL;
+	zebra_vtep_t *zvtep = NULL;
+	uint32_t num_macs = 0;
+	uint32_t num_neigh = 0;
+	uint32_t num_vteps = 0;
 	json_object *json = NULL;
 	json_object *json_vtep_list = NULL;
-	json_object *json_ip_str = NULL;
+	json_object *json_vtep = NULL;
+	char buf[MPLS_LABEL_STRLEN];
 
 	vty = ctxt[0];
 	json = ctxt[1];
@@ -121,7 +123,8 @@ void zebra_evpn_print(zebra_evpn_t *zevpn, void **ctxt)
 		vty_out(vty, " Vlan: %u\n", zevpn->vid);
 		vty_out(vty, " Bridge: %s\n",
 			zevpn->bridge_if ? zevpn->bridge_if->name : "-");
-		vty_out(vty, " Tenant VRF: %s\n", vrf_id_to_name(zevpn->vrf_id));
+		vty_out(vty, " Tenant VRF: %s\n",
+			vrf_id_to_name(zevpn->vrf_id));
 	} else {
 		json_object_int_add(json, "vni", zevpn->vni);
 		json_object_string_add(json, "type", "L2");
@@ -129,13 +132,16 @@ void zebra_evpn_print(zebra_evpn_t *zevpn, void **ctxt)
 		json_object_string_add(json, "bridge",
 				       zevpn->bridge_if ? zevpn->bridge_if->name
 							: "");
-		json_object_string_add(json, "vrf",
+		json_object_string_add(json, "tenantVrf",
 				       vrf_id_to_name(zevpn->vrf_id));
 	}
 
 	if (!zevpn->vxlan_if) { // unexpected
 		if (json == NULL)
 			vty_out(vty, " VxLAN interface: unknown\n");
+		else
+			json_object_string_add(json, "vxlanInterface",
+					       "unknown");
 		return;
 	}
 	num_macs = num_valid_macs(zevpn);
@@ -144,19 +150,23 @@ void zebra_evpn_print(zebra_evpn_t *zevpn, void **ctxt)
 		vty_out(vty, " VxLAN interface: %s\n", zevpn->vxlan_if->name);
 		vty_out(vty, " VxLAN ifIndex: %u\n", zevpn->vxlan_if->ifindex);
 		vty_out(vty, " Local VTEP IP: %s\n",
-			inet_ntoa(zevpn->local_vtep_ip));
+			inet_ntop(AF_INET, &zevpn->local_vtep_ip, buf,
+				  sizeof(buf)));
 		vty_out(vty, " Mcast group: %s\n",
-				inet_ntoa(zevpn->mcast_grp));
+			inet_ntop(AF_INET, &zevpn->mcast_grp, buf,
+				  sizeof(buf)));
 	} else {
 		json_object_string_add(json, "vxlanInterface",
 				       zevpn->vxlan_if->name);
-		json_object_int_add(json, "ifindex", zevpn->vxlan_if->ifindex);
-		json_object_string_add(json, "vtepIp",
-				       inet_ntoa(zevpn->local_vtep_ip));
-		json_object_string_add(json, "mcastGroup",
-				inet_ntoa(zevpn->mcast_grp));
+		json_object_int_add(json, "vxlanIfindex",
+				    zevpn->vxlan_if->ifindex);
+		json_object_string_addf(json, "vtepIp", "%pI4",
+					&zevpn->local_vtep_ip);
+		json_object_string_addf(json, "mcastGroup", "%pI4",
+					&zevpn->mcast_grp);
 		json_object_string_add(json, "advertiseGatewayMacip",
-				       zevpn->advertise_gw_macip ? "Yes" : "No");
+				       zevpn->advertise_gw_macip ? "Yes"
+								 : "No");
 		json_object_string_add(json, "advertiseSviMacip",
 				       zevpn->advertise_svi_macip ? "Yes"
 								  : "No");
@@ -166,30 +176,40 @@ void zebra_evpn_print(zebra_evpn_t *zevpn, void **ctxt)
 	if (!zevpn->vteps) {
 		if (json == NULL)
 			vty_out(vty, " No remote VTEPs known for this VNI\n");
+		else
+			json_object_int_add(json, "numRemoteVteps", num_vteps);
 	} else {
 		if (json == NULL)
 			vty_out(vty, " Remote VTEPs for this VNI:\n");
 		else
 			json_vtep_list = json_object_new_array();
 		for (zvtep = zevpn->vteps; zvtep; zvtep = zvtep->next) {
-			const char *flood_str = lookup_msg(zvtep_flood_str,
-					zvtep->flood_control,
-					VXLAN_FLOOD_STR_DEFAULT);
+			const char *flood_str = lookup_msg(
+				zvtep_flood_str, zvtep->flood_control,
+				VXLAN_FLOOD_STR_DEFAULT);
 
 			if (json == NULL) {
 				vty_out(vty, "  %s flood: %s\n",
-						inet_ntoa(zvtep->vtep_ip),
-						flood_str);
+					inet_ntop(AF_INET, &zvtep->vtep_ip, buf,
+						  sizeof(buf)),
+					flood_str);
 			} else {
-				json_ip_str = json_object_new_string(
-						inet_ntoa(zvtep->vtep_ip));
+				json_vtep = json_object_new_object();
+				json_object_string_addf(json_vtep, "ip", "%pI4",
+							&zvtep->vtep_ip);
+				json_object_string_add(json_vtep, "flood",
+						       flood_str);
+
 				json_object_array_add(json_vtep_list,
-						json_ip_str);
+						      json_vtep);
 			}
+			num_vteps++;
 		}
-		if (json)
-			json_object_object_add(json, "numRemoteVteps",
+		if (json) {
+			json_object_int_add(json, "numRemoteVteps", num_vteps);
+			json_object_object_add(json, "remoteVteps",
 					       json_vtep_list);
+		}
 	}
 	if (json == NULL) {
 		vty_out(vty,
