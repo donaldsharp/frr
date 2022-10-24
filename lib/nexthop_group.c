@@ -50,6 +50,7 @@ struct nexthop_hold {
 
 struct nexthop_group_hooks {
 	void (*new)(const char *name);
+	void (*modify)(const struct nexthop_group_cmd *nhgc);
 	void (*add_nexthop)(const struct nexthop_group_cmd *nhg,
 			    const struct nexthop *nhop);
 	void (*del_nexthop)(const struct nexthop_group_cmd *nhg,
@@ -1330,6 +1331,7 @@ static const struct cmd_variable_handler nhg_name_handlers[] = {
 	{.completions = NULL}};
 
 void nexthop_group_init(void (*new)(const char *name),
+			void (*modify)(const struct nexthop_group_cmd *nhgc),
 			void (*add_nexthop)(const struct nexthop_group_cmd *nhg,
 					    const struct nexthop *nhop),
 			void (*del_nexthop)(const struct nexthop_group_cmd *nhg,
@@ -1353,6 +1355,8 @@ void nexthop_group_init(void (*new)(const char *name),
 
 	if (new)
 		nhg_hooks.new = new;
+	if (modify)
+		nhg_hooks.modify = modify;
 	if (add_nexthop)
 		nhg_hooks.add_nexthop = add_nexthop;
 	if (del_nexthop)
