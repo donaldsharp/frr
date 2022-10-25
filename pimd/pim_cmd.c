@@ -3044,42 +3044,6 @@ struct pnc_cache_walk_data {
 	struct pim_instance *pim;
 };
 
-static int pim_print_pnc_cache_walkcb(struct hash_bucket *bucket, void *arg)
-{
-	struct pim_nexthop_cache *pnc = bucket->data;
-	struct pnc_cache_walk_data *cwd = arg;
-	struct vty *vty = cwd->vty;
-	struct pim_instance *pim = cwd->pim;
-	struct nexthop *nh_node = NULL;
-	ifindex_t first_ifindex;
-	struct interface *ifp = NULL;
-
-	for (nh_node = pnc->nexthop; nh_node; nh_node = nh_node->next) {
-		first_ifindex = nh_node->ifindex;
-		ifp = if_lookup_by_index(first_ifindex, pim->vrf_id);
-
-		vty_out(vty, "%-15s ", inet_ntoa(pnc->rpf.rpf_addr.u.prefix4));
-		vty_out(vty, "%-16s ", ifp ? ifp->name : "NULL");
-		vty_out(vty, "%s ", inet_ntoa(nh_node->gate.ipv4));
-		vty_out(vty, "\n");
-	}
-	return CMD_SUCCESS;
-}
-
-static void pim_show_nexthop(struct pim_instance *pim, struct vty *vty)
-{
-	struct pnc_cache_walk_data cwd;
-
-	cwd.vty = vty;
-	cwd.pim = pim;
-	vty_out(vty, "Number of registered addresses: %lu\n",
-		pim->rpf_hash->count);
-	vty_out(vty, "Address         Interface        Nexthop\n");
-	vty_out(vty, "---------------------------------------------\n");
-
-	hash_walk(pim->rpf_hash, pim_print_pnc_cache_walkcb, &cwd);
-}
-
 /* Display the bsm database details */
 static void pim_show_bsm_db(struct pim_instance *pim, struct vty *vty, bool uj)
 {
