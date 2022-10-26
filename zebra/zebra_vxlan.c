@@ -749,6 +749,7 @@ static void zl3vni_print_rmac_hash(struct hash_bucket *bucket, void *ctx)
 static void zl3vni_print(zebra_l3vni_t *zl3vni, void **ctx)
 {
 	char buf[ETHER_ADDR_STRLEN];
+	char buf_prefix[MPLS_LABEL_STRLEN];
 	struct vty *vty = NULL;
 	json_object *json = NULL;
 	zebra_evpn_t *zevpn = NULL;
@@ -766,7 +767,8 @@ static void zl3vni_print(zebra_l3vni_t *zl3vni, void **ctx)
 		vty_out(vty, "  Bridge: %s\n",
 			zl3vni->bridge_if ? zl3vni->bridge_if->name : "-");
 		vty_out(vty, "  Local Vtep Ip: %s\n",
-			inet_ntoa(zl3vni->local_vtep_ip));
+			inet_ntop(AF_INET, &zl3vni->local_vtep_ip, buf_prefix,
+				  sizeof(buf_prefix)));
 		vty_out(vty, "  Vxlan-Intf: %s\n",
 			zl3vni_vxlan_if_name(zl3vni));
 		vty_out(vty, "  SVI-If: %s\n", zl3vni_svi_if_name(zl3vni));
@@ -787,26 +789,31 @@ static void zl3vni_print(zebra_l3vni_t *zl3vni, void **ctx)
 		json_evpn_list = json_object_new_array();
 		json_object_int_add(json, "vni", zl3vni->vni);
 		json_object_string_add(json, "type", "L3");
-		json_object_string_add(json, "localVtepIp",
-				       inet_ntoa(zl3vni->local_vtep_ip));
+		json_object_string_add(json, "tenantVrf",
+				       zl3vni_vrf_name(zl3vni));
+		json_object_int_add(json, "vlan", zl3vni->vid);
+		json_object_string_add(
+			json, "bridge",
+			zl3vni->bridge_if ? zl3vni->bridge_if->name : "none");
+		json_object_string_addf(json, "localVtepIp", "%pI4",
+					&zl3vni->local_vtep_ip);
 		json_object_string_add(json, "vxlanIntf",
 				       zl3vni_vxlan_if_name(zl3vni));
 		json_object_string_add(json, "sviIntf",
 				       zl3vni_svi_if_name(zl3vni));
 		json_object_boolean_add(json, "isL3svd", zl3vni->is_l3svd);
 		json_object_string_add(json, "state", zl3vni_state2str(zl3vni));
-		json_object_string_add(json, "vrf", zl3vni_vrf_name(zl3vni));
+		json_object_string_add(
+			json, "vniFilter",
+			CHECK_FLAG(zl3vni->filter, PREFIX_ROUTES_ONLY)
+				? "prefix-routes-only"
+				: "none");
 		json_object_string_add(
 			json, "sysMac",
 			zl3vni_sysmac2str(zl3vni, buf, sizeof(buf)));
 		json_object_string_add(
 			json, "routerMac",
 			zl3vni_rmac2str(zl3vni, buf, sizeof(buf)));
-		json_object_string_add(
-			json, "vniFilter",
-			CHECK_FLAG(zl3vni->filter, PREFIX_ROUTES_ONLY)
-				? "prefix-routes-only"
-				: "none");
 		for (ALL_LIST_ELEMENTS(zl3vni->l2vnis, node, nnode, zevpn)) {
 			json_object_array_add(json_evpn_list,
 					      json_object_new_int(zevpn->vni));
@@ -3846,8 +3853,21 @@ void zebra_vxlan_print_vni(struct vty *vty, struct zebra_vrf *zvrf, vni_t vni,
 		zevpn = zebra_evpn_lookup(vni);
 		if (zevpn)
 			zebra_evpn_print(zevpn, (void *)args);
-		else if (!json)
-			vty_out(vty, "%% VNI %u does not exist\n", vni);
+		else {
+			if (!json)
+				vty_out(vty, "%% VNI %u does not exist\n", vni);
+			else {
+				char warning_msg[100];
+				snprintf(warning_msg, sizeof(warning_msg),
+					 "vni %u does not exist", vni);
+				json_object_string_add(json, "warning",
+						       warning_msg);
+				vty_out(vty, "%s\n",
+					json_object_to_json_string(json));
+				json_object_free(json);
+				return;
+			}
+		}
 	}
 
 	if (use_json) {
@@ -3859,8 +3879,9 @@ void zebra_vxlan_print_vni(struct vty *vty, struct zebra_vrf *zvrf, vni_t vni,
 		if (json_array)
 			json_object_array_add(json_array, json);
 		else {
-			vty_out(vty, "%s\n", json_object_to_json_string_ext(
-				json, JSON_C_TO_STRING_PRETTY));
+			vty_out(vty, "%s\n",
+				json_object_to_json_string_ext(
+					json, JSON_C_TO_STRING_PRETTY));
 			json_object_free(json);
 		}
 	}
