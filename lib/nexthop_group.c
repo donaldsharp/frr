@@ -1374,12 +1374,12 @@ void nexthop_group_init(void (*new)(const char *name),
  * nexthop2str() adds interface index.
  */
 const char *nexthop_group2str(const struct nexthop_group *nhg, char *str,
-			      int size)
+			      size_t size)
 {
 	char buf[NEXTHOP_STRLEN + 2];
 	struct nexthop *tnexthop = NULL;
 
-	str[0] == '\0';
+	str[0] = '\0';
 	if (!nhg || !nhg->nexthop) {
 		return str;
 	}

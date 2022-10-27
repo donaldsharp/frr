@@ -15769,6 +15769,10 @@ int bgp_config_write(struct vty *vty)
 	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN))
 		vty_out(vty, "bgp graceful-shutdown\n");
 
+	/* BGP InQ limit */
+	if (bm->inq_limit != BM_DEFAULT_INQ_LIMIT)
+		vty_out(vty, "bgp input-queue-limit %u\n", bm->inq_limit);
+
 	vty_out(vty, "!\n");
 
 	/* BGP configuration. */
@@ -16267,6 +16271,32 @@ static const struct cmd_variable_handler bgp_var_peergroup[] = {
 	{.tokenname = "PGNAME", .completions = bgp_ac_peergroup},
 	{.completions = NULL} };
 
+
+DEFPY (bgp_inq_limit,
+       bgp_inq_limit_cmd,
+       "bgp input-queue-limit (1-4294967295)$limit",
+       BGP_STR
+       "Set the BGP Input Queue limit for all peers when message parsing\n"
+       "Input-Queue limit\n")
+{
+	bm->inq_limit = limit;
+
+	return CMD_SUCCESS;
+}
+
+DEFPY (no_bgp_inq_limit,
+       no_bgp_inq_limit_cmd,
+       "no bgp input-queue-limit [(1-4294967295)$limit]",
+       NO_STR
+       BGP_STR
+       "Set the BGP Input Queue limit for all peers when message parsing\n"
+       "Input-Queue limit\n")
+{
+	bm->inq_limit = BM_DEFAULT_INQ_LIMIT;
+
+	return CMD_SUCCESS;
+}
+
 void bgp_vty_init(void)
 {
 	cmd_variable_handler_register(bgp_var_neighbor);
@@ -16301,6 +16331,10 @@ void bgp_vty_init(void)
 	install_default(BGP_FLOWSPECV6_NODE);
 	install_default(BGP_EVPN_NODE);
 	install_default(BGP_EVPN_VNI_NODE);
+
+	/* "global bgp inq-limit command */
+	install_element(CONFIG_NODE, &bgp_inq_limit_cmd);
+	install_element(CONFIG_NODE, &no_bgp_inq_limit_cmd);
 
 	/* "bgp local-mac" hidden commands. */
 	install_element(CONFIG_NODE, &bgp_local_mac_cmd);
@@ -16480,6 +16514,10 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &no_bgp_graceful_restart_disable_eor_cmd);
 	install_element(BGP_NODE, &bgp_graceful_restart_rib_stale_time_cmd);
 	install_element(BGP_NODE, &no_bgp_graceful_restart_rib_stale_time_cmd);
+
+	/* "bgp inq-limit command */
+	install_element(BGP_NODE, &bgp_inq_limit_cmd);
+	install_element(BGP_NODE, &no_bgp_inq_limit_cmd);
 
 	/* "bgp graceful-shutdown" commands */
 	install_element(BGP_NODE, &bgp_graceful_shutdown_cmd);
