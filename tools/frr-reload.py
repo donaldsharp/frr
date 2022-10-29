@@ -213,6 +213,7 @@ class Context(object):
             self.dlines[ligne] = True
 
 
+
 def get_normalized_es_id(line):
     """
     The es-id or es-sys-mac need to be converted to lower case
@@ -226,6 +227,7 @@ def get_normalized_es_id(line):
     return line
 
 
+
 def get_normalized_bgp_default(line):
     """
     If 'router bgp <ASN> vrf default' is entered, we need to remove the
@@ -236,6 +238,7 @@ def get_normalized_bgp_default(line):
 
     return new_line
 
+
 def get_normalized_mac_ip_line(line):
     if line.startswith("evpn mh es"):
         return get_normalized_es_id(line)
@@ -244,6 +247,7 @@ def get_normalized_mac_ip_line(line):
         return get_normalized_ipv6_line(line)
 
     return line
+
 
 
 class Config(object):
@@ -275,8 +279,12 @@ class Config(object):
             line = " ".join(line.split())
 
             # remove 'vrf default' from 'router bgp x vrf default'
-            if line.startswith('router bgp') and "vrf default" in line:
-                line = get_normalized_bgp_default(line)
+            if line.startswith("router bgp") and "vrf" in line and "default" in line:
+                # only consider 'vrf default' as it could be
+                # 'vrf defaultxyz'
+                bgp_default_re = re.search("\s+default$", line)
+                if bgp_default_re:
+                    line = get_normalized_bgp_default(line)
 
             if ":" in line:
                 line = get_normalized_mac_ip_line(line)
@@ -744,6 +752,7 @@ def line_exist(lines, target_ctx_keys, target_line, exact_match=True):
                 if line.startswith(target_line):
                     return True
     return False
+
 
 
 def check_for_exit_vrf(lines_to_add, lines_to_del):
