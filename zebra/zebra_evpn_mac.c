@@ -140,7 +140,10 @@ static void zebra_evpn_mac_ifp_unlink(zebra_mac_t *zmac)
 			   ifp->name, ifp->ifindex);
 
 	zif = ifp->info;
-	list_delete_node(zif->mac_list, &zmac->ifp_listnode);
+
+	if (zif && zif->mac_list)
+		list_delete_node(zif->mac_list, &zmac->ifp_listnode);
+
 	zmac->ifp = NULL;
 }
 
