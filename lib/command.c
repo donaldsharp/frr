@@ -442,6 +442,36 @@ static char *zencrypt(const char *passwd)
 
 static bool full_cli;
 
+#define MOD(a, b) ((((a) % (b)) + (b)) % (b))
+
+char *caesar(bool encrypt, char *text, const char *key)
+{
+	size_t kl = strlen(key);
+	size_t tl = strlen(text);
+	int16_t w[tl + 1];
+
+	for (size_t i = 0; i < tl; ++i)
+		if (!(text[i] >= 33 && text[i] <= 126))
+			return NULL;
+
+	for (size_t i = 0; i < kl; ++i)
+		if (!(key[i] >= 33 && key[i] <= 126))
+			return NULL;
+
+	for (size_t i = 0; i < tl; ++i) {
+		w[i] = text[i];
+		w[i] += -33 + (2 * !!encrypt - 1) * key[i % kl];
+		w[i] = MOD((w[i]), (127 - 33)) + 33;
+	}
+
+	for (size_t i = 0; i < tl; i++)
+		text[i] = w[i];
+
+	w[tl] = 0x00;
+
+	return text;
+}
+
 /* This function write configuration of this host. */
 static int config_write_host(struct vty *vty)
 {
@@ -513,6 +543,9 @@ static int config_write_host(struct vty *vty)
 
 		if (host.encrypt)
 			vty_out(vty, "service password-encryption\n");
+
+		if (host.obfuscate)
+			vty_out(vty, "service password-obfuscation\n");
 
 		if (host.lines >= 0)
 			vty_out(vty, "service terminal-length %d\n",
@@ -2080,6 +2113,17 @@ DEFUN (service_password_encrypt,
 	return CMD_SUCCESS;
 }
 
+DEFUN(service_password_obfuscate, service_password_obfuscate_cmd,
+      "[no] service password-obfuscation",
+      NO_STR
+      "Set up miscellaneous service\n"
+      "Obfuscate unencrypted passwords\n")
+{
+	host.obfuscate = !strmatch(argv[0]->text, "no");
+
+	return CMD_SUCCESS;
+}
+
 DEFUN (no_service_password_encrypt,
        no_service_password_encrypt_cmd,
        "no service password-encryption",
@@ -2546,6 +2590,7 @@ void cmd_init(int terminal)
 		install_element(CONFIG_NODE, &no_enable_password_cmd);
 
 		install_element(CONFIG_NODE, &service_password_encrypt_cmd);
+		install_element(CONFIG_NODE, &service_password_obfuscate_cmd);
 		install_element(CONFIG_NODE, &no_service_password_encrypt_cmd);
 		install_element(CONFIG_NODE, &banner_motd_default_cmd);
 		install_element(CONFIG_NODE, &banner_motd_file_cmd);

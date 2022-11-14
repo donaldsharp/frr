@@ -6103,6 +6103,8 @@ int peer_password_set(struct peer *peer, const char *password)
 		return 0;
 	XFREE(MTYPE_PEER_PASSWORD, peer->password);
 	peer->password = XSTRDUP(MTYPE_PEER_PASSWORD, password);
+	if (host.obfuscate)
+		caesar(false, peer->password, BGP_PASSWD_OBFUSCATION_KEY);
 
 	/* Check if handling a regular peer. */
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
@@ -6141,6 +6143,10 @@ int peer_password_set(struct peer *peer, const char *password)
 		if (member->password)
 			XFREE(MTYPE_PEER_PASSWORD, member->password);
 		member->password = XSTRDUP(MTYPE_PEER_PASSWORD, password);
+		if (host.obfuscate)
+			caesar(false, member->password,
+			       BGP_PASSWD_OBFUSCATION_KEY);
+>>>>>>> e60ff64f48 (bgpd, ospfd, isisd: obfuscate passwords)
 
 		/* Send notification or reset peer depending on state. */
 		if (BGP_IS_VALID_STATE_FOR_NOTIF(member->status))

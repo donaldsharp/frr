@@ -80,6 +80,7 @@ struct host {
 	/* Flags for services */
 	int advanced;
 	int encrypt;
+	int obfuscate;
 
 	/* Banner configuration. */
 	char *motd;
@@ -625,6 +626,38 @@ extern void print_version(const char *);
 
 extern int cmd_banner_motd_file(const char *);
 extern void cmd_banner_motd_line(const char *line);
+
+/*
+ * Reversible obfuscation.
+ *
+ * Implements a Caesar cipher. Printable ASCII in, printable ASCII out.
+ *
+ * No spaces (0x20) allowed in plaintext, ciphertext or key. No spaces produced
+ * in output.
+ *
+ * --------------------------------------------------------------------------
+ * SUBSTITUTION CIPHERS OFFER NO SECURITY. DO NOT USE THIS IN SECURE SYSTEMS.
+ * SUBSTITUTION CIPHERS OFFER NO SECURITY. DO NOT USE THIS IN SECURE SYSTEMS.
+ * SUBSTITUTION CIPHERS OFFER NO SECURITY. DO NOT USE THIS IN SECURE SYSTEMS.
+ * SUBSTITUTION CIPHERS OFFER NO SECURITY. DO NOT USE THIS IN SECURE SYSTEMS.
+ * SUBSTITUTION CIPHERS OFFER NO SECURITY. DO NOT USE THIS IN SECURE SYSTEMS.
+ * --------------------------------------------------------------------------
+ *
+ * encrypt
+ *    true  = encrypt
+ *    false = decrypt
+ *
+ * text
+ *    null-terminated input text; should be plaintext when encrypt = true,
+ *    ciphertext when encrypt = false; must be printable ASCII without spaces
+ *
+ * key
+ *    null terminated key; must be printable ASCII without spaces
+ *
+ * Returns:
+ *    `text`, encrypted or decrypted in-place.
+ */
+char *caesar(bool encrypt, char *text, const char *key);
 
 /* struct host global, ick */
 extern struct host host;

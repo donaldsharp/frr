@@ -3172,6 +3172,15 @@ DEFUNSH(VTYSH_ALL, no_vtysh_service_password_encrypt,
 	return CMD_SUCCESS;
 }
 
+DEFUNSH(VTYSH_ALL, service_password_obfuscate, service_password_obfuscate_cmd,
+	"[no] service password-obfuscation",
+	NO_STR
+	"Set up miscellaneous service\n"
+	"Obfuscate unencrypted passwords\n")
+{
+	return CMD_SUCCESS;
+}
+
 DEFUNSH(VTYSH_ALL, vtysh_config_password, vtysh_password_cmd,
 	"password [(8-8)] LINE",
 	"Modify the terminal connection password\n"
@@ -4916,6 +4925,8 @@ void vtysh_init_vty(void)
 
 	install_element(CONFIG_NODE, &vtysh_service_password_encrypt_cmd);
 	install_element(CONFIG_NODE, &no_vtysh_service_password_encrypt_cmd);
+
+	install_element(CONFIG_NODE, &service_password_obfuscate_cmd);
 
 	install_element(CONFIG_NODE, &vtysh_password_cmd);
 	install_element(CONFIG_NODE, &no_vtysh_password_cmd);

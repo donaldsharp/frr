@@ -76,7 +76,7 @@ int allow_delete = 0;
 
 int graceful_restart;
 
-bool v6_rr_semantics = false;
+bool v6_rr_semantics = true;
 
 /* Receive buffer size for kernel control sockets */
 #define RCVBUFSIZE_MIN 4194304
@@ -228,6 +228,7 @@ void zebra_finalize(struct thread *dummy)
 
 	zebra_router_terminate();
 
+	ns_terminate();
 	frr_fini();
 	exit(0);
 }
