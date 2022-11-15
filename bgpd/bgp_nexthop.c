@@ -1142,6 +1142,92 @@ static void bgp_show_all_instances_nexthops_vty(struct vty *vty,
 	}
 }
 
+DEFUN(show_ip_bgp_nexthop_ipv4,
+	  show_ip_bgp_nexthop_ipv4_cmd,
+      "show [ip] bgp [<view|vrf> VIEWVRFNAME] nexthop ipv4 [A.B.C.D] [detail] [json]",
+      SHOW_STR
+      IP_STR
+      BGP_STR
+      BGP_INSTANCE_HELP_STR
+      "BGP nexthop table\n"
+      "BGP nexthop IPv4 table\n"
+      "IPv4 nexthop address\n"
+      "Show detailed information\n"
+      JSON_STR)
+{
+	int rc = 0;
+	int idx = 0;
+	int nh_idx = 0;
+	char *vrf = NULL;
+	char *nhop_ip = NULL;
+	json_object *json = NULL;
+	bool detail = false;
+	bool uj = use_json(argc, argv);
+
+	if (uj)
+		json = json_object_new_object();
+
+	if (argv_find(argv, argc, "view", &idx) ||
+	    argv_find(argv, argc, "vrf", &idx))
+		vrf = argv[++idx]->arg;
+
+	if (argv_find(argv, argc, "A.B.C.D", &nh_idx))
+		nhop_ip = argv[nh_idx]->arg;
+
+	if (argv_find(argv, argc, "detail", &idx))
+		detail = true;
+
+	rc = show_ip_bgp_nexthop_table(vty, vrf, nhop_ip, false, json, AFI_IP,
+				       detail);
+
+	if (uj)
+		vty_json(vty, json);
+	return rc;
+}
+
+DEFUN(show_ip_bgp_nexthop_ipv6,
+	  show_ip_bgp_nexthop_ipv6_cmd,
+      "show [ip] bgp [<view|vrf> VIEWVRFNAME] nexthop ipv6 [X:X::X:X] [detail] [json]",
+      SHOW_STR
+      IP_STR
+      BGP_STR
+      BGP_INSTANCE_HELP_STR
+      "BGP nexthop table\n"
+      "BGP nexthop IPv6 table\n"
+      "IPv6 nexthop address\n"
+      "Show detailed information\n"
+      JSON_STR)
+{
+	int rc = 0;
+	int idx = 0;
+	int nh_idx = 0;
+	char *vrf = NULL;
+	char *nhop_ip = NULL;
+	json_object *json = NULL;
+	bool detail = false;
+	bool uj = use_json(argc, argv);
+
+	if (uj)
+		json = json_object_new_object();
+
+	if (argv_find(argv, argc, "view", &idx) ||
+	    argv_find(argv, argc, "vrf", &idx))
+		vrf = argv[++idx]->arg;
+
+	if (argv_find(argv, argc, "X:X::X:X", &nh_idx))
+		nhop_ip = argv[nh_idx]->arg;
+
+	if (argv_find(argv, argc, "detail", &idx))
+		detail = true;
+
+	rc = show_ip_bgp_nexthop_table(vty, vrf, nhop_ip, false, json, AFI_IP6,
+				       detail);
+
+	if (uj)
+		vty_json(vty, json);
+	return rc;
+}
+
 DEFUN(show_ip_bgp_nexthop,
 	  show_ip_bgp_nexthop_cmd,
       "show [ip] bgp [<view|vrf> VIEWVRFNAME] nexthop [<A.B.C.D|X:X::X:X>] [detail] [json]",
@@ -1273,6 +1359,8 @@ void bgp_scan_init(struct bgp *bgp)
 void bgp_scan_vty_init(void)
 {
 	install_element(VIEW_NODE, &show_ip_bgp_nexthop_cmd);
+	install_element(VIEW_NODE, &show_ip_bgp_nexthop_ipv4_cmd);
+	install_element(VIEW_NODE, &show_ip_bgp_nexthop_ipv6_cmd);
 	install_element(VIEW_NODE, &show_ip_bgp_import_check_cmd);
 	install_element(VIEW_NODE, &show_ip_bgp_instance_all_nexthop_cmd);
 }
