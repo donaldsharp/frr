@@ -3765,6 +3765,8 @@ ssize_t netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx, void *data,
 	return total;
 }
 
+extern enum zebra_dplane_result kernel_br_port_update_ctx(
+		struct zebra_dplane_ctx *ctx);
 /* Netlink-specific handler for br_port updates using dataplane context */
 enum zebra_dplane_result kernel_br_port_update_ctx(
 		struct zebra_dplane_ctx *ctx)
