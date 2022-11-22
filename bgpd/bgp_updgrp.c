@@ -586,7 +586,7 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 	json_object *json_subgrp_event = NULL;
 	json_object *json_peers = NULL;
 	json_object *json_pkt_info = NULL;
-	time_t tbuf;
+	time_t epoch_tbuf, tbuf;
 
 	if (!ctx)
 		return CMD_SUCCESS;
@@ -611,15 +611,18 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 		return CMD_SUCCESS;
 	}
 
-
 	vty = ctx->vty;
+
 	if (ctx->uj) {
 		json_updgrp = json_object_new_object();
 		/* Display json o/p */
-		tbuf = time(NULL) - (bgp_clock() - updgrp->uptime);
+		tbuf = monotime(NULL);
+		tbuf -= updgrp->uptime;
+		epoch_tbuf = time(NULL) - tbuf;
 		json_time = json_object_new_object();
-		json_object_int_add(json_time, "epoch", tbuf);
-		json_object_string_add(json_time, "string", ctime(&tbuf));
+		json_object_int_add(json_time, "epoch", epoch_tbuf);
+		json_object_string_add(json_time, "epochString",
+				       ctime(&epoch_tbuf));
 		json_object_object_add(json_updgrp, "groupCreateTime",
 				       json_time);
 		json_object_string_add(json_updgrp, "afi",
@@ -630,23 +633,27 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 		vty_out(vty, "Update-group %" PRIu64 ":\n", updgrp->id);
 		vty_out(vty, "  Created: %s", timestamp_string(updgrp->uptime));
 	}
+
 	filter = &updgrp->conf->filter[updgrp->afi][updgrp->safi];
 	if (filter->map[RMAP_OUT].name) {
-		if (ctx->uj) {
+		if (ctx->uj)
 			json_object_string_add(json_updgrp, "outRouteMap",
 					       filter->map[RMAP_OUT].name);
-			json_object_int_add(json_updgrp, "minRouteAdvInt",
-					    updgrp->conf->v_routeadv);
-		} else {
+		else
 			vty_out(vty, "  Outgoing route map: %s\n",
 				filter->map[RMAP_OUT].name);
-			vty_out(vty, "  MRAI value (seconds): %d\n",
-				updgrp->conf->v_routeadv);
-		}
 	}
+
+	if (ctx->uj)
+		json_object_int_add(json_updgrp, "minRouteAdvInt",
+				    updgrp->conf->v_routeadv);
+	else
+		vty_out(vty, "  MRAI value (seconds): %d\n",
+			updgrp->conf->v_routeadv);
+
 	if (updgrp->conf->change_local_as) {
 		if (ctx->uj) {
-			json_object_int_add(json_updgrp, "localAs ",
+			json_object_int_add(json_updgrp, "localAs",
 					    updgrp->conf->change_local_as);
 			json_object_boolean_add(
 				json_updgrp, "noPrependFlag",
@@ -677,11 +684,14 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 			json_subgrp = json_object_new_object();
 			json_object_int_add(json_subgrp, "subGroupId",
 					    subgrp->id);
-			tbuf = time(NULL) - (bgp_clock() - subgrp->uptime);
+			tbuf = monotime(NULL);
+			tbuf -= subgrp->uptime;
+			epoch_tbuf = time(NULL) - tbuf;
 			json_subgrp_time = json_object_new_object();
-			json_object_int_add(json_subgrp_time, "epoch", tbuf);
-			json_object_string_add(json_subgrp_time, "string",
-					       ctime(&tbuf));
+			json_object_int_add(json_subgrp_time, "epoch",
+					    epoch_tbuf);
+			json_object_string_add(json_subgrp_time, "epochString",
+					       ctime(&epoch_tbuf));
 			json_object_object_add(json_subgrp, "groupCreateTime",
 					       json_subgrp_time);
 		} else {
@@ -712,6 +722,7 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 					subgrp->split_from.subgroup_id);
 			}
 		}
+
 		if (ctx->uj) {
 			json_subgrp_event = json_object_new_object();
 			json_object_int_add(json_subgrp_event, "joinEvents",
@@ -739,7 +750,7 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 					    subgrp->version);
 			json_pkt_info = json_object_new_object();
 			json_object_int_add(
-				json_pkt_info, "eueueLen",
+				json_pkt_info, "qeueueLen",
 				bpacket_queue_length(SUBGRP_PKTQ(subgrp)));
 			json_object_int_add(
 				json_pkt_info, "queuedTotal",
@@ -752,14 +763,12 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 				subgroup_total_packets_enqueued(subgrp));
 			json_object_object_add(json_subgrp, "packetQueueInfo",
 					       json_pkt_info);
-			json_object_int_add(json_subgrp,
-					    "adjListCount:", subgrp->adj_count);
-			json_object_string_add(
-				json_subgrp, "needsRefreshFlag:",
+			json_object_int_add(json_subgrp, "adjListCount",
+					    subgrp->adj_count);
+			json_object_boolean_add(
+				json_subgrp, "needsRefreshFlag",
 				CHECK_FLAG(subgrp->flags,
-					   SUBGRP_FLAG_NEEDS_REFRESH)
-					? "true"
-					: "false");
+					   SUBGRP_FLAG_NEEDS_REFRESH));
 		} else {
 			vty_out(vty, "    Join events: %u\n",
 				subgrp->join_events);
@@ -799,6 +808,7 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 					: "");
 			if (peer)
 				vty_out(vty, "    Max packet size: %d\n",
+					peer->max_packet_size);
 		}
 		if (subgrp->peer_count > 0) {
 			if (ctx->uj) {
@@ -818,14 +828,17 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 						paf->peer->host);
 			}
 		}
+
 		if (ctx->uj)
 			json_object_array_add(json_subgrps, json_subgrp);
 	}
+
 	if (ctx->uj) {
 		json_object_object_add(json_updgrp, "subGroup", json_subgrps);
-		json_object_object_addf(ctx->json_updategrps, json_updgrp, "%u",
-					updgrp->id);
+		json_object_object_addf(ctx->json_updategrps, json_updgrp,
+					"%" PRIu64, updgrp->id);
 	}
+
 	return UPDWALK_CONTINUE;
 }
 
@@ -1767,10 +1780,7 @@ void update_group_show(struct bgp *bgp, afi_t afi, safi_t safi, struct vty *vty,
 		else
 			json_object_object_add(json_vrf_obj, bgp->name,
 					       ctx.json_updategrps);
-		vty_out(vty, "%s\n",
-			json_object_to_json_string_ext(
-				json_vrf_obj, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json_vrf_obj);
+		vty_json(vty, json_vrf_obj);
 	}
 }
 

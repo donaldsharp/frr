@@ -13758,12 +13758,12 @@ static void bgp_show_all_instances_updgrps_vty(struct vty *vty, afi_t afi,
 		if (IS_BGP_INSTANCE_HIDDEN(bgp))
 			continue;
 
-		if (!uj) {
+		if (!uj)
 			vty_out(vty, "\nInstance %s:\n",
 				(bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)
 					? VRF_DEFAULT_NAME
 					: bgp->name);
-		}
+
 		update_group_show(bgp, afi, safi, vty, 0, uj);
 	}
 }
@@ -13789,13 +13789,18 @@ static int bgp_show_update_groups(struct vty *vty, const char *name, int afi,
 	return CMD_SUCCESS;
 }
 
-DEFUN(show_ip_bgp_updgrps, show_ip_bgp_updgrps_cmd,
-      "show [ip] bgp [<view|vrf> VIEWVRFNAME] [" BGP_AFI_CMD_STR
-      " [" BGP_SAFI_WITH_LABEL_CMD_STR "]] update-groups [SUBGROUP-ID] [json]",
-      SHOW_STR IP_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AFI_HELP_STR
-	      BGP_SAFI_WITH_LABEL_HELP_STR
-      "Detailed info about dynamic update groups\n"
-      "Specific subgroup to display detailed info for\n" JSON_STR)
+DEFUN (show_ip_bgp_updgrps,
+       show_ip_bgp_updgrps_cmd,
+       "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]] update-groups [SUBGROUP-ID] [json]",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       BGP_INSTANCE_HELP_STR
+       BGP_AFI_HELP_STR
+       BGP_SAFI_WITH_LABEL_HELP_STR
+       "Detailed info about dynamic update groups\n"
+       "Specific subgroup to display detailed info for\n"
+       JSON_STR)
 {
 	char *vrf = NULL;
 	afi_t afi = AFI_IP6;
@@ -13830,13 +13835,18 @@ DEFUN(show_ip_bgp_updgrps, show_ip_bgp_updgrps_cmd,
 	return (bgp_show_update_groups(vty, vrf, afi, safi, subgrp_id, uj));
 }
 
-DEFUN(show_bgp_instance_all_ipv6_updgrps,
-      show_bgp_instance_all_ipv6_updgrps_cmd,
-      "show [ip] bgp <view|vrf> all update-groups [json]",
-      SHOW_STR IP_STR BGP_STR BGP_INSTANCE_ALL_HELP_STR
-      "Detailed info about dynamic update groups JSON_STR\n")
+DEFUN (show_bgp_instance_all_ipv6_updgrps,
+       show_bgp_instance_all_ipv6_updgrps_cmd,
+       "show [ip] bgp <view|vrf> all update-groups [json]",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       BGP_INSTANCE_ALL_HELP_STR
+       "Detailed info about dynamic update groups\n"
+       JSON_STR)
 {
 	bool uj = use_json(argc, argv);
+
 	bgp_show_all_instances_updgrps_vty(vty, AFI_IP6, SAFI_UNICAST, uj);
 	return CMD_SUCCESS;
 }
