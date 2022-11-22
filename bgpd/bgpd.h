@@ -1511,6 +1511,9 @@ struct peer {
 	/* Sender side AS path loop detection. */
 	bool as_path_loop_detection;
 
+	/* Extended Message Support */
+	uint16_t max_packet_size;
+
 	/* Conditional advertisement */
 	bool advmap_config_change[AFI_MAX][SAFI_MAX];
 	bool advmap_table_change;
