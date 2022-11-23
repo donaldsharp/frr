@@ -872,7 +872,7 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 			json_object_int_add(json_subgrp, "adjListCount",
 					    subgrp->adj_count);
 			json_object_boolean_add(
-				json_subgrp, "needsRefreshFlag",
+				json_subgrp, "needsRefresh",
 				CHECK_FLAG(subgrp->flags,
 					   SUBGRP_FLAG_NEEDS_REFRESH));
 		} else {
