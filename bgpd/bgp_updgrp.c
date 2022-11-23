@@ -656,7 +656,7 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 			json_object_int_add(json_updgrp, "localAs",
 					    updgrp->conf->change_local_as);
 			json_object_boolean_add(
-				json_updgrp, "noPrependFlag",
+				json_updgrp, "noPrepend",
 				CHECK_FLAG(updgrp->conf->flags,
 					   PEER_FLAG_LOCAL_AS_NO_PREPEND));
 			json_object_boolean_add(
@@ -766,7 +766,7 @@ static int update_group_show_walkcb(struct update_group *updgrp, void *arg)
 			json_object_int_add(json_subgrp, "adjListCount",
 					    subgrp->adj_count);
 			json_object_boolean_add(
-				json_subgrp, "needsRefreshFlag",
+				json_subgrp, "needsRefresh",
 				CHECK_FLAG(subgrp->flags,
 					   SUBGRP_FLAG_NEEDS_REFRESH));
 		} else {
@@ -1763,23 +1763,28 @@ void update_group_show(struct bgp *bgp, afi_t afi, safi_t safi, struct vty *vty,
 		       uint64_t subgrp_id, bool uj)
 {
 	struct updwalk_context ctx;
+
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.vty = vty;
 	ctx.subgrp_id = subgrp_id;
-	json_object *json_vrf_obj = json_object_new_object();
-
 	ctx.uj = uj;
+
 	if (uj) {
 		ctx.json_updategrps = json_object_new_object();
+		json_object *json_vrf_obj = json_object_new_object();
 	}
+
 	update_group_af_walk(bgp, afi, safi, update_group_show_walkcb, &ctx);
+
 	if (uj) {
+		const char *vname;
+
 		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)
-			json_object_object_add(json_vrf_obj, VRF_DEFAULT_NAME,
-					       ctx.json_updategrps);
+			vname = VRF_DEFAULT_NAME;
 		else
-			json_object_object_add(json_vrf_obj, bgp->name,
-					       ctx.json_updategrps);
+			vname = bgp->name;
+		json_object_object_add(json_vrf_obj, vname,
+				       ctx.json_updategrps);
 		vty_json(vty, json_vrf_obj);
 	}
 }
