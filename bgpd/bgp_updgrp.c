@@ -1763,6 +1763,7 @@ void update_group_show(struct bgp *bgp, afi_t afi, safi_t safi, struct vty *vty,
 		       uint64_t subgrp_id, bool uj)
 {
 	struct updwalk_context ctx;
+	json_object *json_vrf_obj = NULL;
 
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.vty = vty;
@@ -1771,7 +1772,7 @@ void update_group_show(struct bgp *bgp, afi_t afi, safi_t safi, struct vty *vty,
 
 	if (uj) {
 		ctx.json_updategrps = json_object_new_object();
-		json_object *json_vrf_obj = json_object_new_object();
+		json_vrf_obj = json_object_new_object();
 	}
 
 	update_group_af_walk(bgp, afi, safi, update_group_show_walkcb, &ctx);
