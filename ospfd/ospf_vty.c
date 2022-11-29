@@ -22,6 +22,7 @@
 #include <zebra.h>
 #include <string.h>
 
+#include "printfrr.h"
 #include "monotime.h"
 #include "memory.h"
 #include "thread.h"
@@ -3339,21 +3340,15 @@ DEFUN (show_ip_ospf,
 							  use_vrf);
 			}
 			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
+				vty_json(vty, json);
 			} else if (!ospf_output)
-				vty_out(vty, "%% OSPF instance not found\n");
+				vty_out(vty, "%% OSPF is not enabled\n");
 			return ret;
 		}
 		ospf = ospf_lookup_by_inst_name(inst, vrf_name);
 		if ((ospf == NULL) || !ospf->oi_running) {
 			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
+				vty_json(vty, json);
 			} else
 				vty_out(vty, "%% OSPF instance not found\n");
 
@@ -3364,10 +3359,7 @@ DEFUN (show_ip_ospf,
 		/* Display default ospf (instance 0) info */
 		if (ospf == NULL || !ospf->oi_running) {
 			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
+				vty_json(vty, json);
 			} else
 				vty_out(vty, "%% OSPF instance not found\n");
 
@@ -3419,9 +3411,7 @@ DEFUN (show_ip_ospf_instance,
 	ret = show_ip_ospf_common(vty, ospf, json, 0);
 
 	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	}
 
 	return ret;
@@ -4027,24 +4017,20 @@ DEFUN (show_ip_ospf_interface,
 			}
 
 			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
+				vty_json(vty, json);
 			} else if (!ospf)
-				vty_out(vty, "%% OSPF instance not found\n");
+				vty_out(vty, "%% OSPF is not enabled\n");
 
 			return ret;
 		}
 		ospf = ospf_lookup_by_inst_name(inst, vrf_name);
 		if (ospf == NULL || !ospf->oi_running) {
-			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
-			} else
-				vty_out(vty, "%% OSPF instance not found\n");
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty,
+					"%% OSPF is not enabled in vrf %s\n",
+					vrf_name);
 
 			return CMD_SUCCESS;
 		}
@@ -4055,13 +4041,11 @@ DEFUN (show_ip_ospf_interface,
 		/* Display default ospf (instance 0) info */
 		ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
 		if (ospf == NULL || !ospf->oi_running) {
-			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
-			} else
-				vty_out(vty, "%% OSPF instance not found\n");
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty,
+					"%% OSPF is not enabled in vrf default\n");
 
 			return CMD_SUCCESS;
 		}
@@ -4070,9 +4054,7 @@ DEFUN (show_ip_ospf_interface,
 	}
 
 	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	}
 
 	return ret;
@@ -4115,9 +4097,7 @@ DEFUN (show_ip_ospf_instance_interface,
 	ret = show_ip_ospf_interface_common(vty, ospf, intf_name, 0, json, uj);
 
 	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	}
 
 	return ret;
@@ -4170,10 +4150,7 @@ DEFUN (show_ip_ospf_interface_traffic,
 			}
 
 			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
+				vty_json(vty, json);
 			}
 
 			return ret;
@@ -4200,9 +4177,7 @@ DEFUN (show_ip_ospf_interface_traffic,
 	}
 
 	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	}
 
 	return ret;
@@ -4428,25 +4403,21 @@ DEFUN (show_ip_ospf_neighbor,
 			}
 
 			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
+				vty_json(vty, json);
 			} else if (!ospf)
-				vty_out(vty, "OSPF instance not found\n");
+				vty_out(vty, "OSPF is not enabled\n");
 
 			return ret;
 		}
 
 		ospf = ospf_lookup_by_inst_name(inst, vrf_name);
 		if (ospf == NULL || !ospf->oi_running) {
-			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
-			} else
-				vty_out(vty, "%% OSPF instance not found\n");
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty,
+					"%% OSPF is not enabled in vrf %s\n",
+					vrf_name);
 
 			return CMD_SUCCESS;
 		}
@@ -4454,13 +4425,11 @@ DEFUN (show_ip_ospf_neighbor,
 		/* Display default ospf (instance 0) info */
 		ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
 		if (ospf == NULL || !ospf->oi_running) {
-			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
-			} else
-				vty_out(vty, "%% OSPF instance not found\n");
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty,
+					"%% OSPF is not enabled in vrf default\n");
 
 			return CMD_SUCCESS;
 		}
@@ -4515,9 +4484,7 @@ DEFUN (show_ip_ospf_instance_neighbor,
 	ret = show_ip_ospf_neighbor_common(vty, ospf, json, uj, 0);
 
 	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	}
 
 	return ret;
@@ -4654,10 +4621,7 @@ DEFUN (show_ip_ospf_neighbor_all,
 			}
 
 			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
+				vty_json(vty, json);
 			}
 
 			return ret;
@@ -4726,9 +4690,7 @@ DEFUN (show_ip_ospf_instance_neighbor_all,
 	ret = show_ip_ospf_neighbor_all_common(vty, ospf, json, uj, 0);
 
 	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	}
 
 	return ret;
@@ -4775,9 +4737,7 @@ static int show_ip_ospf_neighbor_int_common(struct vty *vty, struct ospf *ospf,
 	}
 
 	if (use_json) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	} else
 		vty_out(vty, "\n");
 
@@ -5217,9 +5177,7 @@ static int show_ip_ospf_neighbor_id_common(struct vty *vty, struct ospf *ospf,
 	}
 
 	if (use_json) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	} else
 		vty_out(vty, "\n");
 
@@ -5377,10 +5335,7 @@ DEFUN (show_ip_ospf_neighbor_detail,
 					vty, ospf, json, uj, use_vrf);
 			}
 			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
+				vty_json(vty, json);
 			}
 
 			return ret;
@@ -5449,9 +5404,7 @@ DEFUN (show_ip_ospf_instance_neighbor_detail,
 	ret = show_ip_ospf_neighbor_detail_common(vty, ospf, json, uj, 0);
 
 	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	}
 
 	return ret;
@@ -5571,10 +5524,7 @@ DEFUN (show_ip_ospf_neighbor_detail_all,
 			}
 
 			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
+				vty_json(vty, json);
 			}
 
 			return ret;
@@ -5644,9 +5594,7 @@ DEFUN (show_ip_ospf_instance_neighbor_detail_all,
 	ret = show_ip_ospf_neighbor_detail_all_common(vty, ospf, json, uj, 0);
 
 	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	}
 
 	return ret;
@@ -5704,9 +5652,7 @@ static int show_ip_ospf_neighbor_int_detail_common(struct vty *vty,
 	}
 
 	if (use_json) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	} else
 		vty_out(vty, "\n");
 
@@ -5775,27 +5721,60 @@ DEFUN (show_ip_ospf_instance_neighbor_int_detail,
 }
 
 /* Show functions */
-static int show_lsa_summary(struct vty *vty, struct ospf_lsa *lsa, int self)
+static int show_lsa_summary(struct vty *vty, struct ospf_lsa *lsa, int self,
+			    json_object *json_lsa)
 {
 	struct router_lsa *rl;
 	struct summary_lsa *sl;
 	struct as_external_lsa *asel;
 	struct prefix_ipv4 p;
+	char buf[PREFIX2STR_BUFFER];
 
 	if (lsa != NULL)
 		/* If self option is set, check LSA self flag. */
 		if (self == 0 || IS_LSA_SELF(lsa)) {
-			/* LSA common part show. */
-			vty_out(vty, "%-15s ", inet_ntoa(lsa->data->id));
-			vty_out(vty, "%-15s %4d 0x%08lx 0x%04x",
-				inet_ntoa(lsa->data->adv_router), LS_AGE(lsa),
-				(unsigned long)ntohl(lsa->data->ls_seqnum),
-				ntohs(lsa->data->checksum));
+			if (!json_lsa) {
+				/* LSA common part show. */
+				vty_out(vty, "%-15pI4", &lsa->data->id);
+				vty_out(vty, "%-15s %4d 0x%08lx 0x%04x",
+					inet_ntoa(lsa->data->adv_router),
+					LS_AGE(lsa),
+					(unsigned long)ntohl(
+						lsa->data->ls_seqnum),
+					ntohs(lsa->data->checksum));
+			} else {
+				char seqnum[10];
+				char checksum[10];
+
+				snprintf(seqnum, sizeof(seqnum), "%x",
+					 ntohl(lsa->data->ls_seqnum));
+				snprintf(checksum, sizeof(checksum), "%x",
+					 ntohs(lsa->data->checksum));
+				json_object_string_add(
+					json_lsa, "lsId",
+					inet_ntoa(lsa->data->id));
+				json_object_string_add(
+					json_lsa, "advertisedRouter",
+					inet_ntoa(lsa->data->adv_router));
+				json_object_int_add(json_lsa, "lsaAge",
+						    LS_AGE(lsa));
+				json_object_string_add(
+					json_lsa, "sequenceNumber", seqnum);
+				json_object_string_add(json_lsa, "checksum",
+						       checksum);
+			}
+
 			/* LSA specific part show. */
 			switch (lsa->data->type) {
 			case OSPF_ROUTER_LSA:
 				rl = (struct router_lsa *)lsa->data;
-				vty_out(vty, " %-d", ntohs(rl->links));
+
+				if (!json_lsa)
+					vty_out(vty, " %-d", ntohs(rl->links));
+				else
+					json_object_int_add(json_lsa,
+							    "numOfRouterLinks",
+							    ntohs(rl->links));
 				break;
 			case OSPF_SUMMARY_LSA:
 				sl = (struct summary_lsa *)lsa->data;
@@ -5805,8 +5784,14 @@ static int show_lsa_summary(struct vty *vty, struct ospf_lsa *lsa, int self)
 				p.prefixlen = ip_masklen(sl->mask);
 				apply_mask_ipv4(&p);
 
-				vty_out(vty, " %s/%d", inet_ntoa(p.prefix),
-					p.prefixlen);
+				if (!json_lsa)
+					vty_out(vty, " %pFX", &p);
+				else {
+					prefix2str(&p, buf, sizeof(buf));
+					json_object_string_add(json_lsa,
+							       "summaryAddress",
+							       buf);
+				}
 				break;
 			case OSPF_AS_EXTERNAL_LSA:
 			case OSPF_AS_NSSA_LSA:
@@ -5817,13 +5802,30 @@ static int show_lsa_summary(struct vty *vty, struct ospf_lsa *lsa, int self)
 				p.prefixlen = ip_masklen(asel->mask);
 				apply_mask_ipv4(&p);
 
-				vty_out(vty, " %s %s/%d [0x%lx]",
-					IS_EXTERNAL_METRIC(asel->e[0].tos)
-						? "E2"
-						: "E1",
-					inet_ntoa(p.prefix), p.prefixlen,
-					(unsigned long)ntohl(
-						asel->e[0].route_tag));
+				if (!json_lsa)
+					vty_out(vty, " %s %pFX [0x%lx]",
+						IS_EXTERNAL_METRIC(
+							asel->e[0].tos)
+							? "E2"
+							: "E1",
+						&p,
+						(unsigned long)ntohl(
+							asel->e[0].route_tag));
+				else {
+					prefix2str(&p, buf, sizeof(buf));
+					json_object_string_add(
+						json_lsa, "metricType",
+						IS_EXTERNAL_METRIC(
+							asel->e[0].tos)
+							? "E2"
+							: "E1");
+					json_object_string_add(json_lsa,
+							       "route", buf);
+					json_object_int_add(
+						json_lsa, "tag",
+						(unsigned long)ntohl(
+							asel->e[0].route_tag));
+				}
 				break;
 			case OSPF_NETWORK_LSA:
 			case OSPF_ASBR_SUMMARY_LSA:
@@ -5833,7 +5835,9 @@ static int show_lsa_summary(struct vty *vty, struct ospf_lsa *lsa, int self)
 			default:
 				break;
 			}
-			vty_out(vty, "\n");
+
+			if (!json_lsa)
+				vty_out(vty, "\n");
 		}
 
 	return 0;
@@ -5854,6 +5858,21 @@ static const char *const show_database_desc[] = {
 	"AS-external Opaque-LSA",
 };
 
+static const char *const show_database_desc_json[] = {
+	"unknown",
+	"routerLinkStates",
+	"networkLinkStates",
+	"summaryLinkStates",
+	"asbrSummaryLinkStates",
+	"asExternalLinkStates",
+	"groupMembershipLsa",
+	"nssaExternalLinkStates",
+	"type8Lsa",
+	"linkLocalOpaqueLsa",
+	"areaLocalOpaqueLsa",
+	"asExternalOpaqueLsa",
+};
+
 static const char *const show_database_header[] = {
 	"",
 	"Link ID         ADV Router      Age  Seq#       CkSum  Link count",
@@ -5869,7 +5888,8 @@ static const char *const show_database_header[] = {
 	"Opaque-Type/Id  ADV Router      Age  Seq#       CkSum",
 };
 
-static void show_ip_ospf_database_header(struct vty *vty, struct ospf_lsa *lsa)
+static void show_ip_ospf_database_header(struct vty *vty, struct ospf_lsa *lsa,
+					 json_object *json)
 {
 	struct router_lsa *rlsa = (struct router_lsa *)lsa->data;
 
@@ -5880,30 +5900,91 @@ static void show_ip_ospf_database_header(struct vty *vty, struct ospf_lsa *lsa)
 		((lsa->flags & OSPF_LSA_LOCAL_XLT) ? "(Translated from Type-7)"
 						   : ""));
 
-	if (lsa->data->type == OSPF_ROUTER_LSA) {
-		vty_out(vty, "  Flags: 0x%x", rlsa->flags);
+	if (!json) {
+		vty_out(vty, "  LS age: %d\n", LS_AGE(lsa));
+		vty_out(vty, "  Options: 0x%-2x : %s\n", lsa->data->options,
+			ospf_options_dump(lsa->data->options));
+		vty_out(vty, "  LS Flags: 0x%-2x %s\n", lsa->flags,
+			((lsa->flags & OSPF_LSA_LOCAL_XLT)
+				 ? "(Translated from Type-7)"
+				 : ""));
 
-		if (rlsa->flags)
-			vty_out(vty, " :%s%s%s%s",
-				IS_ROUTER_LSA_BORDER(rlsa) ? " ABR" : "",
-				IS_ROUTER_LSA_EXTERNAL(rlsa) ? " ASBR" : "",
-				IS_ROUTER_LSA_VIRTUAL(rlsa) ? " VL-endpoint"
-							    : "",
-				IS_ROUTER_LSA_SHORTCUT(rlsa) ? " Shortcut"
-							     : "");
+		if (lsa->data->type == OSPF_ROUTER_LSA) {
+			vty_out(vty, "  Flags: 0x%x", rlsa->flags);
 
-		vty_out(vty, "\n");
+			if (rlsa->flags)
+				vty_out(vty, " :%s%s%s%s",
+					IS_ROUTER_LSA_BORDER(rlsa) ? " ABR"
+								   : "",
+					IS_ROUTER_LSA_EXTERNAL(rlsa) ? " ASBR"
+								     : "",
+					IS_ROUTER_LSA_VIRTUAL(rlsa)
+						? " VL-endpoint"
+						: "",
+					IS_ROUTER_LSA_SHORTCUT(rlsa)
+						? " Shortcut"
+						: "");
+
+			vty_out(vty, "\n");
+		}
+		vty_out(vty, "  LS Type: %s\n",
+			lookup_msg(ospf_lsa_type_msg, lsa->data->type, NULL));
+		vty_out(vty, "  Link State ID: %pI4 %s\n", &lsa->data->id,
+			lookup_msg(ospf_link_state_id_type_msg, lsa->data->type,
+				   NULL));
+		vty_out(vty, "  Advertising Router: %pI4\n",
+			&lsa->data->adv_router);
+		vty_out(vty, "  LS Seq Number: %08lx\n",
+			(unsigned long)ntohl(lsa->data->ls_seqnum));
+		vty_out(vty, "  Checksum: 0x%04x\n",
+			ntohs(lsa->data->checksum));
+		vty_out(vty, "  Length: %d\n\n", ntohs(lsa->data->length));
+	} else {
+		char seqnum[10];
+		char checksum[10];
+
+		snprintf(seqnum, 10, "%x", ntohl(lsa->data->ls_seqnum));
+		snprintf(checksum, 10, "%x", ntohs(lsa->data->checksum));
+
+		json_object_int_add(json, "lsaAge", LS_AGE(lsa));
+		json_object_string_add(json, "options",
+				       ospf_options_dump(lsa->data->options));
+		json_object_int_add(json, "lsaFlags", lsa->flags);
+
+		if (lsa->flags & OSPF_LSA_LOCAL_XLT)
+			json_object_boolean_true_add(json,
+						     "translatedFromType7");
+
+		if (lsa->data->type == OSPF_ROUTER_LSA) {
+			json_object_int_add(json, "flags", rlsa->flags);
+
+			if (rlsa->flags) {
+				if (IS_ROUTER_LSA_BORDER(rlsa))
+					json_object_boolean_true_add(json,
+								     "abr");
+				if (IS_ROUTER_LSA_EXTERNAL(rlsa))
+					json_object_boolean_true_add(json,
+								     "asbr");
+				if (IS_ROUTER_LSA_VIRTUAL(rlsa))
+					json_object_boolean_true_add(
+						json, "vlEndpoint");
+				if (IS_ROUTER_LSA_SHORTCUT(rlsa))
+					json_object_boolean_true_add(
+						json, "shortcut");
+			}
+		}
+
+		json_object_string_add(
+			json, "lsaType",
+			lookup_msg(ospf_lsa_type_msg, lsa->data->type, NULL));
+		json_object_string_add(json, "linkStateId",
+				       inet_ntoa(lsa->data->id));
+		json_object_string_add(json, "advertisingRouter",
+				       inet_ntoa(lsa->data->adv_router));
+		json_object_string_add(json, "lsaSeqNumber", seqnum);
+		json_object_string_add(json, "checksum", checksum);
+		json_object_int_add(json, "length", ntohs(lsa->data->length));
 	}
-	vty_out(vty, "  LS Type: %s\n",
-		lookup_msg(ospf_lsa_type_msg, lsa->data->type, NULL));
-	vty_out(vty, "  Link State ID: %s %s\n", inet_ntoa(lsa->data->id),
-		lookup_msg(ospf_link_state_id_type_msg, lsa->data->type, NULL));
-	vty_out(vty, "  Advertising Router: %s\n",
-		inet_ntoa(lsa->data->adv_router));
-	vty_out(vty, "  LS Seq Number: %08lx\n",
-		(unsigned long)ntohl(lsa->data->ls_seqnum));
-	vty_out(vty, "  Checksum: 0x%04x\n", ntohs(lsa->data->checksum));
-	vty_out(vty, "  Length: %d\n\n", ntohs(lsa->data->length));
 }
 
 static const char *const link_type_desc[] = {
@@ -5924,128 +6005,242 @@ static const char *const link_data_desc[] = {
 	"Network Mask", "Router Interface address",
 };
 
+static const char *const link_id_desc_json[] = {
+	"null",		  "neighborRouterId", "designatedRouterAddress",
+	"networkAddress", "neighborRouterId",
+};
+
+static const char *const link_data_desc_json[] = {
+	"null",	"routerInterfaceAddress", "routerInterfaceAddress",
+	"networkMask", "routerInterfaceAddress",
+};
+
+
 /* Show router-LSA each Link information. */
 static void show_ip_ospf_database_router_links(struct vty *vty,
-					       struct router_lsa *rl)
+					       struct router_lsa *rl,
+					       json_object *json)
 {
 	int len, type;
-	unsigned int i;
+	unsigned short i;
+	json_object *json_links = NULL;
+	json_object *json_link = NULL;
+	int metric = 0;
+
+	if (json)
+		json_links = json_object_new_object();
 
 	len = ntohs(rl->header.length) - 4;
 	for (i = 0; i < ntohs(rl->links) && len > 0; len -= 12, i++) {
 		type = rl->link[i].type;
 
-		vty_out(vty, "    Link connected to: %s\n",
-			link_type_desc[type]);
-		vty_out(vty, "     (Link ID) %s: %s\n", link_id_desc[type],
-			inet_ntoa(rl->link[i].link_id));
-		vty_out(vty, "     (Link Data) %s: %s\n", link_data_desc[type],
-			inet_ntoa(rl->link[i].link_data));
-		vty_out(vty, "      Number of TOS metrics: 0\n");
-		vty_out(vty, "       TOS 0 Metric: %d\n",
-			ntohs(rl->link[i].metric));
-		vty_out(vty, "\n");
+		if (json) {
+			char link[16];
+
+			snprintf(link, sizeof(link), "link%u", i);
+			json_link = json_object_new_object();
+			json_object_string_add(json_link, "linkType",
+					       link_type_desc[type]);
+			json_object_string_add(json_link,
+					       link_id_desc_json[type],
+					       inet_ntoa(rl->link[i].link_id));
+			json_object_string_add(
+				json_link, link_data_desc_json[type],
+				inet_ntoa(rl->link[i].link_data));
+			json_object_int_add(json_link, "numOfTosMetrics",
+					    metric);
+			json_object_int_add(json_link, "tos0Metric",
+					    ntohs(rl->link[i].metric));
+			json_object_object_add(json_links, link, json_link);
+		} else {
+			vty_out(vty, "    Link connected to: %s\n",
+				link_type_desc[type]);
+			vty_out(vty, "     (Link ID) %s: %pI4\n",
+				link_id_desc[type], &rl->link[i].link_id);
+			vty_out(vty, "     (Link Data) %s: %pI4\n",
+				link_data_desc[type], &rl->link[i].link_data);
+			vty_out(vty, "      Number of TOS metrics: 0\n");
+			vty_out(vty, "       TOS 0 Metric: %d\n",
+				ntohs(rl->link[i].metric));
+			vty_out(vty, "\n");
+		}
 	}
+	if (json)
+		json_object_object_add(json, "routerLinks", json_links);
 }
 
 /* Show router-LSA detail information. */
-static int show_router_lsa_detail(struct vty *vty, struct ospf_lsa *lsa)
+static int show_router_lsa_detail(struct vty *vty, struct ospf_lsa *lsa,
+				  json_object *json)
 {
 	if (lsa != NULL) {
 		struct router_lsa *rl = (struct router_lsa *)lsa->data;
 
-		show_ip_ospf_database_header(vty, lsa);
+		show_ip_ospf_database_header(vty, lsa, json);
 
-		vty_out(vty, "   Number of Links: %d\n\n", ntohs(rl->links));
+		if (!json)
+			vty_out(vty, "   Number of Links: %d\n\n",
+				ntohs(rl->links));
+		else
+			json_object_int_add(json, "numOfLinks",
+					    ntohs(rl->links));
 
-		show_ip_ospf_database_router_links(vty, rl);
-		vty_out(vty, "\n");
+		show_ip_ospf_database_router_links(vty, rl, json);
+
+		if (!json)
+			vty_out(vty, "\n");
 	}
 
 	return 0;
 }
 
 /* Show network-LSA detail information. */
-static int show_network_lsa_detail(struct vty *vty, struct ospf_lsa *lsa)
+static int show_network_lsa_detail(struct vty *vty, struct ospf_lsa *lsa,
+				   json_object *json)
 {
 	int length, i;
+	json_object *json_attached_rt = NULL;
+	json_object *json_router = NULL;
+
+	if (json)
+		json_attached_rt = json_object_new_object();
 
 	if (lsa != NULL) {
 		struct network_lsa *nl = (struct network_lsa *)lsa->data;
 
-		show_ip_ospf_database_header(vty, lsa);
+		show_ip_ospf_database_header(vty, lsa, json);
 
-		vty_out(vty, "  Network Mask: /%d\n", ip_masklen(nl->mask));
+		if (!json)
+			vty_out(vty, "  Network Mask: /%d\n",
+				ip_masklen(nl->mask));
+		else
+			json_object_int_add(json, "networkMask",
+					    ip_masklen(nl->mask));
 
 		length = ntohs(lsa->data->length) - OSPF_LSA_HEADER_SIZE - 4;
 
 		for (i = 0; length > 0; i++, length -= 4)
-			vty_out(vty, "        Attached Router: %s\n",
-				inet_ntoa(nl->routers[i]));
-
-		vty_out(vty, "\n");
+			if (!json) {
+				vty_out(vty, "        Attached Router: %pI4\n",
+					&nl->routers[i]);
+				vty_out(vty, "\n");
+			} else {
+				json_router = json_object_new_object();
+				json_object_string_add(
+					json_router, "attachedRouterId",
+					inet_ntoa(nl->routers[i]));
+				json_object_object_add(
+					json_attached_rt,
+					inet_ntoa(nl->routers[i]), json_router);
+			}
 	}
+
+	if (json)
+		json_object_object_add(json, "attchedRouters",
+				       json_attached_rt);
+
 
 	return 0;
 }
 
 /* Show summary-LSA detail information. */
-static int show_summary_lsa_detail(struct vty *vty, struct ospf_lsa *lsa)
+static int show_summary_lsa_detail(struct vty *vty, struct ospf_lsa *lsa,
+				   json_object *json)
 {
 	if (lsa != NULL) {
 		struct summary_lsa *sl = (struct summary_lsa *)lsa->data;
 
-		show_ip_ospf_database_header(vty, lsa);
+		show_ip_ospf_database_header(vty, lsa, json);
 
-		vty_out(vty, "  Network Mask: /%d\n", ip_masklen(sl->mask));
-		vty_out(vty, "        TOS: 0  Metric: %d\n",
-			GET_METRIC(sl->metric));
-		vty_out(vty, "\n");
+		if (!json) {
+			vty_out(vty, "  Network Mask: /%d\n",
+				ip_masklen(sl->mask));
+			vty_out(vty, "        TOS: 0  Metric: %d\n",
+				GET_METRIC(sl->metric));
+			vty_out(vty, "\n");
+		} else {
+			json_object_int_add(json, "networkMask",
+					    ip_masklen(sl->mask));
+			json_object_int_add(json, "tos0Metric",
+					    GET_METRIC(sl->metric));
+		}
 	}
 
 	return 0;
 }
 
 /* Show summary-ASBR-LSA detail information. */
-static int show_summary_asbr_lsa_detail(struct vty *vty, struct ospf_lsa *lsa)
+static int show_summary_asbr_lsa_detail(struct vty *vty, struct ospf_lsa *lsa,
+					json_object *json)
 {
 	if (lsa != NULL) {
 		struct summary_lsa *sl = (struct summary_lsa *)lsa->data;
 
-		show_ip_ospf_database_header(vty, lsa);
+		show_ip_ospf_database_header(vty, lsa, json);
 
-		vty_out(vty, "  Network Mask: /%d\n", ip_masklen(sl->mask));
-		vty_out(vty, "        TOS: 0  Metric: %d\n",
-			GET_METRIC(sl->metric));
-		vty_out(vty, "\n");
+		if (!json) {
+			vty_out(vty, "  Network Mask: /%d\n",
+				ip_masklen(sl->mask));
+			vty_out(vty, "        TOS: 0  Metric: %d\n",
+				GET_METRIC(sl->metric));
+			vty_out(vty, "\n");
+		} else {
+			json_object_int_add(json, "networkMask",
+					    ip_masklen(sl->mask));
+			json_object_int_add(json, "tos0Metric",
+					    GET_METRIC(sl->metric));
+		}
 	}
 
 	return 0;
 }
 
 /* Show AS-external-LSA detail information. */
-static int show_as_external_lsa_detail(struct vty *vty, struct ospf_lsa *lsa)
+static int show_as_external_lsa_detail(struct vty *vty, struct ospf_lsa *lsa,
+				       json_object *json)
 {
+	int tos = 0;
+
 	if (lsa != NULL) {
 		struct as_external_lsa *al =
 			(struct as_external_lsa *)lsa->data;
 
-		show_ip_ospf_database_header(vty, lsa);
+		show_ip_ospf_database_header(vty, lsa, json);
 
-		vty_out(vty, "  Network Mask: /%d\n", ip_masklen(al->mask));
-		vty_out(vty, "        Metric Type: %s\n",
-			IS_EXTERNAL_METRIC(al->e[0].tos)
-				? "2 (Larger than any link state path)"
-				: "1");
-		vty_out(vty, "        TOS: 0\n");
-		vty_out(vty, "        Metric: %d\n",
-			GET_METRIC(al->e[0].metric));
-		vty_out(vty, "        Forward Address: %s\n",
-			inet_ntoa(al->e[0].fwd_addr));
+		if (!json) {
+			vty_out(vty, "  Network Mask: /%d\n",
+				ip_masklen(al->mask));
+			vty_out(vty, "        Metric Type: %s\n",
+				IS_EXTERNAL_METRIC(al->e[0].tos)
+					? "2 (Larger than any link state path)"
+					: "1");
+			vty_out(vty, "        TOS: 0\n");
+			vty_out(vty, "        Metric: %d\n",
+				GET_METRIC(al->e[0].metric));
+			vty_out(vty, "        Forward Address: %pI4\n",
+				&al->e[0].fwd_addr);
+			vty_out(vty,
+				"        External Route Tag: %" ROUTE_TAG_PRI
+				"\n\n",
+				(route_tag_t)ntohl(al->e[0].route_tag));
+		} else {
+			json_object_int_add(json, "networkMask",
+					    ip_masklen(al->mask));
+			json_object_string_add(
+				json, "metricType",
+				IS_EXTERNAL_METRIC(al->e[0].tos)
+					? "E2 (Larger than any link state path)"
+					: "E1");
+			json_object_int_add(json, "tos", tos);
+			json_object_int_add(json, "metric",
+					    GET_METRIC(al->e[0].metric));
+			json_object_string_add(json, "forwardAddress",
+					       inet_ntoa(al->e[0].fwd_addr));
+			json_object_int_add(
+				json, "externalRouteTag",
+				(route_tag_t)ntohl(al->e[0].route_tag));
+		}
 
-		vty_out(vty,
-			"        External Route Tag: %" ROUTE_TAG_PRI "\n\n",
-			(route_tag_t)ntohl(al->e[0].route_tag));
 	}
 
 	return 0;
@@ -6076,50 +6271,74 @@ show_as_external_lsa_stdvty (struct ospf_lsa *lsa)
 }
 #endif
 /* Show AS-NSSA-LSA detail information. */
-static int show_as_nssa_lsa_detail(struct vty *vty, struct ospf_lsa *lsa)
+static int show_as_nssa_lsa_detail(struct vty *vty, struct ospf_lsa *lsa,
+				   json_object *json)
 {
+	int tos = 0;
+
 	if (lsa != NULL) {
 		struct as_external_lsa *al =
 			(struct as_external_lsa *)lsa->data;
 
-		show_ip_ospf_database_header(vty, lsa);
+		show_ip_ospf_database_header(vty, lsa, json);
 
-		vty_out(vty, "  Network Mask: /%d\n", ip_masklen(al->mask));
-		vty_out(vty, "        Metric Type: %s\n",
-			IS_EXTERNAL_METRIC(al->e[0].tos)
-				? "2 (Larger than any link state path)"
-				: "1");
-		vty_out(vty, "        TOS: 0\n");
-		vty_out(vty, "        Metric: %d\n",
-			GET_METRIC(al->e[0].metric));
-		vty_out(vty, "        NSSA: Forward Address: %s\n",
-			inet_ntoa(al->e[0].fwd_addr));
-
-		vty_out(vty,
-			"        External Route Tag: %" ROUTE_TAG_PRI "\n\n",
-			(route_tag_t)ntohl(al->e[0].route_tag));
+		if (!json) {
+			vty_out(vty, "  Network Mask: /%d\n",
+				ip_masklen(al->mask));
+			vty_out(vty, "        Metric Type: %s\n",
+				IS_EXTERNAL_METRIC(al->e[0].tos)
+					? "2 (Larger than any link state path)"
+					: "1");
+			vty_out(vty, "        TOS: 0\n");
+			vty_out(vty, "        Metric: %d\n",
+				GET_METRIC(al->e[0].metric));
+			vty_out(vty, "        NSSA: Forward Address: %pI4\n",
+				&al->e[0].fwd_addr);
+			vty_out(vty,
+				"        External Route Tag: %" ROUTE_TAG_PRI
+				"\n\n",
+				(route_tag_t)ntohl(al->e[0].route_tag));
+		} else {
+			json_object_int_add(json, "networkMask",
+					    ip_masklen(al->mask));
+			json_object_string_add(
+				json, "metricType",
+				IS_EXTERNAL_METRIC(al->e[0].tos)
+					? "E2 (Larger than any link state path)"
+					: "E1");
+			json_object_int_add(json, "tos", tos);
+			json_object_int_add(json, "metric",
+					    GET_METRIC(al->e[0].metric));
+			json_object_string_add(json, "nssaForwardAddress",
+					       inet_ntoa(al->e[0].fwd_addr));
+			json_object_int_add(
+				json, "externalRouteTag",
+				(route_tag_t)ntohl(al->e[0].route_tag));
+		}
 	}
 
 	return 0;
 }
 
-static int show_func_dummy(struct vty *vty, struct ospf_lsa *lsa)
+static int show_func_dummy(struct vty *vty, struct ospf_lsa *lsa,
+			   json_object *json)
 {
 	return 0;
 }
 
-static int show_opaque_lsa_detail(struct vty *vty, struct ospf_lsa *lsa)
+static int show_opaque_lsa_detail(struct vty *vty, struct ospf_lsa *lsa,
+				  json_object *json)
 {
 	if (lsa != NULL) {
-		show_ip_ospf_database_header(vty, lsa);
-		show_opaque_info_detail(vty, lsa);
-
-		vty_out(vty, "\n");
+		show_ip_ospf_database_header(vty, lsa, json);
+		show_opaque_info_detail(vty, lsa, json);
+		if (!json)
+			vty_out(vty, "\n");
 	}
 	return 0;
 }
 
-int (*const show_function[])(struct vty *, struct ospf_lsa *) = {
+int (*show_function[])(struct vty *, struct ospf_lsa *, json_object *) = {
 	NULL,
 	show_router_lsa_detail,
 	show_network_lsa_detail,
@@ -6152,11 +6371,13 @@ static void show_lsa_prefix_set(struct vty *vty, struct prefix_ls *lp,
 }
 
 static void show_lsa_detail_proc(struct vty *vty, struct route_table *rt,
-				 struct in_addr *id, struct in_addr *adv_router)
+				 struct in_addr *id, struct in_addr *adv_router,
+				 json_object *json)
 {
 	struct prefix_ls lp;
 	struct route_node *rn, *start;
 	struct ospf_lsa *lsa;
+	json_object *json_lsa = NULL;
 
 	show_lsa_prefix_set(vty, &lp, id, adv_router);
 	start = route_node_get(rt, (struct prefix *)&lp);
@@ -6164,9 +6385,14 @@ static void show_lsa_detail_proc(struct vty *vty, struct route_table *rt,
 		route_lock_node(start);
 		for (rn = start; rn; rn = route_next_until(rn, start))
 			if ((lsa = rn->info)) {
+				if (json) {
+					json_lsa = json_object_new_object();
+					json_object_array_add(json, json_lsa);
+				}
+
 				if (show_function[lsa->data->type] != NULL)
-					show_function[lsa->data->type](vty,
-								       lsa);
+					show_function[lsa->data->type](
+						vty, lsa, json_lsa);
 			}
 		route_unlock_node(start);
 	}
@@ -6175,25 +6401,62 @@ static void show_lsa_detail_proc(struct vty *vty, struct route_table *rt,
 /* Show detail LSA information
    -- if id is NULL then show all LSAs. */
 static void show_lsa_detail(struct vty *vty, struct ospf *ospf, int type,
-			    struct in_addr *id, struct in_addr *adv_router)
+			    struct in_addr *id, struct in_addr *adv_router,
+			    json_object *json)
 {
 	struct listnode *node;
 	struct ospf_area *area;
+	json_object *json_lsa_type = NULL;
+	json_object *json_areas = NULL;
+	json_object *json_lsa_array = NULL;
+
+	if (json)
+		json_lsa_type = json_object_new_object();
 
 	switch (type) {
 	case OSPF_AS_EXTERNAL_LSA:
 	case OSPF_OPAQUE_AS_LSA:
-		vty_out(vty, "                %s \n\n",
-			show_database_desc[type]);
-		show_lsa_detail_proc(vty, AS_LSDB(ospf, type), id, adv_router);
+		if (!json)
+			vty_out(vty, "                %s \n\n",
+				show_database_desc[type]);
+		else
+			json_lsa_array = json_object_new_array();
+
+		show_lsa_detail_proc(vty, AS_LSDB(ospf, type), id, adv_router,
+				     json_lsa_array);
+		if (json)
+			json_object_object_add(json,
+					       show_database_desc_json[type],
+					       json_lsa_array);
+
 		break;
 	default:
+		if (json)
+			json_areas = json_object_new_object();
+
 		for (ALL_LIST_ELEMENTS_RO(ospf->areas, node, area)) {
-			vty_out(vty, "\n                %s (Area %s)\n\n",
-				show_database_desc[type],
-				ospf_area_desc_string(area));
+			if (!json) {
+				vty_out(vty,
+					"\n                %s (Area %s)\n\n",
+					show_database_desc[type],
+					ospf_area_desc_string(area));
+			} else {
+				json_lsa_array = json_object_new_array();
+				json_object_object_add(json_areas,
+						       inet_ntoa(area->area_id),
+						       json_lsa_array);
+			}
+
 			show_lsa_detail_proc(vty, AREA_LSDB(area, type), id,
-					     adv_router);
+					     adv_router, json_lsa_array);
+		}
+
+		if (json) {
+			json_object_object_add(json_lsa_type, "areas",
+					       json_areas);
+			json_object_object_add(json,
+					       show_database_desc_json[type],
+					       json_lsa_type);
 		}
 		break;
 	}
@@ -6201,60 +6464,104 @@ static void show_lsa_detail(struct vty *vty, struct ospf *ospf, int type,
 
 static void show_lsa_detail_adv_router_proc(struct vty *vty,
 					    struct route_table *rt,
-					    struct in_addr *adv_router)
+					    struct in_addr *adv_router,
+					    json_object *json)
 {
 	struct route_node *rn;
 	struct ospf_lsa *lsa;
 
 	for (rn = route_top(rt); rn; rn = route_next(rn))
-		if ((lsa = rn->info))
+		if ((lsa = rn->info)) {
+			json_object *json_lsa = NULL;
+
 			if (IPV4_ADDR_SAME(adv_router,
 					   &lsa->data->adv_router)) {
 				if (CHECK_FLAG(lsa->flags, OSPF_LSA_LOCAL_XLT))
 					continue;
+				if (json)
+					json_lsa = json_object_new_object();
+
 				if (show_function[lsa->data->type] != NULL)
-					show_function[lsa->data->type](vty,
-								       lsa);
+					show_function[lsa->data->type](
+						vty, lsa, json_lsa);
+				if (json)
+					json_object_object_add(
+						json, inet_ntoa(lsa->data->id),
+						json_lsa);
 			}
+		}
 }
 
 /* Show detail LSA information. */
 static void show_lsa_detail_adv_router(struct vty *vty, struct ospf *ospf,
-				       int type, struct in_addr *adv_router)
+				       int type, struct in_addr *adv_router,
+				       json_object *json)
 {
 	struct listnode *node;
 	struct ospf_area *area;
+	json_object *json_lstype = NULL;
+	json_object *json_area = NULL;
+
+	if (json)
+		json_lstype = json_object_new_object();
 
 	switch (type) {
 	case OSPF_AS_EXTERNAL_LSA:
 	case OSPF_OPAQUE_AS_LSA:
-		vty_out(vty, "                %s \n\n",
-			show_database_desc[type]);
+		if (!json)
+			vty_out(vty, "                %s \n\n",
+				show_database_desc[type]);
+
 		show_lsa_detail_adv_router_proc(vty, AS_LSDB(ospf, type),
-						adv_router);
+						adv_router, json_lstype);
 		break;
 	default:
+
 		for (ALL_LIST_ELEMENTS_RO(ospf->areas, node, area)) {
-			vty_out(vty, "\n                %s (Area %s)\n\n",
-				show_database_desc[type],
-				ospf_area_desc_string(area));
-			show_lsa_detail_adv_router_proc(
-				vty, AREA_LSDB(area, type), adv_router);
+			if (json)
+				json_area = json_object_new_object();
+			else
+				vty_out(vty,
+					"\n                %s (Area %s)\n\n",
+					show_database_desc[type],
+					ospf_area_desc_string(area));
+			show_lsa_detail_adv_router_proc(vty,
+							AREA_LSDB(area, type),
+							adv_router, json_area);
+
+			if (json)
+				json_object_object_add(json_lstype,
+						       inet_ntoa(area->area_id),
+						       json_area);
 		}
 		break;
 	}
+
+	if (json)
+		json_object_object_add(json, show_database_desc[type],
+				       json_lstype);
 }
 
 static void show_ip_ospf_database_summary(struct vty *vty, struct ospf *ospf,
-					  int self)
+					  int self, json_object *json)
 {
 	struct ospf_lsa *lsa;
 	struct route_node *rn;
 	struct ospf_area *area;
 	struct listnode *node;
+	json_object *json_areas = NULL;
+	json_object *json_area = NULL;
+	json_object *json_lsa = NULL;
 	int type;
+	json_object *json_lsa_array = NULL;
+
+	if (json)
+		json_areas = json_object_new_object();
 
 	for (ALL_LIST_ELEMENTS_RO(ospf->areas, node, area)) {
+		if (json)
+			json_area = json_object_new_object();
+
 		for (type = OSPF_MIN_LSA; type < OSPF_MAX_LSA; type++) {
 			switch (type) {
 			case OSPF_AS_EXTERNAL_LSA:
@@ -6266,19 +6573,48 @@ static void show_ip_ospf_database_summary(struct vty *vty, struct ospf *ospf,
 			if (ospf_lsdb_count_self(area->lsdb, type) > 0
 			    || (!self
 				&& ospf_lsdb_count(area->lsdb, type) > 0)) {
-				vty_out(vty, "                %s (Area %s)\n\n",
-					show_database_desc[type],
-					ospf_area_desc_string(area));
-				vty_out(vty, "%s\n",
-					show_database_header[type]);
 
-				LSDB_LOOP (AREA_LSDB(area, type), rn, lsa)
-					show_lsa_summary(vty, lsa, self);
+				if (!json) {
+					vty_out(vty,
+						"                %s (Area %s)\n\n",
+						show_database_desc[type],
+						ospf_area_desc_string(area));
+					vty_out(vty, "%s\n",
+						show_database_header[type]);
+				} else {
+					json_lsa_array =
+						json_object_new_array();
+					json_object_object_add(
+						json_area,
+						show_database_desc_json[type],
+						json_lsa_array);
+				}
 
-				vty_out(vty, "\n");
+				LSDB_LOOP (AREA_LSDB(area, type), rn, lsa) {
+					if (json) {
+						json_lsa =
+							json_object_new_object();
+						json_object_array_add(
+							json_lsa_array,
+							json_lsa);
+					}
+
+					show_lsa_summary(vty, lsa, self,
+							 json_lsa);
+				}
+
+				if (!json)
+					vty_out(vty, "\n");
 			}
 		}
+		if (json)
+			json_object_object_add(json_areas,
+					       inet_ntoa(area->area_id),
+					       json_area);
 	}
+
+	if (json)
+		json_object_object_add(json, "areas", json_areas);
 
 	for (type = OSPF_MIN_LSA; type < OSPF_MAX_LSA; type++) {
 		switch (type) {
@@ -6290,39 +6626,81 @@ static void show_ip_ospf_database_summary(struct vty *vty, struct ospf *ospf,
 		}
 		if (ospf_lsdb_count_self(ospf->lsdb, type)
 		    || (!self && ospf_lsdb_count(ospf->lsdb, type))) {
-			vty_out(vty, "                %s\n\n",
-				show_database_desc[type]);
-			vty_out(vty, "%s\n", show_database_header[type]);
+			if (!json) {
+				vty_out(vty, "                %s\n\n",
+					show_database_desc[type]);
+				vty_out(vty, "%s\n",
+					show_database_header[type]);
+			} else {
+				json_lsa_array = json_object_new_array();
+				json_object_object_add(
+					json, show_database_desc_json[type],
+					json_lsa_array);
+			}
 
-			LSDB_LOOP (AS_LSDB(ospf, type), rn, lsa)
-				show_lsa_summary(vty, lsa, self);
+			LSDB_LOOP (AS_LSDB(ospf, type), rn, lsa) {
+				if (json) {
+					json_lsa = json_object_new_object();
+					json_object_array_add(json_lsa_array,
+							      json_lsa);
+				}
+				show_lsa_summary(vty, lsa, self, json_lsa);
+			}
 
-			vty_out(vty, "\n");
+			if (!json)
+				vty_out(vty, "\n");
 		}
 	}
 
-	vty_out(vty, "\n");
+	if (!json)
+		vty_out(vty, "\n");
 }
 
-static void show_ip_ospf_database_maxage(struct vty *vty, struct ospf *ospf)
+static void show_ip_ospf_database_maxage(struct vty *vty, struct ospf *ospf,
+					 json_object *json)
 {
 	struct route_node *rn;
+	json_object *json_maxage = NULL;
 
-	vty_out(vty, "\n                MaxAge Link States:\n\n");
+	if (!json)
+		vty_out(vty, "\n                MaxAge Link States:\n\n");
+	else
+		json_maxage = json_object_new_object();
 
 	for (rn = route_top(ospf->maxage_lsa); rn; rn = route_next(rn)) {
 		struct ospf_lsa *lsa;
+		json_object *json_lsa = NULL;
 
 		if ((lsa = rn->info) != NULL) {
-			vty_out(vty, "Link type: %d\n", lsa->data->type);
-			vty_out(vty, "Link State ID: %s\n",
-				inet_ntoa(lsa->data->id));
-			vty_out(vty, "Advertising Router: %s\n",
-				inet_ntoa(lsa->data->adv_router));
-			vty_out(vty, "LSA lock count: %d\n", lsa->lock);
-			vty_out(vty, "\n");
+			if (!json) {
+				vty_out(vty, "Link type: %d\n",
+					lsa->data->type);
+				vty_out(vty, "Link State ID: %s\n",
+					inet_ntoa(lsa->data->id));
+				vty_out(vty, "Advertising Router: %pI4\n",
+					&lsa->data->adv_router);
+				vty_out(vty, "LSA lock count: %d\n", lsa->lock);
+				vty_out(vty, "\n");
+			} else {
+				json_lsa = json_object_new_object();
+				json_object_int_add(json_lsa, "linkType",
+						    lsa->data->type);
+				json_object_string_add(
+					json_lsa, "linkStateId",
+					inet_ntoa(lsa->data->id));
+				json_object_string_add(
+					json_lsa, "advertisingRouter",
+					inet_ntoa(lsa->data->adv_router));
+				json_object_int_add(json_lsa, "lsaLockCount",
+						    lsa->lock);
+				json_object_object_add(json_maxage,
+						       inet_ntoa(lsa->data->id),
+						       json_lsa);
+			}
 		}
 	}
+	if (json)
+		json_object_object_add(json, "maxAgeLinkStates", json_maxage);
 }
 
 #define OSPF_LSA_TYPE_NSSA_DESC      "NSSA external link state\n"
@@ -6345,24 +6723,53 @@ static void show_ip_ospf_database_maxage(struct vty *vty, struct ospf *ospf)
 static int show_ip_ospf_database_common(struct vty *vty, struct ospf *ospf,
 					int arg_base, int argc,
 					struct cmd_token **argv,
-					uint8_t use_vrf)
+					uint8_t use_vrf, json_object *json,
+					bool uj)
 {
 	int idx_type = 4;
 	int type, ret;
 	struct in_addr id, adv_router;
+	json_object *json_vrf = NULL;
 
-	if (ospf->instance)
-		vty_out(vty, "\nOSPF Instance: %d\n", ospf->instance);
+	if (uj) {
+		if (use_vrf)
+			json_vrf = json_object_new_object();
+		else
+			json_vrf = json;
+	}
 
-	ospf_show_vrf_name(ospf, vty, NULL, use_vrf);
+	if (ospf->instance) {
+		if (uj)
+			json_object_int_add(json_vrf, "ospfInstance",
+					    ospf->instance);
+		else
+			vty_out(vty, "\nOSPF Instance: %d\n\n", ospf->instance);
+	}
 
-	vty_out(vty, "\n       OSPF Router with ID (%s)\n\n",
-		inet_ntoa(ospf->router_id));
+	ospf_show_vrf_name(ospf, vty, json_vrf, use_vrf);
+
+	/* Show Router ID. */
+	if (uj) {
+		json_object_string_add(json_vrf, "routerId",
+				       inet_ntoa(ospf->router_id));
+	} else {
+		vty_out(vty, "\n       OSPF Router with ID (%pI4)\n\n",
+			&ospf->router_id);
+	}
 
 	/* Show all LSA. */
-	if (argc == arg_base + 4) {
-		show_ip_ospf_database_summary(vty, ospf, 0);
-		return CMD_SUCCESS;
+	if ((argc == arg_base + 4) || (uj && (argc == arg_base + 5))) {
+		show_ip_ospf_database_summary(vty, ospf, 0, json_vrf);
+		if (json) {
+			if (use_vrf) {
+				if (ospf->vrf_id == VRF_DEFAULT)
+					json_object_object_add(json, "default",
+							       json_vrf);
+				else
+					json_object_object_add(json, ospf->name,
+							       json_vrf);
+			}
+		}
 	}
 
 	/* Set database type to show. */
@@ -6379,10 +6786,30 @@ static int show_ip_ospf_database_common(struct vty *vty, struct ospf *ospf,
 	else if (strncmp(argv[arg_base + idx_type]->text, "e", 1) == 0)
 		type = OSPF_AS_EXTERNAL_LSA;
 	else if (strncmp(argv[arg_base + idx_type]->text, "se", 2) == 0) {
-		show_ip_ospf_database_summary(vty, ospf, 1);
+		show_ip_ospf_database_summary(vty, ospf, 1, json_vrf);
+		if (json) {
+			if (use_vrf) {
+				if (ospf->vrf_id == VRF_DEFAULT)
+					json_object_object_add(json, "default",
+							       json_vrf);
+				else
+					json_object_object_add(json, ospf->name,
+							       json_vrf);
+			}
+		}
 		return CMD_SUCCESS;
 	} else if (strncmp(argv[arg_base + idx_type]->text, "m", 1) == 0) {
-		show_ip_ospf_database_maxage(vty, ospf);
+		show_ip_ospf_database_maxage(vty, ospf, json_vrf);
+		if (json) {
+			if (use_vrf) {
+				if (ospf->vrf_id == VRF_DEFAULT)
+					json_object_object_add(json, "default",
+							       json_vrf);
+				else
+					json_object_object_add(json, ospf->name,
+							       json_vrf);
+			}
+		}
 		return CMD_SUCCESS;
 	} else if (strncmp(argv[arg_base + idx_type]->text, "opaque-l", 8) == 0)
 		type = OSPF_OPAQUE_LINK_LSA;
@@ -6394,18 +6821,19 @@ static int show_ip_ospf_database_common(struct vty *vty, struct ospf *ospf,
 		return CMD_WARNING;
 
 	/* `show ip ospf database LSA'. */
-	if (argc == arg_base + 5)
-		show_lsa_detail(vty, ospf, type, NULL, NULL);
+	if ((argc == arg_base + 5) || (uj && (argc == arg_base + 6)))
+		show_lsa_detail(vty, ospf, type, NULL, NULL, json_vrf);
 	else if (argc >= arg_base + 6) {
 		ret = inet_aton(argv[arg_base + 5]->arg, &id);
 		if (!ret)
 			return CMD_WARNING;
 
 		/* `show ip ospf database LSA ID'. */
-		if (argc == arg_base + 6)
-			show_lsa_detail(vty, ospf, type, &id, NULL);
+		if ((argc == arg_base + 6) || (uj && (argc == arg_base + 7)))
+			show_lsa_detail(vty, ospf, type, &id, NULL, json_vrf);
 		/* `show ip ospf database LSA ID adv-router ADV_ROUTER'. */
-		else if (argc == arg_base + 7) {
+		else if ((argc == arg_base + 7) ||
+			 (uj && (argc == arg_base + 8))) {
 			if (strncmp(argv[arg_base + 6]->text, "s", 1) == 0)
 				adv_router = ospf->router_id;
 			else {
@@ -6414,7 +6842,19 @@ static int show_ip_ospf_database_common(struct vty *vty, struct ospf *ospf,
 				if (!ret)
 					return CMD_WARNING;
 			}
-			show_lsa_detail(vty, ospf, type, &id, &adv_router);
+			show_lsa_detail(vty, ospf, type, &id, &adv_router,
+					json_vrf);
+		}
+	}
+
+	if (json) {
+		if (use_vrf) {
+			if (ospf->vrf_id == VRF_DEFAULT)
+				json_object_object_add(json, "default",
+						       json_vrf);
+			else
+				json_object_object_add(json, ospf->name,
+						       json_vrf);
 		}
 	}
 
@@ -6423,7 +6863,7 @@ static int show_ip_ospf_database_common(struct vty *vty, struct ospf *ospf,
 
 DEFUN (show_ip_ospf_database_max,
        show_ip_ospf_database_max_cmd,
-       "show ip ospf [vrf <NAME|all>] database <max-age|self-originate>",
+       "show ip ospf [vrf <NAME|all>] database <max-age|self-originate> [json]",
        SHOW_STR
        IP_STR
        "OSPF information\n"
@@ -6431,7 +6871,8 @@ DEFUN (show_ip_ospf_database_max,
        "All VRFs\n"
        "Database summary\n"
        "LSAs in MaxAge list\n"
-       "Self-originated link states\n")
+       "Self-originated link states\n"
+       JSON_STR)
 {
 	struct ospf *ospf = NULL;
 	struct listnode *node = NULL;
@@ -6441,6 +6882,11 @@ DEFUN (show_ip_ospf_database_max,
 	int inst = 0;
 	int idx_vrf = 0;
 	uint8_t use_vrf = 0;
+	bool uj = use_json(argc, argv);
+	json_object *json = NULL;
+
+	if (uj)
+		json = json_object_new_object();
 
 	OSPF_FIND_VRF_ARGS(argv, argc, idx_vrf, vrf_name, all_vrf);
 
@@ -6456,31 +6902,38 @@ DEFUN (show_ip_ospf_database_max,
 				ospf_output = true;
 				ret = show_ip_ospf_database_common(
 					vty, ospf, idx_vrf ? 2 : 0, argc, argv,
-					use_vrf);
+					use_vrf, json, uj);
 			}
 
 			if (!ospf_output)
-				vty_out(vty, "%% OSPF instance not found\n");
+				vty_out(vty, "%% OSPF is not enabled\n");
 		} else {
 			ospf = ospf_lookup_by_inst_name(inst, vrf_name);
 			if (ospf == NULL || !ospf->oi_running) {
-				vty_out(vty, "%% OSPF instance not found\n");
+				vty_out(vty,
+					"%% OSPF is not enabled in vrf %s\n",
+					vrf_name);
 				return CMD_SUCCESS;
 			}
 			ret = (show_ip_ospf_database_common(
-				vty, ospf, idx_vrf ? 2 : 0, argc, argv,
-				use_vrf));
+				vty, ospf, idx_vrf ? 2 : 0, argc, argv, use_vrf,
+				json, uj));
 		}
 	} else {
 		/* Display default ospf (instance 0) info */
 		ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
 		if (ospf == NULL || !ospf->oi_running) {
-			vty_out(vty, "%% OSPF instance not found\n");
+			vty_out(vty, "%% OSPF is not enabled in vrf default\n");
 			return CMD_SUCCESS;
 		}
 
 		ret = show_ip_ospf_database_common(vty, ospf, 0, argc, argv,
-						   use_vrf);
+						   use_vrf, json, uj);
+	}
+
+	if (uj) {
+		vty_out(vty, "%s\n", json_object_to_json_string(json));
+		json_object_free(json);
 	}
 
 	return ret;
@@ -6488,7 +6941,7 @@ DEFUN (show_ip_ospf_database_max,
 
 DEFUN (show_ip_ospf_instance_database,
        show_ip_ospf_instance_database_cmd,
-       "show ip ospf [{(1-65535)|vrf NAME}] database [<asbr-summary|external|network|router|summary|nssa-external|opaque-link|opaque-area|opaque-as> [A.B.C.D [<self-originate|adv-router A.B.C.D>]]]",
+       "show ip ospf [{(1-65535)|vrf NAME}] database [<asbr-summary|external|network|router|summary|nssa-external|opaque-link|opaque-area|opaque-as> [A.B.C.D [<self-originate|adv-router A.B.C.D>]]] [json]",
        SHOW_STR
        IP_STR
        "OSPF information\n"
@@ -6499,7 +6952,8 @@ DEFUN (show_ip_ospf_instance_database,
        "Link State ID (as an IP address)\n"
        "Self-originated link states\n"
        "Advertising Router link states\n"
-       "Advertising Router (as an IP address)\n")
+       "Advertising Router (as an IP address)\n"
+       JSON_STR)
 {
 	struct ospf *ospf;
 	unsigned short instance = 0;
@@ -6510,6 +6964,11 @@ DEFUN (show_ip_ospf_instance_database,
 	int inst = 0;
 	int idx = 0;
 	uint8_t use_vrf = 0;
+	bool uj = use_json(argc, argv);
+	json_object *json = NULL;
+
+	if (uj)
+		json = json_object_new_object();
 
 	if (argv_find(argv, argc, "(1-65535)", &idx)) {
 		instance = strtoul(argv[idx]->arg, NULL, 10);
@@ -6519,8 +6978,8 @@ DEFUN (show_ip_ospf_instance_database,
 		if (!ospf->oi_running)
 			return CMD_SUCCESS;
 
-		return (show_ip_ospf_database_common(vty, ospf, idx ? 1 : 0,
-						     argc, argv, use_vrf));
+		return (show_ip_ospf_database_common(
+			vty, ospf, idx ? 1 : 0, argc, argv, use_vrf, json, uj));
 	} else if (argv_find(argv, argc, "vrf", &idx)) {
 		vrf_name = argv[++idx]->arg;
 		all_vrf = strmatch(vrf_name, "all");
@@ -6534,7 +6993,7 @@ DEFUN (show_ip_ospf_instance_database,
 					continue;
 				ret = (show_ip_ospf_database_common(
 					vty, ospf, idx ? 2 : 0, argc, argv,
-					use_vrf));
+					use_vrf, json, uj));
 			}
 		} else {
 			ospf = ospf_lookup_by_inst_name(inst, vrf_name);
@@ -6544,18 +7003,24 @@ DEFUN (show_ip_ospf_instance_database,
 			}
 
 			ret = (show_ip_ospf_database_common(
-				vty, ospf, idx ? 2 : 0, argc, argv, use_vrf));
+				vty, ospf, idx ? 2 : 0, argc, argv, use_vrf,
+				json, uj));
 		}
 	} else {
 		/* Display default ospf (instance 0) info */
 		ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
 		if (ospf == NULL || !ospf->oi_running) {
-			vty_out(vty, "%% OSPF instance not found\n");
+			vty_out(vty, "%% OSPF is not enabled on vrf default\n");
 			return CMD_SUCCESS;
 		}
 
 		ret = (show_ip_ospf_database_common(vty, ospf, 0, argc, argv,
-						    use_vrf));
+						    use_vrf, json, uj));
+	}
+
+	if (uj) {
+		vty_out(vty, "%s\n", json_object_to_json_string(json));
+		json_object_free(json);
 	}
 
 	return ret;
@@ -6563,18 +7028,24 @@ DEFUN (show_ip_ospf_instance_database,
 
 DEFUN (show_ip_ospf_instance_database_max,
        show_ip_ospf_instance_database_max_cmd,
-       "show ip ospf (1-65535) database <max-age|self-originate>",
+       "show ip ospf (1-65535) database <max-age|self-originate> [json]",
        SHOW_STR
        IP_STR
        "OSPF information\n"
        "Instance ID\n"
        "Database summary\n"
        "LSAs in MaxAge list\n"
-       "Self-originated link states\n")
+       "Self-originated link states\n"
+       JSON_STR)
 {
 	int idx_number = 3;
 	struct ospf *ospf;
 	unsigned short instance = 0;
+	bool uj = use_json(argc, argv);
+	json_object *json = NULL;
+
+	if (uj)
+		json = json_object_new_object();
 
 	instance = strtoul(argv[idx_number]->arg, NULL, 10);
 
@@ -6587,7 +7058,12 @@ DEFUN (show_ip_ospf_instance_database_max,
 		return CMD_SUCCESS;
 	}
 
-	return show_ip_ospf_database_common(vty, ospf, 1, argc, argv, 0);
+	show_ip_ospf_database_common(vty, ospf, 1, argc, argv, 0, json, uj);
+
+	if (uj)
+		vty_json(vty, json);
+
+	return CMD_SUCCESS;
 }
 
 
@@ -6595,19 +7071,40 @@ static int show_ip_ospf_database_type_adv_router_common(struct vty *vty,
 							struct ospf *ospf,
 							int arg_base, int argc,
 							struct cmd_token **argv,
-							uint8_t use_vrf)
+							uint8_t use_vrf,
+							json_object *json,
+							bool uj)
 {
 	int idx_type = 4;
 	int type, ret;
 	struct in_addr adv_router;
+	json_object *json_vrf = NULL;
 
-	if (ospf->instance)
-		vty_out(vty, "\nOSPF Instance: %d\n", ospf->instance);
+	if (uj) {
+		if (use_vrf)
+			json_vrf = json_object_new_object();
+		else
+			json_vrf = json;
+	}
 
-	ospf_show_vrf_name(ospf, vty, NULL, use_vrf);
+	if (ospf->instance) {
+		if (uj)
+			json_object_int_add(json, "ospfInstance",
+					    ospf->instance);
+		else
+			vty_out(vty, "\nOSPF Instance: %d\n\n", ospf->instance);
+	}
 
-	vty_out(vty, "\n       OSPF Router with ID (%s)\n\n",
-		inet_ntoa(ospf->router_id));
+	ospf_show_vrf_name(ospf, vty, json_vrf, use_vrf);
+
+	/* Show Router ID. */
+	if (uj) {
+		json_object_string_add(json_vrf, "routerId",
+				       inet_ntoa(ospf->router_id));
+	} else {
+		vty_out(vty, "\n       OSPF Router with ID (%pI4)\n\n",
+			&ospf->router_id);
+	}
 
 	/* Set database type to show. */
 	if (strncmp(argv[arg_base + idx_type]->text, "r", 1) == 0)
@@ -6640,14 +7137,25 @@ static int show_ip_ospf_database_type_adv_router_common(struct vty *vty,
 			return CMD_WARNING;
 	}
 
-	show_lsa_detail_adv_router(vty, ospf, type, &adv_router);
+	show_lsa_detail_adv_router(vty, ospf, type, &adv_router, json_vrf);
+
+	if (json) {
+		if (use_vrf) {
+			if (ospf->vrf_id == VRF_DEFAULT)
+				json_object_object_add(json, "default",
+						       json_vrf);
+			else
+				json_object_object_add(json, ospf->name,
+						       json_vrf);
+		}
+	}
 
 	return CMD_SUCCESS;
 }
 
 DEFUN (show_ip_ospf_instance_database_type_adv_router,
        show_ip_ospf_instance_database_type_adv_router_cmd,
-       "show ip ospf [{(1-65535)|vrf NAME}] database <asbr-summary|external|network|router|summary|nssa-external|opaque-link|opaque-area|opaque-as> <adv-router A.B.C.D|self-originate>",
+       "show ip ospf [{(1-65535)|vrf NAME}] database <asbr-summary|external|network|router|summary|nssa-external|opaque-link|opaque-area|opaque-as> <adv-router A.B.C.D|self-originate> [json]",
        SHOW_STR
        IP_STR
        "OSPF information\n"
@@ -6657,7 +7165,8 @@ DEFUN (show_ip_ospf_instance_database_type_adv_router,
        OSPF_LSA_TYPES_DESC
        "Advertising Router link states\n"
        "Advertising Router (as an IP address)\n"
-       "Self-originated link states\n")
+       "Self-originated link states\n"
+       JSON_STR)
 {
 	struct ospf *ospf = NULL;
 	unsigned short instance = 0;
@@ -6668,6 +7177,11 @@ DEFUN (show_ip_ospf_instance_database_type_adv_router,
 	int inst = 0;
 	int idx = 0, idx_vrf = 0;
 	uint8_t use_vrf = 0;
+	bool uj = use_json(argc, argv);
+	json_object *json = NULL;
+
+	if (uj)
+		json = json_object_new_object();
 
 	if (argv_find(argv, argc, "(1-65535)", &idx)) {
 		instance = strtoul(argv[idx]->arg, NULL, 10);
@@ -6680,7 +7194,7 @@ DEFUN (show_ip_ospf_instance_database_type_adv_router,
 		}
 
 		return (show_ip_ospf_database_type_adv_router_common(
-			vty, ospf, idx ? 1 : 0, argc, argv, use_vrf));
+			vty, ospf, idx ? 1 : 0, argc, argv, use_vrf, json, uj));
 	}
 
 	OSPF_FIND_VRF_ARGS(argv, argc, idx_vrf, vrf_name, all_vrf);
@@ -6697,7 +7211,7 @@ DEFUN (show_ip_ospf_instance_database_type_adv_router,
 				ospf_output = true;
 				ret = show_ip_ospf_database_type_adv_router_common(
 					vty, ospf, idx ? 1 : 0, argc, argv,
-					use_vrf);
+					use_vrf, json, uj);
 			}
 			if (!ospf_output)
 				vty_out(vty, "%% OSPF instance not found\n");
@@ -6709,19 +7223,25 @@ DEFUN (show_ip_ospf_instance_database_type_adv_router,
 			}
 
 			ret = show_ip_ospf_database_type_adv_router_common(
-				vty, ospf, idx ? 1 : 0, argc, argv, use_vrf);
+				vty, ospf, idx ? 1 : 0, argc, argv, use_vrf,
+				json, uj);
 		}
 	} else {
 		/* Display default ospf (instance 0) info */
 		ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
 		if (ospf == NULL || !ospf->oi_running) {
-			vty_out(vty, "%% OSPF instance not found\n");
+			vty_out(vty, "%% OSPF is not enabled in vrf default\n");
 			return CMD_SUCCESS;
 		}
 
 		ret = show_ip_ospf_database_type_adv_router_common(
-			vty, ospf, idx ? 1 : 0, argc, argv, use_vrf);
+			vty, ospf, idx ? 1 : 0, argc, argv, use_vrf, json, uj);
 	}
+
+	if (uj)
+		vty_json(vty, json);
+
+
 	return ret;
 	/*return (show_ip_ospf_database_type_adv_router_common(
 		vty, ospf, idx ? 1 : 0, argc, argv));*/
@@ -9632,25 +10152,22 @@ DEFUN (show_ip_ospf_route,
 								use_vrf);
 			}
 
-			if (uj) {
-				/* Keep Non-pretty format */
-				vty_out(vty, "%s\n",
-					json_object_to_json_string(json));
-				json_object_free(json);
-			} else if (!ospf_output)
-				vty_out(vty, "%% OSPF instance not found\n");
+			/* Keep Non-pretty format */
+			if (uj)
+				vty_json(vty, json);
+			else if (!ospf_output)
+				vty_out(vty, "%% OSPF is not enabled\n");
 
 			return ret;
 		}
 		ospf = ospf_lookup_by_inst_name(inst, vrf_name);
 		if (ospf == NULL || !ospf->oi_running) {
-			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
-			} else
-				vty_out(vty, "%% OSPF instance not found\n");
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty,
+					"%% OSPF is not enabled in vrf %s\n",
+					vrf_name);
 
 			return CMD_SUCCESS;
 		}
@@ -9658,13 +10175,11 @@ DEFUN (show_ip_ospf_route,
 		/* Display default ospf (instance 0) info */
 		ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
 		if (ospf == NULL || !ospf->oi_running) {
-			if (uj) {
-				vty_out(vty, "%s\n",
-					json_object_to_json_string_ext(
-						json, JSON_C_TO_STRING_PRETTY));
-				json_object_free(json);
-			} else
-				vty_out(vty, "%% OSPF instance not found\n");
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty,
+					"%% OSPF is not enabled in vrf default\n");
 
 			return CMD_SUCCESS;
 		}
@@ -9768,9 +10283,7 @@ DEFUN (show_ip_ospf_vrfs,
 		json_object_object_add(json, "vrfs", json_vrfs);
 		json_object_int_add(json, "totalVrfs", count);
 
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		vty_json(vty, json);
 	} else {
 		if (count)
 			vty_out(vty, "\nTotal number of OSPF VRFs: %d\n",
@@ -9787,6 +10300,255 @@ static const char *const ospf_abr_type_str[] = {
 static const char *const ospf_shortcut_mode_str[] = {
 	"default", "enable", "disable"
 };
+static int ospf_vty_external_rt_walkcb(struct hash_bucket *backet, void *arg)
+{
+	struct external_info *ei = backet->data;
+	struct vty *vty = (struct vty *)arg;
+	static unsigned int count;
+
+	vty_out(vty, "%-4pI4/%d, ", &ei->p.prefix, ei->p.prefixlen);
+	count++;
+
+	if (count % 5 == 0)
+		vty_out(vty, "\n");
+
+	if (OSPF_EXTERNAL_RT_COUNT(ei->aggr_route) == count)
+		count = 0;
+
+	return HASHWALK_CONTINUE;
+}
+
+static int ospf_json_external_rt_walkcb(struct hash_bucket *backet, void *arg)
+{
+	struct external_info *ei = backet->data;
+	struct json_object *json = (struct json_object *)arg;
+	char buf[PREFIX2STR_BUFFER];
+	char exnalbuf[20];
+	static unsigned int count;
+
+	prefix2str(&ei->p, buf, sizeof(buf));
+
+	snprintf(exnalbuf, 20, "Exnl Addr-%d", count);
+
+	json_object_string_add(json, exnalbuf, buf);
+
+	count++;
+
+	if (OSPF_EXTERNAL_RT_COUNT(ei->aggr_route) == count)
+		count = 0;
+
+	return HASHWALK_CONTINUE;
+}
+
+static int ospf_show_summary_address(struct vty *vty, struct ospf *ospf,
+				     uint8_t use_vrf, json_object *json,
+				     bool uj, bool detail)
+{
+	struct route_node *rn;
+	json_object *json_vrf = NULL;
+	int mtype = 0;
+	int mval = 0;
+	static char header[] =
+		"Summary-address     Metric-type     Metric     Tag         External_Rt_count\n";
+
+	mtype = metric_type(ospf, 0, ospf->instance);
+	mval = metric_value(ospf, 0, ospf->instance);
+
+	if (!uj)
+		vty_out(vty, "%s\n", header);
+
+	if (uj) {
+		if (use_vrf)
+			json_vrf = json_object_new_object();
+		else
+			json_vrf = json;
+	}
+
+	if (ospf->instance) {
+		if (uj)
+			json_object_int_add(json, "ospfInstance",
+					    ospf->instance);
+		else
+			vty_out(vty, "\nOSPF Instance: %d\n\n", ospf->instance);
+	}
+
+	ospf_show_vrf_name(ospf, vty, json_vrf, use_vrf);
+
+	if (!uj)
+		vty_out(vty, "aggregation delay interval :%d(in seconds)\n\n",
+			ospf->aggr_delay_interval);
+	else
+		json_object_int_add(json_vrf, "aggregation delay interval",
+				    ospf->aggr_delay_interval);
+
+	for (rn = route_top(ospf->rt_aggr_tbl); rn; rn = route_next(rn))
+		if (rn->info) {
+			struct ospf_external_aggr_rt *aggr = rn->info;
+			json_object *json_aggr = NULL;
+			char buf[PREFIX2STR_BUFFER];
+
+			prefix2str(&aggr->p, buf, sizeof(buf));
+
+			if (uj) {
+
+				json_aggr = json_object_new_object();
+
+				json_object_object_add(json_vrf, buf,
+						       json_aggr);
+
+				json_object_string_add(json_aggr,
+						       "Summary address", buf);
+
+				json_object_string_add(
+					json_aggr, "Metric-type",
+					(mtype == EXTERNAL_METRIC_TYPE_1)
+						? "E1"
+						: "E2");
+
+				json_object_int_add(json_aggr, "Metric", mval);
+
+				json_object_int_add(json_aggr, "Tag",
+						    aggr->tag);
+
+				json_object_int_add(
+					json_aggr, "External route count",
+					OSPF_EXTERNAL_RT_COUNT(aggr));
+
+				if (OSPF_EXTERNAL_RT_COUNT(aggr) && detail) {
+					hash_walk(aggr->match_extnl_hash,
+						  ospf_json_external_rt_walkcb,
+						  json_aggr);
+				}
+
+			} else {
+				vty_out(vty, "%-20s", buf);
+
+				(mtype == EXTERNAL_METRIC_TYPE_1)
+					? vty_out(vty, "%-16s", "E1")
+					: vty_out(vty, "%-16s", "E2");
+				vty_out(vty, "%-11d", mval);
+
+				vty_out(vty, "%-12u", aggr->tag);
+
+				vty_out(vty, "%-5ld\n",
+					OSPF_EXTERNAL_RT_COUNT(aggr));
+
+				if (OSPF_EXTERNAL_RT_COUNT(aggr) && detail) {
+					vty_out(vty,
+						"Matched External routes:\n");
+					hash_walk(aggr->match_extnl_hash,
+						  ospf_vty_external_rt_walkcb,
+						  vty);
+					vty_out(vty, "\n");
+				}
+
+				vty_out(vty, "\n");
+			}
+		}
+
+	if (uj) {
+		if (use_vrf) {
+			if (ospf->vrf_id == VRF_DEFAULT)
+				json_object_object_add(json, "default",
+						       json_vrf);
+			else
+				json_object_object_add(json, ospf->name,
+						       json_vrf);
+		}
+	} else
+		vty_out(vty, "\n");
+
+	return CMD_SUCCESS;
+}
+
+DEFUN (show_ip_ospf_external_aggregator,
+       show_ip_ospf_external_aggregator_cmd,
+       "show ip ospf [vrf <NAME|all>] summary-address [detail] [json]",
+       SHOW_STR IP_STR
+       "OSPF information\n"
+       VRF_CMD_HELP_STR
+       "All VRFs\n"
+       "Show external summary addresses\n"
+       "Detailed informtion\n"
+       JSON_STR)
+{
+	char *vrf_name = NULL;
+	bool all_vrf = false;
+	int ret = CMD_SUCCESS;
+	int idx_vrf = 0;
+	int idx = 0;
+	uint8_t use_vrf = 0;
+	bool uj = use_json(argc, argv);
+	struct ospf *ospf = NULL;
+	json_object *json = NULL;
+	struct listnode *node = NULL;
+	int inst = 0;
+	bool detail = false;
+
+	OSPF_FIND_VRF_ARGS(argv, argc, idx_vrf, vrf_name, all_vrf);
+
+	if (argv_find(argv, argc, "detail", &idx))
+		detail = true;
+
+	if (uj)
+		json = json_object_new_object();
+
+	/* vrf input is provided */
+	if (vrf_name) {
+		use_vrf = 1;
+		if (all_vrf) {
+			for (ALL_LIST_ELEMENTS_RO(om->ospf, node, ospf)) {
+				if (!ospf->oi_running)
+					continue;
+				ret = ospf_show_summary_address(
+					vty, ospf, use_vrf, json, uj, detail);
+			}
+
+			if (uj) {
+				vty_out(vty, "%s\n",
+					json_object_to_json_string_ext(
+						json, JSON_C_TO_STRING_PRETTY));
+				json_object_free(json);
+			}
+
+			return ret;
+		}
+
+		ospf = ospf_lookup_by_inst_name(inst, vrf_name);
+
+		if (ospf == NULL || !ospf->oi_running) {
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty,
+					"%% OSPF is not enabled in vrf %s\n",
+					vrf_name);
+
+			return CMD_SUCCESS;
+		}
+		ret = ospf_show_summary_address(vty, ospf, use_vrf, json, uj,
+						detail);
+
+	} else {
+		/* Default Vrf */
+		ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
+		if (ospf == NULL || !ospf->oi_running) {
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty,
+					"%% OSPF is not enabled in vrf default\n");
+
+			return CMD_SUCCESS;
+		}
+
+		ospf_show_summary_address(vty, ospf, use_vrf, json, uj, detail);
+	}
+
+	if (uj)
+		vty_json(vty, json);
+	return CMD_SUCCESS;
+}
 
 static const char *const ospf_int_type_str[] = {
 	"unknown", /* should never be used. */
@@ -10650,6 +11412,9 @@ void ospf_vty_show_init(void)
 
 	/* "show ip ospf vrfs" commands. */
 	install_element(VIEW_NODE, &show_ip_ospf_vrfs_cmd);
+
+	/* "show ip ospf summary-address" command */
+	install_element(VIEW_NODE, &show_ip_ospf_external_aggregator_cmd);
 }
 
 

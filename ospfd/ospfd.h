@@ -317,6 +317,22 @@ struct ospf {
 	struct list *external[ZEBRA_ROUTE_MAX + 1];
 #define EXTERNAL_INFO(E)      (E->external_info)
 
+	/* delay timer to process external routes
+	 * with summary address.
+	 */
+	struct thread *t_external_aggr;
+
+	/* delay interval in seconds */
+	unsigned int aggr_delay_interval;
+
+	/* Table of configured Aggregate addresses */
+	struct route_table *rt_aggr_tbl;
+
+	/* used as argument for aggr delay
+	 * timer thread.
+	 */
+	int aggr_action;
+
 	QOBJ_FIELDS
 };
 DECLARE_QOBJ_TYPE(ospf)
