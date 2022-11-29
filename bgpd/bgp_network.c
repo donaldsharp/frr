@@ -547,8 +547,6 @@ static int bgp_accept(struct thread *thread)
 
 	peer = peer_create(&su, peer1->conf_if, peer1->bgp, peer1->local_as,
 			   peer1->as, peer1->as_type, 0, 0, NULL);
-	hash_release(peer->bgp->peerhash, peer);
-	hash_get(peer->bgp->peerhash, peer, hash_alloc_intern);
 
 	peer_xfer_config(peer, peer1);
 	bgp_peer_gr_flags_update(peer);
