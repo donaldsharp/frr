@@ -5193,6 +5193,9 @@ int zebra_vxlan_process_vrf_vni_cmd(struct zebra_vrf *zvrf, vni_t vni,
 {
 	zebra_l3vni_t *zl3vni = NULL;
 	struct zebra_vrf *zvrf_evpn = NULL;
+	struct zebra_vxlan_vni *vnip = NULL;
+	struct zebra_if *vxlan_if_zif = NULL;
+	struct interface *br_if = NULL;
 
 	zvrf_evpn = zebra_vrf_get_evpn();
 	if (!zvrf_evpn)
@@ -5243,6 +5246,9 @@ int zebra_vxlan_process_vrf_vni_cmd(struct zebra_vrf *zvrf, vni_t vni,
 		 */
 		zl3vni->vxlan_if = zl3vni_map_to_vxlan_if(zl3vni);
 
+		if (zl3vni->vxlan_if)
+			vxlan_if_zif = zl3vni->vxlan_if->info;
+
 		if (IS_ZL3VNI_L3SVD_BACKED(zl3vni))
 			zl3vni->is_l3svd = true;
 
@@ -5253,6 +5259,17 @@ int zebra_vxlan_process_vrf_vni_cmd(struct zebra_vrf *zvrf, vni_t vni,
 		zl3vni->svi_if = zl3vni_map_to_svi_if(zl3vni);
 
 		zl3vni->mac_vlan_if = zl3vni_map_to_mac_vlan_if(zl3vni);
+
+		if (vxlan_if_zif) {
+			vnip = zebra_vxlan_if_vni_find(vxlan_if_zif, vni);
+			br_if = vxlan_if_zif->brslave_info.br_if;
+		}
+
+		if (vnip)
+			zl3vni->vid = vnip->access_vlan;
+
+		if (br_if)
+			zl3vni_bridge_if_set(zl3vni, br_if, true);
 
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug(
