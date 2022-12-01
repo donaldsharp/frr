@@ -1389,7 +1389,8 @@ void bgp_fsm_change_status(struct peer *peer, int status)
 		 * Clearing
 		 * (or Deleted).
 		 */
-		if (!work_queue_is_scheduled(peer->clear_node_queue))
+		if (!work_queue_is_scheduled(peer->clear_node_queue) &&
+		    status != Deleted)
 			BGP_EVENT_ADD(peer, Clearing_Completed);
 	}
 
@@ -1460,7 +1461,7 @@ int bgp_stop(struct peer *peer)
 		if (bgp_debug_neighbor_events(peer))
 			zlog_debug("%s (dynamic neighbor) deleted", peer->host);
 		peer_delete(peer);
-		return -1;
+		return -2;
 	}
 
 	/* Can't do this in Clearing; events are used for state transitions */
@@ -1653,7 +1654,7 @@ int bgp_stop(struct peer *peer)
 	if (!CHECK_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE)
 	    && !(CHECK_FLAG(peer->flags, PEER_FLAG_DELETE))) {
 		peer_delete(peer);
-		ret = -1;
+		ret = -2;
 	} else {
 		bgp_peer_conf_if_to_su_update(peer);
 	}
@@ -2413,7 +2414,9 @@ int bgp_event(struct thread *thread)
 	peer = THREAD_ARG(thread);
 	event = THREAD_VAL(thread);
 
+	peer_lock(peer);
 	ret = bgp_event_update(peer, event);
+	peer_unlock(peer);
 
 	return (ret);
 }
@@ -2485,7 +2488,7 @@ int bgp_event_update(struct peer *peer, enum bgp_fsm_events event)
 		 * we need to indicate that the peer was stopped in the return
 		 * code.
 		 */
-		if (!dyn_nbr && !passive_conn && peer->bgp) {
+		if (!dyn_nbr && !passive_conn && peer->bgp && ret != -2) {
 			flog_err(
 				EC_BGP_FSM,
 				"%s [FSM] Failure handling event %s in state %s, prior events %s, %s, fd %d",
