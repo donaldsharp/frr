@@ -546,7 +546,7 @@ static int bgp_accept(struct thread *thread)
 				peer1->host);
 
 	peer = peer_create(&su, peer1->conf_if, peer1->bgp, peer1->local_as,
-			   peer1->as, peer1->as_type, 0, 0, NULL);
+			   peer1->as, peer1->as_type, 0, 0, NULL, false);
 
 	peer_xfer_config(peer, peer1);
 	bgp_peer_gr_flags_update(peer);
@@ -562,8 +562,6 @@ static int bgp_accept(struct thread *thread)
 			peer_nsf_stop(peer);
 		}
 	}
-
-	UNSET_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE);
 
 	peer->doppelganger = peer1;
 	peer1->doppelganger = peer;

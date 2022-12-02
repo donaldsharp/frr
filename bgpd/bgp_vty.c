@@ -4003,10 +4003,10 @@ static int peer_conf_interface_get(struct vty *vty, const char *conf_if,
 		if (CHECK_FLAG(bgp->flags, BGP_FLAG_NO_DEFAULT_IPV4)
 		    && afi == AFI_IP && safi == SAFI_UNICAST)
 			peer = peer_create(NULL, conf_if, bgp, bgp->as, as,
-					   as_type, 0, 0, NULL);
+					   as_type, 0, 0, NULL, true);
 		else
 			peer = peer_create(NULL, conf_if, bgp, bgp->as, as,
-					   as_type, afi, safi, NULL);
+					   as_type, afi, safi, NULL, true);
 
 		if (!peer) {
 			vty_out(vty, "%% BGP failed to create peer\n");

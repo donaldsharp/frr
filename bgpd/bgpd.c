@@ -887,6 +887,7 @@ static bool peer_hash_same(const void *p1, const void *p2)
 {
 	const struct peer *peer1 = p1;
 	const struct peer *peer2 = p2;
+
 	return (sockunion_same(&peer1->su, &peer2->su)
 		&& CHECK_FLAG(peer1->flags, PEER_FLAG_CONFIG_NODE)
 			   == CHECK_FLAG(peer2->flags, PEER_FLAG_CONFIG_NODE));
@@ -1681,7 +1682,7 @@ void bgp_recalculate_all_bestpaths(struct bgp *bgp)
 struct peer *peer_create(union sockunion *su, const char *conf_if,
 			 struct bgp *bgp, as_t local_as, as_t remote_as,
 			 int as_type, afi_t afi, safi_t safi,
-			 struct peer_group *group)
+			 struct peer_group *group, bool config_node)
 {
 	int active;
 	struct peer *peer;
@@ -1715,7 +1716,11 @@ struct peer *peer_create(union sockunion *su, const char *conf_if,
 	peer = peer_lock(peer); /* bgp peer list reference */
 	peer->group = group;
 	listnode_add_sort(bgp->peer, peer);
-	hash_get(bgp->peerhash, peer, hash_alloc_intern);
+
+	if (config_node)
+		SET_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE);
+
+	(void)hash_get(bgp->peerhash, peer, hash_alloc_intern);
 
 	/* Adjust update-group coalesce timer heuristics for # peers. */
 	if (bgp->heuristic_coalesce) {
@@ -1738,8 +1743,6 @@ struct peer *peer_create(union sockunion *su, const char *conf_if,
 
 	/* Default TTL set. */
 	peer->ttl = (peer->sort == BGP_PEER_IBGP) ? MAXTTL : BGP_DEFAULT_TTL;
-
-	SET_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE);
 
 	if (afi && safi) {
 		peer->afc[afi][safi] = 1;
@@ -1952,10 +1955,10 @@ int peer_remote_as(struct bgp *bgp, union sockunion *su, const char *conf_if,
 		if (CHECK_FLAG(bgp->flags, BGP_FLAG_NO_DEFAULT_IPV4)
 		    && afi == AFI_IP && safi == SAFI_UNICAST)
 			peer_create(su, conf_if, bgp, local_as, *as, as_type, 0,
-				    0, NULL);
+				    0, NULL, true);
 		else
 			peer_create(su, conf_if, bgp, local_as, *as, as_type,
-				    afi, safi, NULL);
+				    afi, safi, NULL, true);
 	}
 
 	return 0;
@@ -2992,7 +2995,7 @@ int peer_group_bind(struct bgp *bgp, union sockunion *su, struct peer *peer,
 		}
 
 		peer = peer_create(su, NULL, bgp, bgp->as, group->conf->as,
-				   group->conf->as_type, 0, 0, group);
+				   group->conf->as_type, 0, 0, group, true);
 
 		peer = peer_lock(peer); /* group->peer list reference */
 		listnode_add(group->peer, peer);
@@ -3010,8 +3013,6 @@ int peer_group_bind(struct bgp *bgp, union sockunion *su, struct peer *peer,
 			} else if (peer->afc[afi][safi])
 				peer_deactivate(peer, afi, safi);
 		}
-
-		SET_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE);
 
 		/* Set up peer's events and timers. */
 		if (peer_active(peer))
@@ -3823,7 +3824,7 @@ struct peer *peer_create_bind_dynamic_neighbor(struct bgp *bgp,
 
 	/* Create peer first; we've already checked group config is valid. */
 	peer = peer_create(su, NULL, bgp, bgp->as, group->conf->as,
-			   group->conf->as_type, 0, 0, group);
+			   group->conf->as_type, 0, 0, group, true);
 	if (!peer)
 		return NULL;
 
@@ -3852,7 +3853,6 @@ struct peer *peer_create_bind_dynamic_neighbor(struct bgp *bgp,
 	/* Mark as dynamic, but also as a "config node" for other things to
 	 * work. */
 	SET_FLAG(peer->flags, PEER_FLAG_DYNAMIC_NEIGHBOR);
-	SET_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE);
 
 	return peer;
 }
