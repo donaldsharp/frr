@@ -14233,9 +14233,10 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, bool use_json,
 				vty_out(vty, "Hostname: %s\n", p->hostname);
 		}
 	} else {
-		if (use_json)
+		if (use_json) {
 			json_object_string_add(json_neigh, "hostname",
 					       "Unknown");
+		}
 	}
 
 	/* Peer-group */
