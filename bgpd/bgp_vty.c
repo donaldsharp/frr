@@ -12811,9 +12811,8 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, bool use_json,
 
 	if (p->hostname) {
 		if (use_json) {
-			if (p->hostname)
-				json_object_string_add(json_neigh, "hostname",
-						       p->hostname);
+			json_object_string_add(json_neigh, "hostname",
+					       p->hostname);
 
 			if (p->domainname)
 				json_object_string_add(json_neigh, "domainname",
@@ -12824,6 +12823,11 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, bool use_json,
 					p->domainname);
 			else
 				vty_out(vty, "Hostname: %s\n", p->hostname);
+		}
+	} else {
+		if (use_json) {
+			json_object_string_add(json_neigh, "hostname",
+					       "Unknown");
 		}
 	}
 
@@ -14392,6 +14396,17 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, bool use_json,
 			vty_out(vty, "BGP connection: %s\n",
 				p->shared_network ? "shared network"
 						  : "non shared network");
+		}
+	} else {
+		if (use_json) {
+			json_object_string_add(json_neigh, "nexthop",
+					       "Unknown");
+			json_object_string_add(json_neigh, "nexthopGlobal",
+					       "Unknown");
+			json_object_string_add(json_neigh, "nexthopLocal",
+					       "Unknown");
+			json_object_string_add(json_neigh, "bgpConnection",
+					       "Unknown");
 		}
 	}
 
