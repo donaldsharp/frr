@@ -4341,6 +4341,7 @@ void rib_delete(afi_t afi, safi_t safi, vrf_id_t vrf_id, int type,
 			}
 		}
 }
+}
 
 
 int rib_add(afi_t afi, safi_t safi, vrf_id_t vrf_id, int type,
