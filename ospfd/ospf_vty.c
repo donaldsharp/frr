@@ -6770,6 +6770,7 @@ static int show_ip_ospf_database_common(struct vty *vty, struct ospf *ospf,
 							       json_vrf);
 			}
 		}
+		return CMD_SUCCESS;
 	}
 
 	/* Set database type to show. */
