@@ -1621,7 +1621,7 @@ bgp_evpn_es_path_update_on_es_vrf_chg(struct bgp_evpn_es_vrf *es_vrf,
 
 	if (BGP_DEBUG(evpn_mh, EVPN_MH_RT))
 		zlog_debug("update paths linked to es %s on es-vrf %s %s",
-			   es->esi_str, es_vrf->bgp_vrf->name, reason);
+			   es->esi_str, es_vrf->bgp_vrf->name_pretty, reason);
 
 	for (ALL_LIST_ELEMENTS_RO(es->macip_global_path_list, node, es_info)) {
 		pi = es_info->pi;
@@ -3232,7 +3232,7 @@ static void bgp_evpn_es_vrf_show_entry(struct vty *vty,
 		json_object *json_types;
 
 		json_object_string_add(json, "esi", es->esi_str);
-		json_object_string_add(json, "vrf", bgp_vrf->name);
+		json_object_string_add(json, "vrf", bgp_vrf->name_pretty);
 
 		if (es_vrf->flags & (BGP_EVPNES_VRF_NHG_ACTIVE)) {
 			json_types = json_object_new_array();
@@ -3251,9 +3251,8 @@ static void bgp_evpn_es_vrf_show_entry(struct vty *vty,
 		if (es_vrf->flags & BGP_EVPNES_VRF_NHG_ACTIVE)
 			strlcat(flags_str, "A", sizeof(flags_str));
 
-		vty_out(vty,
-			"%-30s %-15s %-5s %-8u %-8u %u\n",
-			es->esi_str, bgp_vrf->name, flags_str, es_vrf->nhg_id,
+		vty_out(vty, "%-30s %-15s %-5s %-8u %-8u %u\n", es->esi_str,
+			bgp_vrf->name_pretty, flags_str, es_vrf->nhg_id,
 			es_vrf->v6_nhg_id, es_vrf->ref_cnt);
 	}
 }
@@ -4478,12 +4477,12 @@ static void bgp_evpn_nh_zebra_update_send(struct bgp_evpn_nh *nh, bool add)
 	if (BGP_DEBUG(evpn_mh, EVPN_MH_ES)) {
 		if (add)
 			zlog_debug("evpn vrf %s nh %s rmac %s add to zebra",
-				   nh->bgp_vrf->name, nh->nh_str,
+				   nh->bgp_vrf->name_pretty, nh->nh_str,
 				   prefix_mac2str(&nh->rmac, mac_buf,
 						  sizeof(mac_buf)));
 		else if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
 			zlog_debug("evpn vrf %s nh %s del to zebra",
-				   nh->bgp_vrf->name, nh->nh_str);
+				   nh->bgp_vrf->name_pretty, nh->nh_str);
 	}
 
 	frrtrace(2, frr_bgp, evpn_mh_nh_rmac_zsend, add, nh);
@@ -4553,8 +4552,8 @@ static struct bgp_evpn_nh *bgp_evpn_nh_add(struct bgp *bgp_vrf,
 	}
 
 	if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
-		zlog_debug("evpn vrf %s nh %s rmac %s add", n->bgp_vrf->name,
-			   n->nh_str,
+		zlog_debug("evpn vrf %s nh %s rmac %s add",
+			   n->bgp_vrf->name_pretty, n->nh_str,
 			   prefix_mac2str(&n->rmac, mac_buf, sizeof(mac_buf)));
 	bgp_evpn_nh_zebra_update(n, true);
 	return n;
@@ -4570,8 +4569,8 @@ static void bgp_evpn_nh_del(struct bgp_evpn_nh *n)
 		return;
 
 	if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
-		zlog_debug("evpn vrf %s nh %s del to zebra", bgp_vrf->name,
-			   n->nh_str);
+		zlog_debug("evpn vrf %s nh %s del to zebra",
+			   bgp_vrf->name_pretty, n->nh_str);
 
 	bgp_evpn_nh_zebra_update(n, false);
 	list_delete(&n->pi_list);
@@ -4608,7 +4607,7 @@ static bool bgp_evpn_nh_cmp(const void *p1, const void *p2)
 void bgp_evpn_nh_init(struct bgp *bgp_vrf)
 {
 	if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
-		zlog_debug("evpn vrf %s nh init", bgp_vrf->name);
+		zlog_debug("evpn vrf %s nh init", bgp_vrf->name_pretty);
 	bgp_vrf->evpn_nh_table = hash_create(
 		bgp_evpn_nh_hash_keymake, bgp_evpn_nh_cmp, "BGP EVPN NH table");
 }
@@ -4620,7 +4619,7 @@ static void bgp_evpn_nh_flush_entry(struct bgp_evpn_nh *nh)
 	struct bgp_path_evpn_nh_info *nh_info;
 
 	if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
-		zlog_debug("evpn vrf %s nh %s flush", nh->bgp_vrf->name,
+		zlog_debug("evpn vrf %s nh %s flush", nh->bgp_vrf->name_pretty,
 			   nh->nh_str);
 
 	/* force flush paths */
@@ -4638,7 +4637,7 @@ static void bgp_evpn_nh_flush_cb(struct hash_bucket *bucket, void *ctxt)
 void bgp_evpn_nh_finish(struct bgp *bgp_vrf)
 {
 	if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
-		zlog_debug("evpn vrf %s nh finish", bgp_vrf->name);
+		zlog_debug("evpn vrf %s nh finish", bgp_vrf->name_pretty);
 	hash_iterate(
 		bgp_vrf->evpn_nh_table,
 		(void (*)(struct hash_bucket *, void *))bgp_evpn_nh_flush_cb,
@@ -4663,7 +4662,7 @@ static void bgp_evpn_nh_update_ref_pi(struct bgp_evpn_nh *nh)
 
 		if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
 			zlog_debug("evpn vrf %s nh %s ref_pi update",
-				   nh->bgp_vrf->name, nh->nh_str);
+				   nh->bgp_vrf->name_pretty, nh->nh_str);
 		nh->ref_pi = pi;
 		/* If we have a new pi copy rmac from it and update
 		 * zebra if the new rmac is different
@@ -4683,8 +4682,8 @@ static void bgp_evpn_nh_clear_ref_pi(struct bgp_evpn_nh *nh,
 		return;
 
 	if (BGP_DEBUG(evpn_mh, EVPN_MH_ES))
-		zlog_debug("evpn vrf %s nh %s ref_pi clear", nh->bgp_vrf->name,
-			   nh->nh_str);
+		zlog_debug("evpn vrf %s nh %s ref_pi clear",
+			   nh->bgp_vrf->name_pretty, nh->nh_str);
 	nh->ref_pi = NULL;
 	/* try to find another ref_pi */
 	bgp_evpn_nh_update_ref_pi(nh);
@@ -4743,7 +4742,7 @@ static void bgp_evpn_path_nh_unlink(struct bgp_path_evpn_nh_info *nh_info)
 			   pi->net ? prefix2str(&pi->net->p, prefix_buf,
 						sizeof(prefix_buf))
 				   : "",
-			   nh->bgp_vrf->name, nh->nh_str);
+			   nh->bgp_vrf->name_pretty, nh->nh_str);
 
 	list_delete_node(nh->pi_list, &nh_info->nh_listnode);
 
@@ -4778,7 +4777,7 @@ static void bgp_evpn_path_nh_link(struct bgp *bgp_vrf, struct bgp_path_info *pi)
 			zlog_debug("path %s linked to vrf %s failed",
 				   prefix2str(&pi->net->p, prefix_buf,
 					      sizeof(prefix_buf)),
-				   bgp_vrf->name);
+				   bgp_vrf->name_pretty);
 		return;
 	}
 
@@ -4822,7 +4821,7 @@ static void bgp_evpn_path_nh_link(struct bgp *bgp_vrf, struct bgp_path_info *pi)
 		zlog_debug(
 			"path %s linked to nh %s %s",
 			prefix2str(&pi->net->p, prefix_buf, sizeof(prefix_buf)),
-			nh->bgp_vrf->name, nh->nh_str);
+			nh->bgp_vrf->name_pretty, nh->nh_str);
 
 	/* link mac-ip path to the new nh */
 	nh_info->nh = nh;
@@ -4838,7 +4837,7 @@ static void bgp_evpn_path_nh_link(struct bgp *bgp_vrf, struct bgp_path_info *pi)
 				"path %s linked to nh %s %s with no valid pi",
 				prefix2str(&pi->net->p, prefix_buf,
 					   sizeof(prefix_buf)),
-				nh->bgp_vrf->name, nh->nh_str);
+				nh->bgp_vrf->name_pretty, nh->nh_str);
 	}
 }
 
@@ -4878,15 +4877,15 @@ static void bgp_evpn_nh_show_entry(struct bgp_evpn_nh *nh, struct vty *vty,
 	else
 		prefix_buf[0] = '\0';
 	if (json) {
-		json_object_string_add(json, "vrf", nh->bgp_vrf->name);
+		json_object_string_add(json, "vrf", nh->bgp_vrf->name_pretty);
 		json_object_string_add(json, "ip", nh->nh_str);
 		json_object_string_add(json, "rmac", mac_buf);
 		json_object_string_add(json, "basePath", prefix_buf);
 		json_object_int_add(json, "pathCount", listcount(nh->pi_list));
 	} else {
-		vty_out(vty, "%-15s %-15s %-17s %-10d %s\n", nh->bgp_vrf->name,
-			nh->nh_str, mac_buf, listcount(nh->pi_list),
-			prefix_buf);
+		vty_out(vty, "%-15s %-15s %-17s %-10d %s\n",
+			nh->bgp_vrf->name_pretty, nh->nh_str, mac_buf,
+			listcount(nh->pi_list), prefix_buf);
 	}
 
 	/* add ES to the json array */
