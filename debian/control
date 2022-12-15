@@ -129,7 +129,8 @@ Architecture: all
 Depends:
  ${misc:Depends},
  frr (>= 7.4-cl4u1),
- python3:any
+ python3:any,
+ python3-babeltrace
 Description: FRRouting suite - Python tools
  The FRRouting suite uses a small Python tool to provide configuration
  reload functionality, particularly useful when the interactive configuration
