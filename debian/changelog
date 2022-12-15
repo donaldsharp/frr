@@ -1,3 +1,10 @@
+frr (7.5+cl5.4.0u0) UNRELEASED; urgency=medium
+
+  * frr_babeltrace.py in frr-pythontools requires dependency on
+    python3-babeltrace.
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Wed, 14 Dec 2022 17:24:37 -0800
+
 frr (7.5+cl5.3.0u0) UNRELEASED; urgency=medium
 
   * Updating version for CL5.3.0
