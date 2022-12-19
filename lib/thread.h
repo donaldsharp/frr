@@ -60,12 +60,6 @@ struct fd_handler {
 	nfds_t copycount;
 };
 
-struct cancel_req {
-	struct thread *thread;
-	void *eventobj;
-	struct thread **threadref;
-};
-
 /* Master of the theads. */
 struct thread_master {
 	char *name;
