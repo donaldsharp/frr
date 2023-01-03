@@ -2899,7 +2899,6 @@ DEFPY (show_vrf_vni,
        "show vrf <NAME$vrf_name|all$vrf_all> vni [json]",
        SHOW_STR
        VRF_FULL_CMD_HELP_STR
-       "All VRFs\n"
        "VNI\n"
        JSON_STR)
 {
@@ -2908,15 +2907,37 @@ DEFPY (show_vrf_vni,
 	json_object *json = NULL;
 	json_object *json_vrfs = NULL;
 	bool uj = use_json(argc, argv);
+	uint8_t use_vrf = 0;
 
-	if (uj) {
+	if (uj)
 		json = json_object_new_object();
-		json_vrfs = json_object_new_array();
-	}
 
-	if (!uj)
-		vty_out(vty, "%-37s %-10s %-20s %-20s %-5s %-18s\n", "VRF",
-			"VNI", "VxLAN IF", "L3-SVI", "State", "Rmac");
+	if (vrf_all) {
+		RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
+			zvrf = vrf->info;
+			if (!zvrf)
+				continue;
+
+			use_vrf = 1;
+			break;
+		}
+		if (use_vrf) {
+			if (!uj)
+				vty_out(vty,
+					"%-37s %-10s %-20s %-20s %-5s %-18s\n",
+					"VRF", "VNI", "VxLAN IF", "L3-SVI",
+					"State", "Rmac");
+			else
+				json_vrfs = json_object_new_array();
+		} else {
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty, "%% VRF does not exist\n");
+
+			return CMD_WARNING;
+		}
+	}
 
 	if (vrf_all) {
 		RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
@@ -2930,16 +2951,22 @@ DEFPY (show_vrf_vni,
 	if (vrf_name) {
 		zvrf = zebra_vrf_lookup_by_name(vrf_name);
 		if (!zvrf) {
-			if (uj) {
-				json_object_free(json);
-				json_object_free(json_vrfs);
-			} else {
+			if (uj)
+				vty_json(vty, json);
+			else
 				vty_out(vty,
 					"%% VRF '%s' specified does not exist\n",
 					vrf_name);
-			}
+
 			return CMD_WARNING;
 		}
+
+		if (!uj)
+			vty_out(vty, "%-37s %-10s %-20s %-20s %-5s %-18s\n",
+				"VRF", "VNI", "VxLAN IF", "L3-SVI", "State",
+				"Rmac");
+		else
+			json_vrfs = json_object_new_array();
 
 		zebra_vxlan_print_vrf_vni(vty, zvrf, json_vrfs);
 	}
