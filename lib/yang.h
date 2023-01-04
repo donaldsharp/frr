@@ -99,6 +99,9 @@ enum yang_iter_flags {
 
 	/* Filter RPC input/output nodes. */
 	YANG_ITER_FILTER_INPUT_OUTPUT = (1<<2),
+
+	/* Filter implicitely created nodes. */
+	  YANG_ITER_FILTER_IMPLICIT = (1<<3),
 };
 
 /* Callback used by the yang_snodes_iterate_*() family of functions. */
