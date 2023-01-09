@@ -2896,7 +2896,7 @@ DEFUN (no_vrf_vni_mapping,
 /* show vrf */
 DEFPY (show_vrf_vni,
        show_vrf_vni_cmd,
-       "show vrf <NAME$vrf_name|all$vrf_all> vni [json]",
+       "show vrf [<NAME$vrf_name|all$vrf_all>] vni [json]",
        SHOW_STR
        VRF_FULL_CMD_HELP_STR
        "VNI\n"
@@ -2907,18 +2907,22 @@ DEFPY (show_vrf_vni,
 	json_object *json = NULL;
 	json_object *json_vrfs = NULL;
 	bool uj = use_json(argc, argv);
-	uint8_t use_vrf = 0;
+	bool use_vrf = false;
 
 	if (uj)
 		json = json_object_new_object();
 
-	if (vrf_all) {
+	/* show vrf vni used to display across all vrfs
+	 * This is enhanced to support only for specific
+	 * vrf based output.
+	 */
+	if (vrf_all || !vrf_name) {
 		RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
 			zvrf = vrf->info;
 			if (!zvrf)
 				continue;
 
-			use_vrf = 1;
+			use_vrf = true;
 			break;
 		}
 		if (use_vrf) {
@@ -2939,7 +2943,7 @@ DEFPY (show_vrf_vni,
 		}
 	}
 
-	if (vrf_all) {
+	if (use_vrf) {
 		RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
 			zvrf = vrf->info;
 			if (!zvrf)
@@ -2947,8 +2951,7 @@ DEFPY (show_vrf_vni,
 
 			zebra_vxlan_print_vrf_vni(vty, zvrf, json_vrfs);
 		}
-	}
-	if (vrf_name) {
+	} else if (vrf_name) {
 		zvrf = zebra_vrf_lookup_by_name(vrf_name);
 		if (!zvrf) {
 			if (uj)
