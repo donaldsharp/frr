@@ -56,6 +56,7 @@ enum bgp_show_type {
 	bgp_show_type_dampend_paths,
 	bgp_show_type_damp_neighbor,
 	bgp_show_type_detail,
+	bgp_show_type_self_originated,
 };
 
 enum bgp_show_adj_route_type {
