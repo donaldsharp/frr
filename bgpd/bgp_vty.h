@@ -46,6 +46,9 @@ struct bgp;
 	"Address Family modifier\n"                                            \
 	"Address Family modifier\n"
 
+#define BGP_SELF_ORIG_CMD_STR       "self-originate"
+#define BGP_SELF_ORIG_HELP_STR      "Display only self-originated routes\n"
+
 #define SHOW_GR_HEADER \
 	"Codes: GR - Graceful Restart," \
 	" * -  Inheriting Global GR Config,\n" \

@@ -11162,12 +11162,16 @@ DEFUN(show_ip_bgp_afi_safi_statistics, show_ip_bgp_afi_safi_statistics_cmd,
 
 /* BGP self-originated route print out function */
 DEFPY(show_ip_bgp_self_originated, show_ip_bgp_self_originated_cmd,
-      "show [ip] bgp [<view|vrf> VIEWVRFNAME] [" BGP_AFI_CMD_STR
-      " [" BGP_SAFI_WITH_LABEL_CMD_STR "]] [all$all] self-originate [json$uj]",
-      SHOW_STR IP_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AFI_HELP_STR
-	      BGP_SAFI_WITH_LABEL_HELP_STR
+      "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]] [all$all] "BGP_SELF_ORIG_CMD_STR" [json$uj]",
+      SHOW_STR
+      IP_STR
+      BGP_STR
+      BGP_INSTANCE_HELP_STR
+      BGP_AFI_HELP_STR
+      BGP_SAFI_WITH_LABEL_HELP_STR
       "Display the entries for all address families\n"
-      "Display routes self-originated only\n" JSON_STR)
+      BGP_SELF_ORIG_HELP_STR
+      JSON_STR)
 {
 	afi_t afi = AFI_IP6;
 	safi_t safi = SAFI_UNICAST;
@@ -11192,7 +11196,7 @@ DEFPY(show_ip_bgp_self_originated, show_ip_bgp_self_originated_cmd,
 	}
 
 	bgp_vty_find_and_parse_afi_safi_bgp(vty, argv, argc, &idx, &afi, &safi,
-					    &bgp, uj);
+					    &bgp, !!uj);
 	if (!idx)
 		return CMD_WARNING;
 
