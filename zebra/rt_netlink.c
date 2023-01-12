@@ -3478,6 +3478,8 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	uint32_t nhg_id = 0;
 	bool vni_mcast_grp = false;
 	struct zebra_l2_brvlan_mac *bmac;
+	char buf[ETHER_ADDR_STRLEN];
+
 
 	ndm = NLMSG_DATA(h);
 
