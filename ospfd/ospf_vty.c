@@ -3594,17 +3594,12 @@ static void show_ip_ospf_interface_sub(struct vty *vty, struct ospf *ospf,
 			nbr = ospf_nbr_lookup_by_addr(oi->nbrs, &DR(oi));
 			if (nbr) {
 				if (use_json) {
-					json_object_string_add(
-						json_interface_sub, "drId",
-						inet_ntop(AF_INET,
-							  &nbr->router_id, buf,
-							  sizeof(buf)));
-					json_object_string_add(
-						json_interface_sub, "drAddress",
-						inet_ntop(
-							AF_INET,
-							&nbr->address.u.prefix4,
-							buf, sizeof(buf)));
+					json_object_string_addf(
+						json_oi, "drId", "%pI4",
+						&nbr->router_id);
+					json_object_string_addf(
+						json_oi, "drAddress", "%pI4",
+						&nbr->address.u.prefix4);
 				} else {
 					vty_out(vty,
 						"  Designated Router (ID) %pI4",
