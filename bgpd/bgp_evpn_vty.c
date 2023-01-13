@@ -3289,7 +3289,7 @@ int bgp_evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 	if (use_json)
 		json = json_object_new_object();
 
-	evpn_show_all_routes(vty, bgp, type, json, detail);
+	evpn_show_all_routes(vty, bgp, type, json, detail, false);
 
 	if (use_json)
 		vty_json(vty, json);
