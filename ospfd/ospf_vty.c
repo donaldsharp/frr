@@ -5019,9 +5019,19 @@ static void show_ip_ospf_neighbor_detail_sub(struct vty *vty,
 		json_object_string_add(json_neigh, "areaId",
 				       ospf_area_desc_string(oi->area));
 		json_object_string_add(json_neigh, "ifaceName", oi->ifp->name);
-	} else
-		vty_out(vty, "    In the area %s via interface %s\n",
+		if (oi->address)
+			json_object_string_addf(json_neigh, "localIfaceAddress",
+						"%pI4",
+						&oi->address->u.prefix4);
+	} else {
+		vty_out(vty, "    In the area %s via interface %s",
 			ospf_area_desc_string(oi->area), oi->ifp->name);
+		if (oi->address)
+			vty_out(vty, " local interface IP %pI4\n",
+				&oi->address->u.prefix4);
+		else
+			vty_out(vty, "\n");
+	}
 
 	/* Show neighbor priority and state. */
 	if (use_json) {
@@ -5029,10 +5039,17 @@ static void show_ip_ospf_neighbor_detail_sub(struct vty *vty,
 		json_object_string_add(
 			json_neigh, "nbrState",
 			lookup_msg(ospf_nsm_state_msg, nbr->state, NULL));
+		json_object_string_add(json_neigh, "role",
+				       lookup_msg(ospf_ism_state_msg,
+						  ospf_nbr_ism_state(nbr),
+						  NULL));
 	} else
-		vty_out(vty, "    Neighbor priority is %d, State is %s,",
+		vty_out(vty,
+			"    Neighbor priority is %d, State is %s, Role is %s,",
 			nbr->priority,
-			lookup_msg(ospf_nsm_state_msg, nbr->state, NULL));
+			lookup_msg(ospf_nsm_state_msg, nbr->state, NULL),
+			lookup_msg(ospf_ism_state_msg, ospf_nbr_ism_state(nbr),
+				   NULL));
 
 	/* Show state changes. */
 	if (use_json)
