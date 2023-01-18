@@ -4252,7 +4252,7 @@ static void show_ip_ospf_neighbour_brief(struct vty *vty,
 
 		json_neighbor = json_object_new_object();
 
-		ospf_nbr_ism_state_message(nbr, msgbuf, sizeof(msgbuf));
+		ospf_nbr_state_message(nbr, msgbuf, sizeof(msgbuf));
 #if CONFDATE > 20230321
 		CPP_NOTICE(
 			"Remove show_ip_ospf_neighbor_sub() JSON keys: priority, state, deadTimeMsecs, address, retransmitCounter, requestCounter, dbSummaryCounter")
@@ -4321,7 +4321,7 @@ static void show_ip_ospf_neighbour_brief(struct vty *vty,
 
 		json_object_array_add(json_neigh_array, json_neighbor);
 	} else {
-		ospf_nbr_ism_state_message(nbr, msgbuf, sizeof(msgbuf));
+		ospf_nbr_state_message(nbr, msgbuf, sizeof(msgbuf));
 
 		if (nbr->state == NSM_Attempt &&
 		    nbr->router_id.s_addr == INADDR_ANY)
