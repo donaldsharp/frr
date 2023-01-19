@@ -871,7 +871,8 @@ Showing Information
 .. index:: show ip ospf neighbor detail [json]
 .. clicmd:: show ip ospf neighbor detail [json]
 
-.. index:: show ip ospf neighbor INTERFACE detail [json]
+.. clicmd:: show ip ospf neighbor A.B.C.D [detail] [json]
+
 .. clicmd:: show ip ospf neighbor INTERFACE detail [json]
 
    Display lsa information of LSDB.
