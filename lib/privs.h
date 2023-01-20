@@ -140,14 +140,29 @@ extern void zprivs_get_ids(struct zprivs_ids_t *);
  * scope.)  _once is just a trick to run the loop exactly once.
  */
 extern struct zebra_privs_t *_zprivs_raise(struct zebra_privs_t *privs,
-					   const char *funcname);
+					   bool raise, const char *funcname);
 extern void _zprivs_lower(struct zebra_privs_t **privs);
 
-#define frr_with_privs(privs)                                               \
+#define frr_with_privs(privs)                                                  \
 	for (struct zebra_privs_t *_once = NULL,                               \
 				  *_privs __attribute__(                       \
 					  (unused, cleanup(_zprivs_lower))) =  \
-					  _zprivs_raise(privs, __func__);      \
+					  _zprivs_raise(privs, true,           \
+							__func__);             \
+	     _once == NULL; _once = (void *)1)
+
+/*
+ * There exists a section(s) where we are doing file operations and
+ * there is no desire to actually raise the privileges, *but* FRR needs
+ * a mutex to prevent to pthreads from one raising and another pthread
+ * where frr wants to do a file operation that is not raised.
+ */
+#define frr_with_privs_no_raise(privs)                                         \
+	for (struct zebra_privs_t *_once = NULL,                               \
+				  *_privs __attribute__(                       \
+					  (unused, cleanup(_zprivs_lower))) =  \
+					  _zprivs_raise(privs, false,          \
+							__func__);             \
 	     _once == NULL; _once = (void *)1)
 
 #ifdef __cplusplus

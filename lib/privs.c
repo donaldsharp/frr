@@ -490,7 +490,7 @@ static struct zebra_privs_refs_t *get_privs_refs(struct zebra_privs_t *privs)
 	return refs;
 }
 
-struct zebra_privs_t *_zprivs_raise(struct zebra_privs_t *privs,
+struct zebra_privs_t *_zprivs_raise(struct zebra_privs_t *privs, bool raise,
 				    const char *funcname)
 {
 	int save_errno = errno;
@@ -509,7 +509,7 @@ struct zebra_privs_t *_zprivs_raise(struct zebra_privs_t *privs,
 
 		if (++(refs->refcount) == 1) {
 			errno = 0;
-			if (privs->change(ZPRIVS_RAISE)) {
+			if (raise && privs->change(ZPRIVS_RAISE)) {
 				zlog_err("%s: Failed to raise privileges (%s)",
 					 funcname, safe_strerror(errno));
 			}

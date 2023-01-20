@@ -33,6 +33,7 @@ ForEachMacros:
   - frr_rev_each_from
   - frr_with_mutex
   - frr_with_privs
+  - frr_with_privs_no_raise
   - LIST_FOREACH
   - LIST_FOREACH_SAFE
   - SLIST_FOREACH

@@ -936,9 +936,16 @@ void zserv_start(char *path)
 	setsockopt_so_recvbuf(zsock, 1048576);
 	setsockopt_so_sendbuf(zsock, 1048576);
 
-	frr_with_privs((sa.ss_family != AF_UNIX) ? &zserv_privs : NULL) {
-		ret = bind(zsock, (struct sockaddr *)&sa, sa_len);
+	if (sa.ss_family != AF_UNIX) {
+		frr_with_privs (&zserv_privs) {
+			ret = bind(zsock, (struct sockaddr *)&sa, sa_len);
+		}
+	} else {
+		frr_with_privs_no_raise (&zserv_privs) {
+			ret = bind(zsock, (struct sockaddr *)&sa, sa_len);
+		}
 	}
+
 	if (ret < 0) {
 		flog_err_sys(EC_LIB_SOCKET, "Can't bind zserv socket on %s: %s",
 			     path, safe_strerror(errno));
