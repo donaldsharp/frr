@@ -2779,36 +2779,6 @@ int netlink_vlan_read(struct zebra_ns *zns)
 	return ret;
 }
 
-void if_netlink_set_frr_protodown_r_bit(uint8_t bit)
-{
-	if (IS_ZEBRA_DEBUG_KERNEL)
-		zlog_debug(
-			"Protodown reason bit index changed: bit-index %u -> bit-index %u",
-			frr_protodown_r_bit, bit);
-
-	frr_protodown_r_bit = bit;
-}
-
-void if_netlink_unset_frr_protodown_r_bit(void)
-{
-	if (IS_ZEBRA_DEBUG_KERNEL)
-		zlog_debug(
-			"Protodown reason bit index changed: bit-index %u -> bit-index %u",
-			frr_protodown_r_bit, FRR_PROTODOWN_REASON_DEFAULT_BIT);
-
-	frr_protodown_r_bit = FRR_PROTODOWN_REASON_DEFAULT_BIT;
-}
-
-bool if_netlink_frr_protodown_r_bit_is_set(void)
-{
-	return (frr_protodown_r_bit != FRR_PROTODOWN_REASON_DEFAULT_BIT);
-}
-
-uint8_t if_netlink_get_frr_protodown_r_bit(void)
-{
-	return frr_protodown_r_bit;
-}
-
 /**
  * netlink_vni_change() - Read in change about vni from the kernel
  *
@@ -2921,62 +2891,4 @@ int netlink_vni_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	return 0;
 }
 
-/**
- * netlink_request_tunneldump() - Request vxlan l3svd vni information from the
- * kernel
- * @zns:	Zebra namespace
- * @family:	AF_* netlink family
- * @type:	RTM_* (RTM_GETTUNNEL) route type
- *
- * Return:	Result status
- */
-static int netlink_request_tunneldump(struct zebra_ns *zns, int family,
-				      int ifindex)
-{
-	struct {
-		struct nlmsghdr n;
-		struct tunnel_msg tmsg;
-		char buf[256];
-	} req;
-
-	/* Form the request */
-	memset(&req, 0, sizeof(req));
-	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct tunnel_msg));
-	req.n.nlmsg_type = RTM_GETTUNNEL;
-	req.n.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
-	req.tmsg.family = family;
-	req.tmsg.ifindex = ifindex;
-
-	return netlink_request(&zns->netlink_cmd, &req);
-}
-
-int netlink_tunneldump_read(struct zebra_ns *zns)
-{
-	int ret = 0;
-	struct zebra_dplane_info dp_info;
-	struct route_node *rn;
-	struct interface *tmp_if = NULL;
-	struct zebra_if *zif;
-
-	zebra_dplane_info_from_zns(&dp_info, zns, true /*is_cmd*/);
-
-	for (rn = route_top(zns->if_table); rn; rn = route_next(rn)) {
-		tmp_if = (struct interface *)rn->info;
-		if (!tmp_if)
-			continue;
-		zif = tmp_if->info;
-		if (!zif || zif->zif_type != ZEBRA_IF_VXLAN)
-			continue;
-		if (!IS_ZEBRA_VXLAN_IF_L3SVD(zif))
-			continue;
-		ret = netlink_request_tunneldump(zns, PF_BRIDGE,
-						 tmp_if->ifindex);
-		if (ret < 0)
-			return ret;
-
-		ret = netlink_parse_info(netlink_vni_change, &zns->netlink_cmd,
-					 &dp_info, 0, 1);
-	}
-	return 0;
-}
 #endif /* GNU_LINUX */

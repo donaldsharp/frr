@@ -1137,8 +1137,7 @@ struct zebra_mac *zebra_evpn_mac_add(struct zebra_evpn *zevpn,
  */
 int zebra_evpn_mac_del(struct zebra_evpn *zevpn, struct zebra_mac *mac)
 {
-	zebra_mac_t *tmp_mac;
-	char buf[ETHER_ADDR_STRLEN];
+	struct zebra_mac *tmp_mac;
 
 	if (IS_ZEBRA_DEBUG_VXLAN || IS_ZEBRA_DEBUG_EVPN_MH_MAC) {
 		char mac_buf[MAC_BUF_SIZE];
@@ -2027,6 +2026,7 @@ int zebra_evpn_mac_remote_macip_add(
 	struct zebra_mac *mac;
 	bool old_es_present;
 	bool new_es_present;
+	vlanid_t vid;
 
 	sticky = !!CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_STICKY);
 	remote_gw = !!CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_GW);
@@ -2532,7 +2532,7 @@ int zebra_evpn_mac_add_local_mac(struct interface *br_if, vlanid_t vid,
 				 bool dp_static, void *arg)
 {
 	struct mac_walk_ctx *m_wctx;
-	zebra_evpn_t *zevpn;
+	struct zebra_evpn *zevpn;
 	char buf[ETHER_ADDR_STRLEN];
 	struct interface *ifp;
 

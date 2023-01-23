@@ -1143,7 +1143,7 @@ static void zevpn_build_hash_table(void)
  */
 static void zebra_evpn_vxlan_cleanup_all(struct hash_bucket *bucket, void *arg)
 {
-	zebra_evpn_t *zevpn = NULL;
+	struct zebra_evpn *zevpn = NULL;
 	zebra_l3vni_t *zl3vni = NULL;
 
 	zevpn = (struct zebra_evpn *)bucket->data;
