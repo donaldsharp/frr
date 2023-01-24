@@ -4688,10 +4688,14 @@ DEFUN(show_bgp_l2vpn_evpn_route,
 	evpn_show_all_routes(vty, bgp, type, json, detail, self_orig);
 
 	if (uj) {
-		vty_out(vty, "%s\n", json_object_to_json_string_ext(
-					     json, JSON_C_TO_STRING_PRETTY));
-		json_object_free(json);
+		if (detail) {
+			vty_out(vty, "%s\n", json_object_to_json_string(json));
+			json_object_free(json);
+		} else {
+			vty_json(vty, json);
+		}
 	}
+
 	return CMD_SUCCESS;
 }
 
