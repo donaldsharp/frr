@@ -419,6 +419,16 @@ int bgp_generate_updgrp_packets(struct thread *thread)
 	if (bgp_in_graceful_restart())
 		return 0;
 
+	/*
+	 * Since the following is a do while loop
+	 * let's stop adding to the outq if we are
+	 * already at the limit.
+	 */
+	if (peer->obuf->count >= bm->outq_limit) {
+		bgp_write_proceed_actions(peer);
+		return 0;
+	}
+
 	do {
 		s = NULL;
 		FOREACH_AFI_SAFI (afi, safi) {
@@ -494,7 +504,8 @@ int bgp_generate_updgrp_packets(struct thread *thread)
 			bgp_packet_add(peer, s);
 			bpacket_queue_advance_peer(paf);
 		}
-	} while (s && (++generated < wpq));
+	} while (s && (++generated < wpq) &&
+		 (peer->obuf->count <= bm->outq_limit));
 
 	if (generated)
 		bgp_writes_on(peer);

@@ -198,8 +198,9 @@ struct bgp_master {
 
 	bool terminating;	/* global flag that sigint terminate seen */
 
-#define BM_DEFAULT_INQ_LIMIT 10000
+#define BM_DEFAULT_Q_LIMIT 10000
 	uint32_t inq_limit;
+	uint32_t outq_limit;
 
 	QOBJ_FIELDS
 };

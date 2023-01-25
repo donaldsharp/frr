@@ -7322,7 +7322,8 @@ void bgp_master_init(struct thread_master *master, const int buffer_size)
 	bm->stalepath_time = BGP_DEFAULT_STALEPATH_TIME;
 	bm->select_defer_time = BGP_DEFAULT_SELECT_DEFERRAL_TIME;
 	bm->rib_stale_time = BGP_DEFAULT_RIB_STALE_TIME;
-	bm->inq_limit = BM_DEFAULT_INQ_LIMIT;
+	bm->inq_limit = BM_DEFAULT_Q_LIMIT;
+	bm->outq_limit = BM_DEFAULT_Q_LIMIT;
 
 	bgp_process_queue_init();
 
