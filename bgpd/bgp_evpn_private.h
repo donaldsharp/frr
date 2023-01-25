@@ -39,12 +39,22 @@
 
 /* EVPN route types. */
 typedef enum {
-	BGP_EVPN_AD_ROUTE = 1,    /* Ethernet Auto-Discovery (A-D) route */
-	BGP_EVPN_MAC_IP_ROUTE,    /* MAC/IP Advertisement route */
-	BGP_EVPN_IMET_ROUTE,      /* Inclusive Multicast Ethernet Tag route */
-	BGP_EVPN_ES_ROUTE,	/* Ethernet Segment route */
+	BGP_EVPN_UNKN_ROUTE = 0,
+	BGP_EVPN_AD_ROUTE = 1,	  /* Ethernet Auto-Discovery (A-D) route */
+	BGP_EVPN_MAC_IP_ROUTE,	  /* MAC/IP Advertisement route */
+	BGP_EVPN_IMET_ROUTE,	  /* Inclusive Multicast Ethernet Tag route */
+	BGP_EVPN_ES_ROUTE,	  /* Ethernet Segment route */
 	BGP_EVPN_IP_PREFIX_ROUTE, /* IP Prefix route */
 } bgp_evpn_route_type;
+
+static const struct message bgp_evpn_route_type_str[] = {
+	{BGP_EVPN_UNKN_ROUTE, "UNKNOWN"},
+	{BGP_EVPN_AD_ROUTE, "AD"},
+	{BGP_EVPN_MAC_IP_ROUTE, "MACIP"},
+	{BGP_EVPN_IMET_ROUTE, "IMET"},
+	{BGP_EVPN_ES_ROUTE, "ES"},
+	{BGP_EVPN_IP_PREFIX_ROUTE, "IP-PREFIX"},
+	{0}};
 
 RB_HEAD(bgp_es_evi_rb_head, bgp_evpn_es_evi);
 RB_PROTOTYPE(bgp_es_evi_rb_head, bgp_evpn_es_evi, rb_node,
