@@ -26,6 +26,7 @@ extern "C" {
 
 /* EVPN route types. */
 typedef enum {
+	BGP_EVPN_UNKN_ROUTE = 0,
 	BGP_EVPN_AD_ROUTE = 1,    /* Ethernet Auto-Discovery (A-D) route */
 	BGP_EVPN_MAC_IP_ROUTE,    /* MAC/IP Advertisement route */
 	BGP_EVPN_IMET_ROUTE,      /* Inclusive Multicast Ethernet Tag route */
