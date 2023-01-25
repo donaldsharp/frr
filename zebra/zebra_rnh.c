@@ -1199,73 +1199,282 @@ failure:
 	return -1;
 }
 
-static void print_nh(struct nexthop *nexthop, struct vty *vty,
-		     json_object *json)
+/*
+ * Helper for nexthop output, used in the 'show ip route' path
+ */
+void show_route_nexthop_helper(struct vty *vty, const struct route_entry *re,
+			       const struct nexthop *nexthop)
 {
-	struct zebra_ns *zns = zebra_ns_lookup(nexthop->vrf_id);
+	char buf[MPLS_LABEL_STRLEN];
+	int i;
 
 	switch (nexthop->type) {
 	case NEXTHOP_TYPE_IPV4:
 	case NEXTHOP_TYPE_IPV4_IFINDEX:
-		if (json) {
-			json_object_string_addf(json, "ip", "%pI4",
-						&nexthop->gate.ipv4);
-			if (nexthop->ifindex)
-				json_object_string_add(
-					json, "interface",
-					ifindex2ifname_per_ns(
-						zns, nexthop->ifindex));
-		} else {
-			vty_out(vty, " via %pI4", &nexthop->gate.ipv4);
-			if (nexthop->ifindex)
-				vty_out(vty, ", %s",
-					ifindex2ifname_per_ns(
-						zns, nexthop->ifindex));
-		}
+		vty_out(vty, " via %s",
+			inet_ntop(AF_INET, &nexthop->gate.ipv4, buf,
+				  sizeof(buf)));
+		if (nexthop->ifindex)
+			vty_out(vty, ", %s",
+				ifindex2ifname(nexthop->ifindex,
+					       nexthop->vrf_id));
 		break;
 	case NEXTHOP_TYPE_IPV6:
 	case NEXTHOP_TYPE_IPV6_IFINDEX:
-		if (json) {
-			json_object_string_addf(json, "ip", "%pI6",
-						&nexthop->gate.ipv6);
-			if (nexthop->ifindex)
-				json_object_string_add(
-					json, "interface",
-					ifindex2ifname_per_ns(
-						zns, nexthop->ifindex));
-		} else {
-			vty_out(vty, " %pI6", &nexthop->gate.ipv6);
-			if (nexthop->ifindex)
-				vty_out(vty, ", via %s",
-					ifindex2ifname_per_ns(
-						zns, nexthop->ifindex));
-		}
+		vty_out(vty, " via %s",
+			inet_ntop(AF_INET6, &nexthop->gate.ipv6, buf,
+				  sizeof(buf)));
+		if (nexthop->ifindex)
+			vty_out(vty, ", %s",
+				ifindex2ifname(nexthop->ifindex,
+					       nexthop->vrf_id));
 		break;
+
 	case NEXTHOP_TYPE_IFINDEX:
-		if (json) {
-			json_object_string_add(
-				json, "interface",
-				ifindex2ifname_per_ns(zns, nexthop->ifindex));
-			json_object_boolean_true_add(json, "directlyConnected");
-		} else {
-			vty_out(vty, " is directly connected, %s",
-				ifindex2ifname_per_ns(zns, nexthop->ifindex));
-		}
+		vty_out(vty, " is directly connected, %s",
+			ifindex2ifname(nexthop->ifindex, nexthop->vrf_id));
 		break;
 	case NEXTHOP_TYPE_BLACKHOLE:
-		if (json) {
-			json_object_string_add(json, "interface", "Null0");
-			json_object_boolean_true_add(json, "directlyConnected");
-		} else {
-			vty_out(vty, " is directly connected, Null0");
+		vty_out(vty, " unreachable");
+		switch (nexthop->bh_type) {
+		case BLACKHOLE_REJECT:
+			vty_out(vty, " (ICMP unreachable)");
+			break;
+		case BLACKHOLE_ADMINPROHIB:
+			vty_out(vty, " (ICMP admin-prohibited)");
+			break;
+		case BLACKHOLE_NULL:
+			vty_out(vty, " (blackhole)");
+			break;
+		case BLACKHOLE_UNSPEC:
+			break;
 		}
 		break;
 	default:
 		break;
 	}
 
-	if (!json)
-		vty_out(vty, "\n");
+	if ((re == NULL || (nexthop->vrf_id != re->vrf_id)) &&
+	    (nexthop->type != NEXTHOP_TYPE_BLACKHOLE)) {
+		struct vrf *vrf = vrf_lookup_by_id(nexthop->vrf_id);
+		if (vrf)
+			vty_out(vty, " (vrf %s)", vrf->name);
+		else
+			vty_out(vty, " (vrf UNKNOWN)");
+	}
+
+	if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+		vty_out(vty, " inactive");
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK))
+		vty_out(vty, " onlink");
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+		vty_out(vty, " (recursive)");
+
+	switch (nexthop->type) {
+	case NEXTHOP_TYPE_IPV4:
+	case NEXTHOP_TYPE_IPV4_IFINDEX:
+		if (nexthop->src.ipv4.s_addr) {
+			if (inet_ntop(AF_INET, &nexthop->src.ipv4, buf,
+				      sizeof(buf)))
+				vty_out(vty, ", src %s", buf);
+		}
+		break;
+	case NEXTHOP_TYPE_IPV6:
+	case NEXTHOP_TYPE_IPV6_IFINDEX:
+		if (!IPV6_ADDR_SAME(&nexthop->src.ipv6, &in6addr_any)) {
+			if (inet_ntop(AF_INET6, &nexthop->src.ipv6, buf,
+				      sizeof(buf)))
+				vty_out(vty, ", src %s", buf);
+		}
+		break;
+	default:
+		break;
+	}
+
+	/* Label information */
+	if (nexthop->nh_label && nexthop->nh_label->num_labels) {
+		vty_out(vty, ", label %s",
+			mpls_label2str(nexthop->nh_label->num_labels,
+				       nexthop->nh_label->label, buf,
+				       sizeof(buf), nexthop->nh_label_type, 1));
+	}
+
+	if (nexthop->weight) {
+		vty_out(vty, ", weight %u", nexthop->weight);
+	}
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_HAS_BACKUP)) {
+		vty_out(vty, ", backup %d", nexthop->backup_idx[0]);
+		for (i = 1; i < nexthop->backup_num; i++) {
+			vty_out(vty, ",%d", nexthop->backup_idx[i]);
+		}
+	}
+}
+
+/*
+ * Render a nexthop into a json object; the caller allocates and owns
+ * the json object memory.
+ */
+void show_nexthop_json_helper(json_object *json_nexthop,
+			      const struct nexthop *nexthop,
+			      const struct route_entry *re)
+{
+	char buf[SRCDEST2STR_BUFFER];
+	struct vrf *vrf = NULL;
+	json_object *json_labels = NULL;
+	json_object *json_backups = NULL;
+	int i;
+
+	json_object_int_add(json_nexthop, "flags", nexthop->flags);
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_DUPLICATE))
+		json_object_boolean_true_add(json_nexthop, "duplicate");
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_FIB))
+		json_object_boolean_true_add(json_nexthop, "fib");
+
+	switch (nexthop->type) {
+	case NEXTHOP_TYPE_IPV4:
+	case NEXTHOP_TYPE_IPV4_IFINDEX:
+		json_object_string_add(json_nexthop, "ip",
+				       inet_ntoa(nexthop->gate.ipv4));
+		json_object_string_add(json_nexthop, "afi", "ipv4");
+
+		if (nexthop->ifindex) {
+			json_object_int_add(json_nexthop, "interfaceIndex",
+					    nexthop->ifindex);
+			json_object_string_add(json_nexthop, "interfaceName",
+					       ifindex2ifname(nexthop->ifindex,
+							      nexthop->vrf_id));
+		}
+		break;
+	case NEXTHOP_TYPE_IPV6:
+	case NEXTHOP_TYPE_IPV6_IFINDEX:
+		json_object_string_add(json_nexthop, "ip",
+				       inet_ntop(AF_INET6, &nexthop->gate.ipv6,
+						 buf, sizeof(buf)));
+		json_object_string_add(json_nexthop, "afi", "ipv6");
+
+		if (nexthop->ifindex) {
+			json_object_int_add(json_nexthop, "interfaceIndex",
+					    nexthop->ifindex);
+			json_object_string_add(json_nexthop, "interfaceName",
+					       ifindex2ifname(nexthop->ifindex,
+							      nexthop->vrf_id));
+		}
+		break;
+
+	case NEXTHOP_TYPE_IFINDEX:
+		json_object_boolean_true_add(json_nexthop, "directlyConnected");
+		json_object_int_add(json_nexthop, "interfaceIndex",
+				    nexthop->ifindex);
+		json_object_string_add(
+			json_nexthop, "interfaceName",
+			ifindex2ifname(nexthop->ifindex, nexthop->vrf_id));
+		break;
+	case NEXTHOP_TYPE_BLACKHOLE:
+		json_object_boolean_true_add(json_nexthop, "unreachable");
+		switch (nexthop->bh_type) {
+		case BLACKHOLE_REJECT:
+			json_object_boolean_true_add(json_nexthop, "reject");
+			break;
+		case BLACKHOLE_ADMINPROHIB:
+			json_object_boolean_true_add(json_nexthop,
+						     "adminProhibited");
+			break;
+		case BLACKHOLE_NULL:
+			json_object_boolean_true_add(json_nexthop, "blackhole");
+			break;
+		case BLACKHOLE_UNSPEC:
+			break;
+		}
+		break;
+	default:
+		break;
+	}
+
+	/* This nexthop is a resolver for the parent nexthop.
+	 * Set resolver flag for better clarity and delimiter
+	 * in flat list of nexthops in json.
+	 */
+	if (nexthop->rparent)
+		json_object_boolean_true_add(json_nexthop, "resolver");
+
+	if ((re == NULL || (nexthop->vrf_id != re->vrf_id)) &&
+	    (nexthop->type != NEXTHOP_TYPE_BLACKHOLE)) {
+		vrf = vrf_lookup_by_id(nexthop->vrf_id);
+		json_object_string_add(json_nexthop, "vrf", vrf->name);
+	}
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_DUPLICATE))
+		json_object_boolean_true_add(json_nexthop, "duplicate");
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+		json_object_boolean_true_add(json_nexthop, "active");
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK))
+		json_object_boolean_true_add(json_nexthop, "onLink");
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+		json_object_boolean_true_add(json_nexthop, "recursive");
+
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_HAS_BACKUP)) {
+		json_backups = json_object_new_array();
+		for (i = 0; i < nexthop->backup_num; i++) {
+			json_object_array_add(
+				json_backups,
+				json_object_new_int(nexthop->backup_idx[i]));
+		}
+
+		json_object_object_add(json_nexthop, "backupIndex",
+				       json_backups);
+	}
+
+	switch (nexthop->type) {
+	case NEXTHOP_TYPE_IPV4:
+	case NEXTHOP_TYPE_IPV4_IFINDEX:
+		if (nexthop->src.ipv4.s_addr) {
+			if (inet_ntop(AF_INET, &nexthop->src.ipv4, buf,
+				      sizeof(buf)))
+				json_object_string_add(json_nexthop, "source",
+						       buf);
+		}
+		break;
+	case NEXTHOP_TYPE_IPV6:
+	case NEXTHOP_TYPE_IPV6_IFINDEX:
+		if (!IPV6_ADDR_SAME(&nexthop->src.ipv6, &in6addr_any)) {
+			if (inet_ntop(AF_INET6, &nexthop->src.ipv6, buf,
+				      sizeof(buf)))
+				json_object_string_add(json_nexthop, "source",
+						       buf);
+		}
+		break;
+	default:
+		break;
+	}
+
+	if (nexthop->nh_label && nexthop->nh_label->num_labels) {
+		json_labels = json_object_new_array();
+
+		for (int label_index = 0;
+		     label_index < nexthop->nh_label->num_labels; label_index++)
+			json_object_array_add(
+				json_labels,
+				json_object_new_int((
+					(nexthop->nh_label_type ==
+					 ZEBRA_LSP_EVPN)
+						? label2vni(
+							  &nexthop->nh_label->label
+								   [label_index])
+						: nexthop->nh_label->label
+							  [label_index])));
+
+		json_object_object_add(json_nexthop, "labels", json_labels);
+	}
+
+	if (nexthop->weight)
+		json_object_int_add(json_nexthop, "weight", nexthop->weight);
 }
 
 static void print_rnh(struct route_node *rn, struct vty *vty, json_object *json)
@@ -1297,7 +1506,8 @@ static void print_rnh(struct route_node *rn, struct vty *vty, json_object *json)
 			CHECK_FLAG(rnh->flags, ZEBRA_NHT_CONNECTED));
 		json_object_object_add(json_nht, "clientList",
 				       json_client_array);
-		json_object_object_add(json_nht, "gates", json_nexthop_array);
+		json_object_object_add(json_nht, "nexthops",
+				       json_nexthop_array);
 	} else {
 		vty_out(vty, "%s%s\n",
 			inet_ntop(rn->p.family, &rn->p.u.prefix, buf, BUFSIZ),
@@ -1321,8 +1531,12 @@ static void print_rnh(struct route_node *rn, struct vty *vty, json_object *json)
 				json_nexthop = json_object_new_object();
 				json_object_array_add(json_nexthop_array,
 						      json_nexthop);
+				show_nexthop_json_helper(json_nexthop, nexthop,
+							 NULL);
+			} else {
+				show_route_nexthop_helper(vty, NULL, nexthop);
+				vty_out(vty, "\n");
 			}
-			print_nh(nexthop, vty, json_nexthop);
 		}
 	} else {
 		if (json)

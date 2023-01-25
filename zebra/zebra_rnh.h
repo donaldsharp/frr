@@ -63,6 +63,12 @@ extern char *rnh_str(struct rnh *rnh, char *buf, int size);
 
 extern int rnh_resolve_via_default(struct zebra_vrf *zvrf, int family);
 
+void show_nexthop_json_helper(json_object *json_nexthop,
+			      const struct nexthop *nexthop,
+			      const struct route_entry *re);
+void show_route_nexthop_helper(struct vty *vty, const struct route_entry *re,
+			       const struct nexthop *nexthop);
+
 #ifdef __cplusplus
 }
 #endif
