@@ -267,6 +267,9 @@ void router_id_write(struct vty *vty, struct zebra_vrf *zvrf)
 	}
 }
 
+#if CONFDATE > 20240128
+CPP_NOTICE("REMOVE non vrf sub-mode router-id commands")
+#endif
 DEFUN (ip_router_id,
        ip_router_id_cmd,
        "ip router-id A.B.C.D vrf NAME",
@@ -279,6 +282,9 @@ DEFUN (ip_router_id,
 	struct prefix rid;
 	vrf_id_t vrf_id;
 	struct zebra_vrf *zvrf;
+
+	vty_out(vty,
+		"This command is deprecated please switch to using VRF_NODE version instead\n");
 
 	argv_find(argv, argc, "A.B.C.D", &idx);
 
@@ -316,6 +322,9 @@ DEFUN (ipv6_router_id,
 	struct prefix rid;
 	vrf_id_t vrf_id;
 	struct zebra_vrf *zvrf;
+
+	vty_out(vty,
+		"This command is deprecated please switch to using VRF_NODE version instead\n");
 
 	argv_find(argv, argc, "X:X::X:X", &idx);
 
