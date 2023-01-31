@@ -3185,6 +3185,14 @@ int rib_add_multipath_nhe(afi_t afi, safi_t safi, struct prefix *p,
 		}
 	}
 
+	if (re->metric == ROUTE_INSTALLATION_METRIC &&
+	    CHECK_FLAG(re->flags, ZEBRA_FLAG_SELFROUTE)) {
+		if (same && !zebra_router_notify_on_ack())
+			re->metric = same->metric;
+		else
+			re->metric = 0;
+	}
+
 	/* If this route is kernel/connected route, notify the dataplane. */
 	if (RIB_SYSTEM_ROUTE(re)) {
 		/* Notify dataplane */
