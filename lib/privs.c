@@ -163,6 +163,10 @@ static struct {
 			{
 				1, (pvalue_t[]){CAP_IPC_LOCK},
 			},
+		[ZCAP_SYS_RAWIO] =
+			{
+				1, (pvalue_t[]){CAP_SYS_RAWIO},
+			},
 #endif /* HAVE_LCAPS */
 };
 
@@ -259,6 +263,8 @@ zebra_privs_current_t zprivs_state_caps(void)
 
 static void zprivs_caps_init(struct zebra_privs_t *zprivs)
 {
+	int i;
+
 	zprivs_state.syscaps_p = zcaps2sys(zprivs->caps_p, zprivs->cap_num_p);
 	zprivs_state.syscaps_i = zcaps2sys(zprivs->caps_i, zprivs->cap_num_i);
 
@@ -338,6 +344,19 @@ static void zprivs_caps_init(struct zebra_privs_t *zprivs)
 		exit(1);
 	}
 
+	for (i = 0; zprivs_state.syscaps_i && (i < zprivs_state.syscaps_i->num);
+	     ++i) {
+		if (zprivs_state.syscaps_i->caps[i] == CAP_NET_ADMIN) {
+			if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE,
+				  CAP_NET_ADMIN, 0, 0)
+			    == -1) {
+				fprintf(stderr,
+					"privs_init: ambient raise failed %s\n",
+					safe_strerror(errno));
+				exit(1);
+			}
+		}
+	}
 	/* set methods for the caller to use */
 	zprivs->change = zprivs_change_caps;
 	zprivs->current_state = zprivs_state_caps;
@@ -345,6 +364,8 @@ static void zprivs_caps_init(struct zebra_privs_t *zprivs)
 
 static void zprivs_caps_terminate(void)
 {
+	int i;
+
 	/* Clear all capabilities, if we have any. */
 	if (zprivs_state.caps)
 		cap_clear(zprivs_state.caps);
@@ -356,6 +377,20 @@ static void zprivs_caps_terminate(void)
 		fprintf(stderr, "privs_terminate: cap_set_proc failed, %s",
 			safe_strerror(errno));
 		exit(1);
+	}
+
+	for (i = 0; zprivs_state.syscaps_i && (i < zprivs_state.syscaps_i->num);
+	     ++i) {
+		if (zprivs_state.syscaps_i->caps[i] == CAP_NET_ADMIN) {
+			if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_LOWER,
+				  CAP_NET_ADMIN, 0, 0)
+			    == -1) {
+				fprintf(stderr,
+					"privs_init: ambient lower failed %s\n",
+					safe_strerror(errno));
+				exit(1);
+			}
+		}
 	}
 
 	/* free up private state */
@@ -484,7 +519,7 @@ struct zebra_privs_t *_zprivs_raise(struct zebra_privs_t *privs,
 	 * Serialize 'raise' operations; particularly important for
 	 * OSes where privs are process-wide.
 	 */
-	frr_with_mutex(&(privs->mutex)) {
+	frr_with_mutex (&(privs->mutex)) {
 		/* Locate ref-counting object to use */
 		refs = get_privs_refs(privs);
 
@@ -513,7 +548,7 @@ void _zprivs_lower(struct zebra_privs_t **privs)
 	/* Serialize 'lower privs' operation - particularly important
 	 * when OS privs are process-wide.
 	 */
-	frr_with_mutex(&(*privs)->mutex) {
+	frr_with_mutex (&(*privs)->mutex) {
 		refs = get_privs_refs(*privs);
 
 		if (--(refs->refcount) == 0) {

@@ -51,8 +51,8 @@ static void on_trace(const char *label, struct interface *ifp, pim_addr src)
 }
 
 static void recv_join(struct interface *ifp, struct pim_neighbor *neigh,
-		      uint16_t holdtime, pim_addr upstream, pim_sgaddr *sg,
-		      uint8_t source_flags)
+		      uint16_t holdtime, struct in_addr upstream,
+		      struct prefix_sg *sg, uint8_t source_flags, bool allow_rp)
 {
 	struct pim_interface *pim_ifp = NULL;
 
@@ -82,12 +82,24 @@ static void recv_join(struct interface *ifp, struct pim_neighbor *neigh,
 				  sg);
 			return;
 		}
+
 		/*
-		 * If the RP sent in the message is not
-		 * our RP for the group, drop the message
+		 * If the RP sent in the message is not our RP for the group,
+		 * drop the message - unless the user has specified the
+		 * allow-rp option, which means we skip this check and use our
+		 * RP instead, provided policy allows it. This latter bit is a
+		 * non-RFC-compliant option.
 		 */
-		rpf_addr = pim_addr_from_prefix(&rp->rpf_addr);
-		if (pim_addr_cmp(sg->src, rpf_addr)) {
+		rpf_addr = rp->rpf_addr;
+		if (pim_addr_cmp(sg->src, rpf_addr)
+		    && (!pim_ifp->allow_rp
+			|| !pim_is_rp_allowed(pim_ifp, &sg->src))) {
+			char received_rp[INET_ADDRSTRLEN];
+			char local_rp[INET_ADDRSTRLEN];
+			pim_inet4_dump("<received?>", sg->src, received_rp,
+				       sizeof(received_rp));
+			pim_inet4_dump("<local?>", rp->rpf_addr,
+				       local_rp, sizeof(local_rp));
 			zlog_warn(
 				"%s: Specified RP(%pPAs) in join is different than our configured RP(%pPAs)",
 				__func__, &sg->src, &rpf_addr);
@@ -269,8 +281,9 @@ int pim_joinprune_recv(struct interface *ifp, struct pim_neighbor *neigh,
 			if (filtered)
 				continue;
 
-			recv_join(ifp, neigh, msg_holdtime, msg_upstream_addr,
-				  &sg, msg_source_flags);
+			recv_join(ifp, neigh, msg_holdtime,
+				  msg_upstream_addr, &sg,
+				  msg_source_flags, pim_ifp->allow_rp);
 
 			if (pim_addr_is_any(sg.src)) {
 				starg_ch = pim_ifchannel_find(ifp, &sg);
@@ -427,7 +440,6 @@ int pim_joinprune_send(struct pim_rpf *rpf, struct list *groups)
 	size_t packet_left = 0;
 	size_t packet_size = 0;
 	size_t group_size = 0;
-	pim_addr rpf_addr;
 
 	if (rpf->source_nexthop.interface)
 		pim_ifp = rpf->source_nexthop.interface->info;
@@ -436,9 +448,8 @@ int pim_joinprune_send(struct pim_rpf *rpf, struct list *groups)
 		return -1;
 	}
 
-	rpf_addr = pim_addr_from_prefix(&rpf->rpf_addr);
 
-	on_trace(__func__, rpf->source_nexthop.interface, rpf_addr);
+	on_trace(__func__, rpf->source_nexthop.interface, rpf->rpf_addr);
 
 	if (!pim_ifp) {
 		zlog_warn("%s: multicast not enabled on interface %s", __func__,
@@ -446,11 +457,11 @@ int pim_joinprune_send(struct pim_rpf *rpf, struct list *groups)
 		return -1;
 	}
 
-	if (pim_addr_is_any(rpf_addr)) {
+	if (pim_addr_is_any(rpf->rpf_addr)) {
 		if (PIM_DEBUG_PIM_J_P)
 			zlog_debug(
 				"%s: upstream=%pPA is myself on interface %s",
-				__func__, &rpf_addr,
+				__func__, &rpf->rpf_addr,
 				rpf->source_nexthop.interface->name);
 		return 0;
 	}
@@ -473,7 +484,7 @@ int pim_joinprune_send(struct pim_rpf *rpf, struct list *groups)
 			memset(msg, 0, sizeof(*msg));
 
 			pim_msg_addr_encode_ucast((uint8_t *)&msg->addr,
-						  rpf_addr);
+						  rpf->rpf_addr);
 			msg->reserved = 0;
 			msg->holdtime = htons(PIM_JP_HOLDTIME);
 
@@ -492,7 +503,7 @@ int pim_joinprune_send(struct pim_rpf *rpf, struct list *groups)
 		if (PIM_DEBUG_PIM_J_P)
 			zlog_debug(
 				"%s: sending (G)=%pPAs to upstream=%pPA on interface %s",
-				__func__, &group->group, &rpf_addr,
+				__func__, &group->group, &rpf->rpf_addr,
 				rpf->source_nexthop.interface->name);
 
 		group_size = pim_msg_get_jp_group_size(group->sources);
@@ -516,7 +527,7 @@ int pim_joinprune_send(struct pim_rpf *rpf, struct list *groups)
 			memset(msg, 0, sizeof(*msg));
 
 			pim_msg_addr_encode_ucast((uint8_t *)&msg->addr,
-						  rpf_addr);
+						  rpf->rpf_addr);
 			msg->reserved = 0;
 			msg->holdtime = htons(PIM_JP_HOLDTIME);
 

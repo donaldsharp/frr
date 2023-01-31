@@ -72,6 +72,8 @@
 #endif
 
 extern int allow_delete;
+#include "zebra/zebra_neigh.h"
+#include "zebra/zebra_neigh_throttle.h"
 
 /* context to manage dumps in multiple tables or vrfs */
 struct route_show_ctx {
@@ -382,6 +384,9 @@ static void show_nexthop_detail_helper(struct vty *vty,
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK))
 		vty_out(vty, " onlink");
 
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_LINKDOWN))
+		vty_out(vty, " linkdown");
+
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
 		vty_out(vty, " (recursive)");
 
@@ -420,7 +425,8 @@ static void show_nexthop_detail_helper(struct vty *vty,
 		vty_out(vty, ", label %s",
 			mpls_label2str(nexthop->nh_label->num_labels,
 				       nexthop->nh_label->label, buf,
-				       sizeof(buf), 1 /*pretty*/));
+				       sizeof(buf), nexthop->nh_label_type,
+				       1 /*pretty*/));
 	}
 
 	if (nexthop->weight)
@@ -570,6 +576,8 @@ static void vty_show_ip_route_detail(struct vty *vty, struct route_node *rn,
 		}
 		if (CHECK_FLAG(re->flags, ZEBRA_FLAG_SELECTED))
 			vty_out(vty, ", best");
+		if (CHECK_FLAG(re->status, ROUTE_ENTRY_NO_NHG))
+			vty_out(vty, ", no-NHG");
 		vty_out(vty, "\n");
 
 		uptime2str(re->uptime, buf, sizeof(buf));
@@ -663,6 +671,9 @@ static void show_route_nexthop_helper(struct vty *vty,
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ONLINK))
 		vty_out(vty, " onlink");
 
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_LINKDOWN))
+		vty_out(vty, " linkdown");
+
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
 		vty_out(vty, " (recursive)");
 
@@ -696,7 +707,7 @@ static void show_route_nexthop_helper(struct vty *vty,
 		vty_out(vty, ", label %s",
 			mpls_label2str(nexthop->nh_label->num_labels,
 				       nexthop->nh_label->label, buf,
-				       sizeof(buf), 1));
+				       sizeof(buf), nexthop->nh_label_type, 1));
 	}
 
 	if (nexthop->nh_srv6) {
@@ -843,6 +854,9 @@ static void show_nexthop_json_helper(json_object *json_nexthop,
 		json_object_boolean_true_add(json_nexthop,
 					     "onLink");
 
+	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_LINKDOWN))
+		json_object_boolean_true_add(json_nexthop, "linkDown");
+
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
 		json_object_boolean_true_add(json_nexthop,
 					     "recursive");
@@ -897,9 +911,14 @@ static void show_nexthop_json_helper(json_object *json_nexthop,
 		     label_index++)
 			json_object_array_add(
 				json_labels,
-				json_object_new_int(
-					nexthop->nh_label->label
-					[label_index]));
+				json_object_new_int((
+					(nexthop->nh_label_type
+					 == ZEBRA_LSP_EVPN)
+						? label2vni(
+							&nexthop->nh_label->label
+								 [label_index])
+						: nexthop->nh_label->label
+							  [label_index])));
 
 		json_object_object_add(json_nexthop, "labels",
 				       json_labels);
@@ -992,6 +1011,9 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 
 		if (CHECK_FLAG(re->status, ROUTE_ENTRY_QUEUED))
 			json_object_boolean_true_add(json_route, "queued");
+
+		if (CHECK_FLAG(re->status, ROUTE_ENTRY_NO_NHG))
+			json_object_boolean_true_add(json_route, "noNHG");
 
 		if (CHECK_FLAG(re->flags, ZEBRA_FLAG_TRAPPED))
 			json_object_boolean_true_add(json_route, "trapped");
@@ -1439,13 +1461,21 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe)
 	struct nhg_connected *rb_node_dep = NULL;
 	struct nexthop_group *backup_nhg;
 	char up_str[MONOTIME_STRLEN];
+	char time_left[MONOTIME_STRLEN];
 
 	uptime2str(nhe->uptime, up_str, sizeof(up_str));
 
 	vty_out(vty, "ID: %u (%s)\n", nhe->id, zebra_route_string(nhe->type));
-	vty_out(vty, "     RefCnt: %u\n", nhe->refcnt);
+	vty_out(vty, "     RefCnt: %u", nhe->refcnt);
+	if (thread_is_scheduled(nhe->timer))
+		vty_out(vty, " Time to Deletion: %s",
+			thread_timer_to_hhmmss(time_left, sizeof(time_left),
+					       nhe->timer));
+	vty_out(vty, "\n");
+
 	vty_out(vty, "     Uptime: %s\n", up_str);
 	vty_out(vty, "     VRF: %s\n", vrf_id_to_name(nhe->vrf_id));
+
 
 	if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_VALID)) {
 		vty_out(vty, "     Valid");
@@ -1517,7 +1547,7 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe)
 
 	if (!zebra_nhg_dependents_is_empty(nhe)) {
 		vty_out(vty, "     Dependents:");
-		frr_each(nhg_connected_tree, &nhe->nhg_dependents,
+		frr_each (nhg_connected_tree, &nhe->nhg_dependents,
 			  rb_node_dep) {
 			vty_out(vty, " (%u)", rb_node_dep->nhe->id);
 		}
@@ -1596,7 +1626,7 @@ static void if_nexthop_group_dump_vty(struct vty *vty, struct interface *ifp)
 	if (!if_nhg_dependents_is_empty(ifp)) {
 		vty_out(vty, "Interface %s:\n", ifp->name);
 
-		frr_each(nhg_connected_tree, &zebra_if->nhg_dependents,
+		frr_each (nhg_connected_tree, &zebra_if->nhg_dependents,
 			  rb_node_dep) {
 			vty_out(vty, "   ");
 			show_nexthop_group_out(vty, rb_node_dep->nhe);
@@ -1714,25 +1744,25 @@ DEFPY (show_nexthop_group,
 	return CMD_SUCCESS;
 }
 
-DEFPY_HIDDEN(nexthop_group_use_enable,
-	     nexthop_group_use_enable_cmd,
-	     "[no] zebra nexthop kernel enable",
-	     NO_STR
-	     ZEBRA_STR
-	     "Nexthop configuration \n"
-	     "Configure use of kernel nexthops\n"
-	     "Enable kernel nexthops\n")
+DEFPY (nexthop_group_use_enable,
+       nexthop_group_use_enable_cmd,
+       "[no] zebra nexthop kernel enable",
+       NO_STR
+       ZEBRA_STR
+       "Nexthop configuration \n"
+       "Configure use of kernel nexthops\n"
+       "Enable kernel nexthops\n")
 {
 	zebra_nhg_enable_kernel_nexthops(!no);
 	return CMD_SUCCESS;
 }
 
-DEFPY_HIDDEN(proto_nexthop_group_only, proto_nexthop_group_only_cmd,
-	     "[no] zebra nexthop proto only",
-	     NO_STR ZEBRA_STR
-	     "Nexthop configuration\n"
-	     "Configure exclusive use of proto nexthops\n"
-	     "Only use proto nexthops\n")
+DEFPY (proto_nexthop_group_only, proto_nexthop_group_only_cmd,
+       "[no] zebra nexthop proto only",
+       NO_STR ZEBRA_STR
+       "Nexthop configuration\n"
+       "Configure exclusive use of proto nexthops\n"
+       "Only use proto nexthops\n")
 {
 	zebra_nhg_set_proto_nexthops_only(!no);
 	return CMD_SUCCESS;
@@ -2687,7 +2717,7 @@ DEFUN (allow_external_route_update,
        "allow-external-route-update",
        "Allow FRR routes to be overwritten by external processes\n")
 {
-	allow_delete = 1;
+	zrouter.allow_delete = true;
 
 	return CMD_SUCCESS;
 }
@@ -2698,7 +2728,7 @@ DEFUN (no_allow_external_route_update,
        NO_STR
        "Allow FRR routes to be overwritten by external processes\n")
 {
-	allow_delete = 0;
+	zrouter.allow_delete = false;
 
 	return CMD_SUCCESS;
 }
@@ -2779,13 +2809,43 @@ DEFPY (evpn_mh_startup_delay,
 	return zebra_evpn_mh_startup_delay_update(vty, duration,
 			no ? true : false);
 }
+DEFPY (evpn_mh_tc_off,
+	   evpn_mh_tc_off_cmd,
+	   "[no$no] evpn mh tc-off",
+	   NO_STR
+	   "EVPN\n"
+	   "Multihoming\n"
+	   "Disable SPH/DF TC programming\n")
+{
+	bool tc_off;
 
-DEFPY(evpn_mh_redirect_off, evpn_mh_redirect_off_cmd,
-      "[no$no] evpn mh redirect-off",
-      NO_STR
-      "EVPN\n"
-      "Multihoming\n"
-      "ES bond redirect for fast-failover off\n")
+	tc_off = no ? false : true;
+
+	return zebra_evpn_mh_tc_off(vty, tc_off);
+}
+
+DEFPY (evpn_mh_garp_flood_off,
+	   evpn_mh_garp_flood_off_cmd,
+	   "[no$no] evpn mh garp-flood-off",
+	   NO_STR
+	   "EVPN\n"
+	   "Multihoming\n"
+	   "GARP flood off\n")
+{
+	bool flood_off;
+
+	flood_off = no ? false : true;
+
+	return zebra_evpn_mh_garp_flood_off(vty, flood_off);
+}
+
+DEFPY (evpn_mh_redirect_off,
+	   evpn_mh_redirect_off_cmd,
+	   "[no$no] evpn mh redirect-off",
+	   NO_STR
+	   "EVPN\n"
+	   "Multihoming\n"
+	   "ES bond redirect for fast-failover off\n")
 {
 	bool redirect_off;
 
@@ -2994,6 +3054,14 @@ DEFUN (show_evpn_global,
 	return CMD_SUCCESS;
 }
 
+DEFPY(show_evpn_neigh, show_neigh_cmd, "show ip neigh",
+      SHOW_STR IP_STR "neighbors\n")
+
+{
+	zebra_neigh_show(vty);
+	return CMD_SUCCESS;
+}
+
 DEFUN (show_evpn_arp_redirect,
        show_evpn_arp_nd_redirect_cmd,
        "show evpn arp-nd-redirect[json]",
@@ -3019,6 +3087,130 @@ DEFPY(show_evpn_l2_nh,
 	bool uj = !!json;
 
 	zebra_evpn_l2_nh_show(vty, uj);
+
+	return CMD_SUCCESS;
+}
+
+DEFPY (show_neigh_throttle,
+       show_neigh_throttle_cmd,
+       "show " ZEBRA_NEIGH_THROTTLE_STR " [{detail$detail | json$json}]",
+       SHOW_STR
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Detailed output\n"
+       "JSON output\n")
+{
+	return zebra_neigh_throttle_show(vty, !!detail, !!json);
+}
+
+DEFPY (enable_neigh_throttle,
+       enable_neigh_throttle_cmd,
+       "[no] " ZEBRA_NEIGH_THROTTLE_STR,
+       NO_STR
+       "Neighbor data\n"
+       "Neighbor throttling\n")
+{
+	zebra_neigh_throttle_enable((argc == 2));
+	return CMD_SUCCESS;
+}
+
+DEFUN (neigh_throttle_timeout,
+       neigh_throttle_timeout_cmd,
+       ZEBRA_NEIGH_THROTTLE_STR " timeout " CMD_RANGE_STR(ZEBRA_NEIGH_THROTTLE_MIN_TIMEOUT, ZEBRA_NEIGH_THROTTLE_MAX_TIMEOUT) ,
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Set timeout in seconds\n"
+       "Timeout in seconds\n")
+{
+	uint32_t timeout = strtoul(argv[3]->arg, NULL, 10);
+
+	zebra_neigh_throttle_set_timeout(timeout, false /*reset*/);
+
+	return CMD_SUCCESS;
+}
+
+DEFUN (no_neigh_throttle_timeout,
+       no_neigh_throttle_timeout_cmd,
+       "no " ZEBRA_NEIGH_THROTTLE_STR " timeout [" CMD_RANGE_STR(ZEBRA_NEIGH_THROTTLE_MIN_TIMEOUT, ZEBRA_NEIGH_THROTTLE_MAX_TIMEOUT) "]" ,
+       NO_STR
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Set timeout in seconds\n"
+       "Timeout in seconds\n")
+{
+	zebra_neigh_throttle_set_timeout(0, true /*reset*/);
+	return CMD_SUCCESS;
+}
+
+DEFPY (neigh_throttle_limit,
+       neigh_throttle_limit_cmd,
+       ZEBRA_NEIGH_THROTTLE_STR " limit (0-100000)",
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Limit number of entries\n"
+       "Number of entries\n")
+{
+	zebra_neigh_throttle_set_limit(limit, false /*reset*/);
+	return CMD_SUCCESS;
+}
+
+DEFPY (no_neigh_throttle_limit,
+       no_neigh_throttle_limit_cmd,
+       "no " ZEBRA_NEIGH_THROTTLE_STR " limit [(0-100000)]",
+       NO_STR
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Limit number of entries\n"
+       "Number of entries\n")
+{
+	zebra_neigh_throttle_set_limit(0, true /*reset*/);
+	return CMD_SUCCESS;
+}
+
+DEFPY (neigh_throttle_del,
+       neigh_throttle_del_cmd,
+       ZEBRA_NEIGH_THROTTLE_STR " delete [vrf VRFNAME$vrf_p] \
+	    < <A.B.C.D|X:X::X:X>$address | all$all_p>",
+       "Neighbor data\n"
+       "Neighbor throttling data\n"
+       "Delete an entry\n"
+       "Specify a VRF name\n"
+       "The VRF name\n"
+       "IPv4 address\n"
+       "IPv6 address\n"
+       "Delete all entries\n")
+{
+	struct ipaddr addr;
+	vrf_id_t vrf_id = VRF_DEFAULT;
+
+	if (vrf_p)
+		VRF_GET_ID(vrf_id, vrf_p, false);
+
+	if (address) {
+		if (address->sa.sa_family == AF_INET) {
+			addr.ipa_type = IPADDR_V4;
+			addr.ipaddr_v4 = address->sin.sin_addr;
+		} else {
+			addr.ipa_type = IPADDR_V6;
+			addr.ipaddr_v6 = address->sin6.sin6_addr;
+		}
+
+		zebra_neigh_throttle_delete(vrf_id, &addr);
+	} else
+		zebra_neigh_throttle_delete_all();
+	return CMD_SUCCESS;
+}
+DEFPY(show_evpn_es_peer,
+      show_evpn_es_peer_cmd,
+      "show evpn es-peer [json$json]",
+      SHOW_STR
+      "EVPN\n"
+      "Ethernet Segment peer\n"
+      JSON_STR)
+{
+	bool uj = !!json;
+
+	zebra_evpn_mh_vtep_show(vty, uj);
 
 	return CMD_SUCCESS;
 }
@@ -3074,20 +3266,37 @@ DEFPY(show_evpn_es_evi,
 	return CMD_SUCCESS;
 }
 
-DEFPY(show_evpn_access_vlan,
-      show_evpn_access_vlan_cmd,
-      "show evpn access-vlan [(1-4094)$vid | detail$detail] [json$json]",
+DEFPY(show_evpn_access_vlan, show_evpn_access_vlan_cmd,
+      "show evpn access-vlan [IFNAME$if_name (1-4094)$vid | detail$detail] [json$json]",
       SHOW_STR
       "EVPN\n"
       "Access VLANs\n"
+      "Interface Name\n"
       "VLAN ID\n"
-      "Detailed information\n"
-      JSON_STR)
+      "Detailed information\n" JSON_STR)
 {
 	bool uj = !!json;
 
-	if (vid) {
-		zebra_evpn_acc_vl_show_vid(vty, uj, vid);
+	if (if_name && vid) {
+		bool found = false;
+		struct vrf *vrf;
+		struct interface *ifp;
+
+		RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
+			if (if_name) {
+				ifp = if_lookup_by_name(if_name, vrf->vrf_id);
+				if (ifp) {
+					zebra_evpn_acc_vl_show_vid(vty, uj, vid,
+								   ifp);
+					found = true;
+					break;
+				}
+			}
+		}
+		if (!found) {
+			vty_out(vty, "%% Can't find interface %s\n", if_name);
+			return CMD_WARNING;
+		}
 	} else {
 		if (detail)
 			zebra_evpn_acc_vl_show_detail(vty, uj);
@@ -3237,6 +3446,30 @@ DEFUN (show_evpn_nh_vni_ip,
 	return CMD_SUCCESS;
 }
 
+DEFUN_HIDDEN (show_evpn_nh_svd_ip,
+              show_evpn_nh_svd_ip_cmd,
+              "show evpn next-hops svd ip WORD [json]",
+              SHOW_STR
+              "EVPN\n"
+              "Remote Vteps\n"
+              "Single Vxlan Device\n"
+              "Ip address\n"
+              "Host address (ipv4 or ipv6)\n"
+              JSON_STR)
+{
+	struct ipaddr ip;
+	bool uj = use_json(argc, argv);
+
+	if (str2ipaddr(argv[5]->arg, &ip) != 0) {
+		if (!uj)
+			vty_out(vty, "%% Malformed Neighbor address\n");
+		return CMD_WARNING;
+	}
+	zebra_vxlan_print_specific_nh_l3vni(vty, 0, &ip, uj);
+
+	return CMD_SUCCESS;
+}
+
 DEFUN (show_evpn_nh_vni,
        show_evpn_nh_vni_cmd,
        "show evpn next-hops vni " CMD_VNI_RANGE "[json]",
@@ -3252,6 +3485,22 @@ DEFUN (show_evpn_nh_vni,
 
 	l3vni = strtoul(argv[4]->arg, NULL, 10);
 	zebra_vxlan_print_nh_l3vni(vty, l3vni, uj);
+
+	return CMD_SUCCESS;
+}
+
+DEFUN_HIDDEN (show_evpn_nh_svd,
+              show_evpn_nh_svd_cmd,
+              "show evpn next-hops svd [json]",
+              SHOW_STR
+              "EVPN\n"
+              "Remote VTEPs\n"
+              "Single Vxlan Device\n"
+              JSON_STR)
+{
+	bool uj = use_json(argc, argv);
+
+	zebra_vxlan_print_nh_svd(vty, uj);
 
 	return CMD_SUCCESS;
 }
@@ -3532,6 +3781,37 @@ DEFUN (show_evpn_neigh_vni_all,
 	return CMD_SUCCESS;
 }
 
+DEFPY(show_evpn_local_mac_all,
+      show_evpn_local_mac_all_cmd,
+      "show evpn local-mac [json]",
+      SHOW_STR
+      "EVPN\n"
+      "LOCAL MAC cache\n"
+      JSON_STR)
+{
+	struct vrf *vrf = NULL;
+	struct interface *ifp = NULL;
+	bool uj = use_json(argc, argv);
+	struct zebra_if *zif;
+	struct zebra_l2_bridge_if *br;
+
+	vrf = vrf_lookup_by_id(VRF_DEFAULT);
+	FOR_ALL_INTERFACES (vrf, ifp) {
+		zif = (struct zebra_if *)ifp->info;
+		br = BRIDGE_FROM_ZEBRA_IF(zif);
+		if (!IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(zif))
+			continue;
+		if (!br)
+			continue;
+		for (int vid = 1; vid < VLANID_MAX; vid++) {
+			if (!br->mac_table[vid])
+				continue;
+			zebra_l2_brvlan_print_macs(vty, ifp, vid, uj);
+		}
+	}
+	return CMD_SUCCESS;
+}
+
 DEFUN (show_evpn_neigh_vni_all_detail, show_evpn_neigh_vni_all_detail_cmd,
        "show evpn arp-cache vni all detail [json]",
        SHOW_STR
@@ -3606,6 +3886,42 @@ DEFUN (show_evpn_neigh_vni_vtep,
 	return CMD_SUCCESS;
 }
 
+DEFPY(show_evpn_local_mac,
+      show_evpn_local_mac_cmd,
+      "show evpn local-mac IFNAME$if_name (1-4094)$vid [json$json]",
+      SHOW_STR
+      "EVPN\n"
+      "Local MAC addresses\n"
+      "Interface Name\n"
+      "VLAN ID\n"
+      JSON_STR)
+{
+	struct vrf *vrf = NULL;
+	struct interface *ifp = NULL;
+	bool found = false;
+	bool uj = use_json(argc, argv);
+
+	if (!if_name || !vid) {
+		return CMD_WARNING;
+	}
+
+	RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
+		ifp = if_lookup_by_name(if_name, vrf->vrf_id);
+		if (ifp) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		vty_out(vty, "%% Can't find interface %s\n", if_name);
+		return CMD_WARNING;
+	}
+
+	zebra_l2_brvlan_print_macs(vty, ifp, vid, uj);
+	return CMD_SUCCESS;
+}
+
 /* policy routing contexts */
 DEFUN (show_pbr_ipset,
        show_pbr_ipset_cmd,
@@ -3642,6 +3958,29 @@ DEFUN (show_pbr_iptable,
 		zebra_pbr_show_iptable(vty, NULL);
 	else
 		zebra_pbr_show_iptable(vty, argv[idx]->arg);
+	return CMD_SUCCESS;
+}
+
+/* policy routing contexts */
+DEFPY (show_pbr_rule,
+       show_pbr_rule_cmd,
+       "show pbr rule",
+       SHOW_STR
+       "Policy-Based Routing\n"
+       "Rule\n")
+{
+	zebra_pbr_show_rule(vty);
+	return CMD_SUCCESS;
+}
+
+DEFPY (pbr_nexthop_resolve,
+       pbr_nexthop_resolve_cmd,
+       "[no$no] pbr nexthop-resolve",
+       NO_STR
+       "Policy Based Routing\n"
+       "Resolve nexthop for dataplane programming\n")
+{
+	zebra_pbr_expand_action_update(!no);
 	return CMD_SUCCESS;
 }
 
@@ -3724,7 +4063,7 @@ static int zebra_ip_config(struct vty *vty)
 
 DEFUN (ip_zebra_import_table_distance,
        ip_zebra_import_table_distance_cmd,
-       "ip import-table (1-252) [distance (1-255)] [route-map WORD]",
+       "ip import-table (1-252) [distance (1-255)] [route-map RMAP_NAME]",
        IP_STR
        "import routes from non-main kernel table\n"
        "kernel routing table id\n"
@@ -3862,10 +4201,30 @@ DEFUN (no_ip_zebra_import_table,
 	return (zebra_import_table(AFI_IP, VRF_DEFAULT, table_id, 0, NULL, 0));
 }
 
+DEFPY (zebra_nexthop_group_keep,
+       zebra_nexthop_group_keep_cmd,
+       "[no] zebra nexthop-group keep (1-3600)",
+       NO_STR
+       ZEBRA_STR
+       "Nexthop-Group\n"
+       "How long to keep\n"
+       "Time in seconds from 1-3600\n")
+{
+	if (no)
+		zrouter.nhg_keep = ZEBRA_DEFAULT_NHG_KEEP_TIMER;
+	else
+		zrouter.nhg_keep = keep;
+
+	return CMD_SUCCESS;
+}
+
 static int config_write_protocol(struct vty *vty)
 {
-	if (allow_delete)
+	if (zrouter.allow_delete)
 		vty_out(vty, "allow-external-route-update\n");
+
+	if (zrouter.nhg_keep != ZEBRA_DEFAULT_NHG_KEEP_TIMER)
+		vty_out(vty, "zebra nexthop-group keep %u\n", zrouter.nhg_keep);
 
 	if (zrouter.ribq->spec.hold != ZEBRA_RIB_PROCESS_HOLD_TIME)
 		vty_out(vty, "zebra work-queue %u\n", zrouter.ribq->spec.hold);
@@ -3895,6 +4254,11 @@ static int config_write_protocol(struct vty *vty)
 
 	zebra_evpn_mh_config_write(vty);
 
+	zebra_pbr_config_write(vty);
+
+	/* Neighbor-throttling config */
+	zebra_neigh_throttle_config_write(vty);
+
 	/* Include nexthop-group config */
 	if (!zebra_nhg_kernel_nexthops_enabled())
 		vty_out(vty, "no zebra nexthop kernel enable\n");
@@ -3912,6 +4276,9 @@ static int config_write_protocol(struct vty *vty)
 	/* Include netlink info */
 	netlink_config_write_helper(vty);
 #endif /* HAVE_NETLINK */
+
+	if (zrouter.gre_use_nhg)
+		vty_out(vty, "zebra gre-use-nhg\n");
 
 	return 1;
 }
@@ -3959,10 +4326,31 @@ DEFUN (show_zebra,
 	ttable_add_row(table, "Kernel NHG|%s",
 		       zrouter.supports_nhgs ? "Available" : "Unavailable");
 
+	ttable_add_row(table, "Allow Non FRR route deletion|%s",
+		       zrouter.allow_delete ? "Yes" : "No");
+	ttable_add_row(table, "v4 All LinkDown Routes|%s",
+		       zrouter.all_linkdownv4 ? "On" : "Off");
+	ttable_add_row(table, "v4 Default LinkDown Routes|%s",
+		       zrouter.default_linkdownv4 ? "On" : "Off");
+	ttable_add_row(table, "v6 All LinkDown Routes|%s",
+		       zrouter.all_linkdownv6 ? "On" : "Off");
+	ttable_add_row(table, "v6 Default LinkDown Routes|%s",
+		       zrouter.default_linkdownv6 ? "On" : "Off");
+
+	ttable_add_row(table, "v4 All MC Forwarding|%s",
+		       zrouter.all_mc_forwardingv4 ? "On" : "Off");
+	ttable_add_row(table, "v4 Default MC Forwarding|%s",
+		       zrouter.default_mc_forwardingv4 ? "On" : "Off");
+	ttable_add_row(table, "v6 All MC Forwarding|%s",
+		       zrouter.all_mc_forwardingv6 ? "On" : "Off");
+	ttable_add_row(table, "v6 Default MC Forwarding|%s",
+		       zrouter.default_mc_forwardingv6 ? "On" : "Off");
+
 	out = ttable_dump(table, "\n");
 	vty_out(vty, "%s\n", out);
 	XFREE(MTYPE_TMP, out);
 
+	ttable_del(table);
 	if (zrouter.asic_offloaded) {
 		if (!zrouter.notify_on_ack)
 			vty_out(vty, "Asic Offload is being used\n");
@@ -3970,7 +4358,6 @@ DEFUN (show_zebra,
 			vty_out(vty, "Asic Offload notification is available but not being used\n");
 	} else
 		vty_out(vty, "There is no Asic offload\n");
-
 #if defined(HAVE_CSMGR)
 	vty_out(vty, "%s with CSM, CSM start mode %s (mapped to %s), current mode %s\n",
 		zrouter.frr_csm_regd ? "Registered" : "Not registered",
@@ -3978,7 +4365,6 @@ DEFUN (show_zebra,
 		frr_csm_smode2str(zrouter.frr_csm_smode),
 		mode_to_str(zrouter.csm_cmode));
 #endif
-
 	vty_out(vty,
 		"                            Route      Route      Neighbor   LSP        LSP\n");
 	vty_out(vty,
@@ -4402,6 +4788,18 @@ DEFUN(zebra_on_rib_process_script, zebra_on_rib_process_script_cmd,
 
 #endif /* HAVE_SCRIPTING */
 
+DEFPY (zebra_gre_use_nhg,
+       zebra_gre_use_nhg_cmd,
+       "[no] zebra gre-use-nhg",
+       NO_STR
+       ZEBRA_STR
+       "Allow nexthop-groups for GRE links\n")
+{
+	zrouter.gre_use_nhg = !no;
+
+	return CMD_SUCCESS;
+}
+
 /* IP node for static routes. */
 static int zebra_ip_config(struct vty *vty);
 static struct cmd_node ip_node = {
@@ -4461,6 +4859,7 @@ void zebra_vty_init(void)
 	install_element(CONFIG_NODE, &ip_multicast_mode_cmd);
 	install_element(CONFIG_NODE, &no_ip_multicast_mode_cmd);
 
+	install_element(CONFIG_NODE, &zebra_nexthop_group_keep_cmd);
 	install_element(CONFIG_NODE, &ip_zebra_import_table_distance_cmd);
 	install_element(CONFIG_NODE, &no_ip_zebra_import_table_cmd);
 	install_element(CONFIG_NODE, &zebra_workqueue_timer_cmd);
@@ -4503,13 +4902,16 @@ void zebra_vty_init(void)
 	install_element(VIEW_NODE, &show_evpn_vni_vni_cmd);
 	install_element(VIEW_NODE, &show_evpn_l2_nh_cmd);
 	install_element(VIEW_NODE, &show_evpn_es_cmd);
+	install_element(VIEW_NODE, &show_evpn_es_peer_cmd);
 	install_element(VIEW_NODE, &show_evpn_es_evi_cmd);
 	install_element(VIEW_NODE, &show_evpn_access_vlan_cmd);
 	install_element(VIEW_NODE, &show_evpn_rmac_vni_mac_cmd);
 	install_element(VIEW_NODE, &show_evpn_rmac_vni_cmd);
 	install_element(VIEW_NODE, &show_evpn_rmac_vni_all_cmd);
 	install_element(VIEW_NODE, &show_evpn_nh_vni_ip_cmd);
+	install_element(VIEW_NODE, &show_evpn_nh_svd_ip_cmd);
 	install_element(VIEW_NODE, &show_evpn_nh_vni_cmd);
+	install_element(VIEW_NODE, &show_evpn_nh_svd_cmd);
 	install_element(VIEW_NODE, &show_evpn_nh_vni_all_cmd);
 	install_element(VIEW_NODE, &show_evpn_mac_vni_cmd);
 	install_element(VIEW_NODE, &show_evpn_mac_vni_all_cmd);
@@ -4526,16 +4928,24 @@ void zebra_vty_init(void)
 	install_element(VIEW_NODE, &show_evpn_neigh_vni_vtep_cmd);
 	install_element(VIEW_NODE, &show_evpn_neigh_vni_dad_cmd);
 	install_element(VIEW_NODE, &show_evpn_neigh_vni_all_dad_cmd);
+	install_element(VIEW_NODE, &show_evpn_local_mac_cmd);
+	install_element(VIEW_NODE, &show_evpn_local_mac_all_cmd);
 	install_element(ENABLE_NODE, &clear_evpn_dup_addr_cmd);
+
+	install_element(VIEW_NODE, &show_neigh_cmd);
 
 	install_element(VIEW_NODE, &show_pbr_ipset_cmd);
 	install_element(VIEW_NODE, &show_pbr_iptable_cmd);
+	install_element(VIEW_NODE, &show_pbr_rule_cmd);
+	install_element(CONFIG_NODE, &pbr_nexthop_resolve_cmd);
 	install_element(VIEW_NODE, &show_route_zebra_dump_cmd);
 
 	install_element(CONFIG_NODE, &evpn_mh_mac_holdtime_cmd);
 	install_element(CONFIG_NODE, &evpn_mh_neigh_holdtime_cmd);
-	install_element(CONFIG_NODE, &evpn_mh_startup_delay_cmd);
+	install_element(CONFIG_NODE, &evpn_mh_tc_off_cmd);
 	install_element(CONFIG_NODE, &evpn_mh_redirect_off_cmd);
+	install_element(CONFIG_NODE, &evpn_mh_garp_flood_off_cmd);
+	install_element(CONFIG_NODE, &evpn_mh_startup_delay_cmd);
 	install_element(CONFIG_NODE, &default_vrf_vni_mapping_cmd);
 	install_element(CONFIG_NODE, &no_default_vrf_vni_mapping_cmd);
 	install_element(VRF_NODE, &vrf_vni_mapping_cmd);
@@ -4548,6 +4958,7 @@ void zebra_vty_init(void)
 
 	install_element(CONFIG_NODE, &ip_table_range_cmd);
 	install_element(VRF_NODE, &ip_table_range_cmd);
+	install_element(CONFIG_NODE, &zebra_gre_use_nhg_cmd);
 
 #ifdef HAVE_NETLINK
 	install_element(CONFIG_NODE, &zebra_kernel_netlink_batch_tx_buf_cmd);
@@ -4561,4 +4972,12 @@ void zebra_vty_init(void)
 #endif /* HAVE_SCRIPTING */
 
 	install_element(VIEW_NODE, &zebra_show_routing_tables_summary_cmd);
+
+	install_element(VIEW_NODE, &show_neigh_throttle_cmd);
+	install_element(ENABLE_NODE, &neigh_throttle_del_cmd);
+	install_element(CONFIG_NODE, &enable_neigh_throttle_cmd);
+	install_element(CONFIG_NODE, &neigh_throttle_timeout_cmd);
+	install_element(CONFIG_NODE, &no_neigh_throttle_timeout_cmd);
+	install_element(CONFIG_NODE, &neigh_throttle_limit_cmd);
+	install_element(CONFIG_NODE, &no_neigh_throttle_limit_cmd);
 }

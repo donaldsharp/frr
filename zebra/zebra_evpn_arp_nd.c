@@ -47,7 +47,7 @@ extern struct zebra_privs_t zserv_privs;
 /*****************************************************************************
  * ARP-ND handling
  * A snooper socket is created for each bridge access port to listen
- * in on ARP replies and NAs. These packets are redirected to an ES-peer
+ * in on ARP and ND. These packets are redirected to an ES-peer
  * via the VxLAN overlay if the destination associated with the DMAC
  * is oper-down
  ****************************************************************************/
@@ -55,18 +55,12 @@ static void zebra_evpn_arp_nd_pkt_dump(struct zebra_if *zif, uint16_t vlan,
 				       uint8_t *data, int len)
 {
 	struct ethhdr *ethh = (struct ethhdr *)data;
-	char dmac_buf[ETHER_ADDR_STRLEN];
-	char smac_buf[ETHER_ADDR_STRLEN];
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_ARP_ND_PKT) {
 		zlog_debug(
-			"evpn arp_nd pkt on %s vlan %d [dm=%s sm=%s et=0x%x]",
-			zif->ifp->name, vlan ? vlan : zif->pvid,
-			prefix_mac2str((struct ethaddr *)&ethh->h_dest,
-				       dmac_buf, sizeof(dmac_buf)),
-			prefix_mac2str((struct ethaddr *)&ethh->h_source,
-				       smac_buf, sizeof(smac_buf)),
-			ntohs(ethh->h_proto));
+			"evpn arp_nd pkt on %s vlan %d [dm=%pEA sm=%pEA et=0x%x]",
+			zif->ifp->name, vlan ? vlan : zif->pvid, &ethh->h_dest,
+			&ethh->h_source, ntohs(ethh->h_proto));
 		/* XXX - dump ARP/NA info */
 	}
 }
@@ -78,9 +72,9 @@ void zebra_evpn_arp_nd_print_summary(struct vty *vty, bool uj)
 	if (uj) {
 		json = json_object_new_object();
 		json_object_boolean_true_add(json, "arpRedirect");
-		json_object_int_add(json, "arpReplyPkts",
+		json_object_int_add(json, "arpPkts",
 				    zevpn_arp_nd_info.stat.arp);
-		json_object_int_add(json, "naPkts", zevpn_arp_nd_info.stat.na);
+		json_object_int_add(json, "ndPkts", zevpn_arp_nd_info.stat.na);
 		json_object_int_add(json, "redirectPkts",
 				    zevpn_arp_nd_info.stat.redirect);
 		json_object_int_add(json, "notReadyPkts",
@@ -99,9 +93,8 @@ void zebra_evpn_arp_nd_print_summary(struct vty *vty, bool uj)
 				? "enabled"
 				: "disabled");
 		vty_out(vty, "Stats:\n");
-		vty_out(vty, "  IPv4 ARP replies: %u\n",
-			zevpn_arp_nd_info.stat.arp);
-		vty_out(vty, "  IPv6 neighbor advertisements: %u\n",
+		vty_out(vty, "  IPv4 ARP: %u\n", zevpn_arp_nd_info.stat.arp);
+		vty_out(vty, "  IPv6 neighbor discovery: %u\n",
 			zevpn_arp_nd_info.stat.na);
 		vty_out(vty, "  Redirected packets: %u\n",
 			zevpn_arp_nd_info.stat.redirect);
@@ -129,8 +122,7 @@ void zebra_evpn_arp_nd_print_summary(struct vty *vty, bool uj)
 void zebra_evpn_arp_nd_if_print(struct vty *vty, struct zebra_if *zif)
 {
 	if (zif->arp_nd_info.pkt_fd > 0)
-		vty_out(vty,
-			"  ARP-ND redirect enabled: ARP-replies %u NA %u\n",
+		vty_out(vty, "  ARP-ND redirect enabled: ARP %u ND %u\n",
 			zif->arp_nd_info.arp_pkts, zif->arp_nd_info.na_pkts);
 }
 
@@ -173,7 +165,7 @@ struct vxlanhdr {
 /***************************** from net/vxlan.h ****************************/
 
 /* vxlan encapsulate the data */
-static void zebra_evpn_arp_nd_vxlan_encap(zebra_evpn_t *zevpn,
+static void zebra_evpn_arp_nd_vxlan_encap(struct zebra_evpn *zevpn,
 					  struct in_addr vtep_ip, uint8_t *data,
 					  int len)
 {
@@ -225,7 +217,7 @@ static int zebra_evpn_arp_nd_proc(struct zebra_if *zif, uint16_t vlan,
 {
 	struct ethhdr *ethh = (struct ethhdr *)data;
 	struct zebra_evpn_access_bd *acc_bd;
-	zebra_mac_t *zmac;
+	struct zebra_mac *zmac;
 	struct zebra_evpn_es *es;
 	struct in_addr nh;
 
@@ -249,7 +241,7 @@ static int zebra_evpn_arp_nd_proc(struct zebra_if *zif, uint16_t vlan,
 		return 0;
 	}
 
-	acc_bd = zebra_evpn_acc_vl_find(vlan ? vlan : zif->pvid);
+	acc_bd = zebra_evpn_acc_vl_find(vlan ? vlan : zif->pvid, zif->ifp);
 	if (!acc_bd || !acc_bd->zevpn) {
 		++zevpn_arp_nd_info.stat.vni_missing;
 		if (IS_ZEBRA_DEBUG_EVPN_MH_ARP_ND_PKT)
@@ -366,16 +358,15 @@ static int zebra_evpn_arp_nd_recvmsg(int fd, uint8_t *buf, size_t len,
 }
 
 /* Re-add thread for reading packets of the per-br-port ARP-ND socket */
-static int zebra_evpn_arp_nd_read(struct thread *thread);
+static void zebra_evpn_arp_nd_read(struct thread *t);
 static void zebra_evpn_arp_nd_pkt_read_enable(struct zebra_if *zif)
 {
-	zif->arp_nd_info.t_pkt_read = NULL;
 	thread_add_read(zrouter.master, zebra_evpn_arp_nd_read, zif,
 			zif->arp_nd_info.pkt_fd, &zif->arp_nd_info.t_pkt_read);
 }
 
 /* Read N packets of the ARP socket and process */
-static int zebra_evpn_arp_nd_read(struct thread *t)
+static void zebra_evpn_arp_nd_read(struct thread *t)
 {
 	int count;
 	uint16_t vlan = 0;
@@ -408,23 +399,22 @@ static int zebra_evpn_arp_nd_read(struct thread *t)
 
 	/* prepare for next installment of packets */
 	zebra_evpn_arp_nd_pkt_read_enable(zif);
-
-	return 0;
 }
 
-/* BPF filter for snooping on ARP replies and IPv6 Neighbor advertisements -
- * tcpdump -dd '((arp and arp[6:2] == 2)
- *			or (icmp6 and ip6[40] == 136)) and inbound'
+/* BPF filter for snooping on unicast ARP req/replies and unicast IPv6 NS/NA -
+ * tcpdump -dd '((ether[0] &1 == 0) and (arp or
+ *               (icmp6 and (ip6[40] == 135 or ip6[40] == 136)))) and inbound'
  */
-static struct sock_filter arp_nd_reply_filter[] = {
-	{0x28, 0, 0, 0x0000000c},  {0x15, 0, 2, 0x00000806},
-	{0x28, 0, 0, 0x00000014},  {0x15, 8, 11, 0x00000002},
-	{0x15, 0, 10, 0x000086dd}, {0x30, 0, 0, 0x00000014},
-	{0x15, 3, 0, 0x0000003a},  {0x15, 0, 7, 0x0000002c},
-	{0x30, 0, 0, 0x00000036},  {0x15, 0, 5, 0x0000003a},
-	{0x30, 0, 0, 0x00000036},  {0x15, 0, 3, 0x00000088},
-	{0x28, 0, 0, 0xfffff004},  {0x15, 1, 0, 0x00000004},
-	{0x6, 0, 0, 0x00040000},   {0x6, 0, 0, 0x00000000},
+static struct sock_filter arp_nd_filter[] = {
+	{0x30, 0, 0, 0x00000000},  {0x45, 14, 0, 0x00000001},
+	{0x28, 0, 0, 0x0000000c},  {0x15, 9, 0, 0x00000806},
+	{0x15, 0, 11, 0x000086dd}, {0x30, 0, 0, 0x00000014},
+	{0x15, 3, 0, 0x0000003a},  {0x15, 0, 8, 0x0000002c},
+	{0x30, 0, 0, 0x00000036},  {0x15, 0, 6, 0x0000003a},
+	{0x30, 0, 0, 0x00000036},  {0x15, 1, 0, 0x00000087},
+	{0x15, 0, 3, 0x00000088},  {0x28, 0, 0, 0xfffff004},
+	{0x15, 1, 0, 0x00000004},  {0x6, 0, 0, 0x00040000},
+	{0x6, 0, 0, 0x00000000},
 };
 
 /* Setup socket per-access bridge port */
@@ -435,9 +425,8 @@ static int zebra_evpn_arp_nd_sock_create(struct zebra_if *zif)
 	int rcvbuf = ZEBRA_EVPN_ARP_ND_SOC_RCVBUF;
 	long flags;
 	struct sock_fprog prog = {
-		.len = sizeof(arp_nd_reply_filter)
-		       / sizeof(arp_nd_reply_filter[0]),
-		.filter = arp_nd_reply_filter,
+		.len = sizeof(arp_nd_filter) / sizeof(arp_nd_filter[0]),
+		.filter = arp_nd_filter,
 	};
 
 	frr_with_privs (&zserv_privs) {
@@ -525,7 +514,7 @@ static int zebra_evpn_arp_nd_sock_create(struct zebra_if *zif)
 	return fd;
 }
 
-/* ARP-replies and NA packets are snooped on non-vxlan bridge members.
+/* ARP and ND packets are snooped on non-vxlan bridge members.
  * Create a raw socket and read thread to do that per-member.
  */
 void zebra_evpn_arp_nd_if_update(struct zebra_if *zif, bool enable)
@@ -569,25 +558,38 @@ void zebra_evpn_arp_nd_if_update(struct zebra_if *zif, bool enable)
  */
 void zebra_evpn_arp_nd_udp_sock_create(void)
 {
+	if (!(zevpn_arp_nd_info.flags & ZEBRA_EVPN_ARP_ND_FAILOVER))
+		return;
+
 	if (zmh_info->es_originator_ip.s_addr) {
 		struct sockaddr_in sin;
+		int reuse = 1;
 
 		if (IS_ZEBRA_DEBUG_EVPN_MH_ARP_ND_EVT)
 			zlog_debug(
 				"Create UDP sock for arp_nd redirect from %pI4",
 				&zmh_info->es_originator_ip);
-		if (zevpn_arp_nd_info.udp_fd <= 0)
+		if (zevpn_arp_nd_info.udp_fd <= 0) {
 			zevpn_arp_nd_info.udp_fd =
 				socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-		if (zevpn_arp_nd_info.udp_fd <= 0) {
-			flog_err(
-				EC_LIB_SOCKET,
-				"evpn arp_nd UDP sock fd %d bind to %pI4 errno %s",
-				zevpn_arp_nd_info.udp_fd,
-				&zmh_info->es_originator_ip,
-				safe_strerror(errno));
-			return;
+			if (zevpn_arp_nd_info.udp_fd <= 0) {
+				flog_err(
+					EC_LIB_SOCKET,
+					"evpn arp_nd UDP sock fd %d bind to %pI4 errno %s",
+					zevpn_arp_nd_info.udp_fd,
+					&zmh_info->es_originator_ip,
+					safe_strerror(errno));
+				return;
+			}
+			if (setsockopt(zevpn_arp_nd_info.udp_fd, SOL_SOCKET,
+				       SO_REUSEADDR, (void *)&reuse,
+				       sizeof(reuse)))
+				flog_err(
+					EC_LIB_SOCKET,
+					"evpn arp_nd sock SO_REUSEADDR set: fd %d errno %s",
+					zevpn_arp_nd_info.udp_fd,
+					safe_strerror(errno));
 		}
 
 		memset(&sin, 0, sizeof(sin));

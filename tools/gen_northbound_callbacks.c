@@ -175,8 +175,8 @@ static int generate_prototypes(const struct lysc_node *snode, void *arg)
 		    || !nb_operation_is_valid(cb->operation, snode))
 			continue;
 
-		generate_callback_name(snode, cb->operation, cb_name,
-				       sizeof(cb_name));
+		generate_callback_name(snode, cb->operation,
+				       cb_name, sizeof(cb_name));
 		generate_prototype(cb, cb_name);
 	}
 
@@ -194,7 +194,7 @@ static void generate_callback(const struct nb_callback_info *ncinfo,
 	case NB_OP_MODIFY:
 	case NB_OP_DESTROY:
 	case NB_OP_MOVE:
-		printf("\tswitch (args->event) {\n"
+		printf("\tswitch (event) {\n"
 		       "\tcase NB_EV_VALIDATE:\n"
 		       "\tcase NB_EV_PREPARE:\n"
 		       "\tcase NB_EV_ABORT:\n"
@@ -250,8 +250,8 @@ static int generate_callbacks(const struct lysc_node *snode, void *arg)
 			first = false;
 		}
 
-		generate_callback_name(snode, cb->operation, cb_name,
-				       sizeof(cb_name));
+		generate_callback_name(snode, cb->operation,
+				       cb_name, sizeof(cb_name));
 		generate_callback(cb, cb_name);
 	}
 
@@ -295,8 +295,8 @@ static int generate_nb_nodes(const struct lysc_node *snode, void *arg)
 			first = false;
 		}
 
-		generate_callback_name(snode, cb->operation, cb_name,
-				       sizeof(cb_name));
+		generate_callback_name(snode, cb->operation,
+				       cb_name, sizeof(cb_name));
 		printf("\t\t\t\t.%s = %s,\n", nb_operation_name(cb->operation),
 		       cb_name);
 	}
@@ -357,13 +357,10 @@ int main(int argc, char *argv[])
 
 	/* Load all FRR native models to ensure all augmentations are loaded. */
 	yang_module_load_all();
-
 	module = yang_module_find(argv[0]);
 	if (!module)
 		/* Non-native FRR module (e.g. modules from unit tests). */
 		module = yang_module_load(argv[0]);
-
-	yang_init_loading_complete();
 
 	/* Create a nb_node for all YANG schema nodes. */
 	nb_nodes_create();
@@ -371,7 +368,8 @@ int main(int argc, char *argv[])
 	/* Generate callback prototypes. */
 	if (!static_cbs) {
 		printf("/* prototypes */\n");
-		yang_snodes_iterate(module->info, generate_prototypes, 0, NULL);
+		yang_snodes_iterate(module->info, generate_prototypes, 0,
+					   NULL);
 		printf("\n");
 	}
 

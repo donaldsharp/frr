@@ -85,9 +85,16 @@ enum protodown_reasons {
 	 * ports to allow servers to re-direct their traffic to
 	 * other switches on the Ethernet Segment
 	 */
-	ZEBRA_PROTODOWN_EVPN_UPLINK_DOWN = (1 << 2),
-	ZEBRA_PROTODOWN_EVPN_ALL = (ZEBRA_PROTODOWN_EVPN_UPLINK_DOWN |
-				    ZEBRA_PROTODOWN_EVPN_STARTUP_DELAY),
+	ZEBRA_PROTODOWN_EVPN_UPLINK_DOWN = (1 << 1),
+	/* We want to protodown all ES bonds on FRR shutdown to
+	 * prevent loss in the encap direction on¿bonds which remain
+	 * up until LACP times out or the NIC is taken down.
+	 */
+	ZEBRA_PROTODOWN_EVPN_SHUTDOWN = (1 << 2),
+	ZEBRA_PROTODOWN_EVPN_ALL =
+		(ZEBRA_PROTODOWN_EVPN_UPLINK_DOWN |
+		 ZEBRA_PROTODOWN_EVPN_STARTUP_DELAY |
+		 ZEBRA_PROTODOWN_EVPN_SHUTDOWN),
 	ZEBRA_PROTODOWN_VRRP = (1 << 3),
 	/* This reason used exclusively for testing */
 	ZEBRA_PROTODOWN_SHARP = (1 << 4),
@@ -166,6 +173,8 @@ struct zebra_router {
 	/* Tables and other global info maintained for EVPN multihoming */
 	struct zebra_evpn_mh_info *mh_info;
 
+	struct zebra_neigh_info *neigh_info;
+
 	/* EVPN MH broadcast domains indexed by the VID */
 	struct hash *evpn_vlan_table;
 
@@ -237,6 +246,19 @@ struct zebra_router {
 	bool notify_on_ack;
 
 	bool supports_nhgs;
+
+	bool all_mc_forwardingv4, default_mc_forwardingv4;
+	bool all_mc_forwardingv6, default_mc_forwardingv6;
+	bool all_linkdownv4, default_linkdownv4;
+	bool all_linkdownv6, default_linkdownv6;
+
+#define ZEBRA_DEFAULT_NHG_KEEP_TIMER 180
+	uint32_t nhg_keep;
+
+	/* Should we allow non FRR processes to delete our routes */
+	bool allow_delete;
+	/* Allow NHGs for routes on GRE links */
+	bool gre_use_nhg;
 };
 
 #define GRACEFUL_RESTART_TIME 60
@@ -288,6 +310,11 @@ extern bool zebra_router_notify_on_ack(void);
 static inline void zebra_router_set_supports_nhgs(bool support)
 {
 	zrouter.supports_nhgs = support;
+}
+
+static inline bool zebra_router_in_shutdown(void)
+{
+	return atomic_load_explicit(&zrouter.in_shutdown, memory_order_relaxed);
 }
 
 /* zebra_northbound.c */

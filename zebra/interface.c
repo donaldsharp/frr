@@ -52,6 +52,7 @@
 #include "zebra/zebra_errors.h"
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_evpn_arp_nd.h"
+#include "zebra/zebra_trace.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, ZINFO, "Zebra Interface Information");
 
@@ -148,8 +149,8 @@ static int if_zebra_new_hook(struct interface *ifp)
 	zebra_if = XCALLOC(MTYPE_ZINFO, sizeof(struct zebra_if));
 	zebra_if->ifp = ifp;
 
-	zebra_if->multicast = IF_ZEBRA_MULTICAST_UNSPEC;
-	zebra_if->shutdown = IF_ZEBRA_SHUTDOWN_OFF;
+	zebra_if->multicast = IF_ZEBRA_DATA_UNSPEC;
+	zebra_if->shutdown = IF_ZEBRA_DATA_OFF;
 
 	zebra_if_nhg_dependents_init(zebra_if);
 
@@ -185,13 +186,6 @@ static int if_zebra_new_hook(struct interface *ifp)
 static void if_nhg_dependents_check_valid(struct nhg_hash_entry *nhe)
 {
 	zebra_nhg_check_valid(nhe);
-	if (!CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_VALID)) {
-		/* If we're in shutdown, this interface event needs to clean
-		 * up installed NHGs, so don't clear that flag directly.
-		 */
-		if (!zrouter.in_shutdown)
-			UNSET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
-	}
 }
 
 static void if_down_nhg_dependents(const struct interface *ifp)
@@ -235,6 +229,7 @@ static int if_zebra_delete_hook(struct interface *ifp)
 
 		rtadv_if_fini(zebra_if);
 
+		zebra_l2_bridge_if_cleanup(ifp);
 		zebra_evpn_if_cleanup(zebra_if);
 		zebra_evpn_mac_ifp_del(ifp);
 
@@ -591,9 +586,9 @@ void if_add_update(struct interface *ifp)
 	if_data = ifp->info;
 	assert(if_data);
 
-	if (if_data->multicast == IF_ZEBRA_MULTICAST_ON)
+	if (if_data->multicast == IF_ZEBRA_DATA_ON)
 		if_set_flags(ifp, IFF_MULTICAST);
-	else if (if_data->multicast == IF_ZEBRA_MULTICAST_OFF)
+	else if (if_data->multicast == IF_ZEBRA_DATA_OFF)
 		if_unset_flags(ifp, IFF_MULTICAST);
 
 	zebra_ptm_if_set_ptm_state(ifp, if_data);
@@ -603,7 +598,7 @@ void if_add_update(struct interface *ifp)
 	if (!CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE)) {
 		SET_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE);
 
-		if (if_data->shutdown == IF_ZEBRA_SHUTDOWN_ON) {
+		if (if_data->shutdown == IF_ZEBRA_DATA_ON) {
 			if (IS_ZEBRA_DEBUG_KERNEL) {
 				zlog_debug(
 					"interface %s vrf %s(%u) index %d is shutdown. Won't wake it up.",
@@ -628,6 +623,9 @@ void if_add_update(struct interface *ifp)
 				   ifp->name, ifp->vrf->name, ifp->vrf->vrf_id,
 				   ifp->ifindex);
 	}
+	// FIXME: Remove below trace, this for reference lttng
+	// tracepoints
+	frrtrace(1, frr_zebra, if_add_update, ifp);
 }
 
 /* Install connected routes corresponding to an interface. */
@@ -813,12 +811,12 @@ void if_delete_update(struct interface **pifp)
 	/* Reset some zebra interface params to default values. */
 	zif = ifp->info;
 	if (zif) {
+		zebra_evpn_if_cleanup(zif);
 		zif->zif_type = ZEBRA_IF_OTHER;
 		zif->zif_slave_type = ZEBRA_IF_SLAVE_NONE;
 		memset(&zif->l2info, 0, sizeof(union zebra_l2if_info));
 		memset(&zif->brslave_info, 0,
 		       sizeof(struct zebra_l2info_brslave));
-		zebra_evpn_if_cleanup(zif);
 		zebra_evpn_mac_ifp_del(ifp);
 	}
 
@@ -856,10 +854,6 @@ void if_handle_vrf_change(struct interface *ifp, vrf_id_t vrf_id)
 	/* Send out notification on interface VRF change. */
 	/* This is to issue an ADD, if needed. */
 	zebra_interface_vrf_update_add(ifp, old_vrf_id);
-
-	/* Install connected routes (in new VRF). */
-	if (if_is_operative(ifp))
-		if_install_connected(ifp);
 }
 
 static void ipv6_ll_address_to_mac(struct in6_addr *address, uint8_t *mac)
@@ -1120,7 +1114,9 @@ void if_down(struct interface *ifp)
 
 void if_refresh(struct interface *ifp)
 {
+#ifndef GNU_LINUX
 	if_get_flags(ifp);
+#endif
 }
 
 void zebra_if_update_link(struct interface *ifp, ifindex_t link_ifindex,
@@ -1183,6 +1179,15 @@ void zebra_if_update_all_links(struct zebra_ns *zns)
 	}
 }
 
+void zebra_if_set_neigh_grat_flood(struct interface *ifp, bool on)
+{
+#ifdef HAVE_NETLINK
+	if (netlink_grat_flood_set(ifp, on) < 0)
+		zlog_warn("neigh grat flood %s failed", on ? "on" : "off");
+#else
+	zlog_warn("neigh grat flood knob is not supported on this platform");
+#endif
+}
 static bool if_ignore_set_protodown(const struct interface *ifp, bool new_down,
 				    uint32_t new_protodown_rc)
 {
@@ -1410,30 +1415,80 @@ done:
  * pthread so it can update zebra data structs.
  */
 static void zebra_if_netconf_update_ctx(struct zebra_dplane_ctx *ctx,
-					struct interface *ifp)
+					struct interface *ifp,
+					ifindex_t ifindex)
 {
-	struct zebra_if *zif;
-	enum dplane_netconf_status_e mpls;
+	struct zebra_if *zif = NULL;
+	afi_t afi;
+	enum dplane_netconf_status_e mpls, mcast_on, linkdown;
+	bool *mcast_set, *linkdown_set;
 
-	zif = ifp->info;
-	if (!zif) {
-		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug("%s: if %s(%u) zebra info pointer is NULL",
-				   __func__, ifp->name, ifp->ifindex);
-		return;
+	afi = dplane_ctx_get_afi(ctx);
+	mpls = dplane_ctx_get_netconf_mpls(ctx);
+	linkdown = dplane_ctx_get_netconf_linkdown(ctx);
+	mcast_on = dplane_ctx_get_netconf_mcast(ctx);
+
+	if (ifindex == DPLANE_NETCONF_IFINDEX_ALL) {
+		if (afi == AFI_IP) {
+			mcast_set = &zrouter.all_mc_forwardingv4;
+			linkdown_set = &zrouter.all_linkdownv4;
+		} else {
+			mcast_set = &zrouter.all_mc_forwardingv6;
+			linkdown_set = &zrouter.all_linkdownv6;
+		}
+	} else if (ifindex == DPLANE_NETCONF_IFINDEX_DEFAULT) {
+		if (afi == AFI_IP) {
+			mcast_set = &zrouter.default_mc_forwardingv4;
+			linkdown_set = &zrouter.default_linkdownv4;
+		} else {
+			mcast_set = &zrouter.default_mc_forwardingv6;
+			linkdown_set = &zrouter.default_linkdownv6;
+		}
+	} else {
+		zif = ifp ? ifp->info : NULL;
+		if (!zif) {
+			if (IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug(
+					"%s: if %s(%u) zebra info pointer is NULL",
+					__func__, ifp->name, ifp->ifindex);
+			return;
+		}
+		if (afi == AFI_IP) {
+			mcast_set = &zif->v4mcast_on;
+			linkdown_set = &zif->linkdown;
+		} else {
+			mcast_set = &zif->v6mcast_on;
+			linkdown_set = &zif->linkdownv6;
+		}
+
+		/*
+		 * mpls netconf data is neither v4 or v6 it's AF_MPLS!
+		 */
+		if (mpls == DPLANE_NETCONF_STATUS_ENABLED) {
+			zif->mpls = true;
+			zebra_mpls_turned_on();
+		} else if (mpls == DPLANE_NETCONF_STATUS_DISABLED)
+			zif->mpls = false;
 	}
 
-	mpls = dplane_ctx_get_netconf_mpls(ctx);
+	if (linkdown == DPLANE_NETCONF_STATUS_ENABLED)
+		*linkdown_set = true;
+	else if (linkdown == DPLANE_NETCONF_STATUS_DISABLED)
+		*linkdown_set = false;
 
-	if (mpls == DPLANE_NETCONF_STATUS_ENABLED)
-		zif->mpls = true;
-	else if (mpls == DPLANE_NETCONF_STATUS_DISABLED)
-		zif->mpls = false;
+	if (mcast_on == DPLANE_NETCONF_STATUS_ENABLED)
+		*mcast_set = true;
+	else if (mcast_on == DPLANE_NETCONF_STATUS_DISABLED)
+		*mcast_set = false;
 
 	if (IS_ZEBRA_DEBUG_KERNEL)
-		zlog_debug("%s: if %s, ifindex %d, mpls %s",
-			   __func__, ifp->name, ifp->ifindex,
-			   (zif->mpls ? "ON" : "OFF"));
+		zlog_debug(
+			"%s: afi: %d if %s, ifindex %d, mpls %s mc_forwarding: %s linkdown %s",
+			__func__, afi, ifp ? ifp->name : "Global",
+			ifp ? ifp->ifindex : ifindex,
+			(zif ? (zif->mpls ? "ON" : "OFF") : "OFF"),
+			(*mcast_set ? "ON" : "OFF"),
+			(*linkdown_set ? "ON" : "OFF"));
 }
 
 void zebra_if_dplane_result(struct zebra_dplane_ctx *ctx)
@@ -1461,16 +1516,20 @@ void zebra_if_dplane_result(struct zebra_dplane_ctx *ctx)
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug("%s: can't find zns id %u", __func__, ns_id);
 
-		goto done;
+		return;
 	}
 
 	ifp = if_lookup_by_index_per_ns(zns, ifindex);
 	if (ifp == NULL) {
-		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug("%s: can't find ifp at nsid %u index %d",
-				   __func__, ns_id, ifindex);
+		if (op != DPLANE_OP_INTF_NETCONFIG ||
+		    (ifindex != -1 && ifindex != -2)) {
+			if (IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug(
+					"%s: can't find ifp at nsid %u index %d",
+					__func__, ns_id, ifindex);
 
-		goto done;
+			return;
+		}
 	}
 
 	switch (op) {
@@ -1486,7 +1545,7 @@ void zebra_if_dplane_result(struct zebra_dplane_ctx *ctx)
 		break;
 
 	case DPLANE_OP_INTF_NETCONFIG:
-		zebra_if_netconf_update_ctx(ctx, ifp);
+		zebra_if_netconf_update_ctx(ctx, ifp, ifindex);
 		break;
 
 	case DPLANE_OP_ROUTE_INSTALL:
@@ -1529,10 +1588,52 @@ void zebra_if_dplane_result(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_IPSET_ENTRY_DELETE:
 	case DPLANE_OP_NEIGH_TABLE_UPDATE:
 	case DPLANE_OP_GRE_SET:
+	case DPLANE_OP_TC_INSTALL:
+	case DPLANE_OP_TC_UPDATE:
+	case DPLANE_OP_TC_DELETE:
 		break; /* should never hit here */
 	}
-done:
-	dplane_ctx_fini(&ctx);
+}
+
+/*
+ * Find appropriate source IP for 'dest'; return in caller's buffer.
+ */
+bool zebra_if_get_source(const struct interface *ifp, const struct ipaddr *dest,
+			 struct ipaddr *src)
+{
+	bool ret = false;
+	struct listnode *node;
+	const struct connected *ifc;
+
+	/* Find working connected address in 'dest' address-family */
+
+	/* TODO -- attempt to match dest's subnet? */
+
+	for (ALL_LIST_ELEMENTS_RO(ifp->connected, node, ifc)) {
+		/* Only consider working addresses */
+		if (!CHECK_FLAG(ifc->conf, ZEBRA_IFC_REAL))
+			continue;
+
+		if (dest->ipa_type == IPADDR_V4 &&
+		    ifc->address->family == AF_INET) {
+
+			src->ipa_type = dest->ipa_type;
+			src->ipaddr_v4 = ifc->address->u.prefix4;
+			ret = true;
+			break;
+
+		} else if (dest->ipa_type == IPADDR_V6 &&
+			   ifc->address->family == AF_INET6) {
+
+			src->ipa_type = dest->ipa_type;
+			IPV6_ADDR_COPY(&src->ipaddr_v6,
+				       &ifc->address->u.prefix6);
+			ret = true;
+			break;
+		}
+	}
+
+	return ret;
 }
 
 /* Dump if address information to vty. */
@@ -1836,6 +1937,79 @@ static inline bool if_is_protodown_applicable(struct interface *ifp)
 
 	return true;
 }
+static void zebra_vxlan_if_vni_dump_vty(struct vty *vty, json_object *json_if,
+					struct zebra_vxlan_vni *vni)
+{
+	json_object *json_vni;
+	char vni_str[VNI_STR_LEN];
+
+	if (vty) {
+		vty_out(vty, "\n  VxLAN Id %u", vni->vni);
+		if (vni->access_vlan)
+			vty_out(vty, " Access VLAN Id %u", vni->access_vlan);
+
+		if (vni->mcast_grp.s_addr != INADDR_ANY)
+			vty_out(vty, "\n  Mcast Group %s",
+				inet_ntoa(vni->mcast_grp));
+	} else if (json_if) {
+		json_vni = json_object_new_object();
+		snprintf(vni_str, sizeof(vni_str), "%u", vni->vni);
+		json_object_int_add(json_vni, "accessVlan", vni->access_vlan);
+		json_object_string_addf(json_vni, "mcastGroup", "%pI4",
+					&vni->mcast_grp);
+		json_object_object_add(json_if, vni_str, json_vni);
+	}
+}
+
+static void zebra_vxlan_if_vni_hash_dump_vty(struct hash_bucket *bucket,
+					     void **args)
+{
+	struct zebra_vxlan_vni *vni;
+	struct vty *vty;
+	json_object *json_if;
+
+	vni = (struct zebra_vxlan_vni *)bucket->data;
+	vty = (struct vty *)args[0];
+	json_if = (json_object *)args[1];
+
+	zebra_vxlan_if_vni_dump_vty(vty, json_if, vni);
+}
+
+static void zebra_vxlan_if_dump_vty(struct vty *vty, struct zebra_if *zebra_if)
+{
+	struct zebra_l2info_vxlan *vxlan_info;
+	struct zebra_vxlan_vni_info *vni_info;
+	void *args[2];
+
+	vxlan_info = &zebra_if->l2info.vxl;
+	vni_info = &vxlan_info->vni_info;
+
+	if (vxlan_info->vtep_ip.s_addr != INADDR_ANY)
+		vty_out(vty, "  VTEP IP: %s", inet_ntoa(vxlan_info->vtep_ip));
+
+	if (vxlan_info->ifindex_link && (vxlan_info->link_nsid != NS_UNKNOWN)) {
+		struct interface *ifp;
+
+		ifp = if_lookup_by_index_per_ns(
+			zebra_ns_lookup(vxlan_info->link_nsid),
+			vxlan_info->ifindex_link);
+		vty_out(vty, " Link Interface %s",
+			ifp == NULL ? "Unknown" : ifp->name);
+	}
+
+	if (IS_ZEBRA_VXLAN_IF_VNI(zebra_if)) {
+		zebra_vxlan_if_vni_dump_vty(vty, NULL, &vni_info->vni);
+	} else {
+		args[0] = vty;
+		args[1] = NULL;
+		hash_iterate(vni_info->vni_table,
+			     (void (*)(struct hash_bucket *,
+				       void *))zebra_vxlan_if_vni_hash_dump_vty,
+			     args);
+	}
+
+	vty_out(vty, "\n");
+}
 
 /* Interface's information print out to vty interface. */
 static void if_dump_vty(struct vty *vty, struct interface *ifp)
@@ -1896,6 +2070,16 @@ static void if_dump_vty(struct vty *vty, struct interface *ifp)
 	if (zebra_if->mpls)
 		vty_out(vty, "  MPLS enabled\n");
 
+	if (zebra_if->linkdown)
+		vty_out(vty, "  Ignore all v4 routes with linkdown\n");
+	if (zebra_if->linkdownv6)
+		vty_out(vty, "  Ignore all v6 routes with linkdown\n");
+
+	if (zebra_if->v4mcast_on)
+		vty_out(vty, "  v4 Multicast forwarding is on\n");
+	if (zebra_if->v6mcast_on)
+		vty_out(vty, "  v6 Multicast forwarding is on\n");
+
 	/* Hardware address. */
 	vty_out(vty, "  Type: %s\n", if_link_type_str(ifp->ll_type));
 	if (ifp->hw_addr_len != 0) {
@@ -1935,42 +2119,15 @@ static void if_dump_vty(struct vty *vty, struct interface *ifp)
 		zebra_zifslavetype_2str(zebra_if->zif_slave_type));
 
 	if (IS_ZEBRA_IF_BRIDGE(ifp)) {
-		struct zebra_l2info_bridge *bridge_info;
-
-		bridge_info = &zebra_if->l2info.br;
 		vty_out(vty, "  Bridge VLAN-aware: %s\n",
-			bridge_info->vlan_aware ? "yes" : "no");
+			IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(zebra_if) ? "yes" : "no");
 	} else if (IS_ZEBRA_IF_VLAN(ifp)) {
 		struct zebra_l2info_vlan *vlan_info;
 
 		vlan_info = &zebra_if->l2info.vl;
 		vty_out(vty, "  VLAN Id %u\n", vlan_info->vid);
 	} else if (IS_ZEBRA_IF_VXLAN(ifp)) {
-		struct zebra_l2info_vxlan *vxlan_info;
-
-		vxlan_info = &zebra_if->l2info.vxl;
-		vty_out(vty, "  VxLAN Id %u", vxlan_info->vni);
-		if (vxlan_info->vtep_ip.s_addr != INADDR_ANY)
-			vty_out(vty, " VTEP IP: %pI4",
-				&vxlan_info->vtep_ip);
-		if (vxlan_info->access_vlan)
-			vty_out(vty, " Access VLAN Id %u\n",
-				vxlan_info->access_vlan);
-		if (vxlan_info->mcast_grp.s_addr != INADDR_ANY)
-			vty_out(vty, "  Mcast Group %pI4",
-					&vxlan_info->mcast_grp);
-		if (vxlan_info->ifindex_link &&
-		    (vxlan_info->link_nsid != NS_UNKNOWN)) {
-				struct interface *ifp;
-
-				ifp = if_lookup_by_index_per_ns(
-					zebra_ns_lookup(vxlan_info->link_nsid),
-					vxlan_info->ifindex_link);
-				vty_out(vty, " Link Interface %s",
-					ifp == NULL ? "Unknown" :
-					ifp->name);
-		}
-		vty_out(vty, "\n");
+		zebra_vxlan_if_dump_vty(vty, zebra_if);
 	} else if (IS_ZEBRA_IF_GRE(ifp)) {
 		struct zebra_l2info_gre *gre_info;
 
@@ -2000,12 +2157,20 @@ static void if_dump_vty(struct vty *vty, struct interface *ifp)
 
 		br_slave = &zebra_if->brslave_info;
 		if (br_slave->bridge_ifindex != IFINDEX_INTERNAL) {
-			if (br_slave->br_if)
-				vty_out(vty, "  Master interface: %s\n",
-					br_slave->br_if->name);
+			char vid_buf[16];
+
+			if (zebra_if->pvid)
+				snprintf(vid_buf, sizeof(vid_buf),
+						" PVID: %u", zebra_if->pvid);
 			else
-				vty_out(vty, "  Master ifindex: %u\n",
-					br_slave->bridge_ifindex);
+				vid_buf[0] = '\0';
+
+			if (br_slave->br_if)
+				vty_out(vty, "  Master interface: %s%s\n",
+					br_slave->br_if->name, vid_buf);
+			else
+				vty_out(vty, "  Master ifindex: %u%s\n",
+					br_slave->bridge_ifindex, vid_buf);
 		}
 	}
 
@@ -2036,6 +2201,11 @@ static void if_dump_vty(struct vty *vty, struct interface *ifp)
 					       sizeof(pd_buf)));
 
 	zebra_evpn_arp_nd_if_print(vty, zebra_if);
+
+	if (CHECK_FLAG(zebra_if->flags, ZIF_FLAG_NEIGH_THROTTLE))
+		vty_out(vty, "  Neighbor Throttle enabled\n");
+	if (CHECK_FLAG(zebra_if->flags, ZIF_FLAG_NEIGH_THROTTLE_DISABLE))
+		vty_out(vty, "  Neighbor Throttle disabled\n");
 
 	if (zebra_if->link_ifindex != IFINDEX_INTERNAL) {
 		if (zebra_if->link)
@@ -2165,6 +2335,59 @@ static void if_dump_vty(struct vty *vty, struct interface *ifp)
 #endif /* HAVE_NET_RT_IFLIST */
 }
 
+static void zebra_vxlan_if_vni_dump_vty_json(json_object *json_if,
+					     struct zebra_vxlan_vni *vni)
+{
+	json_object_int_add(json_if, "vxlanId", vni->vni);
+	if (vni->access_vlan)
+		json_object_int_add(json_if, "accessVlanId", vni->access_vlan);
+	if (vni->mcast_grp.s_addr != INADDR_ANY)
+		json_object_string_addf(json_if, "mcastGroup", "%pI4",
+					&vni->mcast_grp);
+}
+
+static void zebra_vxlan_if_vni_hash_dump_vty_json(struct hash_bucket *bucket,
+						  void *ctxt)
+{
+	json_object *json_if;
+	struct zebra_vxlan_vni *vni;
+
+	vni = (struct zebra_vxlan_vni *)bucket->data;
+	json_if = (json_object *)ctxt;
+
+	zebra_vxlan_if_vni_dump_vty_json(json_if, vni);
+}
+
+static void zebra_vxlan_if_dump_vty_json(json_object *json_if,
+					 struct zebra_if *zebra_if)
+{
+	struct zebra_l2info_vxlan *vxlan_info;
+	struct zebra_vxlan_vni_info *vni_info;
+
+	vxlan_info = &zebra_if->l2info.vxl;
+	vni_info = &vxlan_info->vni_info;
+
+	if (vxlan_info->vtep_ip.s_addr != INADDR_ANY)
+		json_object_string_addf(json_if, "vtepIp", "%pI4",
+					&vxlan_info->vtep_ip);
+
+	if (vxlan_info->ifindex_link && (vxlan_info->link_nsid != NS_UNKNOWN)) {
+		struct interface *ifp;
+
+		ifp = if_lookup_by_index_per_ns(
+			zebra_ns_lookup(vxlan_info->link_nsid),
+			vxlan_info->ifindex_link);
+		json_object_string_add(json_if, "linkInterface",
+				       ifp == NULL ? "Unknown" : ifp->name);
+	}
+	if (IS_ZEBRA_VXLAN_IF_VNI(zebra_if)) {
+		zebra_vxlan_if_vni_dump_vty_json(json_if, &vni_info->vni);
+	} else {
+		hash_iterate(vni_info->vni_table,
+			     zebra_vxlan_if_vni_hash_dump_vty_json, json_if);
+	}
+}
+
 static void if_dump_vty_json(struct vty *vty, struct interface *ifp,
 			     json_object *json)
 {
@@ -2219,6 +2442,12 @@ static void if_dump_vty_json(struct vty *vty, struct interface *ifp,
 				       zebra_if->desc);
 
 	json_object_boolean_add(json_if, "mplsEnabled", zebra_if->mpls);
+	json_object_boolean_add(json_if, "linkDown", zebra_if->linkdown);
+	json_object_boolean_add(json_if, "linkDownV6", zebra_if->linkdownv6);
+	json_object_boolean_add(json_if, "mcForwardingV4",
+				zebra_if->v4mcast_on);
+	json_object_boolean_add(json_if, "mcForwardingV6",
+				zebra_if->v6mcast_on);
 
 	if (ifp->ifindex == IFINDEX_INTERNAL) {
 		json_object_boolean_add(json_if, "pseudoInterface", true);
@@ -2286,7 +2515,7 @@ static void if_dump_vty_json(struct vty *vty, struct interface *ifp,
 
 		bridge_info = &zebra_if->l2info.br;
 		json_object_boolean_add(json_if, "bridgeVlanAware",
-					bridge_info->vlan_aware);
+					bridge_info->bridge.vlan_aware);
 	} else if (IS_ZEBRA_IF_VLAN(ifp)) {
 		struct zebra_l2info_vlan *vlan_info;
 
@@ -2294,47 +2523,44 @@ static void if_dump_vty_json(struct vty *vty, struct interface *ifp,
 		json_object_int_add(json_if, "vlanId", vlan_info->vid);
 	} else if (IS_ZEBRA_IF_VXLAN(ifp)) {
 		struct zebra_l2info_vxlan *vxlan_info;
+		struct zebra_vxlan_vni_info *vni_info;
+		json_object *json_vnis = NULL;
+		uint32_t num_vnis;
+		void *args[2];
 
 		vxlan_info = &zebra_if->l2info.vxl;
-		json_object_int_add(json_if, "vxlanId", vxlan_info->vni);
+		vni_info = &vxlan_info->vni_info;
 		if (vxlan_info->vtep_ip.s_addr != INADDR_ANY)
-			json_object_string_addf(json_if, "vtepIp", "%pI4",
-						&vxlan_info->vtep_ip);
-		if (vxlan_info->access_vlan)
-			json_object_int_add(json_if, "accessVlanId",
-					    vxlan_info->access_vlan);
-		if (vxlan_info->mcast_grp.s_addr != INADDR_ANY)
-			json_object_string_addf(json_if, "mcastGroup", "%pI4",
-						&vxlan_info->mcast_grp);
+			json_object_string_add(json_if, "vtepIp",
+					       inet_ntop(AF_INET,
+							 &vxlan_info->vtep_ip,
+							 buf, sizeof(buf)));
+
+		json_vnis = json_object_new_object();
+		if (IS_ZEBRA_VXLAN_IF_VNI(zebra_if)) {
+			zebra_vxlan_if_vni_dump_vty(NULL, json_vnis,
+						    &vni_info->vni);
+		} else {
+			num_vnis = hashcount(vni_info->vni_table);
+			if (num_vnis) {
+				args[0] = NULL;
+				args[1] = json_vnis;
+				hash_iterate(
+					vni_info->vni_table,
+					(void (*)(struct hash_bucket *, void *))
+						zebra_vxlan_if_vni_hash_dump_vty,
+					args);
+			}
+		}
+
+		json_object_object_add(json_if, "vxlanId", json_vnis);
+
 		if (vxlan_info->ifindex_link
 		    && (vxlan_info->link_nsid != NS_UNKNOWN)) {
 			struct interface *ifp;
 
 			ifp = if_lookup_by_index_per_ns(
 				zebra_ns_lookup(vxlan_info->link_nsid),
-				vxlan_info->ifindex_link);
-			json_object_string_add(json_if, "linkInterface",
-					       ifp == NULL ? "Unknown"
-							   : ifp->name);
-		}
-	} else if (IS_ZEBRA_IF_GRE(ifp)) {
-		struct zebra_l2info_gre *gre_info;
-
-		gre_info = &zebra_if->l2info.gre;
-		if (gre_info->vtep_ip.s_addr != INADDR_ANY) {
-			json_object_string_addf(json_if, "vtepIp", "%pI4",
-						&gre_info->vtep_ip);
-			if (gre_info->vtep_ip_remote.s_addr != INADDR_ANY)
-				json_object_string_addf(
-					json_if, "vtepRemoteIp", "%pI4",
-					&gre_info->vtep_ip_remote);
-		}
-		if (gre_info->ifindex_link
-		    && (gre_info->link_nsid != NS_UNKNOWN)) {
-			struct interface *ifp;
-
-			ifp = if_lookup_by_index_per_ns(
-				zebra_ns_lookup(gre_info->link_nsid),
 				gre_info->ifindex_link);
 			json_object_string_add(json_if, "linkInterface",
 					       ifp == NULL ? "Unknown"
@@ -2388,6 +2614,13 @@ static void if_dump_vty_json(struct vty *vty, struct interface *ifp,
 				zebra_protodown_rc_str(zebra_if->protodown_rc,
 						       pd_buf, sizeof(pd_buf)));
 	}
+
+	json_object_boolean_add(
+		json_if, "neighborThrottle",
+		CHECK_FLAG(zebra_if->flags, ZIF_FLAG_NEIGH_THROTTLE));
+	json_object_boolean_add(
+		json_if, "neighborThrottleDisable",
+		CHECK_FLAG(zebra_if->flags, ZIF_FLAG_NEIGH_THROTTLE_DISABLE));
 
 	if (zebra_if->link_ifindex != IFINDEX_INTERNAL) {
 		if (zebra_if->link)
@@ -2849,7 +3082,7 @@ int if_multicast_set(struct interface *ifp)
 		if_refresh(ifp);
 	}
 	if_data = ifp->info;
-	if_data->multicast = IF_ZEBRA_MULTICAST_ON;
+	if_data->multicast = IF_ZEBRA_DATA_ON;
 
 	return 0;
 }
@@ -2872,7 +3105,28 @@ DEFUN (multicast,
 		if_refresh(ifp);
 	}
 	if_data = ifp->info;
-	if_data->multicast = IF_ZEBRA_MULTICAST_ON;
+	if_data->multicast = IF_ZEBRA_DATA_ON;
+
+	return CMD_SUCCESS;
+}
+
+DEFPY (mpls,
+       mpls_cmd,
+       "[no] mpls enable",
+       NO_STR
+       MPLS_STR
+       "Set mpls to be on for the interface\n")
+{
+	VTY_DECLVAR_CONTEXT(interface, ifp);
+	struct zebra_if *if_data = ifp->info;
+
+	if (no) {
+		dplane_intf_mpls_modify_state(ifp, false);
+		if_data->mpls = IF_ZEBRA_DATA_UNSPEC;
+	} else {
+		dplane_intf_mpls_modify_state(ifp, true);
+		if_data->mpls = IF_ZEBRA_DATA_ON;
+	}
 
 	return CMD_SUCCESS;
 }
@@ -2890,7 +3144,7 @@ int if_multicast_unset(struct interface *ifp)
 		if_refresh(ifp);
 	}
 	if_data = ifp->info;
-	if_data->multicast = IF_ZEBRA_MULTICAST_OFF;
+	if_data->multicast = IF_ZEBRA_DATA_OFF;
 
 	return 0;
 }
@@ -2914,7 +3168,7 @@ DEFUN (no_multicast,
 		if_refresh(ifp);
 	}
 	if_data = ifp->info;
-	if_data->multicast = IF_ZEBRA_MULTICAST_OFF;
+	if_data->multicast = IF_ZEBRA_DATA_OFF;
 
 	return CMD_SUCCESS;
 }
@@ -2980,7 +3234,7 @@ int if_shutdown(struct interface *ifp)
 		if_refresh(ifp);
 	}
 	if_data = ifp->info;
-	if_data->shutdown = IF_ZEBRA_SHUTDOWN_ON;
+	if_data->shutdown = IF_ZEBRA_DATA_ON;
 
 	return 0;
 }
@@ -3005,7 +3259,7 @@ DEFUN (shutdown_if,
 		if_refresh(ifp);
 	}
 	if_data = ifp->info;
-	if_data->shutdown = IF_ZEBRA_SHUTDOWN_ON;
+	if_data->shutdown = IF_ZEBRA_DATA_ON;
 
 	return CMD_SUCCESS;
 }
@@ -3029,7 +3283,7 @@ int if_no_shutdown(struct interface *ifp)
 	}
 
 	if_data = ifp->info;
-	if_data->shutdown = IF_ZEBRA_SHUTDOWN_OFF;
+	if_data->shutdown = IF_ZEBRA_DATA_OFF;
 
 	return 0;
 }
@@ -3060,7 +3314,7 @@ DEFUN (no_shutdown_if,
 	}
 
 	if_data = ifp->info;
-	if_data->shutdown = IF_ZEBRA_SHUTDOWN_OFF;
+	if_data->shutdown = IF_ZEBRA_DATA_OFF;
 
 	return CMD_SUCCESS;
 }
@@ -3847,9 +4101,9 @@ int if_ip_address_install(struct interface *ifp, struct prefix *prefix,
 		SET_FLAG(ifc->conf, ZEBRA_IFC_CONFIGURED);
 
 	/* In case of this route need to install kernel. */
-	if (!CHECK_FLAG(ifc->conf, ZEBRA_IFC_QUEUED)
-	    && CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE)
-	    && !(if_data && if_data->shutdown == IF_ZEBRA_SHUTDOWN_ON)) {
+	if (!CHECK_FLAG(ifc->conf, ZEBRA_IFC_QUEUED) &&
+	    CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE) &&
+	    !(if_data && if_data->shutdown == IF_ZEBRA_DATA_ON)) {
 		/* Some system need to up the interface to set IP address. */
 		if (!if_is_up(ifp)) {
 			if_set_flags(ifp, IFF_UP | IFF_RUNNING);
@@ -3942,9 +4196,9 @@ static int ip_address_install(struct vty *vty, struct interface *ifp,
 		SET_FLAG(ifc->conf, ZEBRA_IFC_CONFIGURED);
 
 	/* In case of this route need to install kernel. */
-	if (!CHECK_FLAG(ifc->conf, ZEBRA_IFC_QUEUED)
-	    && CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE)
-	    && !(if_data && if_data->shutdown == IF_ZEBRA_SHUTDOWN_ON)) {
+	if (!CHECK_FLAG(ifc->conf, ZEBRA_IFC_QUEUED) &&
+	    CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE) &&
+	    !(if_data && if_data->shutdown == IF_ZEBRA_DATA_ON)) {
 		/* Some system need to up the interface to set IP address. */
 		if (!if_is_up(ifp)) {
 			if_set_flags(ifp, IFF_UP | IFF_RUNNING);
@@ -4205,9 +4459,9 @@ int if_ipv6_address_install(struct interface *ifp, struct prefix *prefix,
 		SET_FLAG(ifc->conf, ZEBRA_IFC_CONFIGURED);
 
 	/* In case of this route need to install kernel. */
-	if (!CHECK_FLAG(ifc->conf, ZEBRA_IFC_QUEUED)
-	    && CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE)
-	    && !(if_data && if_data->shutdown == IF_ZEBRA_SHUTDOWN_ON)) {
+	if (!CHECK_FLAG(ifc->conf, ZEBRA_IFC_QUEUED) &&
+	    CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE) &&
+	    !(if_data && if_data->shutdown == IF_ZEBRA_DATA_ON)) {
 		/* Some system need to up the interface to set IP address. */
 		if (!if_is_up(ifp)) {
 			if_set_flags(ifp, IFF_UP | IFF_RUNNING);
@@ -4278,9 +4532,9 @@ static int ipv6_address_install(struct vty *vty, struct interface *ifp,
 		SET_FLAG(ifc->conf, ZEBRA_IFC_CONFIGURED);
 
 	/* In case of this route need to install kernel. */
-	if (!CHECK_FLAG(ifc->conf, ZEBRA_IFC_QUEUED)
-	    && CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE)
-	    && !(if_data && if_data->shutdown == IF_ZEBRA_SHUTDOWN_ON)) {
+	if (!CHECK_FLAG(ifc->conf, ZEBRA_IFC_QUEUED) &&
+	    CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_ACTIVE) &&
+	    !(if_data && if_data->shutdown == IF_ZEBRA_DATA_ON)) {
 		/* Some system need to up the interface to set IP address. */
 		if (!if_is_up(ifp)) {
 			if_set_flags(ifp, IFF_UP | IFF_RUNNING);
@@ -4395,6 +4649,50 @@ DEFUN (no_ipv6_address,
 				      NULL, NULL);
 }
 
+DEFPY (intf_neigh_throttle,
+       intf_neigh_throttle_cmd,
+       "[no] neighbor throttle <enable$enable_p | disable$disable_p>",
+       NO_STR
+       "Neighbor commands\n"
+       "Neighbor throttling\n"
+       "Enable for this interface\n"
+       "Disable for this interface\n")
+{
+	struct zebra_if *zif;
+
+	VTY_DECLVAR_CONTEXT(interface, ifp);
+
+	zif = ifp->info;
+
+	/* Manage per-interface config */
+	if (enable_p) {
+		if (no)
+			UNSET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE);
+		else if (!CHECK_FLAG(zif->flags,
+				     ZIF_FLAG_NEIGH_THROTTLE_DISABLE))
+			SET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE);
+		else {
+			/* Invalid */
+			vty_out(vty,
+				"%% Invalid: 'enable' and 'disable' are exclusive\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+	} else if (disable_p) {
+		if (no)
+			UNSET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE_DISABLE);
+		else if (!CHECK_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE))
+			SET_FLAG(zif->flags, ZIF_FLAG_NEIGH_THROTTLE_DISABLE);
+		else {
+			/* Invalid */
+			vty_out(vty,
+				"%% Invalid: 'enable' and 'disable' are exclusive\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+	}
+
+	return CMD_SUCCESS;
+}
+
 static int link_params_config_write(struct vty *vty, struct interface *ifp)
 {
 	int i;
@@ -4465,7 +4763,7 @@ static int if_config_write(struct vty *vty)
 			if_vty_config_start(vty, ifp);
 
 			if (if_data) {
-				if (if_data->shutdown == IF_ZEBRA_SHUTDOWN_ON)
+				if (if_data->shutdown == IF_ZEBRA_DATA_ON)
 					vty_out(vty, " shutdown\n");
 
 				zebra_ptm_if_write(vty, if_data);
@@ -4483,6 +4781,18 @@ static int if_config_write(struct vty *vty)
 			if (!CHECK_FLAG(ifp->status,
 					ZEBRA_INTERFACE_LINKDETECTION))
 				vty_out(vty, " no link-detect\n");
+
+			if (if_data) {
+				if (CHECK_FLAG(if_data->flags,
+					       ZIF_FLAG_NEIGH_THROTTLE))
+					vty_out(vty,
+						" neighbor throttle enable\n");
+
+				if (CHECK_FLAG(if_data->flags,
+					       ZIF_FLAG_NEIGH_THROTTLE_DISABLE))
+					vty_out(vty,
+						" neighbor throttle disable\n");
+			}
 
 			for (ALL_LIST_ELEMENTS_RO(ifp->connected, addrnode,
 						  ifc)) {
@@ -4515,13 +4825,14 @@ static int if_config_write(struct vty *vty)
 			}
 
 			if (if_data) {
-				if (if_data->multicast
-				    != IF_ZEBRA_MULTICAST_UNSPEC)
+				if (if_data->multicast != IF_ZEBRA_DATA_UNSPEC)
 					vty_out(vty, " %smulticast\n",
-						if_data->multicast
-								== IF_ZEBRA_MULTICAST_ON
+						if_data->multicast ==
+								IF_ZEBRA_DATA_ON
 							? ""
 							: "no ");
+				if (if_data->mpls == IF_ZEBRA_DATA_ON)
+					vty_out(vty, " mpls\n");
 			}
 
 			hook_call(zebra_if_config_wr, vty, ifp);
@@ -4558,6 +4869,7 @@ void zebra_if_init(void)
 	install_element(ENABLE_NODE, &show_interface_desc_vrf_all_cmd);
 	install_element(INTERFACE_NODE, &multicast_cmd);
 	install_element(INTERFACE_NODE, &no_multicast_cmd);
+	install_element(INTERFACE_NODE, &mpls_cmd);
 	install_element(INTERFACE_NODE, &linkdetect_cmd);
 	install_element(INTERFACE_NODE, &no_linkdetect_cmd);
 	install_element(INTERFACE_NODE, &shutdown_if_cmd);
@@ -4570,6 +4882,8 @@ void zebra_if_init(void)
 	install_element(INTERFACE_NODE, &no_ip_address_peer_cmd);
 	install_element(INTERFACE_NODE, &ipv6_address_cmd);
 	install_element(INTERFACE_NODE, &no_ipv6_address_cmd);
+	install_element(INTERFACE_NODE, &intf_neigh_throttle_cmd);
+
 #ifdef HAVE_NETLINK
 	install_element(INTERFACE_NODE, &ip_address_label_cmd);
 	install_element(INTERFACE_NODE, &no_ip_address_label_cmd);

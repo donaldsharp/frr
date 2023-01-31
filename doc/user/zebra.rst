@@ -155,6 +155,13 @@ Standard Commands
    Set description for the interface.
 
 
+.. clicmd:: mpls enable
+
+   Enable or disable mpls kernel processing on the interface, for linux.  Interfaces
+   configured with mpls will not automatically turn on if mpls kernel modules do not
+   happen to be loaded.  This command will fail on 3.X linux kernels and does not
+   work on non-linux systems at all.
+
 .. clicmd:: multicast
 
 
@@ -273,6 +280,12 @@ Nexthop tracking doesn't resolve nexthops via the default route by default.
 Allowing this might be useful when e.g. you want to allow BGP to peer across
 the default route.
 
+.. clicmd:: zebra nexthop-group keep (1-3600)
+
+   Set the time that zebra will keep a created and installed nexthop group
+   before removing it from the system if the nexthop group is no longer
+   being used.  The default time is 180 seconds.
+
 .. clicmd:: ip nht resolve-via-default
 
    Allow IPv4 nexthop tracking to resolve via the default route. This parameter
@@ -293,6 +306,15 @@ the default route.
    table.  An alternative form of the command is ``show ip import-check`` and this
    form of the command is deprecated at this point in time.
 
+PBR dataplane programming
+=========================
+
+Some dataplanes require the PBR nexthop to be resolved into a SMAC, DMAC and
+outgoing interface
+
+.. clicmd:: pbr nexthop-resolve
+
+   Resolve PBR nexthop via ip neigh tracking
 
 Administrative Distance
 =======================
@@ -555,6 +577,48 @@ Once installed into the FIB, FRR currently has little control over what
 nexthops are chosen to forward packets on.  Currently the Linux kernel
 has a ``fib_multipath_hash_policy`` sysctl which dictates how the hashing
 algorithm is used to forward packets.
+
+.. _zebra-svd:
+
+Single Vxlan Device Support
+===========================
+
+FRR supports a new way of configuring VLAN-to-VNI mappings for EVPN-VXLAN,
+when working with the Linux kernel. In this new way, the mapping of a VLAN
+to a VNI is configured against a container VXLAN interface which is referred
+to as a ‘Single VXLAN device (SVD)’. Multiple VLAN to VNI mappings can be
+configured against the same SVD. This allows for a significant scaling of
+the number of VNIs since a separate VXLAN interface is no longer required
+for each VNI. Sample configuration of SVD with VLAN to VNI mappings is shown
+below.
+
+If you are using the Linux kernel as a Data Plane, this can be configured
+via `ip link`, `bridge link` and `bridge vlan` commands:
+
+.. code-block:: shell
+
+   # linux shell
+   ip link add dev bridge type bridge
+   ip link set dev bridge type bridge vlan_filtering 1
+   ip link add dev vxlan0 type vxlan external
+   ip link set dev vxlan0 master bridge
+   bridge link set dev vxlan0 vlan_tunnel on
+   bridge vlan add dev vxlan0 vid 100
+   bridge vlan add dev vxlan0 vid 100 tunnel_info id 100
+   bridge vlan tunnelshow
+    port    vlan ids        tunnel id
+    bridge  None
+    vxlan0   100     100
+
+.. clicmd:: show evpn access-vlan [IFNAME VLAN-ID | detail] [json]
+
+   Show information for EVPN Access VLANs.
+
+   ::
+
+      VLAN         SVI             L2-VNI   VXLAN-IF        # Members
+      bridge.20    vlan20          20       vxlan0          0
+      bridge.10    vlan10          0        vxlan0          0
 
 .. _zebra-mpls:
 
@@ -1002,7 +1066,7 @@ FPM Commands
 .. clicmd:: fpm connection ip A.B.C.D port (1-65535)
 
    Configure ``zebra`` to connect to a different FPM server than the default of
-   ``127.0.0.1:2060``
+   ``127.0.0.1:2620``
 
 .. clicmd:: show zebra fpm stats
 
@@ -1125,6 +1189,59 @@ order to off-load work from the main zebra pthread.
    waiting to be processed by the dataplane pthread.
 
 
+DPDK dataplane
+==============
+
+The zebra DPDK subsystem programs the dataplane via rte_XXX APIs.
+This module needs be compiled in via "--enable-dp-dpdk=yes"
+and enabled at start up time via the zebra daemon option "-M dplane_dpdk".
+
+To program the PBR rules as rte_flows you additionally need to configure
+"pbr nexthop-resolve". This is used to expland the PBR actions into the
+{SMAC, DMAC, outgoing port} needed by rte_flow.
+
+
+.. clicmd:: show dplane dpdk port [detail]
+
+   Displays the mapping table between zebra interfaces and DPDK port-ids.
+   Sample output:
+
+   ::
+   Port Device           IfName           IfIndex          sw,domain,port
+
+   0    0000:03:00.0     p0               4                0000:03:00.0,0,65535
+   1    0000:03:00.0     pf0hpf           6                0000:03:00.0,0,4095
+   2    0000:03:00.0     pf0vf0           15               0000:03:00.0,0,4096
+   3    0000:03:00.0     pf0vf1           16               0000:03:00.0,0,4097
+   4    0000:03:00.1     p1               5                0000:03:00.1,1,65535
+   5    0000:03:00.1     pf1hpf           7                0000:03:00.1,1,20479
+
+.. clicmd:: show dplane dpdk pbr flows
+   Displays the DPDK stats per-PBR entry.
+   Sample output:
+
+   ::
+   Rules if pf0vf0
+   Seq 1 pri 300
+   SRC Match 77.0.0.8/32
+   DST Match 88.0.0.8/32
+   Tableid: 10000
+   Action: nh: 45.0.0.250 intf: p0
+   Action: mac: 00:00:5e:00:01:fa
+   DPDK flow: installed 0x40
+   DPDK flow stats: packets 13 bytes 1586
+
+.. clicmd:: show dplane dpdk counters
+ Displays the ZAPI message handler counters
+
+   Sample output:
+
+   ::
+             Ignored updates: 0
+               PBR rule adds: 1
+               PBR rule dels: 0
+
+
 zebra Terminal Mode Commands
 ============================
 
@@ -1181,6 +1298,14 @@ zebra Terminal Mode Commands
 .. clicmd:: show ipv6 forward
 
    Display whether the host's IP v6 forwarding is enabled or not.
+
+.. clicmd:: show ip neigh
+
+   Display the ip neighbor table
+
+.. clicmd:: show pbr rule
+
+   Display the pbr rule table with resolved nexthops
 
 .. clicmd:: show zebra
 

@@ -50,6 +50,7 @@
 #include "zebra/zebra_mpls.h"
 #include "zebra/label_manager.h"
 #include "zebra/zebra_netns_notify.h"
+#include "zebra/zebra_neigh_throttle.h"
 #include "zebra/zebra_rnh.h"
 #include "zebra/zebra_pbr.h"
 #include "zebra/zebra_vxlan.h"
@@ -75,9 +76,6 @@ struct thread_master *master;
 
 /* Route retain mode flag. */
 int retain_mode = 0;
-
-/* Allow non-frr entities to delete frr routes */
-int allow_delete = 0;
 
 int graceful_restart;
 
@@ -110,8 +108,18 @@ const struct option longopts[] = {
 #endif /* HAVE_NETLINK */
 	{0}};
 
-zebra_capabilities_t _caps_p[] = {
-	ZCAP_NET_ADMIN, ZCAP_SYS_ADMIN, ZCAP_NET_RAW,
+zebra_capabilities_t _caps_p[] = {ZCAP_NET_ADMIN, ZCAP_SYS_ADMIN,
+				  ZCAP_NET_RAW,
+#ifdef HAVE_DPDK
+				  ZCAP_IPC_LOCK,  ZCAP_READ_SEARCH,
+				  ZCAP_SYS_RAWIO
+#endif
+};
+
+zebra_capabilities_t _caps_i[] = {
+	ZCAP_NET_ADMIN,
+	ZCAP_SYS_ADMIN,
+	ZCAP_NET_RAW,
 };
 
 /* zebra privileges to run with */
@@ -125,7 +133,8 @@ struct zebra_privs_t zserv_privs = {
 #endif
 	.caps_p = _caps_p,
 	.cap_num_p = array_size(_caps_p),
-	.cap_num_i = 0};
+	.caps_i = _caps_i,
+	.cap_num_i = array_size(_caps_i)};
 
 /* SIGHUP handler. */
 static void sighup(void)
@@ -167,6 +176,8 @@ static void sigint(void)
 	zebra_opaque_stop();
 
 	zebra_dplane_pre_finish();
+
+	zebra_neigh_throttle_fini();
 
 	/* Clean up GR related info. */
 	zebra_gr_stale_client_cleanup(zrouter.stale_client_list);
@@ -345,7 +356,7 @@ int main(int argc, char **argv)
 			// batch_mode = 1;
 			break;
 		case 'a':
-			allow_delete = 1;
+			zrouter.allow_delete = true;
 			break;
 		case 'e': {
 			unsigned long int parsed_multipath =
@@ -435,17 +446,18 @@ int main(int argc, char **argv)
 	zebra_srte_init();
 	zebra_srv6_init();
 	zebra_srv6_vty_init();
+	zebra_neigh_throttle_init();
 
 	/* For debug purpose. */
 	/* SET_FLAG (zebra_debug_event, ZEBRA_DEBUG_EVENT); */
 
 	/* Process the configuration file. Among other configuration
-	*  directives we can meet those installing static routes. Such
-	*  requests will not be executed immediately, but queued in
-	*  zebra->ribq structure until we enter the main execution loop.
-	*  The notifications from kernel will show originating PID equal
-	*  to that after daemon() completes (if ever called).
-	*/
+	 * directives we can meet those installing static routes. Such
+	 * requests will not be executed immediately, but queued in
+	 * zebra->ribq structure until we enter the main execution loop.
+	 * The notifications from kernel will show originating PID equal
+	 * to that after daemon() completes (if ever called).
+	 */
 	frr_config_fork();
 
 #if defined(HAVE_CSMGR)
@@ -453,13 +465,13 @@ int main(int argc, char **argv)
 #endif
 
 	/* After we have successfully acquired the pidfile, we can be sure
-	*  about being the only copy of zebra process, which is submitting
-	*  changes to the FIB.
-	*  Clean up zebra-originated routes. The requests will be sent to OS
-	*  immediately, so originating PID in notifications from kernel
-	*  will be equal to the current getpid(). To know about such routes,
-	* we have to have route_read() called before.
-	*/
+	 * about being the only copy of zebra process, which is submitting
+	 * changes to the FIB.
+	 * Clean up zebra-originated routes. The requests will be sent to OS
+	 * immediately, so originating PID in notifications from kernel
+	 * will be equal to the current getpid(). To know about such routes,
+	 * we have to have route_read() called before.
+	 */
 	zrouter.startup_time = monotime(NULL);
 	zrouter.rib_sweep_time = 0;
 	zrouter.graceful_restart = zebra_di.graceful_restart;
@@ -479,6 +491,13 @@ int main(int argc, char **argv)
 		thread_add_timer(zrouter.master, rib_sweep_route,
 				 NULL, gr_cleanup_time, &zrouter.t_rib_sweep);
 	}
+
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+	if (zrouter.frr_csm_smode == FAST_START ||
+	    zrouter.frr_csm_smode == WARM_START)
+		zrouter.graceful_restart = true;
+	zrouter.maint_mode = (zrouter.frr_csm_smode == MAINT);
+#endif
 
 	/* Needed for BSD routing socket. */
 	pid = getpid();

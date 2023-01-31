@@ -75,7 +75,7 @@ struct pim_interface {
 	bool pim_can_disable_join_suppression : 1;
 	bool pim_passive_enable : 1;
 
-	bool igmp_enable : 1;
+	bool gm_enable : 1;
 
 	ifindex_t mroute_vif_index;
 	struct pim_instance *pim;
@@ -150,6 +150,10 @@ struct pim_interface {
 	/* Turn on Active-Active for this interface */
 	bool activeactive;
 	bool am_i_dr;
+
+	/* Turn on allow-rp for this interface */
+	bool allow_rp;
+	char *allow_rp_plist;
 
 	int64_t pim_ifstat_start; /* start timestamp for stats */
 	uint64_t pim_ifstat_bsm_rx;

@@ -27,6 +27,7 @@
 #include "zebra/rt.h"
 #include "zebra/zebra_pbr.h"
 #include "zebra/rt_netlink.h"
+#include "zebra/if_netlink.h"
 #include "zebra/rule_netlink.h"
 
 void route_read(struct zebra_ns *zns)
@@ -40,9 +41,15 @@ void macfdb_read(struct zebra_ns *zns)
 }
 
 void macfdb_read_for_bridge(struct zebra_ns *zns, struct interface *ifp,
-			    struct interface *br_if)
+			    struct interface *br_if, vlanid_t vid)
 {
-	netlink_macfdb_read_for_bridge(zns, ifp, br_if);
+	netlink_macfdb_read_for_bridge(zns, ifp, br_if, vid);
+}
+
+void macfdb_read_mcast_entry_for_vni(struct zebra_ns *zns,
+				     struct interface *ifp, vni_t vni)
+{
+	netlink_macfdb_read_mcast_for_vni(zns, ifp, vni);
 }
 
 void macfdb_read_specific_mac(struct zebra_ns *zns, struct interface *br_if,
@@ -69,6 +76,11 @@ void neigh_read_specific_ip(const struct ipaddr *ip, struct interface *vlan_if)
 void kernel_read_pbr_rules(struct zebra_ns *zns)
 {
 	netlink_rules_read(zns);
+}
+
+void vlan_read(struct zebra_ns *zns)
+{
+	netlink_vlan_read(zns);
 }
 
 #endif /* GNU_LINUX */

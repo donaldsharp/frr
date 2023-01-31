@@ -59,6 +59,7 @@ typedef uint16_t zebra_size_t;
 /* For input/output buffer to zebra. */
 #define ZEBRA_MAX_PACKET_SIZ          16384U
 #define ZEBRA_SMALL_PACKET_SIZE       200U
+#define ZEBRA_MIN_PACKET_SIZE         200U //CL
 
 /* Zebra header size. */
 #define ZEBRA_HEADER_SIZE             10
@@ -430,6 +431,7 @@ struct zapi_nexthop {
 
 	/* MPLS labels for BGP-LU or Segment Routing */
 	uint8_t label_num;
+	enum lsp_types_t label_type;
 	mpls_label_t labels[MPLS_MAX_LABELS];
 
 	struct ethaddr rmac;
@@ -463,6 +465,7 @@ struct zapi_nexthop {
 #define ZAPI_NEXTHOP_FLAG_HAS_BACKUP	0x08 /* Nexthop has a backup */
 #define ZAPI_NEXTHOP_FLAG_SEG6		0x10
 #define ZAPI_NEXTHOP_FLAG_SEG6LOCAL	0x20
+#define ZAPI_NEXTHOP_FLAG_EVPN		0x40
 
 /*
  * ZAPI Nexthop Group. For use with protocol creation of nexthop groups.

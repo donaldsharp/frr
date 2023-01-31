@@ -43,6 +43,7 @@ struct nexthop_hold {
 	char *intf;
 	bool onlink;
 	char *labels;
+	vni_t vni;
 	uint32_t weight;
 	char *backup_str;
 };
@@ -130,6 +131,18 @@ nexthop_group_active_nexthop_num_no_recurse(const struct nexthop_group *nhg)
 	}
 
 	return num;
+}
+
+bool nexthop_group_has_label(const struct nexthop_group *nhg)
+{
+	struct nexthop *nhop;
+
+	for (ALL_NEXTHOPS_PTR(nhg, nhop)) {
+		if (nhop->nh_label)
+			return true;
+	}
+
+	return false;
 }
 
 struct nexthop *nexthop_exists(const struct nexthop_group *nhg,
@@ -747,12 +760,13 @@ static bool nexthop_group_parse_nexthop(struct nexthop *nhop,
 					const union sockunion *addr,
 					const char *intf, bool onlink,
 					const char *name, const char *labels,
-					int *lbl_ret, uint32_t weight,
-					const char *backup_str)
+					vni_t vni, int *lbl_ret,
+					uint32_t weight, const char *backup_str)
 {
 	int ret = 0;
 	struct vrf *vrf;
 	int num;
+	uint8_t labelnum = 0;
 
 	memset(nhop, 0, sizeof(*nhop));
 
@@ -793,10 +807,9 @@ static bool nexthop_group_parse_nexthop(struct nexthop *nhop,
 		nhop->type = NEXTHOP_TYPE_IFINDEX;
 
 	if (labels) {
-		uint8_t num = 0;
 		mpls_label_t larray[MPLS_MAX_LABELS];
 
-		ret = mpls_str2label(labels, &num, larray);
+		ret = mpls_str2label(labels, &labelnum, larray);
 
 		/* Return label parse result */
 		if (lbl_ret)
@@ -804,9 +817,14 @@ static bool nexthop_group_parse_nexthop(struct nexthop *nhop,
 
 		if (ret < 0)
 			return false;
-		else if (num > 0)
-			nexthop_add_labels(nhop, ZEBRA_LSP_NONE,
-					   num, larray);
+		else if (labelnum > 0)
+			nexthop_add_labels(nhop, ZEBRA_LSP_NONE, labelnum,
+					   larray);
+	} else if (vni) {
+		mpls_label_t label = MPLS_INVALID_LABEL;
+
+		vni2label(vni, &label);
+		nexthop_add_labels(nhop, ZEBRA_LSP_EVPN, 1, &label);
 	}
 
 	nhop->weight = weight;
@@ -833,7 +851,7 @@ static bool nexthop_group_parse_nhh(struct nexthop *nhop,
 {
 	return (nexthop_group_parse_nexthop(
 		nhop, nhh->addr, nhh->intf, nhh->onlink, nhh->nhvrf_name,
-		nhh->labels, NULL, nhh->weight, nhh->backup_str));
+		nhh->labels, nhh->vni, NULL, nhh->weight, nhh->backup_str));
 }
 
 DEFPY(ecmp_nexthops, ecmp_nexthops_cmd,
@@ -845,6 +863,7 @@ DEFPY(ecmp_nexthops, ecmp_nexthops_cmd,
 	[{ \
 	   nexthop-vrf NAME$vrf_name \
 	   |label WORD \
+	   |vni (1-16777215) \
            |weight (1-255) \
            |backup-idx WORD \
 	}]",
@@ -859,6 +878,8 @@ DEFPY(ecmp_nexthops, ecmp_nexthops_cmd,
       "The nexthop-vrf Name\n"
       "Specify label(s) for this nexthop\n"
       "One or more labels in the range (16-1048575) separated by '/'\n"
+      "Specify VNI(s) for this nexthop\n"
+      "VNI in the range (1-16777215)\n"
       "Weight to be used by the nexthop for purposes of ECMP\n"
       "Weight value to be used\n"
       "Specify backup nexthop indexes in another group\n"
@@ -883,8 +904,8 @@ DEFPY(ecmp_nexthops, ecmp_nexthops_cmd,
 	}
 
 	legal = nexthop_group_parse_nexthop(&nhop, addr, intf, !!onlink,
-					    vrf_name, label, &lbl_ret, weight,
-					    backup_idx);
+					    vrf_name, label, vni, &lbl_ret,
+					    weight, backup_idx);
 
 	if (nhop.type == NEXTHOP_TYPE_IPV6
 	    && IN6_IS_ADDR_LINKLOCAL(&nhop.gate.ipv6)) {
@@ -1014,9 +1035,8 @@ void nexthop_group_write_nexthop(struct vty *vty, const struct nexthop *nh)
 	if (nh->nh_label && nh->nh_label->num_labels > 0) {
 		char buf[200];
 
-		mpls_label2str(nh->nh_label->num_labels,
-			       nh->nh_label->label,
-			       buf, sizeof(buf), 0);
+		mpls_label2str(nh->nh_label->num_labels, nh->nh_label->label,
+			       buf, sizeof(buf), nh->nh_label_type, 0);
 		vty_out(vty, " label %s", buf);
 	}
 
@@ -1073,7 +1093,7 @@ void nexthop_group_json_nexthop(json_object *j, const struct nexthop *nh)
 		char buf[200];
 
 		mpls_label2str(nh->nh_label->num_labels, nh->nh_label->label,
-			       buf, sizeof(buf), 0);
+			       buf, sizeof(buf), nh->nh_label_type, 0);
 		json_object_string_add(j, "label", buf);
 	}
 
@@ -1094,12 +1114,10 @@ void nexthop_group_json_nexthop(json_object *j, const struct nexthop *nh)
 static void nexthop_group_write_nexthop_internal(struct vty *vty,
 						 const struct nexthop_hold *nh)
 {
-	char buf[100];
-
 	vty_out(vty, "nexthop");
 
 	if (nh->addr)
-		vty_out(vty, " %s", sockunion2str(nh->addr, buf, sizeof(buf)));
+		vty_out(vty, " %pSU", nh->addr);
 
 	if (nh->intf)
 		vty_out(vty, " %s", nh->intf);
@@ -1112,6 +1130,9 @@ static void nexthop_group_write_nexthop_internal(struct vty *vty,
 
 	if (nh->labels)
 		vty_out(vty, " label %s", nh->labels);
+
+	if (nh->vni)
+		vty_out(vty, " vni %u", nh->vni);
 
 	if (nh->weight)
 		vty_out(vty, " weight %u", nh->weight);

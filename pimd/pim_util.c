@@ -166,3 +166,33 @@ int pim_get_all_mcast_group(struct prefix *prefix)
 #endif
 	return 1;
 }
+
+bool pim_addr_is_multicast(pim_addr addr)
+{
+#if PIM_IPV == 4
+	if (IN_MULTICAST(addr.s_addr))
+		return true;
+#else
+	if (IN6_IS_ADDR_MULTICAST(&addr))
+		return true;
+#endif
+	return false;
+}
+bool pim_is_rp_allowed(struct pim_interface *pim_ifp, struct in_addr *rp)
+{
+	struct prefix rp_pfx;
+	struct prefix_list *pl;
+
+	/* No reason to call this if you're conforming to the RFC */
+	assert(pim_ifp->allow_rp);
+
+	if (!pim_ifp->allow_rp_plist)
+		return true;
+
+	rp_pfx.family = AF_INET;
+	rp_pfx.prefixlen = 32;
+	rp_pfx.u.prefix4 = *rp;
+
+	pl = prefix_list_lookup(AFI_IP, pim_ifp->allow_rp_plist);
+	return pl ? prefix_list_apply(pl, &rp_pfx) == PREFIX_PERMIT : false;
+}

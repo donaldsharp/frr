@@ -42,7 +42,9 @@
 #include "zebra/rt_netlink.h"
 #include "zebra/interface.h"
 #include "zebra/zebra_l2.h"
+#include "zebra/zebra_l2_bridge_if.h"
 #include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_vxlan_if.h"
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_evpn_arp_nd.h"
 
@@ -254,6 +256,13 @@ void zebra_l2if_update_bond(struct interface *ifp, bool add)
 	}
 }
 
+/* Initialize the mac_table in bridge intf */
+static void zebra_init_mac_table(struct zebra_l2_bridge_if *br)
+{
+	for (int i = 0; i < VLANID_MAX; i++)
+		br->mac_table[i] = NULL;
+}
+
 /*
  * Handle Bridge interface add or update. Update relevant info,
  * map slaves (if any) to the bridge.
@@ -263,13 +272,16 @@ void zebra_l2_bridge_add_update(struct interface *ifp,
 				int add)
 {
 	struct zebra_if *zif;
+	struct zebra_l2_bridge_if *br;
 
 	zif = ifp->info;
 	assert(zif);
 
-	/* Copy over the L2 information. */
-	memcpy(&zif->l2info.br, bridge_info, sizeof(*bridge_info));
-
+	br = BRIDGE_FROM_ZEBRA_IF(zif);
+	br->vlan_aware = bridge_info->bridge.vlan_aware;
+	zebra_l2_bridge_if_add(ifp);
+	if (add)
+		zebra_init_mac_table(br);
 	/* Link all slaves to this bridge */
 	map_slaves_to_bridge(ifp, 1, false, ZEBRA_BRIDGE_NO_ACTION);
 }
@@ -279,6 +291,8 @@ void zebra_l2_bridge_add_update(struct interface *ifp,
  */
 void zebra_l2_bridge_del(struct interface *ifp)
 {
+	zebra_l2_bridge_if_del(ifp);
+
 	/* Unlink all slaves to this bridge */
 	map_slaves_to_bridge(ifp, 0, false, ZEBRA_BRIDGE_NO_ACTION);
 }
@@ -350,7 +364,6 @@ void zebra_l2_vxlanif_add_update(struct interface *ifp,
 
 	if (add) {
 		memcpy(&zif->l2info.vxl, vxlan_info, sizeof(*vxlan_info));
-		zebra_evpn_vl_vxl_ref(zif->l2info.vxl.access_vlan, zif);
 		zebra_vxlan_if_add(ifp);
 		return;
 	}
@@ -362,10 +375,13 @@ void zebra_l2_vxlanif_add_update(struct interface *ifp,
 		zif->l2info.vxl.vtep_ip = vxlan_info->vtep_ip;
 	}
 
-	if (!IPV4_ADDR_SAME(&zif->l2info.vxl.mcast_grp,
-				&vxlan_info->mcast_grp)) {
-		chgflags |= ZEBRA_VXLIF_MCAST_GRP_CHANGE;
-		zif->l2info.vxl.mcast_grp = vxlan_info->mcast_grp;
+	if (IS_ZEBRA_VXLAN_IF_VNI(zif)) {
+		if (!IPV4_ADDR_SAME(&zif->l2info.vxl.vni_info.vni.mcast_grp,
+				    &vxlan_info->vni_info.vni.mcast_grp)) {
+			chgflags |= ZEBRA_VXLIF_MCAST_GRP_CHANGE;
+			zif->l2info.vxl.vni_info.vni.mcast_grp =
+				vxlan_info->vni_info.vni.mcast_grp;
+		}
 	}
 
 	if (chgflags)
@@ -380,18 +396,25 @@ void zebra_l2_vxlanif_update_access_vlan(struct interface *ifp,
 {
 	struct zebra_if *zif;
 	vlanid_t old_access_vlan;
+	struct zebra_vxlan_vni *vni;
+
 
 	zif = ifp->info;
 	assert(zif);
 
-	old_access_vlan = zif->l2info.vxl.access_vlan;
+	/* This would be called only in non svd case */
+	assert(IS_ZEBRA_VXLAN_IF_VNI(zif));
+
+	old_access_vlan = zif->l2info.vxl.vni_info.vni.access_vlan;
+	;
 	if (old_access_vlan == access_vlan)
 		return;
 
-	zif->l2info.vxl.access_vlan = access_vlan;
+	vni = zebra_vxlan_if_vni_find(zif, 0);
+	vni->access_vlan = access_vlan;
 
-	zebra_evpn_vl_vxl_deref(old_access_vlan, zif);
-	zebra_evpn_vl_vxl_ref(zif->l2info.vxl.access_vlan, zif);
+	zebra_evpn_vl_vxl_deref(old_access_vlan, vni->vni, zif);
+	zebra_evpn_vl_vxl_ref(access_vlan, vni->vni, zif);
 	zebra_vxlan_if_update(ifp, ZEBRA_VXLIF_VLAN_CHANGE);
 }
 
@@ -405,7 +428,6 @@ void zebra_l2_vxlanif_del(struct interface *ifp)
 	zif = ifp->info;
 	assert(zif);
 
-	zebra_evpn_vl_vxl_deref(zif->l2info.vxl.access_vlan, zif);
 	zebra_vxlan_if_del(ifp);
 }
 

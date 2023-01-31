@@ -60,12 +60,18 @@ extern struct thread_master *master;
 #define VTYSH_ALL        VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_LDPD|VTYSH_BGPD|VTYSH_ISISD|VTYSH_PIMD|VTYSH_PIM6D|VTYSH_NHRPD|VTYSH_EIGRPD|VTYSH_BABELD|VTYSH_SHARPD|VTYSH_PBRD|VTYSH_STATICD|VTYSH_BFDD|VTYSH_FABRICD|VTYSH_VRRPD|VTYSH_PATHD
 #define VTYSH_ACL         VTYSH_BFDD|VTYSH_BABELD|VTYSH_BGPD|VTYSH_EIGRPD|VTYSH_ISISD|VTYSH_FABRICD|VTYSH_LDPD|VTYSH_NHRPD|VTYSH_OSPF6D|VTYSH_OSPFD|VTYSH_PBRD|VTYSH_PIMD|VTYSH_PIM6D|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_VRRPD|VTYSH_ZEBRA
 #define VTYSH_RMAP       VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD|VTYSH_ISISD|VTYSH_PIMD|VTYSH_PIM6D|VTYSH_EIGRPD|VTYSH_FABRICD
-#define VTYSH_INTERFACE          VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_ISISD|VTYSH_PIMD|VTYSH_PIM6D|VTYSH_NHRPD|VTYSH_EIGRPD|VTYSH_BABELD|VTYSH_PBRD|VTYSH_FABRICD|VTYSH_VRRPD
-#define VTYSH_VRF	  VTYSH_INTERFACE|VTYSH_STATICD
+#define VTYSH_INTERFACE_SUBSET                                                 \
+	VTYSH_ZEBRA | VTYSH_RIPD | VTYSH_RIPNGD | VTYSH_OSPFD | VTYSH_OSPF6D | \
+		VTYSH_ISISD | VTYSH_PIMD | VTYSH_PIM6D | VTYSH_NHRPD |         \
+		VTYSH_EIGRPD | VTYSH_BABELD | VTYSH_PBRD | VTYSH_FABRICD |     \
+		VTYSH_VRRPD
+#define VTYSH_INTERFACE VTYSH_INTERFACE_SUBSET | VTYSH_BGPD
+#define VTYSH_VRF VTYSH_INTERFACE_SUBSET | VTYSH_STATICD
 #define VTYSH_KEYS VTYSH_RIPD | VTYSH_EIGRPD | VTYSH_OSPF6D
 /* Daemons who can process nexthop-group configs */
 #define VTYSH_NH_GROUP    VTYSH_PBRD|VTYSH_SHARPD
 #define VTYSH_SR          VTYSH_ZEBRA|VTYSH_PATHD
+#define VTYSH_DPDK VTYSH_ZEBRA
 
 enum vtysh_write_integrated {
 	WRITE_INTEGRATED_UNSPECIFIED,
@@ -100,7 +106,7 @@ void config_add_line(struct list *, const char *);
 
 int vtysh_mark_file(const char *filename);
 
-int vtysh_read_config(const char *filename, bool dry_run);
+int vtysh_apply_config(const char *config_file_path, bool dry_run, bool fork);
 int vtysh_write_config_integrated(void);
 
 void vtysh_config_parse_line(void *, const char *);
@@ -121,4 +127,19 @@ extern int user_mode;
 
 extern bool vtysh_add_timestamp;
 
+/* VTY shell client structure */
+struct vtysh_client {
+	int fd;
+	const char *name;
+	int flag;
+	char path[MAXPATHLEN];
+	struct vtysh_client *next;
+
+	struct thread *log_reader;
+	int log_fd;
+	uint32_t lost_msgs;
+};
+
+
+extern struct vtysh_client vtysh_client[19];
 #endif /* VTYSH_H */

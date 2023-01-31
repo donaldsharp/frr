@@ -601,6 +601,7 @@ void vzlogx(const struct xref_logmsg *xref, int prio,
 {
 	struct zlog_tls *zlog_tls = zlog_tls_get();
 
+#ifndef HAVE_CUMULUS
 #ifdef HAVE_LTTNG
 	va_list copy;
 	va_copy(copy, ap);
@@ -628,6 +629,7 @@ void vzlogx(const struct xref_logmsg *xref, int prio,
 	va_end(copy);
 	XFREE(MTYPE_LOG_MESSAGE, msg);
 #endif
+#endif /* HAVE_CUMULUS */
 
 	if (zlog_tls)
 		vzlog_tls(zlog_tls, xref, prio, fmt, ap);
@@ -991,16 +993,14 @@ void zlog_init(const char *progname, const char *protoname,
 	zlog_instance = instance;
 
 	if (instance) {
-		snprintfrr(zlog_tmpdir, sizeof(zlog_tmpdir),
-			   "/var/tmp/frr/%s-%d.%ld",
-			   progname, instance, (long)getpid());
+		snprintfrr(zlog_tmpdir, sizeof(zlog_tmpdir), "%s/%s-%d.%ld",
+			   TMPBASEDIR, progname, instance, (long)getpid());
 
 		zlog_prefixsz = snprintfrr(zlog_prefix, sizeof(zlog_prefix),
 					   "%s[%d]: ", protoname, instance);
 	} else {
-		snprintfrr(zlog_tmpdir, sizeof(zlog_tmpdir),
-			   "/var/tmp/frr/%s.%ld",
-			   progname, (long)getpid());
+		snprintfrr(zlog_tmpdir, sizeof(zlog_tmpdir), "%s/%s.%ld",
+			   TMPBASEDIR, progname, (long)getpid());
 
 		zlog_prefixsz = snprintfrr(zlog_prefix, sizeof(zlog_prefix),
 					   "%s: ", protoname);

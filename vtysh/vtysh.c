@@ -51,6 +51,7 @@
 #include "frrstr.h"
 #include "json.h"
 #include "ferr.h"
+#include "bgpd/bgp_vty.h"
 
 DEFINE_MTYPE_STATIC(MVTYSH, VTYSH_CMD, "Vtysh cmd copy");
 
@@ -63,18 +64,6 @@ char *vtysh_pager_name = NULL;
 /* VTY should add timestamp */
 bool vtysh_add_timestamp;
 
-/* VTY shell client structure */
-struct vtysh_client {
-	int fd;
-	const char *name;
-	int flag;
-	char path[MAXPATHLEN];
-	struct vtysh_client *next;
-
-	struct thread *log_reader;
-	int log_fd;
-	uint32_t lost_msgs;
-};
 
 static bool stderr_tty;
 static bool stderr_stdout_same;
@@ -1687,7 +1676,7 @@ DEFUNSH(VTYSH_ZEBRA, srv6_locator, srv6_locator_cmd,
 
 #ifdef HAVE_BGPD
 DEFUNSH(VTYSH_BGPD, router_bgp, router_bgp_cmd,
-	"router bgp [(1-4294967295) [<view|vrf> WORD]]",
+	"router bgp [(1-4294967295) [<view|vrf> VIEWVRFNAME]]",
 	ROUTER_STR BGP_STR AS_STR
 	"BGP view\nBGP VRF\n"
 	"View/VRF name\n")
@@ -1700,8 +1689,8 @@ DEFUNSH(VTYSH_BGPD, router_bgp, router_bgp_cmd,
 DEFUNSH(VTYSH_BGPD, address_family_vpnv4, address_family_vpnv4_cmd,
 	"address-family vpnv4 [unicast]",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_VPNV4_NODE;
 	return CMD_SUCCESS;
@@ -1710,8 +1699,8 @@ DEFUNSH(VTYSH_BGPD, address_family_vpnv4, address_family_vpnv4_cmd,
 DEFUNSH(VTYSH_BGPD, address_family_vpnv6, address_family_vpnv6_cmd,
 	"address-family vpnv6 [unicast]",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_VPNV6_NODE;
 	return CMD_SUCCESS;
@@ -1721,8 +1710,8 @@ DEFUNSH(VTYSH_BGPD, address_family_vpnv6, address_family_vpnv6_cmd,
 DEFUNSH(VTYSH_BGPD, address_family_ipv4, address_family_ipv4_cmd,
 	"address-family ipv4 [unicast]",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family Modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_IPV4_NODE;
 	return CMD_SUCCESS;
@@ -1731,8 +1720,8 @@ DEFUNSH(VTYSH_BGPD, address_family_ipv4, address_family_ipv4_cmd,
 DEFUNSH(VTYSH_BGPD, address_family_flowspecv4, address_family_flowspecv4_cmd,
 	"address-family ipv4 flowspec",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family Modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_FLOWSPECV4_NODE;
 	return CMD_SUCCESS;
@@ -1741,8 +1730,8 @@ DEFUNSH(VTYSH_BGPD, address_family_flowspecv4, address_family_flowspecv4_cmd,
 DEFUNSH(VTYSH_BGPD, address_family_flowspecv6, address_family_flowspecv6_cmd,
 	"address-family ipv6 flowspec",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family Modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_FLOWSPECV6_NODE;
 	return CMD_SUCCESS;
@@ -1751,8 +1740,8 @@ DEFUNSH(VTYSH_BGPD, address_family_flowspecv6, address_family_flowspecv6_cmd,
 DEFUNSH(VTYSH_BGPD, address_family_ipv4_multicast,
 	address_family_ipv4_multicast_cmd, "address-family ipv4 multicast",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_IPV4M_NODE;
 	return CMD_SUCCESS;
@@ -1761,8 +1750,8 @@ DEFUNSH(VTYSH_BGPD, address_family_ipv4_multicast,
 DEFUNSH(VTYSH_BGPD, address_family_ipv4_vpn, address_family_ipv4_vpn_cmd,
 	"address-family ipv4 vpn",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_VPNV4_NODE;
 	return CMD_SUCCESS;
@@ -1772,8 +1761,8 @@ DEFUNSH(VTYSH_BGPD, address_family_ipv4_labeled_unicast,
 	address_family_ipv4_labeled_unicast_cmd,
 	"address-family ipv4 labeled-unicast",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_IPV4L_NODE;
 	return CMD_SUCCESS;
@@ -1782,8 +1771,8 @@ DEFUNSH(VTYSH_BGPD, address_family_ipv4_labeled_unicast,
 DEFUNSH(VTYSH_BGPD, address_family_ipv6, address_family_ipv6_cmd,
 	"address-family ipv6 [unicast]",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_IPV6_NODE;
 	return CMD_SUCCESS;
@@ -1792,8 +1781,8 @@ DEFUNSH(VTYSH_BGPD, address_family_ipv6, address_family_ipv6_cmd,
 DEFUNSH(VTYSH_BGPD, address_family_ipv6_multicast,
 	address_family_ipv6_multicast_cmd, "address-family ipv6 multicast",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_IPV6M_NODE;
 	return CMD_SUCCESS;
@@ -1802,8 +1791,8 @@ DEFUNSH(VTYSH_BGPD, address_family_ipv6_multicast,
 DEFUNSH(VTYSH_BGPD, address_family_ipv6_vpn, address_family_ipv6_vpn_cmd,
 	"address-family ipv6 vpn",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_VPNV6_NODE;
 	return CMD_SUCCESS;
@@ -1813,8 +1802,8 @@ DEFUNSH(VTYSH_BGPD, address_family_ipv6_labeled_unicast,
 	address_family_ipv6_labeled_unicast_cmd,
 	"address-family ipv6 labeled-unicast",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_IPV6L_NODE;
 	return CMD_SUCCESS;
@@ -1878,8 +1867,8 @@ DEFUNSH(VTYSH_BGPD,
 DEFUNSH(VTYSH_BGPD, address_family_evpn, address_family_evpn_cmd,
 	"address-family <l2vpn evpn>",
 	"Enter Address Family command mode\n"
-	"Address Family\n"
-	"Address Family modifier\n")
+	BGP_AF_STR
+	BGP_AF_MODIFIER_STR)
 {
 	vty->node = BGP_EVPN_NODE;
 	return CMD_SUCCESS;
@@ -3155,6 +3144,20 @@ DEFUN(vtysh_debug_uid_backtrace,
 	return err;
 }
 
+DEFUNSH(VTYSH_ALL, vtysh_allow_reserved_ranges, vtysh_allow_reserved_ranges_cmd,
+	"allow-reserved-ranges",
+	"Allow using IPv4 (Class E) reserved IP space\n")
+{
+	return CMD_SUCCESS;
+}
+
+DEFUNSH(VTYSH_ALL, no_vtysh_allow_reserved_ranges,
+	no_vtysh_allow_reserved_ranges_cmd, "no allow-reserved-ranges",
+	NO_STR "Allow using IPv4 (Class E) reserved IP space\n")
+{
+	return CMD_SUCCESS;
+}
+
 DEFUNSH(VTYSH_ALL, vtysh_service_password_encrypt,
 	vtysh_service_password_encrypt_cmd, "service password-encryption",
 	"Set up miscellaneous service\n"
@@ -3492,7 +3495,7 @@ DEFUN (vtysh_copy_to_running,
 	int ret;
 	const char *fname = argv[1]->arg;
 
-	ret = vtysh_read_config(fname, true);
+	ret = vtysh_apply_config(fname, true, false);
 
 	/* Return to enable mode - the 'read_config' api leaves us up a level */
 	vtysh_execute_no_pager("enable");
@@ -4926,6 +4929,8 @@ void vtysh_init_vty(void)
 	install_element(CONFIG_NODE, &vtysh_service_password_encrypt_cmd);
 	install_element(CONFIG_NODE, &no_vtysh_service_password_encrypt_cmd);
 
+	install_element(CONFIG_NODE, &vtysh_allow_reserved_ranges_cmd);
+	install_element(CONFIG_NODE, &no_vtysh_allow_reserved_ranges_cmd);
 	install_element(CONFIG_NODE, &service_password_obfuscate_cmd);
 
 	install_element(CONFIG_NODE, &vtysh_password_cmd);

@@ -61,6 +61,7 @@ extern "C" {
 #define RTPROT_ZSTATIC     196
 #define RTPROT_OPENFABRIC  197
 #define RTPROT_SRTE        198
+#define RTPROT_FRR         199
 
 void rt_netlink_init(void);
 
@@ -93,7 +94,10 @@ extern int netlink_neigh_change(struct nlmsghdr *h, ns_id_t ns_id);
 extern int netlink_macfdb_read(struct zebra_ns *zns);
 extern int netlink_macfdb_read_for_bridge(struct zebra_ns *zns,
 					  struct interface *ifp,
-					  struct interface *br_if);
+					  struct interface *br_if,
+					  vlanid_t vid);
+extern int netlink_macfdb_read_mcast_for_vni(struct zebra_ns *zns,
+					     struct interface *ifp, vni_t vni);
 extern int netlink_neigh_read(struct zebra_ns *zns);
 extern int netlink_neigh_read_for_vlan(struct zebra_ns *zns,
 				       struct interface *vlan_if);

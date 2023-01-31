@@ -7,7 +7,7 @@
 ##
 AC_PREREQ([2.69])
 
-AC_INIT([frr], [8.3.1], [https://github.com/frrouting/frr/issues])
+AC_INIT([frr], [8.4.1], [https://github.com/frrouting/frr/issues])
 PACKAGE_URL="https://frrouting.org/"
 AC_SUBST([PACKAGE_URL])
 PACKAGE_FULLNAME="FRRouting"
@@ -635,6 +635,8 @@ AC_ARG_ENABLE([isisd],
   AS_HELP_STRING([--disable-isisd], [do not build isisd]))
 AC_ARG_ENABLE([pimd],
   AS_HELP_STRING([--disable-pimd], [do not build pimd]))
+AC_ARG_ENABLE([pim6d],
+  AS_HELP_STRING([--enable-pim6d], [build pim6d]))
 AC_ARG_ENABLE([pbrd],
   AS_HELP_STRING([--disable-pbrd], [do not build pbrd]))
 AC_ARG_ENABLE([sharpd],
@@ -667,6 +669,10 @@ AC_ARG_ENABLE([zeromq],
   AS_HELP_STRING([--enable-zeromq], [enable ZeroMQ handler (libfrrzmq)]))
 AC_ARG_ENABLE([lttng],
   AS_HELP_STRING([--enable-lttng], [enable LTTng tracing]))
+AC_ARG_ENABLE([bgp-lttng],
+  AS_HELP_STRING([--enable-bgp-lttng], [enable BGP LTTng tracing]))
+AC_ARG_ENABLE([zebra-lttng],
+  AS_HELP_STRING([--enable-zebra-lttng], [enable Zebra LTTng tracing]))
 AC_ARG_ENABLE([usdt],
   AS_HELP_STRING([--enable-usdt], [enable USDT probes]))
 AC_ARG_WITH([libpam],
@@ -1381,7 +1387,7 @@ case "${enable_vtysh}" in
   AC_DEFINE([VTYSH], [1], [VTY shell])
 
   prev_libs="$LIBS"
-  AC_CHECK_LIB([readline], [main], [
+  AC_CHECK_LIB([readline], [readline], [
     LIBREADLINE="-lreadline"
   ], [
     dnl readline failed - it might be incorrectly linked and missing its
@@ -1762,6 +1768,10 @@ AS_IF([test "$enable_pimd" != "no"], [
   AC_DEFINE([HAVE_PIMD], [1], [pimd])
 ])
 
+AS_IF([test "$enable_pim6d" = "yes"], [
+  AC_DEFINE([HAVE_PIM6D], [1], [pim6d])
+])
+
 AS_IF([test "$enable_pbrd" != "no"], [
   AC_DEFINE([HAVE_PBRD], [1], [pbrd])
 ])
@@ -1803,7 +1813,6 @@ fi
 AS_IF([test "$enable_pathd" != "no"], [
   AC_DEFINE([HAVE_PATHD], [1], [pathd])
 ])
-
 
 if test "$ac_cv_lib_json_c_json_object_get" = "no" -a "$BFDD" = "bfdd"; then
   AC_MSG_ERROR(["you must use json-c library to use bfdd"])
@@ -2010,6 +2019,18 @@ if test "$enable_grpc" = "yes"; then
   AC_LANG_POP([C++])
 fi
 
+dnl ---------
+dnl DPDK
+dnl ---------
+if test "$enable_dp_dpdk" = "yes"; then
+  PKG_CHECK_MODULES([DPDK], [libdpdk], [
+    AC_DEFINE([HAVE_DPDK], [1], [Enable DPDK backend])
+    DPDK=true
+  ], [
+    AC_MSG_ERROR([configuration specifies --enable-dp-dpdk but DPDK libs were not found])
+  ])
+fi
+
 dnl -----
 dnl LTTng
 dnl -----
@@ -2019,6 +2040,30 @@ if test "$enable_lttng" = "yes"; then
     LTTNG=true
   ], [
     AC_MSG_ERROR([configuration specifies --enable-lttng but lttng-ust was not found])
+  ])
+fi
+
+dnl ---------
+dnl BGP LTTng
+dnl ---------
+if test "$enable_bgp_lttng" = "yes"; then
+  PKG_CHECK_MODULES([BGPUST], [lttng-ust >= 2.10.0], [
+    AC_DEFINE([HAVE_BGP_LTTNG], [1], [Enable BGP LTTng support])
+    BGP_LTTNG=true
+  ], [
+    AC_MSG_ERROR([configuration specifies --enable-bgp-lttng but lttng-ust was not found])
+  ])
+fi
+
+dnl ---------
+dnl Zebra LTTng
+dnl ---------
+if test "$enable_zebra_lttng" = "yes"; then
+  PKG_CHECK_MODULES([ZEBRAUST], [lttng-ust >= 2.10.0], [
+    AC_DEFINE([HAVE_ZEBRA_LTTNG], [1], [Enable ZEBRA LTTng support])
+    ZEBRA_LTTNG=true
+  ], [
+    AC_MSG_ERROR([configuration specifies --enable-zebra-lttng but lttng-ust was not found])
   ])
 fi
 
@@ -2711,6 +2756,7 @@ AM_CONDITIONAL([BABELD], [test "$enable_babeld" != "no"])
 AM_CONDITIONAL([OSPF6D], [test "$enable_ospf6d" != "no"])
 AM_CONDITIONAL([ISISD], [test "$enable_isisd" != "no"])
 AM_CONDITIONAL([PIMD], [test "$enable_pimd" != "no"])
+AM_CONDITIONAL([PIM6D], [test "$enable_pim6d" = "yes"])
 AM_CONDITIONAL([PBRD], [test "$enable_pbrd" != "no"])
 AM_CONDITIONAL([SHARPD], [test "$enable_sharpd" = "yes"])
 AM_CONDITIONAL([STATICD], [test "$enable_staticd" != "no"])
@@ -2718,6 +2764,7 @@ AM_CONDITIONAL([FABRICD], [test "$enable_fabricd" != "no"])
 AM_CONDITIONAL([VRRPD], [test "$enable_vrrpd" != "no"])
 AM_CONDITIONAL([PATHD], [test "$enable_pathd" != "no"])
 AM_CONDITIONAL([PATHD_PCEP], [test "$enable_pathd" != "no"])
+AM_CONDITIONAL([DP_DPDK], [test "$enable_dp_dpdk" = "yes"])
 
 AC_CONFIG_FILES([Makefile],[
 	test "$enable_dev_build" = "yes" && makefile_devbuild="--dev-build"

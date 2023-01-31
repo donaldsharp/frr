@@ -469,7 +469,11 @@ static void parse_schedule(const char *schedule_str)
 			schedule[count].value = repeatat;
 			count++;
 		}
-		assert(count == schedule_length);
+			/* TODO: R: upgrade 8.4  Fix assert linking
+		assert(count == schedule_length);*/
+		if (count == schedule_length){
+		    badusage("count == schedule_length Asserted");
+        }
 	}
 }
 
@@ -886,7 +890,9 @@ static int run_stop_schedule(void)
 			}
 
 		default:
-			assert(!"schedule[].type value must be valid");
+			/* TODO: R: upgrade 8.4  Fix assert linking
+			 * assert(!"schedule[].type value must be valid");*/
+			printf("schedule[].type value must be valid");
 		}
 
 	next_item:

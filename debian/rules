@@ -29,6 +29,12 @@ else
   CONF_SYSTEMD=--enable-systemd=no
 endif
 
+ifeq ($(filter pkg.frr.pim6d,$(DEB_BUILD_PROFILES)),)
+  CONF_PIM6=--disable-pim6d
+else
+  CONF_PIM6=--enable-pim6d
+endif
+
 ifneq (,$(filter sanitizer,$(DEB_BUILD_OPTIONS)))
   CONF_ASAN=--enable-address-sanitizer
 else
@@ -63,6 +69,8 @@ override_dh_auto_configure:
 		$(CONF_DEVBUILD) \
 		$(CONF_SYSTEMD) \
 		$(CONF_RPKI) \
+		$(CONF_LUA) \
+		$(CONF_PIM6) \
 		--with-libpam \
 		--enable-doc \
 		--enable-doc-html \

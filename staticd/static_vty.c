@@ -428,7 +428,7 @@ DEFPY_YANG(ip_route_blackhole_vrf,
 {
 	const struct lyd_node *vrf_dnode;
 	const char *vrfname;
-	const char *tablestr = NULL;
+	const char *table_str = NULL;
 
 	vrf_dnode =
 		yang_dnode_get(vty->candidate_config->dnode, VTY_CURR_XPATH);

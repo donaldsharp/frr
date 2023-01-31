@@ -50,7 +50,7 @@
 
 #define DEFAULT_PERIOD		5
 #define DEFAULT_TIMEOUT		90
-#define DEFAULT_RESTART_TIMEOUT	20
+#define DEFAULT_RESTART_TIMEOUT	90
 #define DEFAULT_LOGLEVEL	LOG_INFO
 #define DEFAULT_MIN_RESTART	60
 #define DEFAULT_MAX_RESTART	600
@@ -1429,7 +1429,7 @@ int main(int argc, char **argv)
 
 			if ((sscanf(optarg, "%ld%1s", &gs.operational_timeout,
 				    garbage) != 1) ||
-			    (gs.max_restart_interval < 0)) {
+			    (gs.operational_timeout < 0)) {
 				fprintf(stderr,
 					"Invalid Operational_timeout argument: %s\n",
 					optarg);

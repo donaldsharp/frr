@@ -31,6 +31,7 @@
 #include "zebra/zebra_mroute.h"
 #include "zebra/rt.h"
 #include "zebra/debug.h"
+#include "zebra/zebra_trace.h"
 
 void zebra_ipmr_route_stats(ZAPI_HANDLER_ARGS)
 {
@@ -70,11 +71,12 @@ void zebra_ipmr_route_stats(ZAPI_HANDLER_ARGS)
 		zlog_debug("Asking for (%pIA,%pIA)[%s(%u)] mroute information",
 			   &mroute.src, &mroute.grp, zvrf->vrf->name,
 			   zvrf->vrf->vrf_id);
+	}
 
 	suc = kernel_get_ipmr_sg_stats(zvrf, &mroute);
 
 stream_failure:
-	s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+	s = stream_new(ZEBRA_MIN_PACKET_SIZE);
 
 	stream_reset(s);
 

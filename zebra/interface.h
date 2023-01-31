@@ -28,6 +28,7 @@
 #include "bitfield.h"
 
 #include "zebra/zebra_l2.h"
+#include "zebra/zebra_l2_bridge_if.h"
 #include "zebra/zebra_nhg_private.h"
 #include "zebra/zebra_router.h"
 #include "zebra/rtadv.h"
@@ -36,14 +37,10 @@
 extern "C" {
 #endif
 
-/* For interface multicast configuration. */
-#define IF_ZEBRA_MULTICAST_UNSPEC 0
-#define IF_ZEBRA_MULTICAST_ON     1
-#define IF_ZEBRA_MULTICAST_OFF    2
-
-/* For interface shutdown configuration. */
-#define IF_ZEBRA_SHUTDOWN_OFF    0
-#define IF_ZEBRA_SHUTDOWN_ON     1
+/* For interface configuration. */
+#define IF_ZEBRA_DATA_UNSPEC 0
+#define IF_ZEBRA_DATA_ON 1
+#define IF_ZEBRA_DATA_OFF 2
 
 #define IF_VLAN_BITMAP_MAX 4096
 
@@ -106,12 +103,24 @@ enum zebra_if_flags {
 	 * and inherited by the bond (if one or more bond members are in
 	 * a bypass state the bond is placed in a bypass state)
 	 */
-	ZIF_FLAG_LACP_BYPASS = (1 << 3),
+	ZIF_FLAG_LACP_BYPASS = (1 << 5),
+
+	/* Interface has been configured to enable or disable the neighbor
+	 * throttling feature.
+	 */
+	ZIF_FLAG_NEIGH_THROTTLE = (1 << 6),
+	ZIF_FLAG_NEIGH_THROTTLE_DISABLE = (1 << 7),
 
 	/* On local ESs ARP ND snooping is enabling if fast-failover is
 	 * needed with arp-suppression on
 	 */
-	ZIF_FLAG_ARP_ND_SNOOP = (1 << 4)
+	ZIF_FLAG_ARP_ND_SNOOP = (1 << 4),
+
+	/* TC has been initialized */
+	ZIF_FLAG_EVPN_MH_TC_INIT = (1 << 5),
+
+	/* GARP flooding turned on */
+	ZIF_FLAG_EVPN_MH_GARP_FLOOD_CFG_ON = (1 << 6)
 };
 
 /* We snoop on ARP replies and NAs rxed on bridge ports if MH is
@@ -124,7 +133,6 @@ struct zebra_arp_nd_if_info {
 				    *ARP/NA packets */
 	uint32_t arp_pkts;
 	uint32_t na_pkts;
->>>>>>> f81b09a0d... zebra: enable arp-reply/NA snooping on br members for fast-failover in MH
 };
 
 #define ZEBRA_IF_IS_PROTODOWN(zif) ((zif)->flags & ZIF_FLAG_PROTODOWN)
@@ -136,7 +144,8 @@ struct zebra_if {
 	/* back pointer to the interface */
 	struct interface *ifp;
 
-	enum zebra_if_flags flags;
+	/* Flags values, see above. */
+	uint32_t flags;
 
 	/* Shutdown configuration. */
 	uint8_t shutdown;
@@ -146,6 +155,12 @@ struct zebra_if {
 
 	/* MPLS status. */
 	bool mpls;
+
+	/* Linkdown status */
+	bool linkdown, linkdownv6;
+
+	/* Is Multicast Forwarding on? */
+	bool v4mcast_on, v6mcast_on;
 
 	/* Router advertise configuration. */
 	uint8_t rtadv_enable;
@@ -213,6 +228,7 @@ struct zebra_if {
 
 	/* bitmap of vlans associated with this interface */
 	bitfield_t vlan_bitmap;
+	vlanid_t pvid;
 
 	/* An interface can be error-disabled if a protocol (such as EVPN or
 	 * VRRP) detects a problem with keeping it operationally-up.
@@ -324,6 +340,7 @@ extern int zebra_if_update_protodown_rc(struct interface *ifp, bool new_down,
  */
 extern int zebra_if_set_protodown(struct interface *ifp, bool down,
 				  enum protodown_reasons new_reason);
+extern void zebra_if_set_neigh_grat_flood(struct interface *ifp, bool on);
 extern int if_ip_address_install(struct interface *ifp, struct prefix *prefix,
 				 const char *label, struct prefix *pp);
 extern int if_ipv6_address_install(struct interface *ifp, struct prefix *prefix,
@@ -350,6 +367,10 @@ extern void zebra_l2_unmap_slave_from_bond(struct zebra_if *zif);
 extern const char *zebra_protodown_rc_str(uint32_t protodown_rc, char *pd_buf,
 					  uint32_t pd_buf_len);
 void zebra_if_dplane_result(struct zebra_dplane_ctx *ctx);
+
+/* Find appropriate source IP for 'dest'; return in caller's buffer */
+bool zebra_if_get_source(const struct interface *ifp, const struct ipaddr *dest,
+			 struct ipaddr *src);
 
 #ifdef HAVE_PROC_NET_DEV
 extern void ifstat_update_proc(void);

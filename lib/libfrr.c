@@ -784,20 +784,19 @@ struct thread_master *frr_init(void)
 		    == 0)
 			see_cumulus_mlag = true;
 
-		module = frrmod_load(oc->arg, dir, moderr, sizeof(moderr));
-		if (!module) {
+		module = frrmod_load(oc->arg, dir, _err_print, __func__);
+		if (!module)
 			fprintf(stderr, "%s\n", moderr);
 			exit(1);
 		XFREE(MTYPE_TMP, oc);
 	}
 
 	if (is_zebra && !see_cumulus_mlag) {
-		module = frrmod_load("cumulus_mlag", dir, moderr,
-				     sizeof(moderr));
-		if (!module) {
+		module = frrmod_load("cumulus_mlag", dir, _err_print,
+				     __func__);
+		if (!module)
 			fprintf(stderr, "%s\n", moderr);
 			exit(1);
-		}
 	}
 	zprivs_init(di->privs);
 

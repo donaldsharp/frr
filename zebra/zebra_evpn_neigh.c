@@ -36,6 +36,8 @@
 #include "zebra/rt.h"
 #include "zebra/zebra_errors.h"
 #include "zebra/zebra_vrf.h"
+#include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_vxlan_if.h"
 #include "zebra/zebra_evpn.h"
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_evpn_neigh.h"
@@ -701,11 +703,6 @@ struct zebra_neigh *zebra_evpn_proc_sync_neigh_update(
 			set_dp_inactive = true;
 			n->flags |= ZEBRA_NEIGH_LOCAL_INACTIVE;
 		}
-
-		if (CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_PROXY_ADVERT))
-			SET_FLAG(n->flags, ZEBRA_NEIGH_ES_PEER_PROXY);
-		else
-			SET_FLAG(n->flags, ZEBRA_NEIGH_ES_PEER_ACTIVE);
 
 		if (CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_PROXY_ADVERT)) {
 			SET_FLAG(n->flags, ZEBRA_NEIGH_ES_PEER_PROXY);

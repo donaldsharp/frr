@@ -27,8 +27,7 @@
 #define EVPN_ROUTE_STRLEN 200 /* Must be >> MAC + IPv6 strings. */
 #define EVPN_AUTORT_VXLAN 0x10000000
 
-#define EVPN_ENABLED(bgp)                                                      \
-       ((bgp)->advertise_all_vni
+#define EVPN_ENABLED(bgp) ((bgp)->advertise_all_vni)
 
 /* Allow evpn configuration to change in default bgp instace,
  * even advertise-all-vni is not present.
@@ -41,7 +40,7 @@ static inline int is_evpn_enabled(void)
 	struct bgp *bgp = NULL;
 
 	bgp = bgp_get_evpn();
-	return bgp ? bgp->advertise_all_vni : 0;
+	return bgp ? EVPN_ENABLED(bgp) : 0;
 }
 
 static inline void vni2label(vni_t vni, mpls_label_t *label)
@@ -237,5 +236,10 @@ bgp_evpn_handle_resolve_overlay_index_set(struct hash_bucket *bucket,
 extern void
 bgp_evpn_handle_resolve_overlay_index_unset(struct hash_bucket *bucket,
 					    void *arg);
+extern mpls_label_t *bgp_evpn_path_info_labels_get_l3vni(mpls_label_t *labels,
+							 uint32_t num_labels);
+extern vni_t bgp_evpn_path_info_get_l3vni(const struct bgp_path_info *pi);
+extern bool bgp_evpn_mpath_has_dvni(const struct bgp *bgp_vrf,
+				    struct bgp_path_info *mpinfo);
 
 #endif /* _QUAGGA_BGP_EVPN_H */

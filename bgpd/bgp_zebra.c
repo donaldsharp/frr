@@ -75,6 +75,8 @@ struct zclient *zclient = NULL;
 DEFINE_HOOK(bgp_vrf_status_changed, (struct bgp *bgp, struct interface *ifp),
 	    (bgp, ifp));
 
+DEFINE_MTYPE_STATIC(BGPD, BGP_IF_INFO, "BGP interface context");
+
 /* Can we install into zebra? */
 static inline bool bgp_install_info_to_zebra(struct bgp *bgp)
 {
@@ -305,6 +307,11 @@ static int bgp_interface_address_add(ZAPI_CALLBACK_ARGS)
 {
 	struct connected *ifc;
 	struct bgp *bgp;
+	struct peer *peer;
+	struct prefix *addr;
+	struct listnode *node, *nnode;
+	afi_t afi;
+	safi_t safi;
 
 	bgp = bgp_lookup_by_vrf_id(vrf_id);
 
@@ -330,6 +337,48 @@ static int bgp_interface_address_add(ZAPI_CALLBACK_ARGS)
 		if (IN6_IS_ADDR_LINKLOCAL(&ifc->address->u.prefix6)
 		    && !list_isempty(ifc->ifp->nbr_connected))
 			bgp_start_interface_nbrs(bgp, ifc->ifp);
+		else {
+			addr = ifc->address;
+
+			for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
+				if (addr->family == AF_INET)
+					continue;
+
+				/*
+				 * If the Peer's interface name matches the
+				 * interface name for which BGP received the
+				 * update and if the received interface address
+				 * is a globalV6 and if the peer is currently
+				 * using a v4-mapped-v6 addr or a link local
+				 * address, then copy the Rxed global v6 addr
+				 * into peer's v6_global and send updates out
+				 * with new nexthop addr.
+				 */
+				if ((peer->conf_if &&
+				     (strcmp(peer->conf_if, ifc->ifp->name) ==
+				      0)) &&
+				    !IN6_IS_ADDR_LINKLOCAL(&addr->u.prefix6) &&
+				    ((IS_MAPPED_IPV6(
+					     &peer->nexthop.v6_global)) ||
+				     IN6_IS_ADDR_LINKLOCAL(
+					     &peer->nexthop.v6_global))) {
+
+					if (bgp_debug_zebra(ifc->address)) {
+						zlog_debug(
+							"Update peer %pBP's current intf addr %pI6 and send updates",
+							peer,
+							&peer->nexthop
+								 .v6_global);
+					}
+					memcpy(&peer->nexthop.v6_global,
+					       &addr->u.prefix6,
+					       IPV6_MAX_BYTELEN);
+					FOREACH_AFI_SAFI (afi, safi)
+						bgp_announce_route(peer, afi,
+								   safi, true);
+				}
+			}
+		}
 	}
 
 	return 0;
@@ -456,7 +505,7 @@ static int bgp_interface_vrf_update(ZAPI_CALLBACK_ARGS)
 	if (!ifp)
 		return 0;
 
-	if (BGP_DEBUG(zebra, ZEBRA) && ifp)
+	if (BGP_DEBUG(zebra, ZEBRA))
 		zlog_debug("Rx Intf VRF change VRF %u IF %s NewVRF %u", vrf_id,
 			   ifp->name, new_vrf_id);
 
@@ -1000,19 +1049,13 @@ static bool bgp_table_map_apply(struct route_map *map, const struct prefix *p,
 				p, &path->attr->nexthop);
 		}
 		if (p->family == AF_INET6) {
-			char buf[2][INET6_ADDRSTRLEN];
 			ifindex_t ifindex;
 			struct in6_addr *nexthop;
 
 			nexthop = bgp_path_info_to_ipv6_nexthop(path, &ifindex);
 			zlog_debug(
-				"Zebra rmap deny: IPv6 route %pFX nexthop %s",
-				p,
-				nexthop ? inet_ntop(AF_INET6, nexthop, buf[1],
-						    sizeof(buf[1]))
-					: inet_ntop(AF_INET,
-						    &path->attr->nexthop,
-						    buf[1], sizeof(buf[1])));
+				"Zebra rmap deny: IPv6 route %pFX nexthop %pI6",
+				p, nexthop);
 		}
 	}
 	return false;
@@ -1132,6 +1175,7 @@ static bool update_ipv4nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 			api_nh->type = NEXTHOP_TYPE_IPV4;
 		else {
 			api_nh->type = NEXTHOP_TYPE_IPV4_IFINDEX;
+			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN);
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_ONLINK);
 			api_nh->ifindex = nh_bgp->l3vni_svi_ifindex;
 		}
@@ -1170,6 +1214,7 @@ static bool update_ipv6nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 			api_nh->type = NEXTHOP_TYPE_IPV6;
 		else {
 			api_nh->type = NEXTHOP_TYPE_IPV6_IFINDEX;
+			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN);
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_ONLINK);
 			api_nh->ifindex = nh_bgp->l3vni_svi_ifindex;
 		}
@@ -1265,15 +1310,21 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	struct bgp_path_info local_info;
 	struct bgp_path_info *mpinfo_cp = &local_info;
 	route_tag_t tag;
-	mpls_label_t label;
 	struct bgp_sid_info *sid_info;
+	mpls_label_t *labels;
+	uint32_t num_labels = 0;
+	mpls_label_t nh_label;
 	int nh_othervrf = 0;
 	bool is_evpn;
+	int has_valid_label = 0;
 	bool nh_updated = false;
 	bool do_wt_ecmp;
 	uint64_t cum_bw = 0;
 	uint32_t nhg_id = 0;
 	bool is_add;
+	uint32_t ttl = 0;
+	uint32_t bos = 0;
+	uint32_t exp = 0;
 
 	/* Don't try to install if we're not connected to Zebra or Zebra doesn't
 	 * know of this instance.
@@ -1363,6 +1414,8 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 	for (; mpinfo; mpinfo = bgp_path_info_mpath_next(mpinfo)) {
 		uint32_t nh_weight;
+		bool is_evpn;
+		bool is_parent_evpn;
 
 		if (valid_nh_count >= multipath_num)
 			break;
@@ -1371,12 +1424,12 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		nh_weight = 0;
 
 		/* Get nexthop address-family */
-		if (p->family == AF_INET
-		    && !BGP_ATTR_NEXTHOP_AFI_IP6(mpinfo_cp->attr))
+		if (p->family == AF_INET &&
+		    !BGP_ATTR_MP_NEXTHOP_LEN_IP6(mpinfo_cp->attr))
 			nh_family = AF_INET;
-		else if (p->family == AF_INET6
-			 || (p->family == AF_INET
-			     && BGP_ATTR_NEXTHOP_AFI_IP6(mpinfo_cp->attr)))
+		else if (p->family == AF_INET6 ||
+			 (p->family == AF_INET &&
+			  BGP_ATTR_MP_NEXTHOP_LEN_IP6(mpinfo_cp->attr)))
 			nh_family = AF_INET6;
 		else
 			continue;
@@ -1428,11 +1481,13 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 		BGP_ORIGINAL_UPDATE(bgp_orig, mpinfo, bgp);
 
+		is_parent_evpn = is_route_parent_evpn(mpinfo);
+
 		if (nh_family == AF_INET) {
 			nh_updated = update_ipv4nh_for_route_install(
 				nh_othervrf, bgp_orig,
 				&mpinfo_cp->attr->nexthop, mpinfo_cp->attr,
-				is_evpn, api_nh);
+				is_parent_evpn, api_nh);
 		} else {
 			ifindex_t ifindex = IFINDEX_INTERNAL;
 			struct in6_addr *nexthop;
@@ -1444,12 +1499,16 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 				nh_updated = update_ipv4nh_for_route_install(
 					nh_othervrf, bgp_orig,
 					&mpinfo_cp->attr->nexthop,
-					mpinfo_cp->attr, is_evpn, api_nh);
+					mpinfo_cp->attr, is_parent_evpn,
+					api_nh);
 			else
 				nh_updated = update_ipv6nh_for_route_install(
 					nh_othervrf, bgp_orig, nexthop, ifindex,
-					mpinfo, info, is_evpn, api_nh);
+					mpinfo, info, is_parent_evpn, api_nh);
+
 		}
+
+		is_evpn = !!CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN);
 
 		/* Did we get proper nexthop info to update zebra? */
 		if (!nh_updated)
@@ -1464,17 +1523,30 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 			|| mpinfo->peer->sort == BGP_PEER_CONFED))
 			allow_recursion = true;
 
-		if (mpinfo->extra
-		    && bgp_is_valid_label(&mpinfo->extra->label[0])
-		    && !CHECK_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE)) {
-		    && !is_evpn) {
+		if (mpinfo->extra) {
+			labels = mpinfo->extra->label;
+			num_labels = mpinfo->extra->num_labels;
+		}
+
+		if (labels && (num_labels > 0) &&
+		    (is_evpn || bgp_is_valid_label(&labels[0]))) {
+			enum lsp_types_t nh_label_type = ZEBRA_LSP_NONE;
+
+			if (is_evpn) {
+				nh_label = *bgp_evpn_path_info_labels_get_l3vni(
+					labels, num_labels);
+				nh_label_type = ZEBRA_LSP_EVPN;
+			} else {
+				mpls_lse_decode(labels[0], &nh_label, &ttl,
+						&exp, &bos);
+			}
+
 			has_valid_label = 1;
-			label = label_pton(&mpinfo->extra->label[0]);
 
 			SET_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_LABEL);
-
 			api_nh->label_num = 1;
-			api_nh->labels[0] = label;
+			api_nh->label_type = nh_label_type;
+			api_nh->labels[0] = nh_label;
 		}
 
 		if (is_evpn
@@ -1485,20 +1557,21 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 		api_nh->weight = nh_weight;
 
-		if (mpinfo->extra && !sid_zero(&mpinfo->extra->sid[0].sid)
-		    && !CHECK_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE)) {
+		if (mpinfo->extra && !sid_zero(&mpinfo->extra->sid[0].sid) &&
+		    !is_evpn) {
 			sid_info = &mpinfo->extra->sid[0];
 
 			memcpy(&api_nh->seg6_segs, &sid_info->sid,
 			       sizeof(api_nh->seg6_segs));
 
 			if (sid_info->transposition_len != 0) {
-				if (!bgp_is_valid_label(
-					    &mpinfo->extra->label[0]))
+				if (!labels || (num_labels <= 0) ||
+				    !bgp_is_valid_label(&labels[0]))
 					continue;
 
-				label = label_pton(&mpinfo->extra->label[0]);
-				transpose_sid(&api_nh->seg6_segs, label,
+				mpls_lse_decode(labels[0], &nh_label, &ttl,
+						&exp, &bos);
+				transpose_sid(&api_nh->seg6_segs, nh_label,
 					      sid_info->transposition_offset,
 					      sid_info->transposition_len);
 			}
@@ -1608,31 +1681,45 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 			}
 
 			label_buf[0] = '\0';
-			eth_buf[0] = '\0';
 			segs_buf[0] = '\0';
-			if (CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_LABEL)
-			    && !CHECK_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE))
+			if (CHECK_FLAG(api_nh->flags,
+				       ZAPI_NEXTHOP_FLAG_LABEL) &&
+			    !CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN))
 				snprintf(label_buf, sizeof(label_buf),
 					"label %u", api_nh->labels[0]);
-			if (CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_SEG6)
-			    && !CHECK_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE)) {
+			if (CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_SEG6) &&
+			    !CHECK_FLAG(api_nh->flags,
+					ZAPI_NEXTHOP_FLAG_EVPN)) {
 				inet_ntop(AF_INET6, &api_nh->seg6_segs,
 					  sid_buf, sizeof(sid_buf));
 				snprintf(segs_buf, sizeof(segs_buf), "segs %s",
 					 sid_buf);
 			}
+<<<<<<< HEAD
 			if (has_valid_label)
 				snprintf(label_buf, sizeof(label_buf),
 					"label %u", api_nh->labels[0]);
 			if (CHECK_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE)
 			    && !is_zero_mac(&api_nh->rmac))
+||||||| merged common ancestors
+			if (CHECK_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE)
+			    && !is_zero_mac(&api_nh->rmac))
+=======
+#if 0
+			if (CHECK_FLAG(api_nh->flags, ZAPI_NEXTHOP_FLAG_EVPN) &&
+			    !is_zero_mac(&api_nh->rmac))
+>>>>>>> frr-don/raj_devto8.4_new
 				snprintf(eth_buf, sizeof(eth_buf), " RMAC %s",
 					 prefix_mac2str(&api_nh->rmac,
 							buf1, sizeof(buf1)));
-			zlog_debug("  nhop [%d]: %s if %u VRF %u wt %u %s %s %s",
+#endif
+			zlog_debug("  nhop [%d]: %s if %u VRF %u wt %u %s %s",
 				   i + 1, nh_buf, api_nh->ifindex,
 				   api_nh->vrf_id, api_nh->weight,
-				   label_buf, segs_buf, eth_buf);
+				   label_buf, segs_buf);
+			if (has_valid_label)
+				snprintf(label_buf, sizeof(label_buf),
+					"label %u", api_nh->labels[0]);
 		}
 
 		int recursion_flag = 0;
@@ -3285,7 +3372,7 @@ static int bgp_zebra_process_srv6_locator_delete(ZAPI_CALLBACK_ARGS)
 	struct srv6_locator_chunk *chunk;
 	struct bgp_srv6_function *func;
 	struct bgp *bgp_vrf;
-	struct in6_addr *tovpn_sid;
+	struct in6_addr *tovpn_sid, *tovpn_sid_locator;
 	struct prefix_ipv6 tmp_prefi;
 
 	if (zapi_srv6_locator_decode(zclient->ibuf, &loc) < 0)
@@ -3294,8 +3381,10 @@ static int bgp_zebra_process_srv6_locator_delete(ZAPI_CALLBACK_ARGS)
 	// refresh chunks
 	for (ALL_LIST_ELEMENTS(bgp->srv6_locator_chunks, node, nnode, chunk))
 		if (prefix_match((struct prefix *)&loc.prefix,
-				 (struct prefix *)&chunk->prefix))
+				 (struct prefix *)&chunk->prefix)) {
 			listnode_delete(bgp->srv6_locator_chunks, chunk);
+			srv6_locator_chunk_free(chunk);
+		}
 
 	// refresh functions
 	for (ALL_LIST_ELEMENTS(bgp->srv6_functions, node, nnode, func)) {
@@ -3303,8 +3392,10 @@ static int bgp_zebra_process_srv6_locator_delete(ZAPI_CALLBACK_ARGS)
 		tmp_prefi.prefixlen = 128;
 		tmp_prefi.prefix = func->sid;
 		if (prefix_match((struct prefix *)&loc.prefix,
-				 (struct prefix *)&tmp_prefi))
+				 (struct prefix *)&tmp_prefi)) {
 			listnode_delete(bgp->srv6_functions, func);
+			XFREE(MTYPE_BGP_SRV6_FUNCTION, func);
+		}
 	}
 
 	// refresh tovpn_sid
@@ -3338,6 +3429,37 @@ static int bgp_zebra_process_srv6_locator_delete(ZAPI_CALLBACK_ARGS)
 	}
 
 	vpn_leak_postchange_all();
+
+	/* refresh tovpn_sid_locator */
+	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp_vrf)) {
+		if (bgp_vrf->inst_type != BGP_INSTANCE_TYPE_VRF)
+			continue;
+
+		/* refresh vpnv4 tovpn_sid_locator */
+		tovpn_sid_locator =
+			bgp_vrf->vpn_policy[AFI_IP].tovpn_sid_locator;
+		if (tovpn_sid_locator) {
+			tmp_prefi.family = AF_INET6;
+			tmp_prefi.prefixlen = IPV6_MAX_BITLEN;
+			tmp_prefi.prefix = *tovpn_sid_locator;
+			if (prefix_match((struct prefix *)&loc.prefix,
+					 (struct prefix *)&tmp_prefi))
+				XFREE(MTYPE_BGP_SRV6_SID, tovpn_sid_locator);
+		}
+
+		/* refresh vpnv6 tovpn_sid_locator */
+		tovpn_sid_locator =
+			bgp_vrf->vpn_policy[AFI_IP6].tovpn_sid_locator;
+		if (tovpn_sid_locator) {
+			tmp_prefi.family = AF_INET6;
+			tmp_prefi.prefixlen = IPV6_MAX_BITLEN;
+			tmp_prefi.prefix = *tovpn_sid_locator;
+			if (prefix_match((struct prefix *)&loc.prefix,
+					 (struct prefix *)&tmp_prefi))
+				XFREE(MTYPE_BGP_SRV6_SID, tovpn_sid_locator);
+		}
+	}
+
 	return 0;
 }
 
@@ -3375,6 +3497,31 @@ static zclient_handler *const bgp_handlers[] = {
 	[ZEBRA_SRV6_MANAGER_GET_LOCATOR_CHUNK] =
 		bgp_zebra_process_srv6_locator_chunk,
 };
+
+static int bgp_if_new_hook(struct interface *ifp)
+{
+	struct bgp_interface *iifp;
+
+	if (ifp->info)
+		return 0;
+	iifp = XCALLOC(MTYPE_BGP_IF_INFO, sizeof(struct bgp_interface));
+	ifp->info = iifp;
+
+	return 0;
+}
+
+static int bgp_if_delete_hook(struct interface *ifp)
+{
+	XFREE(MTYPE_BGP_IF_INFO, ifp->info);
+	return 0;
+}
+
+void bgp_if_init(void)
+{
+	/* Initialize Zebra interface data structure. */
+	hook_register_prio(if_add, 0, bgp_if_new_hook);
+	hook_register_prio(if_del, 0, bgp_if_delete_hook);
+}
 
 void bgp_zebra_init(struct thread_master *master, unsigned short instance)
 {

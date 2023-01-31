@@ -250,7 +250,7 @@ static int zebra_csm_maint_mode(struct thread *t)
 
 	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	if (client) {
-		s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+		s = stream_new(ZEBRA_MIN_PACKET_SIZE);
 		zclient_create_header(s, ZEBRA_MAINTENANCE_MODE, VRF_DEFAULT);
 		stream_putc(s, enter);
 		/* Write packet size. */
@@ -284,7 +284,7 @@ static int zebra_csm_fast_restart(struct thread *t)
 	zrouter.fast_shutdown = true;
 	client = zserv_find_client(ZEBRA_ROUTE_BGP, 0);
 	if (client) {
-		s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+		s = stream_new(ZEBRA_MIN_PACKET_SIZE);
 		zclient_create_header(s, ZEBRA_FAST_SHUTDOWN, VRF_DEFAULT);
 		stream_putc(s, upgrade);
 		/* Write packet size. */
@@ -372,12 +372,24 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 
 	zrouter.csm_cmode = mode;
 	zrouter.csm_cstate = state;
-	if (mode == MAINTENANCE)
-		frr_csm_enter_maintenance_mode();
-	else if (mode == REBOOT_FAST)
+	switch (mode) {
+	case REBOOT_FAST:
+	case REBOOT_WARM:
 		frr_csm_fast_restart_triggered();
-	else if (mode == SYS_UPGRADE_REBOOT_FAST)
+		break;
+
+	case SYS_UPGRADE_REBOOT_FAST:
+	case SYS_UPGRADE_REBOOT_WARM:
 		frr_csm_fast_upgrade_triggered();
+		break;
+
+	case MAINTENANCE:
+		frr_csm_enter_maintenance_mode();
+		break;
+
+	default:
+		break;
+	}
 }
 
 /*

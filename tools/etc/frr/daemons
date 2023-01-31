@@ -1,5 +1,11 @@
 # This file tells the frr package which daemons to start.
 #
+# Entries are in the format: <daemon>=(yes|no|priority)
+#   0, "no"  = disabled
+#   1, "yes" = highest priority
+#   2 .. 10  = lower priorities
+# Read /usr/share/doc/frr/README.Debian for details.
+#
 # Sample configurations for these daemons can be found in
 # /usr/share/doc/frr/examples/.
 #
@@ -12,7 +18,8 @@
 # When using "vtysh" such a config file is also needed. It should be owned by
 # group "frrvty" and set to ug=rw,o= though. Check /etc/pam.d/frr, too.
 #
-# The watchfrr, zebra and staticd daemons are always started.
+# The watchfrr daemon is always started. Per default in monitoring-only but
+# that can be changed.
 #
 bgpd=no
 ospfd=no
@@ -20,6 +27,7 @@ ospf6d=no
 ripd=no
 ripngd=no
 isisd=no
+fabricd=no
 pimd=no
 ldpd=no
 nhrpd=no
@@ -27,10 +35,8 @@ eigrpd=no
 babeld=no
 sharpd=no
 pbrd=no
-bfdd=no
 fabricd=no
 vrrpd=no
-pathd=no
 
 #
 # If this option is set the /etc/init.d/frr script automatically loads
@@ -53,10 +59,8 @@ babeld_options=" -A 127.0.0.1"
 sharpd_options=" -A 127.0.0.1"
 pbrd_options="   -A 127.0.0.1"
 staticd_options="-A 127.0.0.1"
-bfdd_options="   -A 127.0.0.1"
 fabricd_options="-A 127.0.0.1"
 vrrpd_options="  -A 127.0.0.1"
-pathd_options="  -A 127.0.0.1"
 
 # configuration profile
 #
