@@ -323,9 +323,13 @@ extern void vty_endframe(struct vty *, const char *);
 extern bool vty_set_include(struct vty *vty, const char *regexp);
 /* returns CMD_SUCCESS so you can do a one-line "return vty_json(...)"
  * NULL check and json_object_free() is included.
+ *
+ * _no_pretty means do not add a bunch of newlines and dump the output
+ * as densely as possible.
  */
 extern int vty_json(struct vty *vty, struct json_object *json);
 extern void vty_json_empty(struct vty *vty);
+extern int vty_json_no_pretty(struct vty *vty, struct json_object *json);
 
 extern bool vty_read_config(struct nb_config *config, const char *config_file,
 			    char *config_default_dir);
