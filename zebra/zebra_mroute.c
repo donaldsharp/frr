@@ -71,7 +71,6 @@ void zebra_ipmr_route_stats(ZAPI_HANDLER_ARGS)
 		zlog_debug("Asking for (%pIA,%pIA)[%s(%u)] mroute information",
 			   &mroute.src, &mroute.grp, zvrf->vrf->name,
 			   zvrf->vrf->vrf_id);
-	}
 
 	suc = kernel_get_ipmr_sg_stats(zvrf, &mroute);
 

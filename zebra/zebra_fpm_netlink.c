@@ -636,5 +636,4 @@ int zfpm_netlink_encode_mac(struct fpm_mac_info_t *mac, char *in_buf,
 
 	return req->hdr.nlmsg_len;
 }
-
 #endif /* HAVE_NETLINK */

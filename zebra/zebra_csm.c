@@ -26,7 +26,6 @@
 #include "thread.h"
 #include "filter.h"
 #include "memory.h"
-#include "zebra_memory.h"
 #include "log.h"
 #include "privs.h"
 #include "sigevent.h"
@@ -34,7 +33,6 @@
 #include "frrcu.h"
 
 #include "zebra/zserv.h"
-#include "zebra/zebra_csm.h"
 
 #if defined(HAVE_CSMGR)
 #include <cumulus/cs_mgr_intf.h>

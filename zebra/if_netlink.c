@@ -73,10 +73,11 @@
 #include "zebra/zebra_errors.h"
 #include "zebra/zebra_vxlan.h"
 #include "zebra/zebra_evpn_mh.h"
-#include "zebra/zebra_l2.h"
+//#include "zebra/zebra_l2.h"
 #include "zebra/netconf_netlink.h"
 #include "zebra/zebra_trace.h"
 #include "zebra/zebra_evpn_arp_nd.h"
+#include "zebra/zebra_trace.h"
 
 extern struct zebra_privs_t zserv_privs;
 uint8_t frr_protodown_r_bit = FRR_PROTODOWN_REASON_DEFAULT_BIT;
@@ -2578,9 +2579,11 @@ static void vxlan_vni_state_change(struct zebra_if *zif, uint16_t id,
 			zlog_debug(
 				"Cannot find VNI for VID (%u) IF %s for vlan state update",
 				id, zif->ifp->name);
-
 		return;
 	}
+	if (zif)
+		frrtrace(3, frr_zebra, vxlan_vni_state_change, id, zif, vnip->vni,
+			 state);
 
 	switch (state) {
 	case BR_STATE_FORWARDING:
@@ -2716,7 +2719,9 @@ int netlink_vlan_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 				zlog_debug("VLANDB_ENTRY: VID (%u) state=%s",
 					   vinfo->vid, port_state2str(state));
 		}
-
+		if (vinfo)
+			frrtrace(7, frr_zebra, netlink_vlan_change, h, bvm,
+				 ns_id, vinfo, vrange, state, ifp);
 		vlan_id_range_state_change(
 			ifp, vinfo->vid, (vrange ? vrange : vinfo->vid), state);
 	}
@@ -2826,8 +2831,6 @@ int netlink_vni_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	}
 	zif = (struct zebra_if *)ifp->info;
 
-	if (!IS_ZEBRA_VXLAN_IF_L3SVD(zif))
-		return 0;
 
 	rem = len;
 	for (attr = TUNNEL_RTA(tmsg); RTA_OK(attr, rem);

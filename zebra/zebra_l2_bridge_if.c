@@ -157,7 +157,7 @@ static void zebra_l2_brvlan_mac_table_destroy(struct hash *mac_table)
 	}
 }
 
-static struct hash *zebra_l2_brvlan_mac_table_create()
+static struct hash *zebra_l2_brvlan_mac_table_create(void)
 {
 	return hash_create(zebra_l2_brvlan_mac_hash_keymake,
 			   zebra_l2_brvlan_mac_hash_cmp,

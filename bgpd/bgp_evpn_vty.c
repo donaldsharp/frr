@@ -834,7 +834,7 @@ static void show_vni_routes(struct bgp *bgp, struct bgpevpn *vpn, int type,
 						     RPKI_NOT_BEING_USED,
 						     json_path);
 			else
-				route_vty_out(vty, &tmp_p, pi, 0, SAFI_EVPN,
+				route_vty_out(vty, p, pi, 0, SAFI_EVPN,
 					      json_path, false, NULL);
 
 			if (json)

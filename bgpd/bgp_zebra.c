@@ -1315,7 +1315,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	uint32_t num_labels = 0;
 	mpls_label_t nh_label;
 	int nh_othervrf = 0;
-	bool is_evpn;
 	int has_valid_label = 0;
 	bool nh_updated = false;
 	bool do_wt_ecmp;
@@ -1367,12 +1366,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 	tag = info->attr->tag;
 
-	/* If the route's source is EVPN, flag as such. */
-	is_evpn = is_route_parent_evpn(info);
-#if 0
-	if (is_evpn)
-		SET_FLAG(api.flags, ZEBRA_FLAG_EVPN_ROUTE);
-#endif
 
 	if (peer->sort == BGP_PEER_IBGP || peer->sort == BGP_PEER_CONFED
 	    || info->sub_type == BGP_ROUTE_AGGREGATE) {
