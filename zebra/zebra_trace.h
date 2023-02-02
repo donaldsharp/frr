@@ -339,7 +339,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, ip_prefix_send_to_client, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       zebra_evpn_svi_macip_del_for_evpn_hash,
-      TP_ARGS(zebra_evpn_t *, zevpn),
+      TP_ARGS(zebra_evpn *, zevpn),
       TP_FIELDS(
         ctf_integer(int, vni, zevpn->vni)
         ctf_integer(int, flags, zevpn->flags)
@@ -353,7 +353,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_svi_macip_del_for_evpn_hash, TRACE_INF
   TRACEPOINT_EVENT(
       frr_zebra,
       zebra_evpn_read_mac_neigh,
-      TP_ARGS(zebra_evpn_t *, zevpn, struct interface *, br_if,
+      TP_ARGS(zebra_evpn *, zevpn, struct interface *, br_if,
         struct zebra_vxlan_vni *, vni, struct interface *, vlan_if),
       TP_FIELDS(
         //TBD: mac and remote dest, since macs are SVI MAC-IP, VRR MAC-IP
@@ -371,7 +371,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_read_mac_neigh, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       zebra_evpn_send_add_to_client,
-      TP_ARGS(zebra_evpn_t *, zevpn, struct zserv *, client),
+      TP_ARGS(zebra_evpn *, zevpn, struct zserv *, client),
       TP_FIELDS(
         ctf_integer(int, vni, zevpn->vni)
         ctf_integer(int, vrfid, zevpn->vrf_id)
@@ -385,7 +385,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_send_add_to_client, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       process_remote_macip_add,
-      TP_ARGS(vni_t, vni, zebra_evpn_t *, zevpn, struct ethaddr *, mac,
+      TP_ARGS(vni_t, vni, zebra_evpn *, zevpn, struct ethaddr *, mac,
         struct ipaddr *, ip, struct in_addr, vtep_ip, esi_t *, esi,
         uint8_t , flags, uint32_t, seq),
       TP_FIELDS(
@@ -509,7 +509,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, dplane_vtep_delete, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       zebra_evpn_gw_macip_del_for_evpn_hash,
-      TP_ARGS(zebra_evpn_t *, zevpn),
+      TP_ARGS(zebra_evpn *, zevpn),
       TP_FIELDS(
         ctf_integer(int, vni, zevpn->vni)
         ctf_integer(int, flags, zevpn->flags)
@@ -523,7 +523,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_gw_macip_del_for_evpn_hash, TRACE_INFO
   TRACEPOINT_EVENT(
       frr_zebra,
       zebra_evpn_send_del_to_client,
-      TP_ARGS(struct zserv *, client,zebra_evpn_t *,zevpn),
+      TP_ARGS(struct zserv *, client,zebra_evpn *,zevpn),
       TP_FIELDS(
         ctf_string(client, zebra_route_string(client->proto))
         ctf_integer(int, vni, zevpn->vni)
@@ -535,7 +535,7 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_send_del_to_client, TRACE_INFO)
   TRACEPOINT_EVENT(
       frr_zebra,
       zebra_evpn_process_sync_macip_add,
-      TP_ARGS(zebra_evpn_t *, zevpn, struct ethaddr *, mac,struct ipaddr *, ip, uint16_t,
+      TP_ARGS(zebra_evpn *, zevpn, struct ethaddr *, mac,struct ipaddr *, ip, uint16_t,
         ipa_len, esi_t *, esi, uint8_t , flags, uint32_t, seq),
       TP_FIELDS(
         ctf_integer(int, vni, zevpn->vni)

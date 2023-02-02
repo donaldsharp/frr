@@ -1551,3 +1551,13 @@ static ssize_t printfrr_psg(struct fbuf *buf, struct printfrr_eargs *ea,
 
 	return ret;
 }
+
+/*CL only*/
+/* Utility function for making IPv6 address string. */
+const char *inet6_ntoa(struct in6_addr addr)
+{
+    static char buf[INET6_ADDRSTRLEN];
+
+    inet_ntop(AF_INET6, &addr, buf, INET6_ADDRSTRLEN);
+    return buf;
+}

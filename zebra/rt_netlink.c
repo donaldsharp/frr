@@ -3450,10 +3450,13 @@ static ssize_t netlink_neigh_update_msg_encode(
 				 ipa_len))
 			return 0;
 	}
+#if 0
+    //mac needs to be passed on
 	if (mac && ip) {
 		frrtrace(7, frr_zebra, netlink_neigh_update_msg_encode, mac, ip,
 			 nhg_id, flags, state, family, type);
 	}
+#endif
 	if (op == DPLANE_OP_MAC_INSTALL || op == DPLANE_OP_MAC_DELETE) {
 		vlanid_t vid = dplane_ctx_mac_get_vlan(ctx);
 		vni_t vni = dplane_ctx_mac_get_vni(ctx);
@@ -4431,6 +4434,7 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	bool dp_static = false;
 	int l2_len = 0;
 	int cmd;
+    struct vrf *vrf;
 
 	/* N.B. the message type has already been checked by the caller */
 
@@ -4441,7 +4445,7 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	ifp = if_lookup_by_index_per_ns(zns, ndm->ndm_ifindex);
 	if (!ifp || !ifp->info)
 		return 0;
-
+    vrf = vrf_lookup_by_id(ifp->vrf->vrf_id);
 	zif = (struct zebra_if *)ifp->info;
 
 	/* Parse attributes and extract fields of interest. */
@@ -4451,7 +4455,7 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 		zlog_debug("%s family %s IF %s(%u) vrf %s(%u) - no DST",
 			   nl_msg_type_to_str(h->nlmsg_type),
 			   nl_family_to_str(ndm->ndm_family), ifp->name,
-			   ndm->ndm_ifindex, VRF_LOGNAME(vrf), ifp->vrf_id);
+			   ndm->ndm_ifindex, VRF_LOGNAME(vrf), ifp->vrf->vrf_id);
 		return 0;
 	}
 

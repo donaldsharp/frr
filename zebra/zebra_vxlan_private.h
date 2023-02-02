@@ -51,6 +51,8 @@ struct zebra_l3vni {
 	uint32_t filter;
 #define PREFIX_ROUTES_ONLY	(1 << 0) /* l3-vni used for prefix routes only */
 
+  bool is_l3svd;
+
 	/* Corresponding Bridge information */
 	vlanid_t vid;
 	struct interface *bridge_if;

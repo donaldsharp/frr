@@ -73,7 +73,7 @@
 #include "zebra/zebra_errors.h"
 #include "zebra/zebra_vxlan.h"
 #include "zebra/zebra_evpn_mh.h"
-#include "zebra/zebra_l2.h"
+//#include "zebra/zebra_l2.h"
 #include "zebra/netconf_netlink.h"
 #include "zebra/zebra_trace.h"
 #include "zebra/zebra_evpn_arp_nd.h"
@@ -2571,7 +2571,6 @@ static void vxlan_vni_state_change(struct zebra_if *zif, uint16_t id,
 				   uint8_t state)
 {
 	struct zebra_vxlan_vni *vnip;
-	vni_t vni;
 
 	vnip = zebra_vxlan_if_vlanid_vni_find(zif, id);
 
@@ -2582,9 +2581,8 @@ static void vxlan_vni_state_change(struct zebra_if *zif, uint16_t id,
 				id, zif->ifp->name);
 		return;
 	}
-	vni = vnip->vni; // lttng
 	if (zif)
-		frrtrace(3, frr_zebra, vxlan_vni_state_change, id, zif, vni,
+		frrtrace(3, frr_zebra, vxlan_vni_state_change, id, zif, vnip->vni,
 			 state);
 
 	switch (state) {
@@ -2833,8 +2831,6 @@ int netlink_vni_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	}
 	zif = (struct zebra_if *)ifp->info;
 
-	if (!IS_ZEBRA_VXLAN_IF_L3SVD(zif))
-		return 0;
 
 	rem = len;
 	for (attr = TUNNEL_RTA(tmsg); RTA_OK(attr, rem);

@@ -1145,7 +1145,7 @@ static void zevpn_build_hash_table(void)
 static void zebra_evpn_vxlan_cleanup_all(struct hash_bucket *bucket, void *arg)
 {
 	struct zebra_evpn *zevpn = NULL;
-	zebra_l3vni_t *zl3vni = NULL;
+	struct zebra_l3vni *zl3vni = NULL;
 
 	zevpn = (struct zebra_evpn *)bucket->data;
 
@@ -2210,10 +2210,8 @@ static inline void zl3vni_get_vrr_rmac(struct zebra_l3vni *zl3vni,
 	if (!zl3vni)
 		return;
 
-	if (zl3vni->is_l3svd && !is_l3svd_l3vni_oper_up(zl3vni))
-		return;
-	else if (!is_l3vni_oper_up(zl3vni))
-		return;
+    if (!is_l3vni_oper_up(zl3vni))
+        return;
 
 	if (zl3vni->mac_vlan_if && if_is_operative(zl3vni->mac_vlan_if))
 		memcpy(rmac->octet, zl3vni->mac_vlan_if->hw_addr, ETH_ALEN);
@@ -4736,6 +4734,9 @@ void zebra_vxlan_remote_vtep_add_zapi(ZAPI_HANDLER_ARGS)
 	unsigned short l = 0;
 	vni_t vni;
 	struct in_addr vtep_ip;
+	struct zebra_evpn *zevpn;
+	struct interface *ifp;
+	struct zebra_if *zif;
 	int flood_control;
 
 	if (!is_evpn_enabled()) {
@@ -5799,10 +5800,8 @@ ifindex_t get_l3vni_vxlan_ifindex(vrf_id_t vrf_id)
 	if (!zl3vni)
 		return 0;
 
-	if (zl3vni->is_l3svd && !is_l3svd_l3vni_oper_up(zl3vni))
-		return 0;
-	else if (!is_l3vni_oper_up(zl3vni))
-		return 0;
+    if (!is_l3vni_oper_up(zl3vni))
+        return 0;
 
 	return zl3vni->vxlan_if->ifindex;
 }

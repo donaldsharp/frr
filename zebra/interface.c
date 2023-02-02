@@ -2561,7 +2561,7 @@ static void if_dump_vty_json(struct vty *vty, struct interface *ifp,
 
 			ifp = if_lookup_by_index_per_ns(
 				zebra_ns_lookup(vxlan_info->link_nsid),
-				gre_info->ifindex_link);
+				vxlan_info->ifindex_link);
 			json_object_string_add(json_if, "linkInterface",
 					       ifp == NULL ? "Unknown"
 							   : ifp->name);

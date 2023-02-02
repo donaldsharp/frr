@@ -8750,7 +8750,6 @@ static void route_vty_out_route(const struct prefix *p, struct vty *vty,
 							 BUFSIZ));
 			json_object_int_add(json, "prefixLen", p->prefixlen);
 			json_object_string_addf(json, "network", "%pFX", p);
-			json_object_int_add(json, "version", dest->version);
 		}
 	} else if (p->family == AF_ETHERNET) {
 		len = vty_out(vty, "%pFX", p);
@@ -8780,7 +8779,6 @@ static void route_vty_out_route(const struct prefix *p, struct vty *vty,
 							BUFSIZ));
 			json_object_int_add(json, "prefixLen", p->prefixlen);
 			json_object_string_addf(json, "network", "%pFX", p);
-			json_object_int_add(json, "version", dest->version);
 		}
 	}
 

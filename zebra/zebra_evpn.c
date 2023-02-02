@@ -1531,16 +1531,14 @@ void zebra_evpn_rem_macip_add(vni_t vni, const struct ethaddr *macaddr,
 	}
 
 	zvrf = zebra_vrf_get_evpn();
-	if (zebra_evpn_mac_remote_macip_add(zevpn, zvrf, macaddr, ipa_len,
-					    ipaddr, &mac, vtep_ip, flags, seq,
-					    esi)
-	    != 0)
-		return;
 
 	if (!ipa_len) {
 		/* MAC update */
-		process_mac_remote_macip_add(zevpn, zvrf, macaddr, vtep_ip,
-					     flags, seq, esi);
+        if (zebra_evpn_mac_remote_macip_add(zevpn, zvrf, macaddr, ipa_len,
+                    ipaddr, &mac, vtep_ip, flags, seq,
+                    esi)
+                != 0)
+            return;
 	} else {
 		/* MAC-IP update
 		 * Add auto MAC if it doesn't exist.
@@ -1561,7 +1559,7 @@ void zebra_evpn_rem_macip_add(vni_t vni, const struct ethaddr *macaddr,
 				 seq);
 		}
 
-		process_neigh_remote_macip_add(zevpn, zvrf, ipaddr, mac,
+		zebra_evpn_neigh_remote_macip_add(zevpn, zvrf, ipaddr, mac,
 					       vtep_ip, flags, seq);
 	}
 }
@@ -1689,6 +1687,7 @@ void zebra_evpn_rem_macip_del(vni_t vni, const struct ethaddr *macaddr,
 			zebra_evpn_rem_mac_del(zevpn, mac);
 		}
 	}
+}
 }
 
 /************************** EVPN BGP config management ************************/

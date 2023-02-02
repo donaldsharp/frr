@@ -61,7 +61,6 @@
 #include "zebra/zebra_opaque.h"
 #include "zebra/zebra_srte.h"
 #include "zebra/zebra_srv6.h"
-#include "zebra/zebra_csm.h"
 #include "zebra/zebra_trace.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, RE_OPAQUE, "Route Opaque Data");
@@ -1988,9 +1987,11 @@ static void zread_nhg_del(ZAPI_HANDLER_ARGS)
 static void zread_nhg_add(ZAPI_HANDLER_ARGS)
 {
 	struct stream *s;
+	uint32_t id;
 	struct zapi_nhg api_nhg = {};
 	struct nexthop_group *nhg = NULL;
 	struct nhg_backup_info *bnhg = NULL;
+    uint16_t proto;
 	struct nhg_hash_entry *nhe;
 
 	s = msg;
@@ -2040,7 +2041,8 @@ static void zread_nhg_add(ZAPI_HANDLER_ARGS)
 	/*
 	 * Create the nhg
 	 */
-	nhe = zebra_nhg_proto_add(id, proto, nhg, 0);
+	nhe = zebra_nhg_proto_add(id, proto, nhe->zapi_instance,
+	        nhe->zapi_session, nhg, 0);
 
 	/* Take over the list(s) of nexthops */
 	nhe->nhg.nexthop = nhg->nexthop;

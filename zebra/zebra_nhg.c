@@ -2647,6 +2647,8 @@ static unsigned nexthop_active_check(struct route_node *rn,
 	/* Check for no-NHG condition */
 	no_nhg_check(rn, re, nexthop);
 
+skip_check:
+
 	if (!CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_ACTIVE)) {
 		if (IS_ZEBRA_DEBUG_RIB_DETAILED)
 			zlog_debug("        %s: Unable to find active nexthop",
