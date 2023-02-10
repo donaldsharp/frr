@@ -11163,138 +11163,6 @@ DEFUN(show_ip_bgp_afi_safi_statistics, show_ip_bgp_afi_safi_statistics_cmd,
 	return ret;
 }
 
-/* BGP self-originated route print out function */
-DEFPY(show_ip_bgp_self_originated, show_ip_bgp_self_originated_cmd,
-      "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]] [all$all] "BGP_SELF_ORIG_CMD_STR" [json$uj]",
-      SHOW_STR
-      IP_STR
-      BGP_STR
-      BGP_INSTANCE_HELP_STR
-      BGP_AFI_HELP_STR
-      BGP_SAFI_WITH_LABEL_HELP_STR
-      "Display the entries for all address families\n"
-      BGP_SELF_ORIG_HELP_STR
-      JSON_STR)
-{
-	afi_t afi = AFI_IP6;
-	safi_t safi = SAFI_UNICAST;
-	struct bgp *bgp = NULL;
-	int idx = 0;
-	bool first = true;
-	uint16_t show_flags = 0;
-
-	if (uj) {
-		argc--;
-		SET_FLAG(show_flags, BGP_SHOW_OPT_JSON);
-	}
-
-	/* [<ipv4|ipv6> [all]] */
-	if (all) {
-		SET_FLAG(show_flags, BGP_SHOW_OPT_AFI_ALL);
-
-		if (argv_find(argv, argc, "ipv4", &idx))
-			SET_FLAG(show_flags, BGP_SHOW_OPT_AFI_IP);
-		else if (argv_find(argv, argc, "ipv6", &idx))
-			SET_FLAG(show_flags, BGP_SHOW_OPT_AFI_IP6);
-	}
-
-	bgp_vty_find_and_parse_afi_safi_bgp(vty, argv, argc, &idx, &afi, &safi,
-					    &bgp, !!uj);
-	if (!idx)
-		return CMD_WARNING;
-
-	if (!all) {
-		/* show ip bgp:	AFI_IP SAFI_UNICAST
-		 * show bgp:	AFI_IP6 SAFI_UNICAST
-		 */
-		return bgp_show(vty, bgp, afi, safi,
-				bgp_show_type_self_originated, NULL,
-				show_flags);
-	} else {
-		/* show <ip> bgp ipv4 all: AFI_IP for each SAFI
-		 * show <ip> bgp ipv6 all: AFI_IP6 for each SAFI
-		 */
-		if (uj)
-			vty_out(vty, "{\n");
-
-		if (CHECK_FLAG(show_flags,
-			       BGP_SHOW_OPT_AFI_IP | BGP_SHOW_OPT_AFI_IP6)) {
-			afi = CHECK_FLAG(show_flags, BGP_SHOW_OPT_AFI_IP)
-				      ? AFI_IP
-				      : AFI_IP6;
-
-			FOREACH_SAFI (safi) {
-				if (strmatch(get_afi_safi_str(afi, safi, true),
-					     "Unknown"))
-					continue;
-
-				if (!bgp_afi_safi_peer_exists(bgp, afi, safi))
-					continue;
-
-				if (uj) {
-					if (first)
-						first = false;
-					else
-						vty_out(vty, ",\n");
-
-					vty_out(vty, "\"%s\":{\n",
-						get_afi_safi_str(afi, safi,
-								 true));
-				} else {
-					vty_out(vty,
-						"\nFor address family: %s\n",
-						get_afi_safi_str(afi, safi,
-								 false));
-				}
-
-				bgp_show(vty, bgp, afi, safi,
-					 bgp_show_type_self_originated, NULL,
-					 show_flags);
-
-				if (uj)
-					vty_out(vty, "}\n");
-			}
-		} else {
-			/* show <ip> bgp all: for each AFI and SAFI */
-			FOREACH_AFI_SAFI (afi, safi) {
-				if (strmatch(get_afi_safi_str(afi, safi, true),
-					     "Unknown"))
-					continue;
-
-				if (!bgp_afi_safi_peer_exists(bgp, afi, safi))
-					continue;
-
-				if (uj) {
-					if (first)
-						first = false;
-					else
-						vty_out(vty, ",\n");
-
-					vty_out(vty, "\"%s\":{\n",
-						get_afi_safi_str(afi, safi,
-								 true));
-				} else {
-					vty_out(vty,
-						"\nFor address family: %s\n",
-						get_afi_safi_str(afi, safi,
-								 false));
-				}
-
-				bgp_show(vty, bgp, afi, safi,
-					 bgp_show_type_self_originated, NULL,
-					 show_flags);
-
-				if (uj)
-					vty_out(vty, "}\n");
-			}
-		}
-		if (uj)
-			vty_out(vty, "}\n");
-	}
-
-	return CMD_SUCCESS;
-}
-
 /* BGP route print out function without JSON */
 DEFPY(show_ip_bgp, show_ip_bgp_cmd,
       "show [ip] bgp [<view|vrf> VIEWVRFNAME] [" BGP_AFI_CMD_STR
@@ -11357,6 +11225,7 @@ DEFPY (show_ip_bgp_json,
 	  |route-map WORD\
 	  |A.B.C.D/M longer-prefixes\
 	  |X:X::X:X/M longer-prefixes\
+	  |"BGP_SELF_ORIG_CMD_STR"\
           ] [json$uj [detail$detail] | wide$wide]",
        SHOW_STR
        IP_STR
@@ -11400,6 +11269,7 @@ DEFPY (show_ip_bgp_json,
        "Display route and more specific routes\n"
        "IPv6 prefix\n"
        "Display route and more specific routes\n"
+       BGP_SELF_ORIG_HELP_STR
        JSON_STR
        "Display detailed version of JSON output\n"
        "Increase table width for longer prefixes\n")
@@ -11557,6 +11427,10 @@ DEFPY (show_ip_bgp_json,
 		sh_type = bgp_show_type_prefix_longer;
 		output_arg = &p;
 	}
+
+	/* self originated only */
+	if (argv_find(argv, argc, BGP_SELF_ORIG_CMD_STR, &idx))
+		sh_type = bgp_show_type_self_originated;
 
 	if (!all) {
 		/* show bgp: AFI_IP6, show ip bgp: AFI_IP */
@@ -14297,7 +14171,6 @@ void bgp_route_init(void)
 	install_element(VIEW_NODE, &show_ip_bgp_route_cmd);
 	install_element(VIEW_NODE, &show_ip_bgp_regexp_cmd);
 	install_element(VIEW_NODE, &show_ip_bgp_statistics_all_cmd);
-	install_element(VIEW_NODE, &show_ip_bgp_self_originated_cmd);
 
 	install_element(VIEW_NODE,
 			&show_ip_bgp_instance_neighbor_advertised_route_cmd);
