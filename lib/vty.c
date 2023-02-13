@@ -332,6 +332,13 @@ int vty_json(struct vty *vty, struct json_object *json)
 	return CMD_SUCCESS;
 }
 
+void vty_json_empty(struct vty *vty)
+{
+	json_object *json = json_object_new_object();
+
+	vty_json(vty, json);
+}
+
 /* Output current time to the vty. */
 void vty_time_print(struct vty *vty, int cr)
 {

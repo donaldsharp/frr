@@ -10234,15 +10234,6 @@ DEFUN (no_ip_msdp_mesh_group,
 		return ip_no_msdp_mesh_group_cmd_worker(pim, vty, NULL);
 }
 
-static void print_empty_json_obj(struct vty *vty)
-{
-	json_object *json;
-	json = json_object_new_object();
-	vty_out(vty, "%s\n",
-		json_object_to_json_string_ext(json, JSON_C_TO_STRING_PRETTY));
-	json_object_free(json);
-}
-
 static void ip_msdp_show_mesh_group(struct pim_instance *pim, struct vty *vty,
 				    bool uj)
 {
@@ -10260,7 +10251,7 @@ static void ip_msdp_show_mesh_group(struct pim_instance *pim, struct vty *vty,
 
 	if (!mg) {
 		if (uj)
-			print_empty_json_obj(vty);
+			vty_json_empty(vty);
 		return;
 	}
 
