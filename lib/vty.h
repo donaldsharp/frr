@@ -359,6 +359,7 @@ extern int vty_json_no_pretty(struct vty *vty, struct json_object *json);
  * fd is owned by the VTY code after this and will be closed when done
  */
 extern void vty_pass_fd(struct vty *vty, int fd);
+extern void vty_json_empty(struct vty *vty);
 
 extern bool vty_read_config(struct nb_config *config, const char *config_file,
 			    char *config_default_dir);
