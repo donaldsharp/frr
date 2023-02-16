@@ -370,7 +370,8 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 		} else {
 			frr_csm_fast_restart_triggered();
 		}
-	}
+	} else
+		frr_csm_send_down_complete(mod);
 }
 
 /*
