@@ -325,6 +325,7 @@ extern bool vty_set_include(struct vty *vty, const char *regexp);
  * NULL check and json_object_free() is included.
  */
 extern int vty_json(struct vty *vty, struct json_object *json);
+extern void vty_json_empty(struct vty *vty);
 
 extern bool vty_read_config(struct nb_config *config, const char *config_file,
 			    char *config_default_dir);

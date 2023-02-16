@@ -862,8 +862,8 @@ Showing Information
    Show state and configuration of OSPF the specified interface, or all
    interfaces if no interface is given.
 
-.. index:: show ip ospf neighbor [json]
-.. clicmd:: show ip ospf neighbor [json]
+.. index:: show ip ospf [vrf <NAME|all>] neighbor [json]
+.. clicmd:: show ip ospf [vrf <NAME|all>] neighbor [json]
 
 .. index:: show ip ospf neighbor INTERFACE [json]
 .. clicmd:: show ip ospf neighbor INTERFACE [json]
@@ -871,9 +871,9 @@ Showing Information
 .. index:: show ip ospf neighbor detail [json]
 .. clicmd:: show ip ospf neighbor detail [json]
 
-.. clicmd:: show ip ospf neighbor A.B.C.D [detail] [json]
+.. clicmd:: show ip ospf [vrf <NAME|all>] neighbor A.B.C.D [detail] [json]
 
-.. clicmd:: show ip ospf neighbor INTERFACE detail [json]
+.. clicmd:: show ip ospf [vrf <NAME|all>] neighbor INTERFACE detail [json]
 
    Display lsa information of LSDB.
    Json o/p of this command covers base route information
