@@ -833,24 +833,24 @@ void apply_mask(union prefixptr pu)
 struct prefix *sockunion2hostprefix(const union sockunion *su,
 				    struct prefix *prefix)
 {
-	if (su->sa.sa_family == AF_INET) {
-		struct prefix_ipv4 *p;
+	/*
+	 * Pre-conditions and all that jazzy mc-jazz
+	 */
+	assert(prefix);
+	assert(su);
 
-		p = prefix ? (struct prefix_ipv4 *)prefix : prefix_ipv4_new();
-		p->family = AF_INET;
-		p->prefix = su->sin.sin_addr;
-		p->prefixlen = IPV4_MAX_BITLEN;
-		return (struct prefix *)p;
+	if (su->sa.sa_family == AF_INET) {
+		prefix->family = AF_INET;
+		prefix->u.prefix4 = su->sin.sin_addr;
+		prefix->prefixlen = IPV4_MAX_BITLEN;
+		return prefix;
 	}
 	if (su->sa.sa_family == AF_INET6) {
-		struct prefix_ipv6 *p;
-
-		p = prefix ? (struct prefix_ipv6 *)prefix : prefix_ipv6_new();
-		p->family = AF_INET6;
-		p->prefixlen = IPV6_MAX_BITLEN;
-		memcpy(&p->prefix, &su->sin6.sin6_addr,
+		prefix->family = AF_INET6;
+		prefix->prefixlen = IPV6_MAX_BITLEN;
+		memcpy(&prefix->u.prefix, &su->sin6.sin6_addr,
 		       sizeof(struct in6_addr));
-		return (struct prefix *)p;
+		return prefix;
 	}
 	return NULL;
 }

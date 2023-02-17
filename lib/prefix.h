@@ -435,7 +435,12 @@ extern void apply_mask(union prefixptr pu);
 #define prefix_copy(a, b) ({ memset(a, 0, sizeof(*a)); prefix_copy(a, b); })
 #endif
 
-extern struct prefix *sockunion2hostprefix(const union sockunion *,
+/*
+ * User must pass in a valid pointers, else assert will do
+ * assert type things.  If the sockunion *su passed in is
+ * not v4 or v6 this function will return NULL
+ */
+extern struct prefix *sockunion2hostprefix(const union sockunion *su,
 					   struct prefix *p);
 extern void prefix2sockunion(const struct prefix *, union sockunion *);
 
