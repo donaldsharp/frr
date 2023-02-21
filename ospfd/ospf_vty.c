@@ -6507,14 +6507,17 @@ static void show_lsa_detail_proc(struct vty *vty, struct route_table *rt,
 		route_lock_node(start);
 		for (rn = start; rn; rn = route_next_until(rn, start))
 			if ((lsa = rn->info)) {
-				if (json) {
-					json_lsa = json_object_new_object();
-					json_object_array_add(json, json_lsa);
-				}
+				if (show_function[lsa->data->type] != NULL) {
+					if (json) {
+						json_lsa =
+							json_object_new_object();
+						json_object_array_add(json,
+								      json_lsa);
+					}
 
-				if (show_function[lsa->data->type] != NULL)
 					show_function[lsa->data->type](
 						vty, lsa, json_lsa);
+				}
 			}
 		route_unlock_node(start);
 	}
@@ -6531,9 +6534,6 @@ static void show_lsa_detail(struct vty *vty, struct ospf *ospf, int type,
 	json_object *json_lsa_type = NULL;
 	json_object *json_areas = NULL;
 	json_object *json_lsa_array = NULL;
-
-	if (json)
-		json_lsa_type = json_object_new_object();
 
 	switch (type) {
 	case OSPF_AS_EXTERNAL_LSA:
@@ -6574,6 +6574,7 @@ static void show_lsa_detail(struct vty *vty, struct ospf *ospf, int type,
 		}
 
 		if (json) {
+			json_lsa_type = json_object_new_object();
 			json_object_object_add(json_lsa_type, "areas",
 					       json_areas);
 			json_object_object_add(json,
@@ -7036,6 +7037,9 @@ DEFUN (show_ip_ospf_database_max,
 				vty_out(vty,
 					"%% OSPF is not enabled in vrf %s\n",
 					vrf_name);
+				if (uj)
+					json_object_free(json);
+
 				return CMD_SUCCESS;
 			}
 			ret = (show_ip_ospf_database_common(
@@ -7047,6 +7051,9 @@ DEFUN (show_ip_ospf_database_max,
 		ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
 		if (ospf == NULL || !ospf->oi_running) {
 			vty_out(vty, "%% OSPF is not enabled in vrf default\n");
+			if (uj)
+				json_object_free(json);
+
 			return CMD_SUCCESS;
 		}
 
@@ -7191,16 +7198,26 @@ static int show_ip_ospf_database_type_adv_router_common(struct vty *vty,
 		type = OSPF_OPAQUE_AREA_LSA;
 	else if (strncmp(argv[arg_base + idx_type]->text, "opaque-as", 9) == 0)
 		type = OSPF_OPAQUE_AS_LSA;
-	else
+	else {
+		if (uj) {
+			if (use_vrf)
+				json_object_free(json_vrf);
+		}
 		return CMD_WARNING;
+	}
 
 	/* `show ip ospf database LSA adv-router ADV_ROUTER'. */
 	if (strncmp(argv[arg_base + 5]->text, "s", 1) == 0)
 		adv_router = ospf->router_id;
 	else {
 		ret = inet_aton(argv[arg_base + 6]->arg, &adv_router);
-		if (!ret)
+		if (!ret) {
+			if (uj) {
+				if (use_vrf)
+					json_object_free(json_vrf);
+			}
 			return CMD_WARNING;
+		}
 	}
 
 	show_lsa_detail_adv_router(vty, ospf, type, &adv_router, json_vrf);
@@ -7269,7 +7286,12 @@ DEFUN (show_ip_ospf_database_type_adv_router,
 		} else {
 			ospf = ospf_lookup_by_inst_name(inst, vrf_name);
 			if ((ospf == NULL) || !ospf->oi_running) {
-				vty_out(vty, "%% OSPF instance not found\n");
+				if (uj)
+					vty_json(vty, json);
+				else
+					vty_out(vty,
+						"%% OSPF is not enabled in vrf %s\n",
+						vrf_name);
 				return CMD_SUCCESS;
 			}
 
@@ -7280,7 +7302,11 @@ DEFUN (show_ip_ospf_database_type_adv_router,
 		/* Display default ospf (instance 0) info */
 		ospf = ospf_lookup_by_vrf_id(VRF_DEFAULT);
 		if (ospf == NULL || !ospf->oi_running) {
-			vty_out(vty, "%% OSPF is not enabled in vrf default\n");
+			if (uj)
+				vty_json(vty, json);
+			else
+				vty_out(vty,
+					"%% OSPF is not enabled on vrf default\n");
 			return CMD_SUCCESS;
 		}
 
@@ -10222,7 +10248,12 @@ static int show_ip_ospf_route_common(struct vty *vty, struct ospf *ospf,
 	ospf_show_vrf_name(ospf, vty, json_vrf, use_vrf);
 
 	if (ospf->new_table == NULL) {
-		vty_out(vty, "No OSPF routing information exist\n");
+		if (json) {
+			if (use_vrf)
+				json_object_free(json_vrf);
+		} else {
+			vty_out(vty, "No OSPF routing information exist\n");
+		}
 		return CMD_SUCCESS;
 	}
 
