@@ -9899,6 +9899,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 	bool use_json = CHECK_FLAG(show_flags, BGP_SHOW_OPT_JSON);
 	bool wide = CHECK_FLAG(show_flags, BGP_SHOW_OPT_WIDE);
 	bool all = CHECK_FLAG(show_flags, BGP_SHOW_OPT_AFI_ALL);
+	bool detail = CHECK_FLAG(show_flags, BGP_SHOW_OPT_DETAIL);
 
 	if (output_cum && *output_cum != 0)
 		header = false;
@@ -9931,8 +9932,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 	}
 
 	/* Check for 'json detail', where we need header output once per dest */
-	if (use_json && CHECK_FLAG(show_flags, BGP_SHOW_OPT_DETAIL) &&
-	    type != bgp_show_type_dampend_paths &&
+	if (use_json && detail && type != bgp_show_type_dampend_paths &&
 	    type != bgp_show_type_damp_neighbor &&
 	    type != bgp_show_type_flap_statistics &&
 	    type != bgp_show_type_flap_neighbor)
@@ -9941,7 +9941,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 	/* Start processing of routes. */
 	for (dest = bgp_table_top(table); dest; dest = bgp_route_next(dest)) {
 		const struct prefix *dest_p = bgp_dest_get_prefix(dest);
-		bool json_detail = json_detail_header;
+		bool json_detail_header_used = false;
 
 		pi = bgp_dest_get_bgp_path_info(dest);
 		if (pi == NULL)
@@ -10135,25 +10135,6 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 							   : BGP_SHOW_HEADER));
 				header = false;
 
-			} else if (json_detail && json_paths != NULL) {
-				const struct prefix_rd *prd;
-				json_object *jtemp;
-
-				/* Use common detail header, for most types;
-				 * need a json 'object'.
-				 */
-
-				jtemp = json_object_new_object();
-				prd = bgp_rd_from_dest(dest, safi);
-
-				route_vty_out_detail_header(
-					vty, bgp, dest,
-					bgp_dest_get_prefix(dest), prd,
-					table->afi, safi, jtemp);
-
-				json_object_array_add(json_paths, jtemp);
-
-				json_detail = false;
 			}
 
 			if (rd != NULL && !display && !output_count) {
@@ -10173,16 +10154,30 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 						   AFI_IP, safi, use_json,
 						   json_paths);
 			else {
-				if (CHECK_FLAG(show_flags, BGP_SHOW_OPT_DETAIL))
+				if (detail) {
+					const struct prefix_rd *prd = NULL;
+
+					if (dest->pdest)
+						prd = bgp_rd_from_dest(
+							dest->pdest, safi);
+
+					if (!use_json)
+						route_vty_out_detail_header(
+							vty, bgp, dest,
+							bgp_dest_get_prefix(
+								dest),
+							prd, table->afi, safi,
+							NULL, false);
+
 					route_vty_out_detail(
-						vty, bgp, dest,
-						bgp_dest_get_prefix(dest), pi,
+						vty, bgp, dest, dest_p, pi,
 						family2afi(dest_p->family),
 						safi, json_paths);
-				else
+				} else {
 					route_vty_out(vty, dest_p, pi, display,
 						      safi, json_paths, wide,
 						      NULL);
+				}
 			}
 			display++;
 		}
@@ -10215,6 +10210,23 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 				else
 					vty_out(vty, ",\"%pFX\": ", dest_p);
 			}
+
+			if (json_detail_header && json_paths != NULL) {
+				const struct prefix_rd *prd;
+
+				vty_out(vty, "{\n");
+
+				prd = bgp_rd_from_dest(dest, safi);
+
+				route_vty_out_detail_header(
+					vty, bgp, dest,
+					bgp_dest_get_prefix(dest), prd,
+					table->afi, safi, json_paths, true);
+
+				vty_out(vty, "\"paths\": ");
+				json_detail_header_used = true;
+			}
+
 			/*
 			 * We are using no_pretty here because under
 			 * extremely high settings( say lots and lots of
@@ -10225,6 +10237,10 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			 * routers out there
 			 */
 			vty_json_no_pretty(vty, json_paths);
+
+			if (json_detail_header_used)
+				vty_out(vty, "} ");
+
 			json_paths = NULL;
 			first = 0;
 		} else
@@ -10409,14 +10425,14 @@ static void bgp_show_all_instances_routes_vty(struct vty *vty, afi_t afi,
 void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 				 struct bgp_dest *dest, const struct prefix *p,
 				 const struct prefix_rd *prd, afi_t afi,
-				 safi_t safi, json_object *json)
+				 safi_t safi, json_object *json,
+				 bool incremental_print)
 {
 	struct bgp_path_info *pi;
 	struct peer *peer;
 	struct listnode *node, *nnode;
 	char buf1[RD_ADDRSTRLEN];
 	char buf2[INET6_ADDRSTRLEN];
-	char prefix_str[BUFSIZ];
 	int count = 0;
 	int best = 0;
 	int suppress = 0;
@@ -10453,13 +10469,13 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 			char prefix_str[BUFSIZ];
 
 			bgp_evpn_route2str((const struct prefix_evpn *)p,
-					   prefix_str,
-				   sizeof(prefix_str));
+					   prefix_str, sizeof(prefix_str));
 			json_object_string_add(json, "prefix", prefix_str);
 			json_object_int_add(json, "prefixLen", p->prefixlen);
-			json_object_string_add(json, "rd",
-				prd ? prefix_rd2str(prd, buf1, sizeof(buf1)) :
-				"");
+			json_object_string_add(
+				json, "rd",
+				prd ? prefix_rd2str(prd, buf1, sizeof(buf1))
+				    : "");
 			bgp_evpn_route2json((struct prefix_evpn *)p, json);
 		}
 	} else {
@@ -10474,15 +10490,23 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 					INET6_ADDRSTRLEN),
 				p->prefixlen);
 
-		} else
-			json_object_string_add(json, "prefix",
-				prefix2str(p, prefix_str, sizeof(prefix_str)));
+		} else {
+			if (incremental_print)
+				vty_out(vty, "\"prefix\": \"%pFX\",\n", p);
+			else
+				json_object_string_addf(json, "prefix", "%pFX",
+							p);
+		}
 	}
 
 	if (has_valid_label) {
-		if (json)
-			json_object_int_add(json, "localLabel", label);
-		else
+		if (json) {
+			if (incremental_print)
+				vty_out(vty, "\"localLabel\": \"%u\",\n",
+					label);
+			else
+				json_object_int_add(json, "localLabel", label);
+		} else
 			vty_out(vty, "Local label: %d\n", label);
 	}
 
@@ -10607,13 +10631,16 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 			}
 		}
 
-		if (json) {
-			if (json_adv_to) {
+		if (json && json_adv_to) {
+			if (incremental_print) {
+				vty_out(vty, "\"advertisedTo\": ");
+				vty_json(vty, json_adv_to);
+				vty_out(vty, ",");
+			} else
 				json_object_object_add(json, "advertisedTo",
 						       json_adv_to);
-			}
 		} else {
-			if (first)
+			if (!json && first)
 				vty_out(vty, "  Not advertised to any peer");
 			vty_out(vty, "\n");
 		}
@@ -10648,7 +10675,7 @@ static void bgp_show_path_info(const struct prefix_rd *pfx_rd,
 			route_vty_out_detail_header(
 				vty, bgp, bgp_node,
 				bgp_dest_get_prefix(bgp_node), pfx_rd, AFI_IP,
-				safi, json_header);
+				safi, json_header, false);
 			header = 0;
 		}
 		(*display)++;
