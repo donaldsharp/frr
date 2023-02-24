@@ -117,6 +117,7 @@ struct bgp_master {
 
 	/* BGP start time.  */
 	time_t start_time;
+	time_t gr_completion_time;
 
 	/* Various BGP global configuration.  */
 	uint8_t options;
@@ -165,6 +166,7 @@ struct bgp_master {
 #define BM_FLAG_FAST_SHUTDOWN		 (1 << 4)
 #define BM_FLAG_UPGRADE			 (1 << 5)
 #define BM_FLAG_GRACEFUL_RESTART	 (1 << 6)
+#define BM_FLAG_GR_COMPLETE (1 << 7)
 #define BM_FLAG_IPV6_NO_AUTO_RA		 (1 << 8)
 
 	bool terminating;	/* global flag that sigint terminate seen */
@@ -545,6 +547,9 @@ struct bgp {
 	 * - ZEBRA_GR_ENABLE / ZEBRA_GR_DISABLE
 	 */
 	enum zebra_gr_mode present_zebra_gr_state;
+
+	/* Is deferred path selection still not complete? */
+	bool gr_route_sync_pending;
 
 	/* BGP Per AF flags */
 	uint16_t af_flags[AFI_MAX][SAFI_MAX];
@@ -2725,6 +2730,30 @@ static inline bool bgp_in_graceful_shutdown(struct bgp *bgp)
 	return (!!CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN) ||
 	        !!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN) ||
 	        !!CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE));
+}
+
+static inline void bgp_update_gr_completion(void)
+{
+	struct listnode *node, *nnode;
+	struct bgp *bgp;
+
+	/*
+	 * Check and mark GR complete. This is done when deferred
+	 * path selection has been completed for all instances and
+	 * route-advertisement/EOR and route-sync with zebra has
+	 * been invoked.
+	 */
+	if (!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) ||
+	    CHECK_FLAG(bm->flags, BM_FLAG_GR_COMPLETE))
+		return;
+
+	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
+		if (bgp->gr_route_sync_pending)
+			return;
+	}
+
+	SET_FLAG(bm->flags, BM_FLAG_GR_COMPLETE);
+	bm->gr_completion_time = monotime(NULL);
 }
 
 /* For benefit of rfapi */

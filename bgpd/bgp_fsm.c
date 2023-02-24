@@ -2048,6 +2048,7 @@ static int bgp_start_deferral_timer(struct bgp *bgp, afi_t afi, safi_t safi,
 	/* Send message to RIB indicating route update pending */
 	if (gr_info->af_enabled[afi][safi] == false) {
 		gr_info->af_enabled[afi][safi] = true;
+		bgp->gr_route_sync_pending = true;
 		/* Send message to RIB */
 		bgp_zebra_update(bgp, afi, safi,
 				 ZEBRA_CLIENT_ROUTE_UPDATE_PENDING);
