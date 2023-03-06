@@ -82,4 +82,5 @@ void pim_cmd_init(void);
 		(vrf) ? vrf->info : pim_get_pim_instance(VRF_DEFAULT);         \
 	vrf = (vrf) ? vrf : pim->vrf;
 
+#define PIM_TIME_STRLEN 10
 #endif /* PIM_CMD_H */
