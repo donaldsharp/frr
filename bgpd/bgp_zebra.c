@@ -3849,6 +3849,9 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 		api.vrf_id = bgp->vrf_id;
 	}
 
+	struct vrf *vrf = vrf_lookup_by_id(bgp->vrf_id);
+	zlog_debug("bgp zebra send capapblieis: %s(%u) cap: %d",
+		   VRF_LOGNAME(vrf), bgp->vrf_id, api.cap);
 	if (zclient_capabilities_send(ZEBRA_CLIENT_CAPABILITIES, zclient, &api)
 	    == ZCLIENT_SEND_FAILURE) {
 		zlog_err("error sending capability");
@@ -3871,6 +3874,7 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
  */
 int bgp_zebra_update(afi_t afi, safi_t safi, vrf_id_t vrf_id, int type)
 {
+	struct vrf *vrf = vrf_lookup_by_id(vrf_id);
 	struct zapi_cap api = {0};
 
 	if (zclient == NULL) {
@@ -3890,6 +3894,10 @@ int bgp_zebra_update(afi_t afi, safi_t safi, vrf_id_t vrf_id, int type)
 	api.safi = safi;
 	api.vrf_id = vrf_id;
 	api.cap = type;
+
+	zlog_debug(
+		"Sending GR capabilities for %s(%u) afi: %d safi: %d, type: %d",
+		VRF_LOGNAME(vrf), vrf_id, afi, safi, type);
 
 	if (zclient_capabilities_send(ZEBRA_CLIENT_CAPABILITIES, zclient, &api)
 	    == ZCLIENT_SEND_FAILURE) {
@@ -3923,6 +3931,10 @@ int bgp_zebra_stale_timer_update(struct bgp *bgp)
 	api.cap = ZEBRA_CLIENT_RIB_STALE_TIME;
 	api.stale_removal_time = bgp->rib_stale_time;
 	api.vrf_id = bgp->vrf_id;
+
+	struct vrf *vrf = vrf_lookup_by_id(bgp->vrf_id);
+	zlog_debug("bgp zebra stale timer update for %s(%u) RIB STALE TIME",
+		   VRF_LOGNAME(vrf), bgp->vrf_id);
 	if (zclient_capabilities_send(ZEBRA_CLIENT_CAPABILITIES, zclient, &api)
 	    == ZCLIENT_SEND_FAILURE) {
 		if (BGP_DEBUG(zebra, ZEBRA))
