@@ -3823,16 +3823,22 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 	struct zapi_cap api;
 	int ret = BGP_GR_SUCCESS;
 
+	if (BGP_DEBUG(zebra, ZEBRA))
+		zlog_debug("%s: Sending %sable for %s", __func__,
+			   disable ? "dis" : "en", bgp->name_pretty);
+
 	if (zclient == NULL) {
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("zclient invalid");
+			zlog_debug("%s: %s zclient invalid", __func__,
+				   bgp->name_pretty);
 		return BGP_GR_FAILURE;
 	}
 
 	/* Check if the client is connected */
 	if ((zclient->sock < 0) || (zclient->t_connect)) {
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("client not connected");
+			zlog_debug("%s: %s client not connected", __func__,
+				   bgp->name_pretty);
 		return BGP_GR_FAILURE;
 	}
 
@@ -3854,7 +3860,8 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 		   VRF_LOGNAME(vrf), bgp->vrf_id, api.cap);
 	if (zclient_capabilities_send(ZEBRA_CLIENT_CAPABILITIES, zclient, &api)
 	    == ZCLIENT_SEND_FAILURE) {
-		zlog_err("error sending capability");
+		zlog_err("%s: %s error sending capability", __func__,
+			 bgp->name_pretty);
 		ret = BGP_GR_FAILURE;
 	} else {
 		if (disable)
@@ -3863,7 +3870,8 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 			bgp->present_zebra_gr_state = ZEBRA_GR_ENABLE;
 
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("send capabilty success");
+			zlog_debug("%s: %s send capabilty success", __func__,
+				   bgp->name_pretty);
 		ret = BGP_GR_SUCCESS;
 	}
 	return ret;
@@ -3872,37 +3880,41 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 /* Send route update pesding or completed status to RIB for the
  * specific AFI, SAFI
  */
-int bgp_zebra_update(afi_t afi, safi_t safi, vrf_id_t vrf_id, int type)
+int bgp_zebra_update(struct bgp *bgp, afi_t afi, safi_t safi,
+		     enum zserv_client_capabilities type)
 {
-	struct vrf *vrf = vrf_lookup_by_id(vrf_id);
 	struct zapi_cap api = {0};
+
+	if (BGP_DEBUG(zebra, ZEBRA))
+		zlog_debug("%s: %s afi: %u safi: %u Command %s", __func__,
+			   bgp->name_pretty, afi, safi,
+			   zserv_gr_client_cap_string(type));
 
 	if (zclient == NULL) {
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("zclient == NULL, invalid");
+			zlog_debug("%s: %s zclient == NULL, invalid", __func__,
+				   bgp->name_pretty);
 		return BGP_GR_FAILURE;
 	}
 
 	/* Check if the client is connected */
 	if ((zclient->sock < 0) || (zclient->t_connect)) {
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("client not connected");
+			zlog_debug("%s: %s client not connected", __func__,
+				   bgp->name_pretty);
 		return BGP_GR_FAILURE;
 	}
 
 	api.afi = afi;
 	api.safi = safi;
-	api.vrf_id = vrf_id;
+	api.vrf_id = bgp->vrf_id;
 	api.cap = type;
-
-	zlog_debug(
-		"Sending GR capabilities for %s(%u) afi: %d safi: %d, type: %d",
-		VRF_LOGNAME(vrf), vrf_id, afi, safi, type);
 
 	if (zclient_capabilities_send(ZEBRA_CLIENT_CAPABILITIES, zclient, &api)
 	    == ZCLIENT_SEND_FAILURE) {
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("error sending capability");
+			zlog_debug("%s: %s error sending capability", __func__,
+				   bgp->name_pretty);
 		return BGP_GR_FAILURE;
 	}
 	return BGP_GR_SUCCESS;
@@ -3914,6 +3926,10 @@ int bgp_zebra_stale_timer_update(struct bgp *bgp)
 {
 	struct zapi_cap api;
 
+	if (BGP_DEBUG(zebra, ZEBRA))
+		zlog_debug("%s: %s Timer Update to %u", __func__,
+			   bgp->name_pretty, bgp->rib_stale_time);
+
 	if (zclient == NULL) {
 		if (BGP_DEBUG(zebra, ZEBRA))
 			zlog_debug("zclient invalid");
@@ -3923,7 +3939,8 @@ int bgp_zebra_stale_timer_update(struct bgp *bgp)
 	/* Check if the client is connected */
 	if ((zclient->sock < 0) || (zclient->t_connect)) {
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("client not connected");
+			zlog_debug("%s: %s client not connected", __func__,
+				   bgp->name_pretty);
 		return BGP_GR_FAILURE;
 	}
 
@@ -3938,11 +3955,11 @@ int bgp_zebra_stale_timer_update(struct bgp *bgp)
 	if (zclient_capabilities_send(ZEBRA_CLIENT_CAPABILITIES, zclient, &api)
 	    == ZCLIENT_SEND_FAILURE) {
 		if (BGP_DEBUG(zebra, ZEBRA))
-			zlog_debug("error sending capability");
+			zlog_debug("%s: %s error sending capability", __func__,
+				   bgp->name_pretty);
 		return BGP_GR_FAILURE;
 	}
-	if (BGP_DEBUG(zebra, ZEBRA))
-		zlog_debug("send capabilty success");
+
 	return BGP_GR_SUCCESS;
 }
 

@@ -2044,7 +2044,7 @@ static int bgp_start_deferral_timer(struct bgp *bgp, afi_t afi, safi_t safi,
 		gr_info->af_enabled[afi][safi] = true;
 		bgp->gr_route_sync_pending = true;
 		/* Send message to RIB */
-		bgp_zebra_update(afi, safi, bgp->vrf_id,
+		bgp_zebra_update(bgp, afi, safi,
 				 ZEBRA_CLIENT_ROUTE_UPDATE_PENDING);
 	}
 	if (BGP_DEBUG(update, UPDATE_OUT))
@@ -2192,7 +2192,7 @@ static int bgp_establish(struct peer *peer)
 				/* Send route processing complete
 				   message to RIB */
 				bgp_zebra_update(
-					afi, safi, peer->bgp->vrf_id,
+					peer->bgp, afi, safi,
 					ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE);
 		}
 	} else {
@@ -2204,7 +2204,7 @@ static int bgp_establish(struct peer *peer)
 				/* Send route processing complete
 				   message to RIB */
 				bgp_zebra_update(
-					afi, safi, peer->bgp->vrf_id,
+					peer->bgp, afi, safi,
 					ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE);
 		}
 	}

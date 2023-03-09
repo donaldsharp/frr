@@ -128,6 +128,7 @@ extern int proto_name2num(const char *s);
 extern int proto_redistnum(int afi, const char *s);
 
 extern const char *zserv_command_string(unsigned int command);
+extern const char *zserv_gr_client_cap_string(unsigned int zcc);
 
 
 /* structure useful for avoiding repeated rendering of the same timestamp */
