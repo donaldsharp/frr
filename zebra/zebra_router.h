@@ -209,7 +209,7 @@ struct zebra_router {
 	/*
 	 * Time for when we sweep the rib from old routes
 	 */
-	time_t startup_time;
+	uint64_t startup_time;
 	struct event *sweeper;
 
 	bool maint_mode;

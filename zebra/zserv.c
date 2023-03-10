@@ -1132,7 +1132,7 @@ static void zebra_show_stale_client_detail(struct vty *vty,
 					   struct zserv *client)
 {
 	char buf[PREFIX2STR_BUFFER];
-	time_t uptime;
+	uint64_t uptime;
 	struct client_gr_info *info = NULL;
 	struct zserv *s = NULL;
 	bool first_p = true;
@@ -1168,10 +1168,10 @@ static void zebra_show_stale_client_detail(struct vty *vty,
 		if (ZEBRA_CLIENT_GR_ENABLED(info->capabilities)) {
 			if (info->stale_client_ptr) {
 				s = (struct zserv *)(info->stale_client_ptr);
-				uptime = monotime(NULL);
+				uptime = monotime_nano();
 				uptime -= s->restart_time;
 
-				frrtime_to_interval(uptime, buf, sizeof(buf));
+				frrtime_to_interval(UPTIMESECS(uptime), buf, sizeof(buf));
 
 				vty_out(vty, "Last restart time : %s ago\n",
 					buf);

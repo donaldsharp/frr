@@ -135,7 +135,6 @@ static void zebra_gr_client_info_delete(struct zserv *client,
 int32_t zebra_gr_client_disconnect(struct zserv *client)
 {
 	struct zserv *stale_client;
-	struct timeval tv;
 	struct client_gr_info *info = NULL;
 
 	/* Find the stale client */
@@ -150,7 +149,7 @@ int32_t zebra_gr_client_disconnect(struct zserv *client)
 		assert(0);
 	}
 
-	client->restart_time = monotime(&tv);
+	client->restart_time = monotime_nano();
 
 	/* For all the GR instance start the stale removal timer. */
 	TAILQ_FOREACH (info, &client->gr_info_queue, gr_info) {
@@ -290,6 +289,7 @@ struct zebra_gr_afi_clean {
 	afi_t afi;
 	uint8_t proto;
 	uint8_t instance;
+	uint64_t restart_time;
 
 	struct event *t_gac;
 };
@@ -476,12 +476,11 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct event *thread)
  *
  * Returns true when a node is deleted else false
  */
-static bool zebra_gr_process_route_entry(struct zserv *client,
-					 struct route_node *rn,
-					 struct route_entry *re)
+static bool zebra_gr_process_route_entry(struct zserv *client, struct route_node *rn,
+					 struct route_entry *re, uint64_t compare_time)
 {
 	/* If the route is not refreshed after restart, delete the entry */
-	if (re->uptime < client->restart_time) {
+	if (re->uptime < compare_time) {
 		if (IS_ZEBRA_DEBUG_RIB)
 			zlog_debug("%s: Client %s stale route %pFX is deleted",
 				   __func__, zebra_route_string(client->proto),
@@ -520,10 +519,9 @@ static void zebra_gr_delete_stale_route_table_afi(struct event *event)
 			 * the route
 			 */
 
-			if (re->type == gac->proto &&
-			    re->instance == gac->instance &&
-			    zebra_gr_process_route_entry(
-				    gac->info->stale_client_ptr, rn, re))
+			if (re->type == gac->proto && re->instance == gac->instance &&
+			    zebra_gr_process_route_entry(gac->info->stale_client_ptr, rn, re,
+							 gac->restart_time))
 				n++;
 
 			/* If the max route count is reached
@@ -557,6 +555,7 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 	uint8_t proto;
 	uint16_t instance;
 	struct zserv *s_client;
+	//uint64_t restart_time;
 
 	s_client = info->stale_client_ptr;
 	if (s_client == NULL) {

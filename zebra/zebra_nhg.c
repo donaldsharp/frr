@@ -841,7 +841,7 @@ static bool zebra_nhe_find(struct nhg_hash_entry **nhe, /* return value */
 
 done:
 	/* Reset time since last update */
-	(*nhe)->uptime = monotime(NULL);
+	(*nhe)->uptime = monotime_nano();
 
 	return created;
 }

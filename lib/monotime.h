@@ -59,6 +59,15 @@ struct printfrr_eargs;
 	} while (0)
 #endif
 
+static inline uint64_t monotime_nano(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000000000L + ts.tv_nsec;
+}
+#define UPTIMESECS(X) ((X) / 1000000000L)
+
 static inline time_t monotime(struct timeval *tvo)
 {
 	struct timespec ts;

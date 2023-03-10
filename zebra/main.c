@@ -524,7 +524,7 @@ int main(int argc, char **argv)
 	 * will be equal to the current getpid(). To know about such routes,
 	 * we have to have route_read() called before.
 	 */
-	zrouter.startup_time = monotime(NULL);
+	zrouter.startup_time = monotime_nano();
 	event_add_timer(zrouter.master, rib_sweep_route, NULL, graceful_restart,
 			&zrouter.sweeper);
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)

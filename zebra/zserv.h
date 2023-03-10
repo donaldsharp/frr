@@ -219,7 +219,7 @@ struct zserv {
 	 * graceful restart
 	 */
 	uint32_t gr_instance_count;
-	time_t restart_time;
+	uint64_t restart_time;
 
 	/*
 	 * Graceful restart information for
