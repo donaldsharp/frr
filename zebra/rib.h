@@ -153,7 +153,7 @@ struct route_entry {
 	route_tag_t tag;
 
 	/* Uptime. */
-	time_t uptime;
+	uint64_t uptime;
 
 	struct re_opaque *opaque;
 
