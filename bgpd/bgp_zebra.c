@@ -3273,13 +3273,12 @@ static int bgp_zebra_handle_fast_down(ZAPI_CALLBACK_ARGS)
 
 static void bgp_zebra_capabilities(struct zclient_capabilities *cap)
 {
-	bool maint;
-	// bool gr;
+	bool gr, maint;
 
-	// gr = cap->graceful_restart;
+	gr = cap->graceful_restart;
 	maint = cap->maint_mode;
-	// if (gr)
-	//	SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART);
+	if (gr)
+		SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART);
 
 	if (maint)
 		bgp_process_maintenance_mode(NULL, true);
@@ -3823,7 +3822,7 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 	struct zapi_cap api;
 	int ret = BGP_GR_SUCCESS;
 
-	if (BGP_DEBUG(zebra, ZEBRA))
+	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 		zlog_debug("%s: Sending %sable for %s", __func__,
 			   disable ? "dis" : "en", bgp->name_pretty);
 
@@ -3855,9 +3854,6 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 		api.vrf_id = bgp->vrf_id;
 	}
 
-	struct vrf *vrf = vrf_lookup_by_id(bgp->vrf_id);
-	zlog_debug("bgp zebra send capapblieis: %s(%u) cap: %d",
-		   VRF_LOGNAME(vrf), bgp->vrf_id, api.cap);
 	if (zclient_capabilities_send(ZEBRA_CLIENT_CAPABILITIES, zclient, &api)
 	    == ZCLIENT_SEND_FAILURE) {
 		zlog_err("%s: %s error sending capability", __func__,
@@ -3885,7 +3881,7 @@ int bgp_zebra_update(struct bgp *bgp, afi_t afi, safi_t safi,
 {
 	struct zapi_cap api = {0};
 
-	if (BGP_DEBUG(zebra, ZEBRA))
+	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 		zlog_debug("%s: %s afi: %u safi: %u Command %s", __func__,
 			   bgp->name_pretty, afi, safi,
 			   zserv_gr_client_cap_string(type));
