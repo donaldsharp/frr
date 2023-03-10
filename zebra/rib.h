@@ -117,7 +117,7 @@ struct route_entry {
 	route_tag_t tag;
 
 	/* Uptime. */
-	time_t uptime;
+	uint64_t uptime;
 
 	/* Type of this route. */
 	int type;

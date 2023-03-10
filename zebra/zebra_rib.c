@@ -4026,8 +4026,8 @@ void _route_entry_dump(const char *func, union prefixconstptr pp,
 			     : "",
 		   VRF_LOGNAME(vrf), re->vrf_id);
 	zlog_debug("%s: uptime == %lu, type == %u, instance == %d, table == %d",
-		   straddr, (unsigned long)re->uptime, re->type, re->instance,
-		   re->table);
+		   straddr, (unsigned long)UPTIMESECS(re->uptime), re->type,
+		   re->instance, re->table);
 	zlog_debug(
 		"%s: metric == %u, mtu == %u, distance == %u, flags == %sstatus == %s",
 		straddr, re->metric, re->mtu, re->distance,
@@ -4087,7 +4087,7 @@ struct route_entry *zebra_rib_route_entry_new(vrf_id_t vrf_id, int type,
 	re->mtu = mtu;
 	re->table = table_id;
 	re->vrf_id = vrf_id;
-	re->uptime = monotime(NULL);
+	re->uptime = monotime_nano();
 	re->tag = tag;
 	re->nhe_id = nhe_id;
 

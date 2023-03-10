@@ -471,7 +471,7 @@ int main(int argc, char **argv)
 	 * (e.g., BGP) to signal GR is complete else we wait for specfified
 	 * duration.
 	 */
-	zrouter.startup_time = monotime(NULL);
+	zrouter.startup_time = monotime_nano();
 	zrouter.rib_sweep_time = 0;
 	zrouter.graceful_restart = zebra_di.graceful_restart;
 

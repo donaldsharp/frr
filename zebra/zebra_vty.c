@@ -512,10 +512,11 @@ static void zebra_show_ip_route_opaque(struct vty *vty, struct route_entry *re,
 	}
 }
 
-static void uptime2str(time_t uptime, char *buf, size_t bufsize)
+static void uptime2str(uint64_t uptime, char *buf, size_t bufsize)
 {
 	time_t cur;
 
+	uptime = UPTIMESECS(uptime);
 	cur = monotime(NULL);
 	cur -= uptime;
 
@@ -2553,7 +2554,7 @@ static void show_ip_route_dump_vty(struct vty *vty, struct route_table *table)
 			vty_out(vty, "   tag: %u\n", re->tag);
 
 			uptime = monotime(&tv);
-			uptime -= re->uptime;
+			uptime -= UPTIMESECS(re->uptime);
 			gmtime_r(&uptime, &tm);
 
 			if (uptime < ONE_DAY_SECOND)

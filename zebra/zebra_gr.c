@@ -149,7 +149,6 @@ static void zebra_gr_client_info_delte(struct zserv *client,
 int32_t zebra_gr_client_disconnect(struct zserv *client)
 {
 	struct zserv *stale_client;
-	struct timeval tv;
 	struct client_gr_info *info = NULL;
 
 	/* Find the stale client */
@@ -164,7 +163,7 @@ int32_t zebra_gr_client_disconnect(struct zserv *client)
 		assert(0);
 	}
 
-	client->restart_time = monotime(&tv);
+	client->restart_time = monotime_nano();
 
 	/* For all the GR instance start the stale removal timer. */
 	TAILQ_FOREACH (info, &client->gr_info_queue, gr_info) {
@@ -521,7 +520,7 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread)
  */
 static void zebra_gr_process_route_entry(struct route_node *rn,
 					 struct route_entry *re,
-					 time_t compare_time, uint8_t proto)
+					 uint64_t compare_time, uint8_t proto)
 {
 	struct nexthop *nexthop;
 
@@ -560,7 +559,7 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 	uint16_t instance;
 	struct zserv *s_client;
 	struct zserv *client;
-	time_t restart_time = time(NULL);
+	uint64_t restart_time;
 
 	if ((info == NULL) || (zvrf == NULL))
 		return -1;
