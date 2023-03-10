@@ -3492,14 +3492,12 @@ static bool bgp_zebra_label_manager_connect(void)
 
 static void bgp_zebra_capabilities(struct zclient_capabilities *cap)
 {
-	bool maint;
-	// bool gr;
+	bool gr, maint;
 
-	bm->v6_with_v4_nexthops = cap->v6_with_v4_nexthop;
-	// gr = cap->graceful_restart;
+	gr = cap->graceful_restart;
 	maint = cap->maint_mode;
-	// if (gr)
-	//	SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART);
+	if (gr)
+		SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART);
 
 	if (maint)
 		bgp_process_maintenance_mode(NULL, true);
@@ -3812,7 +3810,7 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 	struct zapi_cap api;
 	int ret = BGP_GR_SUCCESS;
 
-	if (BGP_DEBUG(zebra, ZEBRA))
+	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 		zlog_debug("%s: Sending %sable for %s", __func__,
 			   disable ? "dis" : "en", bgp->name_pretty);
 
@@ -3871,7 +3869,7 @@ int bgp_zebra_update(struct bgp *bgp, afi_t afi, safi_t safi,
 {
 	struct zapi_cap api = {0};
 
-	if (BGP_DEBUG(zebra, ZEBRA))
+	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 		zlog_debug("%s: %s afi: %u safi: %u Command %s", __func__,
 			   bgp->name_pretty, afi, safi,
 			   zserv_gr_client_cap_string(type));
