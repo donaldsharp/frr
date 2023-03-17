@@ -53,7 +53,7 @@
 #include "ospfd/ospf_abr.h"
 #include "ospfd/ospf_errors.h"
 
-static struct ospf_lsa *ospf_handle_summarylsa_lsId_chg(struct ospf *ospf,
+static struct ospf_lsa *ospf_handle_summarylsa_lsId_chg(struct ospf_area *area,
 							struct prefix_ipv4 *p,
 							uint8_t type,
 							uint32_t metric,
@@ -1274,7 +1274,7 @@ ospf_summary_lsa_prepare_and_flood(struct prefix_ipv4 *p, uint32_t metric,
 	return new;
 }
 
-static struct ospf_lsa *ospf_handle_summarylsa_lsId_chg(struct ospf *ospf,
+static struct ospf_lsa *ospf_handle_summarylsa_lsId_chg(struct ospf_area *area,
 							struct prefix_ipv4 *p,
 							uint8_t type,
 							uint32_t metric,
@@ -1284,13 +1284,14 @@ static struct ospf_lsa *ospf_handle_summarylsa_lsId_chg(struct ospf *ospf,
 	struct ospf_lsa *summary_lsa = NULL;
 	struct summary_lsa *sl = NULL;
 	struct ospf_area *old_area = NULL;
+	struct ospf *ospf = area->ospf;
 	struct prefix_ipv4 old_prefix;
 	uint32_t old_metric;
 	struct in_addr mask;
 	uint32_t metric_val;
 	char *metric_buf;
 
-	lsa = ospf_lsdb_lookup_by_id(ospf->lsdb, type, p->prefix,
+	lsa = ospf_lsdb_lookup_by_id(area->lsdb, type, p->prefix,
 				     ospf->router_id);
 
 	if (!lsa) {
@@ -1349,8 +1350,8 @@ struct ospf_lsa *ospf_summary_lsa_originate(struct prefix_ipv4 *p,
 		if (IS_DEBUG_OSPF(lsa, LSA_GENERATE))
 			zlog_debug("Link ID has to be changed.");
 
-		new = ospf_handle_summarylsa_lsId_chg(
-			area->ospf, p, OSPF_SUMMARY_LSA, metric, id);
+		new = ospf_handle_summarylsa_lsId_chg(area, p, OSPF_SUMMARY_LSA,
+						      metric, id);
 		return new;
 	} else if (status == LSID_NOT_AVAILABLE) {
 		/* Link State ID not available. */
@@ -1512,7 +1513,7 @@ struct ospf_lsa *ospf_summary_asbr_lsa_originate(struct prefix_ipv4 *p,
 			zlog_debug("Link ID has to be changed.");
 
 		new = ospf_handle_summarylsa_lsId_chg(
-			area->ospf, p, OSPF_ASBR_SUMMARY_LSA, metric, id);
+			area, p, OSPF_ASBR_SUMMARY_LSA, metric, id);
 		return new;
 	} else if (status == LSID_NOT_AVAILABLE) {
 		/* Link State ID not available. */
