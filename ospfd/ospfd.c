@@ -325,7 +325,10 @@ static struct ospf *ospf_new(unsigned short instance, const char *name)
 	new->write_oi_count = OSPF_WRITE_INTERFACE_COUNT_DEFAULT;
 	new->disable_proactive_ping = false;
 
-	ospf_asbr_external_aggregator_init(new);
+	new->rt_aggr_tbl = route_table_init();
+	new->t_external_aggr = NULL;
+	new->aggr_action = 0;
+	new->aggr_delay_interval = OSPF_EXTL_AGGR_DEFAULT_DELAY;
 
 	QOBJ_REG(new, ospf);
 
@@ -777,20 +780,6 @@ static void ospf_finish_final(struct ospf *ospf)
 
 	ospf_distance_reset(ospf);
 	route_table_finish(ospf->distance_table);
-
-	/* Release extrenal Aggregator table */
-	for (rn = route_top(ospf->rt_aggr_tbl); rn; rn = route_next(rn)) {
-		struct ospf_external_aggr_rt *aggr;
-
-		aggr = rn->info;
-
-		if (aggr) {
-			ospf_external_aggregator_free(aggr);
-			rn->info = NULL;
-			route_unlock_node(rn);
-		}
-	}
-
 	route_table_finish(ospf->rt_aggr_tbl);
 
 	ospf_free_refresh_queue(ospf);
