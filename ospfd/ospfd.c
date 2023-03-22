@@ -325,6 +325,11 @@ static struct ospf *ospf_new(unsigned short instance, const char *name)
 	new->write_oi_count = OSPF_WRITE_INTERFACE_COUNT_DEFAULT;
 	new->disable_proactive_ping = false;
 
+	new->rt_aggr_tbl = route_table_init();
+	new->t_external_aggr = NULL;
+	new->aggr_action = 0;
+	new->aggr_delay_interval = OSPF_EXTL_AGGR_DEFAULT_DELAY;
+
 	QOBJ_REG(new, ospf);
 
 	new->fd = -1;
@@ -707,6 +712,7 @@ static void ospf_finish_final(struct ospf *ospf)
 	OSPF_TIMER_OFF(ospf->t_opaque_lsa_self);
 	OSPF_TIMER_OFF(ospf->t_sr_update);
 	OSPF_TIMER_OFF(ospf->t_default_routemap_timer);
+	OSPF_TIMER_OFF(ospf->t_external_aggr);
 
 	LSDB_LOOP (OPAQUE_AS_LSDB(ospf), rn, lsa)
 		ospf_discard_from_db(ospf, ospf->lsdb, lsa);
@@ -774,6 +780,7 @@ static void ospf_finish_final(struct ospf *ospf)
 
 	ospf_distance_reset(ospf);
 	route_table_finish(ospf->distance_table);
+	route_table_finish(ospf->rt_aggr_tbl);
 
 	ospf_free_refresh_queue(ospf);
 
