@@ -4913,6 +4913,7 @@ static void show_ip_ospf_neighbor_detail_sub(struct vty *vty,
 	char timebuf[OSPF_TIME_DUMP_SIZE];
 	json_object *json_neigh = NULL, *json_neigh_array = NULL;
 	char neigh_str[INET_ADDRSTRLEN] = {0};
+	struct ospf_neighbor *nbr1;
 
 	if (use_json) {
 		if (prev_nbr &&
@@ -5042,19 +5043,40 @@ static void show_ip_ospf_neighbor_detail_sub(struct vty *vty,
 		}
 	}
 
-	/* Show Designated Rotuer ID. */
-	if (use_json)
-		json_object_string_add(json_neigh, "routerDesignatedId",
-				       inet_ntoa(nbr->d_router));
-	else
-		vty_out(vty, "    DR is %s,", inet_ntoa(nbr->d_router));
+	/* Show Designated Router ID. */
+	if (DR(oi).s_addr == INADDR_ANY) {
+		if (!use_json)
+			vty_out(vty,
+				"  No designated router on this network\n");
+	} else {
+		nbr1 = ospf_nbr_lookup_by_addr(oi->nbrs, &DR(oi));
+		if (nbr1) {
+			if (use_json)
+				json_object_string_addf(
+					json_neigh, "routerDesignatedId",
+					"%pI4", &nbr1->router_id);
+			else
+				vty_out(vty, "    DR is %pI4,",
+					&nbr1->router_id);
+		}
+	}
 
-	/* Show Backup Designated Rotuer ID. */
-	if (use_json)
-		json_object_string_add(json_neigh, "routerDesignatedBackupId",
-				       inet_ntoa(nbr->bd_router));
-	else
-		vty_out(vty, " BDR is %s\n", inet_ntoa(nbr->bd_router));
+	/* Show Backup Designated Router ID. */
+	nbr1 = NULL;
+	nbr1 = ospf_nbr_lookup_by_addr(oi->nbrs, &BDR(oi));
+	if (nbr1 == NULL) {
+		if (!use_json)
+			vty_out(vty,
+				"  No backup designated router on this network\n");
+	} else {
+		if (use_json)
+			json_object_string_add(json_neigh,
+					       "routerDesignatedBackupId",
+					       inet_ntoa(nbr1->router_id));
+		else
+			vty_out(vty, " BDR is %s\n",
+				inet_ntoa(nbr1->router_id));
+	}
 
 	/* Show options. */
 	if (use_json) {
