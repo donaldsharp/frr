@@ -94,11 +94,12 @@ void zebra_gr_stale_client_cleanup(struct list *client_list)
 			if (info->t_stale_removal != NULL) {
 				THREAD_OFF(info->t_stale_removal);
 				info->t_stale_removal = NULL;
+				info->do_delete = true;
 				/* Process the stale routes */
 				thread_execute(
-				    zrouter.master,
-				    zebra_gr_route_stale_delete_timer_expiry,
-				    info, 1);
+					zrouter.master,
+					zebra_gr_route_stale_delete_timer_expiry,
+					info, 0);
 			}
 		}
 	}
@@ -485,10 +486,6 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread)
 	else
 		client = (struct zserv *)info->stale_client_ptr;
 
-	/* Set the flag to indicate all stale route deletion */
-	if (thread->u.val == 1)
-		info->do_delete = true;
-
 	cnt = zebra_gr_delete_stale_routes(info);
 
 	/* Restart the timer */
@@ -729,6 +726,7 @@ static void zebra_gr_process_client_stale_routes(struct zserv *client,
 		       __func__, zebra_route_string(client->proto),
 		       VRF_LOGNAME(vrf), info->vrf_id);
 		THREAD_OFF(info->t_stale_removal);
+		info->do_delete = false;
 		thread_execute(zrouter.master,
 			       zebra_gr_route_stale_delete_timer_expiry, info,
 			       0);
