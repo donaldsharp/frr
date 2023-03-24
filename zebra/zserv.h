@@ -81,7 +81,6 @@ struct client_gr_info {
 	bool route_sync[AFI_MAX][SAFI_MAX];
 
 	/* Book keeping */
-	struct prefix *current_prefix;
 	void *client_ptr;
 	void *stale_client_ptr;
 	struct thread *t_stale_removal;
