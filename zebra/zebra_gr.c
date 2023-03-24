@@ -558,9 +558,6 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 	struct zserv *client;
 	uint64_t restart_time;
 
-	if ((info == NULL) || (zvrf == NULL))
-		return -1;
-
 	if (zrouter.graceful_restart) {
 		client = info->client_ptr;
 		if (client == NULL) {
