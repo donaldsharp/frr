@@ -54,7 +54,7 @@ static struct zserv *zebra_gr_find_stale_client(struct zserv *client);
 static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread);
 static int32_t zebra_gr_delete_stale_routes(struct client_gr_info *info);
 static void zebra_gr_process_client_stale_routes(struct zserv *client,
-						 vrf_id_t vrf_id);
+						 struct client_gr_info *info);
 
 /*
  * Debug macros.
@@ -302,17 +302,43 @@ void zebra_gr_client_reconnect(struct zserv *client)
  */
 
 /*
- * Update the graceful restart information
- * for the client instance.
- * This function handles all the capabilities that are received.
+ * Function to decode and call appropriate functions
+ * to handle client capabilities.
  */
-static void zebra_client_update_info(struct zserv *client, struct zapi_cap *api)
+void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 {
+	struct zapi_cap api;
 	struct client_gr_info *info = NULL;
+	struct stream *s;
+	struct vrf *vrf;
+
+	s = msg;
+
+	if (zapi_capabilities_decode(s, &api)) {
+		LOG_GR("%s: Error in reading capabilities for client %s",
+		       __func__, zebra_route_string(client->proto));
+		return;
+	}
+
+	vrf = vrf_lookup_by_id(api.vrf_id);
+
+	/*
+	 * If this ever matters uncomment and add safi to the
+	 * arrays as needed to track
+	 */
+	if (api.safi != SAFI_UNICAST)
+		return;
+
+	/* GR only for dynamic clients */
+	if (client->proto <= ZEBRA_ROUTE_CONNECT) {
+		LOG_GR("%s: GR capabilities for client %s not supported",
+		       __func__, zebra_route_string(client->proto));
+		return;
+	}
 
 	/* Find the bgp information for the specified vrf id */
 	TAILQ_FOREACH (info, &client->gr_info_queue, gr_info) {
-		if (info->vrf_id == api->vrf_id)
+		if (info->vrf_id == api.vrf_id)
 			break;
 	}
 
@@ -320,7 +346,7 @@ static void zebra_client_update_info(struct zserv *client, struct zapi_cap *api)
 	 * If the command is delete, then cancel the stale timer and
 	 * delete the bgp info
 	 */
-	switch (api->cap) {
+	switch (api.cap) {
 	case ZEBRA_CLIENT_GR_DISABLE:
 		if (!info)
 			return;
@@ -341,18 +367,16 @@ static void zebra_client_update_info(struct zserv *client, struct zapi_cap *api)
 
 		/* Update other parameters */
 		if (!info->gr_enable) {
-			struct vrf *vrf = vrf_lookup_by_id(api->vrf_id);
-
 			client->gr_instance_count++;
 
 			LOG_GR("%s: Cient %s vrf %s(%u) GR enabled count %d",
 			       __func__, zebra_route_string(client->proto),
-			       VRF_LOGNAME(vrf), api->vrf_id,
+			       VRF_LOGNAME(vrf), api.vrf_id,
 			       client->gr_instance_count);
 
-			info->capabilities = api->cap;
-			info->stale_removal_time = api->stale_removal_time;
-			info->vrf_id = api->vrf_id;
+			info->capabilities = api.cap;
+			info->stale_removal_time = api.stale_removal_time;
+			info->vrf_id = api.vrf_id;
 			info->gr_enable = true;
 		}
 		break;
@@ -362,14 +386,13 @@ static void zebra_client_update_info(struct zserv *client, struct zapi_cap *api)
 
 		/* Update the stale removal timer */
 		if (info && info->t_stale_removal == NULL) {
-			struct vrf *vrf = vrf_lookup_by_id(info->vrf_id);
 
 			LOG_GR("%s: vrf %s(%u) Stale time: %d is now update to: %d",
 			       __func__, VRF_LOGNAME(vrf), info->vrf_id,
 			       info->stale_removal_time,
-			       api->stale_removal_time);
+			       api.stale_removal_time);
 
-			info->stale_removal_time = api->stale_removal_time;
+			info->stale_removal_time = api.stale_removal_time;
 		}
 
 		break;
@@ -377,85 +400,32 @@ static void zebra_client_update_info(struct zserv *client, struct zapi_cap *api)
 		if (!info) {
 			LOG_GR("%s: Client %s route update complete for AFI %d, SAFI %d",
 			       __func__, zebra_route_string(client->proto),
-			       api->afi, api->safi);
+			       api.afi, api.safi);
 		} else {
-			struct vrf *vrf = vrf_lookup_by_id(info->vrf_id);
-
 			LOG_GR("%s: Client %s vrf %s(%u) route update complete for AFI %d, SAFI %d",
 			       __func__, zebra_route_string(client->proto),
-			       VRF_LOGNAME(vrf), info->vrf_id, api->afi,
-			       api->safi);
-			info->route_sync[api->afi] = true;
+			       VRF_LOGNAME(vrf), info->vrf_id, api.afi,
+			       api.safi);
+			info->route_sync[api.afi] = true;
 		}
+		zebra_gr_process_client_stale_routes(client, info);
 		break;
 	case ZEBRA_CLIENT_ROUTE_UPDATE_PENDING:
 		if (!info) {
 			LOG_GR("%s: Client %s route update pending for AFI %d, SAFI %d",
 			       __func__, zebra_route_string(client->proto),
-			       api->afi, api->safi);
+			       api.afi, api.safi);
 		} else {
-			struct vrf *vrf = vrf_lookup_by_id(info->vrf_id);
-
 			LOG_GR("%s: Client %s vrf %s(%u) route update pending for AFI %d, SAFI %d",
 			       __func__, zebra_route_string(client->proto),
-			       VRF_LOGNAME(vrf), info->vrf_id, api->afi,
-			       api->safi);
+			       VRF_LOGNAME(vrf), info->vrf_id, api.afi,
+			       api.safi);
 
-			info->af_enabled[api->afi] = true;
+			info->af_enabled[api.afi] = true;
 		}
 		break;
 	}
 }
-
-/*
- * Function to decode and call appropriate functions
- * to handle client capabilities.
- */
-void zread_client_capabilities(ZAPI_HANDLER_ARGS)
-{
-	struct zapi_cap api;
-	struct stream *s;
-
-	s = msg;
-
-	if (zapi_capabilities_decode(s, &api)) {
-		LOG_GR("%s: Error in reading capabilities for client %s",
-		       __func__, zebra_route_string(client->proto));
-		return;
-	}
-
-	if (api.safi != SAFI_UNICAST)
-		return;
-
-	/* GR only for dynamic clients */
-	if (client->proto <= ZEBRA_ROUTE_CONNECT) {
-		LOG_GR("%s: GR capabilities for client %s not supported",
-		       __func__, zebra_route_string(client->proto));
-		return;
-	}
-
-	/* Call the capabilities handler */
-	switch (api.cap) {
-	case ZEBRA_CLIENT_GR_CAPABILITIES:
-	case ZEBRA_CLIENT_ROUTE_UPDATE_PENDING:
-	case ZEBRA_CLIENT_GR_DISABLE:
-	case ZEBRA_CLIENT_RIB_STALE_TIME:
-		/*
-		 * For all the cases we need to update the client info.
-		 */
-		zebra_client_update_info(client, &api);
-		break;
-	case ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE:
-		/*
-		 * After client info has been updated delete all
-		 * stale routes
-		 */
-		zebra_client_update_info(client, &api);
-		zebra_gr_process_client_stale_routes(client, api.vrf_id);
-		break;
-	}
-}
-
 
 /*
  * Stale route handling
@@ -648,31 +618,22 @@ static int32_t zebra_gr_delete_stale_routes(struct client_gr_info *info)
  * and cancels the stale timer
  */
 static void zebra_gr_process_client_stale_routes(struct zserv *client,
-						 vrf_id_t vrf_id)
+						 struct client_gr_info *info)
 {
-	struct client_gr_info *info = NULL;
 	afi_t afi;
-
-	TAILQ_FOREACH (info, &client->gr_info_queue, gr_info) {
-		if (info->vrf_id == vrf_id)
-			break;
-	}
 
 	if (info == NULL)
 		return;
 
 	/* Check if route update completed for all AFI, SAFI */
 	for (afi = AFI_IP; afi < AFI_MAX; afi++) {
-		if (info->af_enabled[afi]) {
-			if (!info->route_sync[afi]) {
-				struct vrf *vrf = vrf_lookup_by_id(vrf_id);
+		if (info->af_enabled[afi] && !info->route_sync[afi]) {
+			struct vrf *vrf = vrf_lookup_by_id(info->vrf_id);
 
-				LOG_GR("%s: Client %s vrf: %s(%u) route update not completed for AFI %d",
-				       __func__,
-				       zebra_route_string(client->proto),
-				       VRF_LOGNAME(vrf), info->vrf_id, afi);
-				return;
-			}
+			LOG_GR("%s: Client %s vrf: %s(%u) route update not completed for AFI %d",
+			       __func__, zebra_route_string(client->proto),
+			       VRF_LOGNAME(vrf), info->vrf_id, afi);
+			return;
 		}
 	}
 
