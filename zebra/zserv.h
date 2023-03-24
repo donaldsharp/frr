@@ -77,8 +77,8 @@ struct client_gr_info {
 	bool stale_client;
 
 	/* Route sync and enable flags for AFI/SAFI */
-	bool af_enabled[AFI_MAX][SAFI_MAX];
-	bool route_sync[AFI_MAX][SAFI_MAX];
+	bool af_enabled[AFI_MAX];
+	bool route_sync[AFI_MAX];
 
 	/* Book keeping */
 	void *client_ptr;
