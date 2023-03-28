@@ -55,7 +55,7 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread);
 static int32_t zebra_gr_delete_stale_routes(struct client_gr_info *info);
 static void zebra_gr_process_client_stale_routes(struct zserv *client,
 						 struct client_gr_info *info);
-
+static void zebra_gr_delete_stale_route_table_afi(struct thread *event);
 /*
  * Debug macros.
  */
@@ -113,6 +113,8 @@ static struct client_gr_info *zebra_gr_client_info_create(struct zserv *client)
 
 	info = XCALLOC(MTYPE_TMP, sizeof(struct client_gr_info));
 
+	info->stale_client_ptr = client;
+
 	TAILQ_INSERT_TAIL(&(client->gr_info_queue), info, gr_info);
 	info->client_ptr = client;
 	return info;
@@ -121,8 +123,8 @@ static struct client_gr_info *zebra_gr_client_info_create(struct zserv *client)
 /*
  * A helper function to delete and destroy client info.
  */
-static void zebra_gr_client_info_delte(struct zserv *client,
-				       struct client_gr_info *info)
+static void zebra_gr_client_info_delete(struct zserv *client,
+					struct client_gr_info *info)
 {
 	struct vrf *vrf = vrf_lookup_by_id(info->vrf_id);
 
@@ -297,6 +299,16 @@ void zebra_gr_client_reconnect(struct zserv *client)
 	XFREE(MTYPE_TMP, old_client);
 }
 
+struct zebra_gr_afi_clean {
+	struct client_gr_info *info;
+	afi_t afi;
+	uint8_t proto;
+	uint8_t instance;
+	uint64_t restart_time;
+
+	struct thread *t_gac;
+};
+
 /*
  * Functions to deal with capabilities
  */
@@ -358,7 +370,7 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 		if ((info->gr_enable) && (client->gr_instance_count > 0))
 			client->gr_instance_count--;
 
-		zebra_gr_client_info_delte(client, info);
+		zebra_gr_client_info_delete(client, info);
 		break;
 	case ZEBRA_CLIENT_GR_CAPABILITIES:
 		/* Allocate bgp info */
@@ -398,15 +410,29 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 		break;
 	case ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE:
 		if (!info) {
-			LOG_GR("%s: Client %s route update complete for AFI %d, SAFI %d",
+			LOG_GR("%s: Client %s route update complete for AFI %d, SAFI %d, no Graceful Restart communication, returning",
 			       __func__, zebra_route_string(client->proto),
 			       api.afi, api.safi);
+			return;
 		} else {
+			struct zebra_gr_afi_clean *gac;
+
 			LOG_GR("%s: Client %s vrf %s(%u) route update complete for AFI %d, SAFI %d",
 			       __func__, zebra_route_string(client->proto),
 			       VRF_LOGNAME(vrf), info->vrf_id, api.afi,
 			       api.safi);
 			info->route_sync[api.afi] = true;
+
+			gac = XCALLOC(MTYPE_TMP, sizeof(*gac));
+
+			gac->info = info;
+			gac->afi = api.afi;
+			gac->proto = client->proto;
+			gac->instance = client->instance;
+
+			thread_add_event(zrouter.master,
+					 zebra_gr_delete_stale_route_table_afi,
+					 gac, 0, &gac->t_gac);
 		}
 		zebra_gr_process_client_stale_routes(client, info);
 		break;
@@ -501,6 +527,58 @@ static bool zebra_gr_process_route_entry(struct route_node *rn,
 	return false;
 }
 
+static void zebra_gr_delete_stale_route_table_afi(struct thread *event)
+{
+	struct zebra_gr_afi_clean *gac = THREAD_ARG(event);
+	struct route_table *table;
+	struct route_node *rn;
+	struct route_entry *re, *next;
+	struct zebra_vrf *zvrf = zebra_vrf_lookup_by_id(gac->info->vrf_id);
+	int32_t n = 0;
+
+	if (!zvrf)
+		goto done;
+
+	table = zvrf->table[gac->afi][SAFI_UNICAST];
+	if (!table)
+		goto done;
+
+	for (rn = route_top(table); rn; rn = srcdest_route_next(rn)) {
+		RNODE_FOREACH_RE_SAFE (rn, re, next) {
+			if (CHECK_FLAG(re->status, ROUTE_ENTRY_REMOVED))
+				continue;
+
+			/* If the route refresh is received
+			 * after restart then do not delete
+			 * the route
+			 */
+
+			if (re->type == gac->proto &&
+			    re->instance == gac->instance &&
+			    zebra_gr_process_route_entry(
+				    rn, re, gac->restart_time, gac->proto))
+				n++;
+
+			/* If the max route count is reached
+			 * then timer thread will be restarted
+			 * Store the current prefix and afi
+			 */
+			if ((n >= ZEBRA_MAX_STALE_ROUTE_COUNT) &&
+			    (gac->info->do_delete == false)) {
+				thread_add_timer(
+					zrouter.master,
+					zebra_gr_delete_stale_route_table_afi,
+					gac, ZEBRA_DEFAULT_STALE_UPDATE_DELAY,
+					&gac->t_gac);
+			}
+		}
+	}
+
+done:
+	XFREE(MTYPE_TMP, gac);
+	return;
+}
+
 /*
  * This function walks through the route table for all vrf and deletes
  * the stale routes for the restarted client specified by the protocol
@@ -509,11 +587,6 @@ static bool zebra_gr_process_route_entry(struct route_node *rn,
 static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 					   struct zebra_vrf *zvrf)
 {
-	struct route_node *rn;
-	struct route_entry *re;
-	struct route_entry *next;
-	struct route_table *table;
-	int32_t n = 0;
 	afi_t afi, curr_afi;
 	uint8_t proto;
 	uint16_t instance;
@@ -548,37 +621,23 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 
 	/* Process routes for all AFI */
 	for (afi = curr_afi; afi < AFI_MAX; afi++) {
-		table = zvrf->table[afi][SAFI_UNICAST];
+		struct zebra_gr_afi_clean *gac =
+			XCALLOC(MTYPE_TMP, sizeof(*gac));
 
-		if (!table)
-			continue;
+		gac->info = info;
+		gac->afi = afi;
+		gac->proto = proto;
+		gac->instance = instance;
+		gac->restart_time = restart_time;
 
-		for (rn = route_top(table); rn; rn = srcdest_route_next(rn)) {
-			RNODE_FOREACH_RE_SAFE (rn, re, next) {
-				if (CHECK_FLAG(re->status, ROUTE_ENTRY_REMOVED))
-					continue;
-
-				/* If the route refresh is received
-				 * after restart then do not delete
-				 * the route
-				 */
-				if (re->type == proto &&
-				    re->instance == instance &&
-				    zebra_gr_process_route_entry(
-					    rn, re, restart_time, proto))
-					n++;
-
-				/* If the max route count is reached
-				 * then timer thread will be restarted
-				 * Store the current prefix and afi
-				 */
-				if ((n >= ZEBRA_MAX_STALE_ROUTE_COUNT) &&
-				    (info->do_delete == false)) {
-					info->current_afi = afi;
-					return n;
-				}
-			}
-		}
+		if (info->do_delete)
+			thread_execute(zrouter.master,
+				       zebra_gr_delete_stale_route_table_afi,
+				       gac, 0);
+		else
+			thread_add_event(zrouter.master,
+					 zebra_gr_delete_stale_route_table_afi,
+					 gac, 0, &gac->t_gac);
 	}
 	return 0;
 }
@@ -589,21 +648,13 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
  */
 static int32_t zebra_gr_delete_stale_routes(struct client_gr_info *info)
 {
-	struct vrf *vrf;
 	struct zebra_vrf *zvrf;
 	uint64_t cnt = 0;
 
 	if (info == NULL)
 		return -1;
 
-	/* Get the current VRF */
-	vrf = vrf_lookup_by_id(info->vrf_id);
-	if (vrf == NULL) {
-		LOG_GR("%s: Invalid VRF specified %u", __func__, info->vrf_id);
-		return -1;
-	}
-
-	zvrf = vrf->info;
+	zvrf = zebra_vrf_lookup_by_id(info->vrf_id);
 	if (zvrf == NULL) {
 		LOG_GR("%s: Invalid VRF entry %u", __func__, info->vrf_id);
 		return -1;
@@ -639,7 +690,7 @@ static void zebra_gr_process_client_stale_routes(struct zserv *client,
 
 	/*
 	 * Route update completed for all AFI, SAFI
-	 * Also perform the cleanup if FRR itself is gracefully restarting.
+	 * Cancel the stale timer, routes are already being processed
 	 */
 	info->route_sync_done_time = monotime(NULL);
 	if (info->t_stale_removal || zrouter.graceful_restart) {
@@ -649,9 +700,5 @@ static void zebra_gr_process_client_stale_routes(struct zserv *client,
 		       __func__, zebra_route_string(client->proto),
 		       VRF_LOGNAME(vrf), info->vrf_id);
 		THREAD_OFF(info->t_stale_removal);
-		info->do_delete = false;
-		thread_execute(zrouter.master,
-			       zebra_gr_route_stale_delete_timer_expiry, info,
-			       0);
 	}
 }
