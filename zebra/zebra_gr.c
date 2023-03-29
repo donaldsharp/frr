@@ -176,7 +176,6 @@ int32_t zebra_gr_client_disconnect(struct zserv *client)
 				zebra_gr_route_stale_delete_timer_expiry, info,
 				info->stale_removal_time,
 				&info->t_stale_removal);
-			info->current_afi = AFI_IP;
 			info->stale_client_ptr = client;
 			info->stale_client = true;
 			LOG_GR("%s: Client %s vrf %s(%u) Stale timer update to %d",
@@ -491,7 +490,6 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread)
 		       __func__, zebra_route_string(client->proto),
 		       VRF_LOGNAME(vrf), info->vrf_id);
 
-		info->current_afi = 0;
 		zebra_gr_delete_stale_client(info);
 	}
 }
@@ -587,7 +585,7 @@ done:
 static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 					   struct zebra_vrf *zvrf)
 {
-	afi_t afi, curr_afi;
+	afi_t afi;
 	uint8_t proto;
 	uint16_t instance;
 	struct zserv *s_client;
@@ -614,13 +612,14 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 		restart_time = s_client->restart_time;
 	}
 
-	curr_afi = info->current_afi;
+	proto = s_client->proto;
+	instance = s_client->instance;
 
 	LOG_GR("%s: Client %s %s(%u) stale routes are being deleted", __func__,
 	       zebra_route_string(proto), zvrf->vrf->name, zvrf->vrf->vrf_id);
 
 	/* Process routes for all AFI */
-	for (afi = curr_afi; afi < AFI_MAX; afi++) {
+	for (afi = AFI_IP; afi < AFI_MAX; afi++) {
 		struct zebra_gr_afi_clean *gac =
 			XCALLOC(MTYPE_TMP, sizeof(*gac));
 
