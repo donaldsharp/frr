@@ -81,19 +81,37 @@ static int open_bpf_dev(struct isis_circuit *circuit)
 
 	zlog_debug("Opened BPF device %s", bpfdev);
 
-	memcpy(ifr.ifr_name, circuit->interface->name, sizeof(ifr.ifr_name));
-	if (ioctl(fd, BIOCSETIF, (caddr_t)&ifr) < 0) {
-		zlog_warn("open_bpf_dev(): failed to bind to interface: %s",
-			  safe_strerror(errno));
-		return ISIS_WARNING;
-	}
-
 	if (ioctl(fd, BIOCGBLEN, (caddr_t)&blen) < 0) {
 		zlog_warn("failed to get BPF buffer len");
 		blen = circuit->interface->mtu;
 	}
 
 	readblen = blen;
+	/*
+	 * If the buffer length is smaller than our mtu, lets try to increase it
+	 */
+	if (blen < circuit->interface->mtu) {
+		if (ioctl(fd, BIOCSBLEN, &circuit->interface->mtu) < 0) {
+			zlog_warn("failed to set BPF buffer len (%u to %u)",
+				  blen, circuit->interface->mtu);
+		}
+
+		/*
+		 * We just reset the value of the bpf buffer to
+		 * be equivalent to the size of the mtu of the interface
+		 * we are working on.  This is because the read
+		 * can be an entire packet which is of course
+		 * can be the mtu since we isis will use that value
+		 */
+		readblen = blen = circuit->interface->mtu;
+	}
+
+	memcpy(ifr.ifr_name, circuit->interface->name, sizeof(ifr.ifr_name));
+	if (ioctl(fd, BIOCSETIF, (caddr_t)&ifr) < 0) {
+		zlog_warn("open_bpf_dev(): failed to bind to interface: %s",
+			  safe_strerror(errno));
+		return ISIS_WARNING;
+	}
 
 	if (readbuff == NULL)
 		readbuff = malloc(blen);
@@ -124,16 +142,6 @@ static int open_bpf_dev(struct isis_circuit *circuit)
 	 */
 	if (ioctl(fd, BIOCPROMISC) < 0) {
 		zlog_warn("failed to set BPF dev to promiscuous mode");
-	}
-
-	/*
-	 * If the buffer length is smaller than our mtu, lets try to increase it
-	 */
-	if (blen < circuit->interface->mtu) {
-		if (ioctl(fd, BIOCSBLEN, &circuit->interface->mtu) < 0) {
-			zlog_warn("failed to set BPF buffer len (%u to %u)",
-				  blen, circuit->interface->mtu);
-		}
 	}
 
 	/*
