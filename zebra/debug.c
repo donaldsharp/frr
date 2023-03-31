@@ -714,6 +714,9 @@ void zebra_debug_init(void)
 	zebra_debug_nexthop = 0;
 	zebra_debug_pbr = 0;
 
+	SET_FLAG(zebra_debug_kernel, ZEBRA_DEBUG_KERNEL);
+	SET_FLAG(zebra_debug_kernel, ZEBRA_DEBUG_KERNEL_MSGDUMP_RECV);
+
 	install_node(&debug_node);
 
 	install_element(ENABLE_NODE, &show_debugging_zebra_cmd);
