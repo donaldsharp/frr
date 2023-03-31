@@ -3720,6 +3720,8 @@ static void show_ip_ospf_interface_sub(struct vty *vty, struct ospf *ospf,
 				json_object_int_add(json_oi,
 						    "timerHelloInMsecs",
 						    time_store);
+				json_object_boolean_false_add(
+					json_oi, "timerPassiveIface");
 			} else
 				vty_out(vty, "    Hello due in %s\n",
 					ospf_timer_dump(oi->t_hello, timebuf,
