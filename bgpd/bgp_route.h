@@ -565,6 +565,7 @@ DECLARE_HOOK(bgp_process,
 #define BGP_SHOW_OPT_ESTABLISHED (1 << 5)
 #define BGP_SHOW_OPT_FAILED (1 << 6)
 #define BGP_SHOW_OPT_DETAIL (1 << 7)
+#define BGP_SHOW_OPT_ROUTES_DETAIL (1 << 8)
 
 /* Prototypes. */
 extern void bgp_rib_remove(struct bgp_dest *dest, struct bgp_path_info *pi,
@@ -741,7 +742,8 @@ extern void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 					struct bgp_dest *dest,
 					const struct prefix *p,
 					const struct prefix_rd *prd, afi_t afi,
-					safi_t safi, json_object *json);
+					safi_t safi, json_object *json,
+					bool incremental_print);
 extern void route_vty_out_detail(struct vty *vty, struct bgp *bgp,
 				 struct bgp_dest *bn, const struct prefix *p,
 				 struct bgp_path_info *path, afi_t afi,
