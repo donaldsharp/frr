@@ -1253,6 +1253,7 @@ struct peer {
 #define PEER_FLAG_ALLOWAS_IN_ORIGIN         (1 << 25) /* allowas-in origin */
 #define PEER_FLAG_SEND_LARGE_COMMUNITY      (1 << 26) /* Send large Communities */
 #define PEER_FLAG_MAX_PREFIX_OUT            (1 << 27) /* outgoing maximum prefix */
+#define PEER_FLAG_SOO                       (1 << 30) /* soo */
 
 	enum bgp_addpath_strat addpath_type[AFI_MAX][SAFI_MAX];
 
@@ -1443,6 +1444,9 @@ struct peer {
 
 	/* allowas-in. */
 	char allowas_in[AFI_MAX][SAFI_MAX];
+
+	/* soo */
+	struct ecommunity *soo[AFI_MAX][SAFI_MAX];
 
 	/* weight */
 	unsigned long weight[AFI_MAX][SAFI_MAX];
@@ -1811,6 +1815,26 @@ enum peer_change_type {
 	peer_change_reset_in,
 	peer_change_reset_out,
 };
+
+/* Enumeration of martian ("self") entry types.
+ * Routes carrying fields that match a self entry are considered martians
+ * and should be handled accordingly, i.e. dropped or import-filtered.
+ * Note:
+ *     These "martians" are separate from routes optionally allowed via
+ *     'bgp allow-martian-nexthop'. The optionally allowed martians are
+ *     simply prefixes caught by ipv4_martian(), i.e. routes outside
+ *     the non-reserved IPv4 Unicast address space.
+ */
+enum bgp_martian_type {
+	BGP_MARTIAN_IF_IP,  /* bgp->address_hash */
+	BGP_MARTIAN_TUN_IP, /* bgp->tip_hash */
+	BGP_MARTIAN_IF_MAC, /* bgp->self_mac_hash */
+	BGP_MARTIAN_RMAC,   /* bgp->rmac */
+	BGP_MARTIAN_SOO,    /* bgp->evpn_info->macvrf_soo */
+};
+
+extern const struct message bgp_martian_type_str[];
+extern const char *bgp_martian_type2str(enum bgp_martian_type mt);
 
 extern struct bgp_master *bm;
 extern unsigned int multipath_num;

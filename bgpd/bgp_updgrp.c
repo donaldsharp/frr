@@ -156,6 +156,12 @@ static void conf_copy(struct peer *dst, struct peer *src, afi_t afi,
 	dst->local_as = src->local_as;
 	dst->change_local_as = src->change_local_as;
 	dst->shared_network = src->shared_network;
+
+	if (src->soo[afi][safi]) {
+		ecommunity_free(&dst->soo[afi][safi]);
+		dst->soo[afi][safi] = ecommunity_dup(src->soo[afi][safi]);
+	}
+
 	memcpy(&(dst->nexthop), &(src->nexthop), sizeof(struct bgp_nexthop));
 
 	dst->group = src->group;
@@ -240,6 +246,8 @@ static void conf_release(struct peer *src, afi_t afi, safi_t safi)
 	XFREE(MTYPE_BGP_FILTER_NAME, srcfilter->advmap.cname);
 
 	XFREE(MTYPE_BGP_PEER_HOST, src->host);
+
+	ecommunity_free(&src->soo[afi][safi]);
 }
 
 static void peer2_updgrp_copy(struct update_group *updgrp, struct peer_af *paf)
@@ -409,6 +417,12 @@ static unsigned int updgrp_hash_key_make(const void *p)
 			  PEER_CAP_ORF_PREFIX_SM_OLD_RCV))
 		key = jhash_1word(jhash(peer->host, strlen(peer->host), SEED2),
 				  key);
+
+	if (peer->soo[afi][safi]) {
+		char *soo_str = ecommunity_str(peer->soo[afi][safi]);
+
+		key = jhash_1word(jhash(soo_str, strlen(soo_str), SEED1), key);
+	}
 
 	return key;
 }

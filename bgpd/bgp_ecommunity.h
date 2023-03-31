@@ -208,6 +208,7 @@ extern unsigned int ecommunity_hash_make(const void *);
 extern struct ecommunity *ecommunity_str2com(const char *, int, int);
 extern char *ecommunity_ecom2str(struct ecommunity *, int, int);
 extern void ecommunity_strfree(char **s);
+extern bool ecommunity_include(struct ecommunity *e1, struct ecommunity *e2);
 extern bool ecommunity_match(const struct ecommunity *,
 			     const struct ecommunity *);
 extern char *ecommunity_str(struct ecommunity *);
@@ -253,6 +254,8 @@ extern const uint8_t *ecommunity_linkbw_present(struct ecommunity *ecom,
 						uint32_t *bw);
 extern struct ecommunity *ecommunity_replace_linkbw(as_t as,
 				struct ecommunity *ecom, uint64_t cum_bw);
+
+extern bool soo_in_ecom(struct ecommunity *ecom, struct ecommunity *soo);
 
 static inline void ecommunity_strip_rts(struct ecommunity *ecom)
 {

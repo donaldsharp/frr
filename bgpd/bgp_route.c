@@ -2129,6 +2129,31 @@ bool subgroup_announce_check(struct bgp_dest *dest, struct bgp_path_info *pi,
 		if (aspath_check_as_sets(attr->aspath))
 			return false;
 
+	/* If neighbor soo is configured, then check if the route has
+	 * SoO extended community and validate against the configured
+	 * one. If they match, do not announce, to prevent routing
+	 * loops.
+	 */
+	if ((attr->flag & ATTR_FLAG_BIT(BGP_ATTR_EXT_COMMUNITIES)) &&
+	    peer->soo[afi][safi]) {
+		struct ecommunity *ecomm_soo = peer->soo[afi][safi];
+		struct ecommunity *ecomm = attr->ecommunity;
+
+		if ((ecommunity_lookup(ecomm, ECOMMUNITY_ENCODE_AS,
+				       ECOMMUNITY_SITE_ORIGIN) ||
+		     ecommunity_lookup(ecomm, ECOMMUNITY_ENCODE_AS4,
+				       ECOMMUNITY_SITE_ORIGIN) ||
+		     ecommunity_lookup(ecomm, ECOMMUNITY_ENCODE_IP,
+				       ECOMMUNITY_SITE_ORIGIN)) &&
+		    ecommunity_include(ecomm, ecomm_soo)) {
+			if (bgp_debug_update(NULL, p, subgrp->update_group, 0))
+				zlog_debug(
+					"%pBP [Update:SEND] %pFX is filtered by SoO extcommunity '%s'",
+					peer, p, ecommunity_str(ecomm_soo));
+			return false;
+		}
+	}
+
 	/* Codification of AS 0 Processing */
 	if (aspath_check_as_zero(attr->aspath))
 		return false;
@@ -3734,6 +3759,35 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	    && (!bgp_option_check(BGP_OPT_NO_FIB))
 	    && (!CHECK_FLAG(dest->flags, BGP_NODE_FIB_INSTALLED)))
 		SET_FLAG(dest->flags, BGP_NODE_FIB_INSTALL_PENDING);
+
+	/* If neighbor soo is configured, tag all incoming routes with
+	 * this SoO tag and then filter out advertisements in
+	 * subgroup_announce_check() if it matches the configured SoO
+	 * on the other peer.
+	 */
+	if (peer->soo[afi][safi]) {
+		struct ecommunity *old_ecomm = new_attr.ecommunity;
+		struct ecommunity *ecomm_soo = peer->soo[afi][safi];
+		struct ecommunity *new_ecomm;
+
+		if (old_ecomm) {
+			new_ecomm = ecommunity_merge(ecommunity_dup(old_ecomm),
+						     ecomm_soo);
+
+			if (!old_ecomm->refcnt)
+				ecommunity_free(&old_ecomm);
+		} else {
+			new_ecomm = ecommunity_dup(ecomm_soo);
+		}
+
+		new_attr.ecommunity = new_ecomm;
+		if (new_ecomm)
+			SET_FLAG(new_attr.flag,
+				 ATTR_FLAG_BIT(BGP_ATTR_EXT_COMMUNITIES));
+		else
+			UNSET_FLAG(new_attr.flag,
+				   ATTR_FLAG_BIT(BGP_ATTR_EXT_COMMUNITIES));
+	}
 
 	attr_new = bgp_attr_intern(&new_attr);
 

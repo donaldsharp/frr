@@ -938,6 +938,23 @@ char *ecommunity_ecom2str(struct ecommunity *ecom, int format, int filter)
 	return str_buf;
 }
 
+bool ecommunity_include(struct ecommunity *e1, struct ecommunity *e2)
+{
+	int i, j;
+
+	if (!e1 || !e2)
+		return false;
+	for (i = 0; i < e1->size; ++i) {
+		for (j = 0; j < e2->size; ++j) {
+			if (!memcmp(e1->val + (i * ECOMMUNITY_SIZE),
+				    e2->val + (j * ECOMMUNITY_SIZE),
+				    ECOMMUNITY_SIZE))
+				return true;
+		}
+	}
+	return false;
+}
+
 bool ecommunity_match(const struct ecommunity *ecom1,
 		      const struct ecommunity *ecom2)
 {
@@ -1346,4 +1363,19 @@ struct ecommunity *ecommunity_replace_linkbw(as_t as,
 	ecommunity_add_val(new, &lb_eval, true, true);
 
 	return new;
+}
+
+bool soo_in_ecom(struct ecommunity *ecom, struct ecommunity *soo)
+{
+	if (ecom && soo) {
+		if ((ecommunity_lookup(ecom, ECOMMUNITY_ENCODE_AS,
+				       ECOMMUNITY_SITE_ORIGIN) ||
+		     ecommunity_lookup(ecom, ECOMMUNITY_ENCODE_AS4,
+				       ECOMMUNITY_SITE_ORIGIN) ||
+		     ecommunity_lookup(ecom, ECOMMUNITY_ENCODE_IP,
+				       ECOMMUNITY_SITE_ORIGIN)) &&
+		    ecommunity_include(ecom, soo))
+			return true;
+	}
+	return false;
 }

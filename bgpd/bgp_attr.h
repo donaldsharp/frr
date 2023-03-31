@@ -465,4 +465,6 @@ static inline uint32_t link_bandwidth(struct attr *attr)
 	return (attr) ? attr->link_bw : 0;
 }
 
+extern bool route_matches_soo(struct bgp_path_info *pi, struct ecommunity *soo);
+
 #endif /* _QUAGGA_BGP_ATTR_H */

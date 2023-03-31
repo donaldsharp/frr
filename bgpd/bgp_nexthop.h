@@ -74,11 +74,6 @@ struct tip_addr {
 	int refcnt;
 };
 
-struct bgp_addrv6 {
-	struct in6_addr addrv6;
-	struct list *ifp_name_list;
-};
-
 extern void bgp_connected_add(struct bgp *bgp, struct connected *c);
 extern void bgp_connected_delete(struct bgp *bgp, struct connected *c);
 extern bool bgp_subgrp_multiaccess_check_v4(struct in_addr nexthop,
