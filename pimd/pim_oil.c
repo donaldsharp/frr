@@ -228,9 +228,9 @@ int pim_channel_del_oif(struct channel_oil *channel_oil, struct interface *oif,
 
 	pim_ifp = oif->info;
 
-	assertf(pim_ifp->mroute_vif_index >= 0,
-		"trying to del OIF %s with VIF (%d)", oif->name,
-		pim_ifp->mroute_vif_index);
+	if (PIM_DEBUG_MROUTE)
+		zlog_debug("trying to del OIF %s with VIF (%d)", oif->name,
+			   pim_ifp->mroute_vif_index);
 
 	/*
 	 * Don't do anything if we've been asked to remove a source
