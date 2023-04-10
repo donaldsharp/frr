@@ -3728,6 +3728,9 @@ static void rib_meta_queue_gr_run_free(struct meta_queue *mq, struct list *l,
 		list_delete_node(l, node);
 
 		XFREE(MTYPE_WQ_WRAPPER, gr_run);
+		node->data = NULL;
+		list_delete_node(l, node);
+		mq->size--;
 	}
 }
 
