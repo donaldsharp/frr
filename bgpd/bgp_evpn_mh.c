@@ -1042,7 +1042,7 @@ static void bgp_evpn_local_type1_evi_route_add(struct bgp *bgp,
 	struct bgp_evpn_es_evi *es_evi;
 
 	/* EAD-per-EVI routes have been suppressed */
-	if (!bgp_mh_info->ead_evi_tx)
+	if (!bgp_mh_info->enable_ead_evi_tx)
 		return;
 
 	if (CHECK_FLAG(es->flags, BGP_EVPNES_ADV_EVI))
@@ -3402,7 +3402,7 @@ static void bgp_evpn_es_evi_vtep_re_eval_active(struct bgp *bgp,
 
 	old_active = !!CHECK_FLAG(evi_vtep->flags, BGP_EVPN_EVI_VTEP_ACTIVE);
 
-	if (bgp_mh_info->ead_evi_rx)
+	if (bgp_mh_info->enable_ead_evi_rx)
 		/* Both EAD-per-ES and EAD-per-EVI routes must be rxed from a PE
 		 * before it can be activated.
 		 */
@@ -4959,8 +4959,8 @@ void bgp_evpn_mh_init(void)
 	bgp_mh_info->pend_es_list = list_new();
 	listset_app_node_mem(bgp_mh_info->pend_es_list);
 
-	bgp_mh_info->ead_evi_rx = BGP_EVPN_MH_EAD_EVI_RX_DEF;
-	bgp_mh_info->ead_evi_tx = BGP_EVPN_MH_EAD_EVI_TX_DEF;
+	bgp_mh_info->enable_ead_evi_rx = BGP_EVPN_MH_EAD_EVI_RX_DEF;
+	bgp_mh_info->enable_ead_evi_tx = BGP_EVPN_MH_EAD_EVI_TX_DEF;
 	bgp_mh_info->ead_es_export_rtl = list_new();
 	bgp_mh_info->ead_es_export_rtl->cmp =
 		(int (*)(void *, void *))bgp_evpn_route_target_cmp;
@@ -4996,4 +4996,58 @@ void bgp_evpn_mh_finish(void)
 	list_delete(&bgp_mh_info->ead_es_export_rtl);
 
 	XFREE(MTYPE_BGP_EVPN_MH_INFO, bgp_mh_info);
+}
+
+/* This function is called when disable-ead-evi-tx knob flaps */
+void bgp_evpn_switch_ead_evi_tx(void)
+{
+	struct bgp *bgp;
+	struct bgp_evpn_es *es = NULL;
+
+	bgp = bgp_get_evpn();
+	if (!bgp)
+		return;
+
+	RB_FOREACH (es, bgp_es_rb_head, &bgp_mh_info->es_rb_tree) {
+		if (bgp_mh_info->enable_ead_evi_tx)
+			bgp_evpn_local_type1_evi_route_add(bgp, es);
+		else
+			bgp_evpn_local_type1_evi_route_del(bgp, es);
+	}
+}
+
+/* This function is called when disable-ead-evi-rx knob flaps */
+void bgp_evpn_switch_ead_evi_rx(void)
+{
+	struct bgp *bgp;
+	struct bgp_evpn_es *es;
+	struct bgp_evpn_es_evi *es_evi;
+	struct listnode *evi_node = NULL;
+	struct listnode *evi_next = NULL;
+	struct bgp_evpn_es_evi_vtep *vtep;
+	struct listnode *vtep_node = NULL;
+	struct listnode *vtep_next = NULL;
+
+	bgp = bgp_get_evpn();
+	if (!bgp)
+		return;
+
+	/*
+	 * Process all the remote es_evi_vteps and reevaluate if the es_evi_vtep
+	 * is active.
+	 */
+	RB_FOREACH (es, bgp_es_rb_head, &bgp_mh_info->es_rb_tree) {
+		if (!CHECK_FLAG(es->flags, BGP_EVPNES_REMOTE))
+			continue;
+
+		for (ALL_LIST_ELEMENTS(es->es_evi_list, evi_node, evi_next,
+				       es_evi)) {
+			if (!CHECK_FLAG(es_evi->flags, BGP_EVPNES_EVI_REMOTE))
+				continue;
+
+			for (ALL_LIST_ELEMENTS(es_evi->es_evi_vtep_list,
+					       vtep_node, vtep_next, vtep))
+				bgp_evpn_es_evi_vtep_re_eval_active(bgp, vtep);
+		}
+	}
 }
