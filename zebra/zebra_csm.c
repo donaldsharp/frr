@@ -360,7 +360,7 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 		/* We expect 'come up' only in the case of coming out of
 		 * 'maintenance' mode.
 		 */
-		if (!IS_MODE_MAINTENANCE(mode))
+		if (!IS_MODE_MAINTENANCE(zrouter.csm_cmode))
 			return;
 
 		zrouter.csm_cmode = mode;
