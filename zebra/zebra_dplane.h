@@ -733,7 +733,6 @@ enum zebra_dplane_result dplane_intf_addr_unset(const struct interface *ifp,
  */
 enum zebra_dplane_result dplane_intf_add(const struct interface *ifp);
 enum zebra_dplane_result dplane_intf_update(const struct interface *ifp);
-enum zebra_dplane_result dplane_intf_delete(const struct interface *ifp);
 
 /*
  * Enqueue interface link changes for the dataplane.
