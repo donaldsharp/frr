@@ -1188,6 +1188,7 @@ static ssize_t netlink_intf_msg_encoder(struct zebra_dplane_ctx *ctx, void *buf,
 	case DPLANE_OP_INTF_DELETE:
 		cmd = RTM_DELLINK;
 		break;
+	case DPLANE_OP_STARTUP_STAGE:
 	default:
 		flog_err(
 			EC_ZEBRA_NHG_FIB_UPDATE,

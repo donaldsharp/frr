@@ -255,6 +255,7 @@ static int kernel_lsp_cmd(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_LSP_UPDATE:
 		action = RTM_CHANGE;
 		break;
+	case DPLANE_OP_STARTUP_STAGE:
 	default:
 		return -1;
 	}
@@ -415,6 +416,7 @@ enum zebra_dplane_result kernel_pw_update(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_PW_UNINSTALL:
 		result = kmpw_uninstall(ctx);
 		break;
+	case DPLANE_OP_STARTUP_STAGE:
 	default:
 		break;
 	}

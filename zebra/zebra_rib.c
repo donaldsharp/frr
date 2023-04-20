@@ -2146,6 +2146,7 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 		    (old_re && RIB_SYSTEM_ROUTE(old_re)))
 			zebra_rib_fixup_system(rn);
 		break;
+	case DPLANE_OP_STARTUP_STAGE:
 	default:
 		break;
 	}
@@ -4738,6 +4739,7 @@ static void rib_process_dplane_results(struct thread *thread)
 			case DPLANE_OP_NEIGH_TABLE_UPDATE:
 			case DPLANE_OP_GRE_SET:
 			case DPLANE_OP_NONE:
+			case DPLANE_OP_STARTUP_STAGE:
 				break;
 
 			} /* Dispatch by op code */

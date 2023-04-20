@@ -1849,6 +1849,7 @@ void zebra_mpls_lsp_dplane_result(struct zebra_dplane_ctx *ctx)
 					     ZEBRA_SR_POLICY_LABEL_REMOVED);
 		break;
 
+	case DPLANE_OP_STARTUP_STAGE:
 	default:
 		break;
 
