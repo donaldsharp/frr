@@ -4190,6 +4190,10 @@ static ssize_t netlink_neigh_msg_encoder(struct zebra_dplane_ctx *ctx,
 		ret = netlink_neigh_table_update_ctx(ctx, buf, buflen);
 		break;
 	default:
+	case DPLANE_OP_INTF_INSTALL:
+	case DPLANE_OP_INTF_UPDATE:
+	case DPLANE_OP_INTF_DELETE:
+	case DPLANE_OP_STARTUP_STAGE:
 		ret = -1;
 	}
 

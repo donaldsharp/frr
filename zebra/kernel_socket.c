@@ -1574,7 +1574,31 @@ void kernel_update_multi(struct dplane_ctx_q *ctx_list)
 			res = ZEBRA_DPLANE_REQUEST_SUCCESS;
 			break;
 
+<<<<<<< HEAD
 		default:
+=======
+		case DPLANE_OP_INTF_NETCONFIG:
+			res = kernel_intf_netconf_update(ctx);
+			break;
+
+		case DPLANE_OP_NONE:
+		case DPLANE_OP_BR_PORT_UPDATE:
+		case DPLANE_OP_IPTABLE_ADD:
+		case DPLANE_OP_IPTABLE_DELETE:
+		case DPLANE_OP_IPSET_ADD:
+		case DPLANE_OP_IPSET_DELETE:
+		case DPLANE_OP_IPSET_ENTRY_ADD:
+		case DPLANE_OP_IPSET_ENTRY_DELETE:
+		case DPLANE_OP_NEIGH_IP_INSTALL:
+		case DPLANE_OP_NEIGH_IP_DELETE:
+		case DPLANE_OP_NEIGH_TABLE_UPDATE:
+		case DPLANE_OP_GRE_SET:
+		case DPLANE_OP_INTF_ADDR_ADD:
+		case DPLANE_OP_INTF_ADDR_DEL:
+		case DPLANE_OP_STARTUP_STAGE:
+			zlog_err("Unhandled dplane data for %s",
+				 dplane_op2str(dplane_ctx_get_op(ctx)));
+>>>>>>> 1b0778183a (zebra: Add code to get/set interface to pass up from dplane)
 			res = ZEBRA_DPLANE_REQUEST_FAILURE;
 			break;
 		}

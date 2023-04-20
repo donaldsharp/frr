@@ -413,6 +413,10 @@ void lua_pushzebra_dplane_ctx(lua_State *L, const struct zebra_dplane_ctx *ctx)
 		}
 		lua_setfield(L, -2, "gre");
 	case DPLANE_OP_NONE:
+	case DPLANE_OP_INTF_INSTALL:
+	case DPLANE_OP_INTF_UPDATE:
+	case DPLANE_OP_INTF_DELETE:
+	case DPLANE_OP_STARTUP_STAGE:
 		break;
 	} /* Dispatch by op code */
 }

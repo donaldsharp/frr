@@ -1213,44 +1213,21 @@ void zebra_if_set_protodown(struct interface *ifp, bool down)
  * This runs in the main pthread, using the info in the context object to
  * modify an interface.
  */
-void zebra_if_addr_update_ctx(struct zebra_dplane_ctx *ctx)
+void zebra_if_addr_update_ctx(struct zebra_dplane_ctx *ctx,
+			      struct interface *ifp)
 {
-	struct interface *ifp;
 	uint8_t flags = 0;
 	const char *label = NULL;
-	ns_id_t ns_id;
-	struct zebra_ns *zns;
 	uint32_t metric = METRIC_MAX;
-	ifindex_t ifindex;
 	const struct prefix *addr, *dest = NULL;
 	enum dplane_op_e op;
 
 	op = dplane_ctx_get_op(ctx);
-	ns_id = dplane_ctx_get_ns_id(ctx);
-
-	zns = zebra_ns_lookup(ns_id);
-	if (zns == NULL) {
-		/* No ns - deleted maybe? */
-		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug("%s: can't find zns id %u", __func__, ns_id);
-		goto done;
-	}
-
-	ifindex = dplane_ctx_get_ifindex(ctx);
-
-	ifp = if_lookup_by_index_per_ns(zns, ifindex);
-	if (ifp == NULL) {
-		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug("%s: can't find ifp at nsid %u index %d",
-				   __func__, ns_id, ifindex);
-		goto done;
-	}
-
 	addr = dplane_ctx_get_intf_addr(ctx);
 
 	if (IS_ZEBRA_DEBUG_KERNEL)
 		zlog_debug("%s: %s: ifindex %u, addr %pFX", __func__,
-			   dplane_op2str(op), ifindex, addr);
+			   dplane_op2str(op), ifp->ifindex, addr);
 
 	/* Is there a peer or broadcast address? */
 	dest = dplane_ctx_get_intf_dest(ctx);
@@ -1305,10 +1282,103 @@ void zebra_if_addr_update_ctx(struct zebra_dplane_ctx *ctx)
 	 */
 	if (op != DPLANE_OP_INTF_ADDR_ADD)
 		rib_update(RIB_UPDATE_KERNEL);
+}
 
-done:
-	/* We're responsible for the ctx object */
-	dplane_ctx_fini(&ctx);
+void zebra_if_dplane_result(struct zebra_dplane_ctx *ctx)
+{
+	struct zebra_ns *zns;
+	struct interface *ifp;
+	ns_id_t ns_id;
+	enum dplane_op_e op;
+	enum zebra_dplane_result dp_res;
+	ifindex_t ifindex;
+
+	ns_id = dplane_ctx_get_ns_id(ctx);
+	dp_res = dplane_ctx_get_status(ctx);
+	op = dplane_ctx_get_op(ctx);
+	ifindex = dplane_ctx_get_ifindex(ctx);
+
+	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL || IS_ZEBRA_DEBUG_KERNEL)
+		zlog_debug("Intf dplane ctx %p, op %s, ifindex (%u), result %s",
+			   ctx, dplane_op2str(op), ifindex,
+			   dplane_res2str(dp_res));
+
+	zns = zebra_ns_lookup(ns_id);
+	if (zns == NULL) {
+		/* No ns - deleted maybe? */
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("%s: can't find zns id %u", __func__, ns_id);
+
+		return;
+	}
+
+	ifp = if_lookup_by_index_per_ns(zns, ifindex);
+	if (ifp == NULL) {
+		if (ifindex != -1 && ifindex != -2) {
+			if (IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug(
+					"%s: can't find ifp at nsid %u index %d",
+					__func__, ns_id, ifindex);
+
+			return;
+		}
+	}
+
+	switch (op) {
+	case DPLANE_OP_INTF_ADDR_ADD:
+	case DPLANE_OP_INTF_ADDR_DEL:
+		zebra_if_addr_update_ctx(ctx, ifp);
+		break;
+
+	case DPLANE_OP_INTF_INSTALL:
+	case DPLANE_OP_INTF_UPDATE:
+	case DPLANE_OP_INTF_DELETE:
+		break;
+
+
+	case DPLANE_OP_ROUTE_INSTALL:
+	case DPLANE_OP_ROUTE_UPDATE:
+	case DPLANE_OP_ROUTE_DELETE:
+	case DPLANE_OP_NH_DELETE:
+	case DPLANE_OP_NH_INSTALL:
+	case DPLANE_OP_NH_UPDATE:
+	case DPLANE_OP_ROUTE_NOTIFY:
+	case DPLANE_OP_LSP_INSTALL:
+	case DPLANE_OP_LSP_UPDATE:
+	case DPLANE_OP_LSP_DELETE:
+	case DPLANE_OP_LSP_NOTIFY:
+	case DPLANE_OP_PW_INSTALL:
+	case DPLANE_OP_PW_UNINSTALL:
+	case DPLANE_OP_SYS_ROUTE_ADD:
+	case DPLANE_OP_SYS_ROUTE_DELETE:
+	case DPLANE_OP_ADDR_INSTALL:
+	case DPLANE_OP_ADDR_UNINSTALL:
+	case DPLANE_OP_MAC_INSTALL:
+	case DPLANE_OP_MAC_DELETE:
+	case DPLANE_OP_NEIGH_INSTALL:
+	case DPLANE_OP_NEIGH_UPDATE:
+	case DPLANE_OP_NEIGH_DELETE:
+	case DPLANE_OP_NEIGH_IP_INSTALL:
+	case DPLANE_OP_NEIGH_IP_DELETE:
+	case DPLANE_OP_VTEP_ADD:
+	case DPLANE_OP_VTEP_DELETE:
+	case DPLANE_OP_RULE_ADD:
+	case DPLANE_OP_RULE_DELETE:
+	case DPLANE_OP_RULE_UPDATE:
+	case DPLANE_OP_NEIGH_DISCOVER:
+	case DPLANE_OP_BR_PORT_UPDATE:
+	case DPLANE_OP_NONE:
+	case DPLANE_OP_IPTABLE_ADD:
+	case DPLANE_OP_IPTABLE_DELETE:
+	case DPLANE_OP_IPSET_ADD:
+	case DPLANE_OP_IPSET_DELETE:
+	case DPLANE_OP_IPSET_ENTRY_ADD:
+	case DPLANE_OP_IPSET_ENTRY_DELETE:
+	case DPLANE_OP_NEIGH_TABLE_UPDATE:
+	case DPLANE_OP_GRE_SET:
+	case DPLANE_OP_STARTUP_STAGE:
+		break; /* should never hit here */
+	}
 }
 
 /* Dump if address information to vty. */
