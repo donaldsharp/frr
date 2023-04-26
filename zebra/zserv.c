@@ -1092,7 +1092,6 @@ static void zebra_show_client_detail(struct vty *vty, struct zserv *client)
 
 	TAILQ_FOREACH (info, &client->gr_info_queue, gr_info) {
 		afi_t afi;
-		safi_t safi;
 		bool route_sync_done = true;
 		char timebuf[MONOTIME_STRLEN];
 
@@ -1110,19 +1109,16 @@ static void zebra_show_client_detail(struct vty *vty, struct zserv *client)
 			break;
 		}
 		for (afi = AFI_IP; afi < AFI_MAX; afi++) {
-			for (safi = SAFI_UNICAST; safi <= SAFI_MPLS_VPN;
-			     safi++) {
-				if (info->af_enabled[afi][safi]) {
-					if (info->route_sync[afi][safi])
-						vty_out(vty,
-							"AFI/SAFI %d/%d enabled, route sync DONE\n",
-							afi, safi);
-					else {
-						vty_out(vty,
-							"AFI/SAFI %d/%d enabled, route sync NOT DONE\n",
-							afi, safi);
-						route_sync_done = false;
-					}
+			if (info->af_enabled[afi]) {
+				if (info->route_sync[afi])
+					vty_out(vty,
+						"AFI %d enabled, route sync DONE\n",
+						afi);
+				else {
+					vty_out(vty,
+						"AFI %d enabled, route sync NOT DONE\n",
+						afi);
+					route_sync_done = false;
 				}
 			}
 		}
@@ -1199,10 +1195,6 @@ static void zebra_show_stale_client_detail(struct vty *vty,
 							info->t_stale_removal));
 				}
 			}
-			vty_out(vty, "Current AFI : %d\n", info->current_afi);
-			if (info->current_prefix)
-				vty_out(vty, "Current prefix : %pFX\n",
-					info->current_prefix);
 		}
 	}
 	vty_out(vty, "\n");

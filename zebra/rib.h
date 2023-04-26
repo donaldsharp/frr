@@ -190,7 +190,7 @@ struct route_entry {
  * sub-queue 9: any other origin (if any) typically those that
  *              don't generate routes
  */
-#define MQ_SIZE 10
+#define MQ_SIZE 11
 struct meta_queue {
 	struct list *subq[MQ_SIZE];
 	uint32_t size; /* sum of lengths of all subqueues */
@@ -613,6 +613,12 @@ static inline struct nexthop_group *rib_get_fib_backup_nhg(
 {
 	return &(re->fib_backup_ng);
 }
+
+extern void zebra_gr_process_client(afi_t afi, vrf_id_t vrf_id, uint8_t proto,
+				    uint8_t instance, uint64_t restart_time);
+
+extern int rib_add_gr_run(afi_t afi, vrf_id_t vrf_id, uint8_t proto,
+			  uint8_t instance, uint64_t restart_time);
 
 extern void zebra_vty_init(void);
 

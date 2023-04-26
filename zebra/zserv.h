@@ -64,9 +64,6 @@ struct client_gr_info {
 	/* VRF for which GR enabled */
 	vrf_id_t vrf_id;
 
-	/* AFI */
-	afi_t current_afi;
-
 	/* Stale time and GR cap */
 	uint32_t stale_removal_time;
 	enum zserv_client_capabilities capabilities;
@@ -77,11 +74,10 @@ struct client_gr_info {
 	bool stale_client;
 
 	/* Route sync and enable flags for AFI/SAFI */
-	bool af_enabled[AFI_MAX][SAFI_MAX];
-	bool route_sync[AFI_MAX][SAFI_MAX];
+	bool af_enabled[AFI_MAX];
+	bool route_sync[AFI_MAX];
 
 	/* Book keeping */
-	struct prefix *current_prefix;
 	void *client_ptr;
 	void *stale_client_ptr;
 	struct thread *t_stale_removal;
