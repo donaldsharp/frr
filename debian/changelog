@@ -1,3 +1,9 @@
+frr (7.5+cl5.5.0u0) UNRELEASED; urgency=medium
+
+  * RM 3446455 - Updating configure.ac + debian/changelog for CL 5.5.0
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Wed, 26 Apr 2023 21:00:25 -0700
+
 frr (7.5+cl5.4.0u0) UNRELEASED; urgency=medium
 
   * frr_babeltrace.py in frr-pythontools requires dependency on
