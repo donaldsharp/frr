@@ -41,6 +41,7 @@ else
   CONF_DEVBUILD=--disable-dev-build
 endif
 
+CHANGELOG_VERSION=$(shell dpkg-parsechangelog -S Version)
 
 export PYTHON=python3
 
@@ -48,6 +49,8 @@ export PYTHON=python3
 	dh $@ --with=$(DH_WITH_SYSTEMD)autoreconf --parallel
 
 override_dh_auto_configure:
+	sed -i -e "s/^AC_INIT.*/AC_INIT([frr], [${CHANGELOG_VERSION}], [https:\/\/github.com\/frrouting\/frr\/issues])/" configure.ac
+	grep AC_INIT configure.ac
 	$(shell dpkg-buildflags --export=sh); \
 	dh_auto_configure -- \
 		--enable-exampledir=/usr/share/doc/frr/examples/ \
