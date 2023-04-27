@@ -226,6 +226,7 @@ struct dplane_intf_info {
 
 	bool protodown;
 	bool protodown_set;
+	bool pd_reason_val;
 
 #define DPLANE_INTF_CONNECTED   (1 << 0) /* Connected peer, p2p */
 #define DPLANE_INTF_SECONDARY   (1 << 1)
@@ -2214,6 +2215,13 @@ void dplane_ctx_set_intf_metric(struct zebra_dplane_ctx *ctx, uint32_t metric)
 	DPLANE_CTX_VALID(ctx);
 
 	ctx->u.intf.metric = metric;
+}
+
+uint32_t dplane_ctx_get_intf_pd_reason_val(const struct zebra_dplane_ctx *ctx)
+{
+	DPLANE_CTX_VALID(ctx);
+
+	return ctx->u.intf.pd_reason_val;
 }
 
 bool dplane_ctx_intf_is_protodown(const struct zebra_dplane_ctx *ctx)

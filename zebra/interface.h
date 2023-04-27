@@ -303,12 +303,21 @@ enum zebra_if_flags {
 	/* Dataplane protodown-on */
 	ZIF_FLAG_PROTODOWN = (1 << 2),
 
+	/* Dataplane protodown-on Queued to the dplane */
+	ZIF_FLAG_SET_PROTODOWN = (1 << 3),
+	/* Dataplane protodown-off Queued to the dplane */
+	ZIF_FLAG_UNSET_PROTODOWN = (1 << 4),
+
 	/* LACP bypass state is set by the dataplane on a bond member
 	 * and inherited by the bond (if one or more bond members are in
 	 * a bypass state the bond is placed in a bypass state)
 	 */
-	ZIF_FLAG_LACP_BYPASS = (1 << 3)
+	ZIF_FLAG_LACP_BYPASS = (1 << 5)
 };
+
+#define ZEBRA_IF_IS_PROTODOWN(zif) ((zif)->flags & ZIF_FLAG_PROTODOWN)
+#define ZEBRA_IF_IS_PROTODOWN_ONLY_EXTERNAL(zif)                               \
+	((zif)->protodown_rc == ZEBRA_PROTODOWN_EXTERNAL)
 
 /* `zebra' daemon local interface structure. */
 struct zebra_if {

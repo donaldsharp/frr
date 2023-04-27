@@ -343,7 +343,7 @@ static int netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 	case RTM_NEWLINK:
 		return netlink_link_change(h, ns_id, startup);
 	case RTM_DELLINK:
-		return netlink_link_change(h, ns_id, startup);
+		return 0;
 	case RTM_NEWNEIGH:
 	case RTM_DELNEIGH:
 	case RTM_GETNEIGH:
@@ -397,6 +397,7 @@ static int dplane_netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 	/* TODO */
 	case RTM_NEWLINK:
 	case RTM_DELLINK:
+		return netlink_link_change(h, ns_id, startup);
 
 	default:
 		break;
@@ -981,7 +982,6 @@ int netlink_parse_info(int (*filter)(struct nlmsghdr *, ns_id_t, int),
 					h->nlmsg_type, h->nlmsg_len,
 					h->nlmsg_seq, h->nlmsg_pid);
 
-
 			/*
 			 * Ignore messages that maybe sent from
 			 * other actors besides the kernel
@@ -1502,7 +1502,7 @@ void kernel_update_multi(struct dplane_ctx_q *ctx_list)
    netlink_socket (). */
 void kernel_init(struct zebra_ns *zns)
 {
-	uint32_t groups;
+	uint32_t groups, dplane_groups;
 #if defined SOL_NETLINK
 	int one, ret;
 #endif
@@ -1516,16 +1516,14 @@ void kernel_init(struct zebra_ns *zns)
 	 * lead to confusion, so we need to convert the
 	 * RTNLGRP_XXX to a bit position for ourself
 	 */
-	groups = RTMGRP_LINK                   |
-		RTMGRP_IPV4_ROUTE              |
-		RTMGRP_IPV4_IFADDR             |
-		RTMGRP_IPV6_ROUTE              |
-		RTMGRP_IPV6_IFADDR             |
-		RTMGRP_IPV4_MROUTE             |
-		RTMGRP_NEIGH                   |
-		((uint32_t) 1 << (RTNLGRP_IPV4_RULE - 1)) |
-		((uint32_t) 1 << (RTNLGRP_IPV6_RULE - 1)) |
-		((uint32_t) 1 << (RTNLGRP_NEXTHOP - 1));
+	groups = RTMGRP_IPV4_ROUTE | RTMGRP_IPV6_ROUTE | RTMGRP_IPV4_MROUTE |
+		 RTMGRP_NEIGH | ((uint32_t)1 << (RTNLGRP_IPV4_RULE - 1)) |
+		 ((uint32_t)1 << (RTNLGRP_IPV6_RULE - 1)) |
+		 ((uint32_t)1 << (RTNLGRP_NEXTHOP - 1));
+
+	dplane_groups = (RTMGRP_LINK | RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR |
+			 ((uint32_t)1 << (RTNLGRP_IPV4_NETCONF - 1)) |
+			 ((uint32_t)1 << (RTNLGRP_IPV6_NETCONF - 1)));
 
 	snprintf(zns->netlink.name, sizeof(zns->netlink.name),
 		 "netlink-listen (NS %u)", zns->ns_id);
@@ -1561,7 +1559,8 @@ void kernel_init(struct zebra_ns *zns)
 		 sizeof(zns->netlink_dplane_in.name), "netlink-dp-in (NS %u)",
 		 zns->ns_id);
 	zns->netlink_dplane_in.sock = -1;
-	if (netlink_socket(&zns->netlink_dplane_in, groups, zns->ns_id) < 0) {
+	if (netlink_socket(&zns->netlink_dplane_in, dplane_groups, zns->ns_id) <
+	    0) {
 		zlog_err("Failure to create %s socket",
 			 zns->netlink_dplane_in.name);
 		exit(-1);

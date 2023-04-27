@@ -100,7 +100,6 @@ enum zebra_dplane_result {
 
 enum zebra_dplane_startup_notifications {
 	ZEBRA_DPLANE_INTERFACES_READ,
-	ZEBRA_DPLANE_TUNNELS_READ,
 	ZEBRA_DPLANE_ADDRESSES_READ,
 };
 /*
@@ -387,6 +386,19 @@ uint8_t dplane_ctx_get_ifp_family(const struct zebra_dplane_ctx *ctx);
 struct zebra_vxlan_vni_array;
 void dplane_ctx_set_ifp_vxlan_vni_array(struct zebra_dplane_ctx *ctx,
 					struct zebra_vxlan_vni_array *vniarray);
+
+/*
+ * These defines mirror the values for bridge values in linux
+ * at this point since we only have a linux implementation
+ * we don't need to do any type of translation.  Let's just
+ * pass these through and use them
+ */
+#define DPLANE_BRIDGE_VLAN_INFO_PVID                                           \
+	(1 << 1) /* VLAN is PVID, ingress untagged */
+#define DPLANE_BRIDGE_VLAN_INFO_RANGE_BEGIN                                    \
+	(1 << 3) /* VLAN is start of vlan range */
+#define DPLANE_BRIDGE_VLAN_INFO_RANGE_END                                      \
+	(1 << 4) /* VLAN is end of vlan range */
 const struct zebra_vxlan_vni_array *
 dplane_ctx_get_ifp_vxlan_vni_array(const struct zebra_dplane_ctx *ctx);
 struct zebra_dplane_bridge_vlan_info {
