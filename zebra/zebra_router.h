@@ -209,6 +209,8 @@ struct zebra_router {
 	 */
 	bool asic_offloaded;
 	bool notify_on_ack;
+
+	uint8_t protodown_r_bit;
 };
 
 #define GRACEFUL_RESTART_TIME 60
@@ -256,6 +258,32 @@ extern void multicast_mode_ipv4_set(enum multicast_mode mode);
 extern enum multicast_mode multicast_mode_ipv4_get(void);
 
 extern bool zebra_router_notify_on_ack(void);
+
+#define FRR_PROTODOWN_REASON_DEFAULT_BIT 7
+/* Protodown bit setter/getter
+ *
+ * Allow users to change the bit if it conflicts with another
+ * on their system.
+ */
+static inline void if_netlink_set_frr_protodown_r_bit(uint8_t bit)
+{
+	zrouter.protodown_r_bit = bit;
+}
+
+static inline void if_netlink_unset_frr_protodown_r_bit(void)
+{
+	zrouter.protodown_r_bit = FRR_PROTODOWN_REASON_DEFAULT_BIT;
+}
+
+static inline bool if_netlink_frr_protodown_r_bit_is_set(void)
+{
+	return (zrouter.protodown_r_bit != FRR_PROTODOWN_REASON_DEFAULT_BIT);
+}
+
+static inline uint8_t if_netlink_get_frr_protodown_r_bit(void)
+{
+	return zrouter.protodown_r_bit;
+}
 
 /* zebra_northbound.c */
 extern const struct frr_yang_module_info frr_zebra_info;
