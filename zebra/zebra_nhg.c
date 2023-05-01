@@ -1637,7 +1637,6 @@ void zebra_nhg_hash_free(void *p)
 				   nhe->nhg.nexthop);
 	}
 
-	THREAD_OFF(nhe->timer);
 
 	nexthops_free(nhe->nhg.nexthop);
 
@@ -1676,17 +1675,6 @@ void zebra_nhg_hash_free_zero_id(struct hash_bucket *b, void *arg)
 	}
 }
 
-static void zebra_nhg_timer(struct thread *thread)
-{
-	struct nhg_hash_entry *nhe = THREAD_ARG(thread);
-
-	if (IS_ZEBRA_DEBUG_NHG_DETAIL)
-		zlog_debug("Nexthop Timer for nhe: %pNG", nhe);
-
-	if (nhe->refcnt == 1)
-		zebra_nhg_decrement_ref(nhe);
-}
-
 void zebra_nhg_decrement_ref(struct nhg_hash_entry *nhe)
 {
 	if (IS_ZEBRA_DEBUG_NHG_DETAIL)
@@ -1694,16 +1682,6 @@ void zebra_nhg_decrement_ref(struct nhg_hash_entry *nhe)
 			   nhe->refcnt, nhe->refcnt - 1);
 
 	nhe->refcnt--;
-
-	if (!zebra_router_in_shutdown() && nhe->refcnt <= 0 &&
-	    CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED) &&
-	    !CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_KEEP_AROUND)) {
-		nhe->refcnt = 1;
-		SET_FLAG(nhe->flags, NEXTHOP_GROUP_KEEP_AROUND);
-		thread_add_timer(zrouter.master, zebra_nhg_timer, nhe,
-				 zrouter.nhg_keep, &nhe->timer);
-		return;
-	}
 
 	if (!zebra_nhg_depends_is_empty(nhe))
 		nhg_connected_tree_decrement_ref(&nhe->nhg_depends);
@@ -1719,12 +1697,6 @@ void zebra_nhg_increment_ref(struct nhg_hash_entry *nhe)
 			   nhe->refcnt, nhe->refcnt + 1);
 
 	nhe->refcnt++;
-
-	if (thread_is_scheduled(nhe->timer)) {
-		THREAD_OFF(nhe->timer);
-		nhe->refcnt--;
-		UNSET_FLAG(nhe->flags, NEXTHOP_GROUP_KEEP_AROUND);
-	}
 
 	if (!zebra_nhg_depends_is_empty(nhe))
 		nhg_connected_tree_increment_ref(&nhe->nhg_depends);
@@ -3502,6 +3474,9 @@ struct nhg_hash_entry *zebra_nhg_proto_add(uint32_t id, int type,
 
 		rib_handle_nhg_replace(old, new);
 
+		/* if this != 1 at this point, we have a bug */
+		assert(old->refcnt == 1);
+
 		/* We have to decrement its singletons
 		 * because some might not exist in NEW.
 		 */
@@ -3513,7 +3488,6 @@ struct nhg_hash_entry *zebra_nhg_proto_add(uint32_t id, int type,
 
 		/* Dont call the dec API, we dont want to uninstall the ID */
 		old->refcnt = 0;
-		THREAD_OFF(old->timer);
 		zebra_nhg_free(old);
 		old = NULL;
 	}

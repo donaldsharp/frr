@@ -1504,7 +1504,6 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 	struct nhg_connected *rb_node_dep = NULL;
 	struct nexthop_group *backup_nhg;
 	char up_str[MONOTIME_STRLEN];
-	char time_left[MONOTIME_STRLEN];
 	json_object *json_dependants = NULL;
 	json_object *json_depends = NULL;
 	json_object *json_nexthop_array = NULL;
@@ -1523,12 +1522,6 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 		json_object_string_add(json, "type",
 				       zebra_route_string(nhe->type));
 		json_object_int_add(json, "refCount", nhe->refcnt);
-		if (thread_is_scheduled(nhe->timer))
-			json_object_string_add(
-				json, "timeToDeletion",
-				thread_timer_to_hhmmss(time_left,
-						       sizeof(time_left),
-						       nhe->timer));
 		json_object_string_add(json, "uptime", up_str);
 		json_object_string_add(json, "vrf",
 				       vrf_id_to_name(nhe->vrf_id));
@@ -1536,13 +1529,7 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 	} else {
 		vty_out(vty, "ID: %u (%s)\n", nhe->id,
 			zebra_route_string(nhe->type));
-		vty_out(vty, "     RefCnt: %u", nhe->refcnt);
-		if (thread_is_scheduled(nhe->timer))
-			vty_out(vty, " Time to Deletion: %s",
-				thread_timer_to_hhmmss(time_left,
-						       sizeof(time_left),
-						       nhe->timer));
-		vty_out(vty, "\n");
+		vty_out(vty, "     RefCnt: %u\n", nhe->refcnt);
 
 		vty_out(vty, "     Uptime: %s\n", up_str);
 		vty_out(vty, "     VRF: %s\n", vrf_id_to_name(nhe->vrf_id));
