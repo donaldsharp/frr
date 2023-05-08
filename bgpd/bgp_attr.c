@@ -4748,3 +4748,18 @@ void bgp_dump_routes_attr(struct stream *s, struct attr *attr,
 	len = stream_get_endp(s) - cp - 2;
 	stream_putw_at(s, cp, len);
 }
+
+bool route_matches_soo(struct bgp_path_info *pi, struct ecommunity *soo)
+{
+	struct attr *attr = pi->attr;
+	struct ecommunity *ecom;
+
+	if (!CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_EXT_COMMUNITIES)))
+		return false;
+
+	ecom = attr->ecommunity;
+	if (!ecom || !ecom->size)
+		return false;
+
+	return soo_in_ecom(ecom, soo);
+}
