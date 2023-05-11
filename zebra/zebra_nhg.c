@@ -3491,8 +3491,9 @@ struct nhg_hash_entry *zebra_nhg_proto_add(uint32_t id, int type,
 
 		rib_handle_nhg_replace(old, new);
 
-		/* if this != 1 at this point, we have a bug */
-		assert(old->refcnt == 1);
+		/* if this > 1 or -1 at this point, we have a bug */
+		if (old->refcnt != 0)
+			assert(old->refcnt == 1);
 
 		/* We have to decrement its singletons
 		 * because some might not exist in NEW.
