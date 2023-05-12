@@ -828,3 +828,12 @@ static ssize_t printfrr_nh(char *buf, size_t bsz, const char *fmt,
 	}
 	return 0;
 }
+
+bool nexthop_is_ifindex_type(const struct nexthop *nh)
+{
+	if (nh->type == NEXTHOP_TYPE_IFINDEX ||
+	    nh->type == NEXTHOP_TYPE_IPV4_IFINDEX ||
+	    nh->type == NEXTHOP_TYPE_IPV6_IFINDEX)
+		return true;
+	return false;
+}
