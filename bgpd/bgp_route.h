@@ -663,8 +663,9 @@ DECLARE_HOOK(bgp_process,
 #define BGP_SHOW_OPT_AFI_IP6 (1 << 4)
 #define BGP_SHOW_OPT_ESTABLISHED (1 << 5)
 #define BGP_SHOW_OPT_FAILED (1 << 6)
-#define BGP_SHOW_OPT_DETAIL (1 << 7)
+#define BGP_SHOW_OPT_JSON_DETAIL (1 << 7)
 #define BGP_SHOW_OPT_TERSE (1 << 8)
+#define BGP_SHOW_OPT_ROUTES_DETAIL (1 << 9)
 
 /* Prototypes. */
 extern void bgp_rib_remove(struct bgp_dest *dest, struct bgp_path_info *pi,
@@ -852,7 +853,8 @@ extern void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 					struct bgp_dest *dest,
 					const struct prefix *p,
 					const struct prefix_rd *prd, afi_t afi,
-					safi_t safi, json_object *json);
+					safi_t safi, json_object *json,
+					bool incremental_print);
 extern void route_vty_out_detail(struct vty *vty, struct bgp *bgp,
 				 struct bgp_dest *bn, const struct prefix *p,
 				 struct bgp_path_info *path, afi_t afi,
@@ -861,7 +863,7 @@ extern void route_vty_out_detail(struct vty *vty, struct bgp *bgp,
 extern int bgp_show_table_rd(struct vty *vty, struct bgp *bgp, safi_t safi,
 			     struct bgp_table *table, struct prefix_rd *prd,
 			     enum bgp_show_type type, void *output_arg,
-			     bool use_json);
+			     uint16_t show_flags);
 extern void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi,
 					   safi_t safi);
 extern bool bgp_update_martian_nexthop(struct bgp *bgp, afi_t afi, safi_t safi,
