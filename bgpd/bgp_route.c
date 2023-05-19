@@ -7276,7 +7276,7 @@ static bool bgp_aggregate_info_same(struct bgp_path_info *pi, uint8_t origin,
 {
 	static struct aspath *ae = NULL;
 
-	if (!ae)
+	if (!aspath)
 		ae = aspath_empty();
 
 	if (!pi)
