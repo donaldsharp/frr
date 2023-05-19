@@ -44,6 +44,8 @@ func_frr()
     exec_cmd bgp.nexthop vtysh -c "show ip bgp vrf all nexthop"
     exec_cmd bgp.update_group vtysh -c "show ip bgp vrf all update-group"
     exec_cmd bgp.route vtysh -c "show ip bgp vrf all"
+    exec_cmd $jexec bgp.route.ipv4_vrf_all_detail vtysh -c "show bgp vrf all ipv4 unicast detail $json"
+    exec_cmd $jexec bgp.route.ipv6_vrf_all_detail vtysh -c "show bgp vrf all ipv6 unicast detail $json"
     exec_cmd $jexec bgp.vrfs vtysh -c "show bgp vrfs $json"
 
     exec_cmd $jexec bgp.ipv6_summary vtysh -c "show bgp vrf all ipv6 uni summary $json"
@@ -119,9 +121,9 @@ func_frr()
     exec_cmd bgp.evpn.update_group vtysh -c "show bgp l2vpn evpn update-groups"
     exec_cmd bgp.mac_hash vtysh -c "show bgp mac hash"
 
-    exec_cmd $jexec pbr.map vtysh -c "show pbr map"
-    exec_cmd $jexec pbr.intf vtysh -c "show pbr interface"
-    exec_cmd $jexec pbr.nhop.group vtysh -c "show pbr nexthop-groups"
+    exec_cmd $jexec pbr.map vtysh -c "show pbr map $json"
+    exec_cmd $jexec pbr.intf vtysh -c "show pbr interface $json"
+    exec_cmd $jexec pbr.nhop.group vtysh -c "show pbr nexthop-groups $json"
 
     exec_cmd vrrp.summary vtysh -c "show vrrp"
 
