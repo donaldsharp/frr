@@ -14789,8 +14789,7 @@ DEFPY(show_ip_bgp_vrf_afi_safi_routes_detailed,
 	safi_t safi = SAFI_UNICAST;
 	struct bgp *bgp = NULL;
 	int idx = 0;
-	bool uj = use_json(argc, argv);
-	uint16_t show_flags = BGP_SHOW_OPT_JSON_DETAIL;
+	uint16_t show_flags = BGP_SHOW_OPT_ROUTES_DETAIL;
 
 	if (uj)
 		SET_FLAG(show_flags, BGP_SHOW_OPT_JSON);
