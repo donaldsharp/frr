@@ -63,6 +63,7 @@
 DEFINE_QOBJ_TYPE(bgpevpn);
 DEFINE_QOBJ_TYPE(bgp_evpn_es);
 
+DEFINE_MTYPE_STATIC(BGPD, BGP_EVPN_INFO, "BGP EVPN instance information");
 DEFINE_MTYPE_STATIC(BGPD, VRF_ROUTE_TARGET, "L3 Route Target");
 
 /*
@@ -6763,6 +6764,8 @@ void bgp_evpn_cleanup(struct bgp *bgp)
 	list_delete(&bgp->vrf_import_rtl);
 	list_delete(&bgp->vrf_export_rtl);
 	list_delete(&bgp->l2vnis);
+
+	XFREE(MTYPE_BGP_EVPN_INFO, bgp->evpn_info);
 }
 
 /*
@@ -6794,6 +6797,8 @@ void bgp_evpn_init(struct bgp *bgp)
 	bgp->vrf_export_rtl->del = evpn_vrf_rt_del;
 	bgp->l2vnis = list_new();
 	bgp->l2vnis->cmp = vni_list_cmp;
+	bgp->evpn_info =
+		XCALLOC(MTYPE_BGP_EVPN_INFO, sizeof(struct bgp_evpn_info));
 	/* By default Duplicate Address Dection is enabled.
 	 * Max-moves (N) 5, detection time (M) 180
 	 * default action is warning-only
