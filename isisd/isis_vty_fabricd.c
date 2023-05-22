@@ -799,10 +799,10 @@ DEFUN (isis_passwd,
 
 	if (argv[idx_encryption]->arg[0] == 'm')
 		rv = isis_circuit_passwd_hmac_md5_set(circuit,
-						      argv[idx_word]->arg);
+						      argv[idx_word]->arg, vty);
 	else
-		rv = isis_circuit_passwd_cleartext_set(circuit,
-						       argv[idx_word]->arg);
+		rv = isis_circuit_passwd_cleartext_set(
+			circuit, argv[idx_word]->arg, vty);
 
 	CMD_FERR_RETURN(rv, "Failed to set circuit password: $ERR");
 	return CMD_SUCCESS;

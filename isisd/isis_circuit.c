@@ -1514,7 +1514,8 @@ ferr_r isis_circuit_passwd_unset(struct isis_circuit *circuit)
 }
 
 ferr_r isis_circuit_passwd_set(struct isis_circuit *circuit,
-			       uint8_t passwd_type, const char *passwd)
+			       uint8_t passwd_type, const char *passwd,
+			       struct vty *vty)
 {
 	int len;
 
@@ -1529,7 +1530,13 @@ ferr_r isis_circuit_passwd_set(struct isis_circuit *circuit,
 	circuit->passwd.len = len;
 	strlcpy((char *)circuit->passwd.passwd, passwd,
 		sizeof(circuit->passwd.passwd));
-	if (host.obfuscate)
+	/*
+	 *  a) frr-restart (read_from_conf = 1) -->Decrypted password
+	 *  b) new config (read_from_conf = 0) --> Dont decrypt
+	 *
+	 *  NOTE: Internal cache always stores native passwords
+	 */
+	if (host.obfuscate && vty && vty->read_from_conf)
 		caesar(false, (char *)circuit->passwd.passwd,
 		       ISIS_PASSWD_OBFUSCATION_KEY);
 	circuit->passwd.type = passwd_type;
@@ -1537,17 +1544,17 @@ ferr_r isis_circuit_passwd_set(struct isis_circuit *circuit,
 }
 
 ferr_r isis_circuit_passwd_cleartext_set(struct isis_circuit *circuit,
-					 const char *passwd)
+					 const char *passwd, struct vty *vty)
 {
 	return isis_circuit_passwd_set(circuit, ISIS_PASSWD_TYPE_CLEARTXT,
-				       passwd);
+				       passwd, vty);
 }
 
 ferr_r isis_circuit_passwd_hmac_md5_set(struct isis_circuit *circuit,
-					const char *passwd)
+					const char *passwd, struct vty *vty)
 {
 	return isis_circuit_passwd_set(circuit, ISIS_PASSWD_TYPE_HMAC_MD5,
-				       passwd);
+				       passwd, vty);
 }
 
 void isis_circuit_circ_type_set(struct isis_circuit *circuit, int circ_type)
