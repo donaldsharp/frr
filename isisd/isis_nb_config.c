@@ -4248,7 +4248,7 @@ int lib_interface_isis_password_password_modify(struct nb_cb_modify_args *args)
 	password = yang_dnode_get_string(args->dnode, NULL);
 	circuit = nb_running_get_entry(args->dnode, NULL, true);
 
-	isis_circuit_passwd_set(circuit, circuit->passwd.type, password);
+	isis_circuit_passwd_set(circuit, circuit->passwd.type, password, NULL);
 
 	return NB_OK;
 }

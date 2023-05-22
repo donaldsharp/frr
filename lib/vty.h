@@ -232,6 +232,10 @@ struct vty {
 	uintptr_t mgmt_req_pending_data;
 	bool mgmt_locked_candidate_ds;
 	bool mgmt_locked_running_ds;
+	/*
+	 * Used for password-obfuscate to differentiate whether the passwords
+	 * are encrpyted or not after frr restart.*/
+	bool read_from_conf;
 };
 
 static inline void vty_push_context(struct vty *vty, int node, uint64_t id)
