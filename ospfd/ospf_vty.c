@@ -1107,14 +1107,26 @@ DEFUN (ospf_area_vlink,
 			return CMD_WARNING_CONFIG_FAILED;
 
 		strlcpy(md5_key, argv[idx + 3]->arg, sizeof(md5_key));
-		if (host.obfuscate)
+		/*
+		 *  a) frr-restart (read_from_conf = 1) -->Decrypted password
+		 *  b) new config (read_from_conf = 0) --> Dont decrypt
+		 *
+		 *  NOTE: Internal cache always stores native passwords
+		 */
+		if (host.obfuscate && vty->read_from_conf)
 			caesar(false, (char *)md5_key, OSPF_PASSWD_OBFUSCATION_KEY);
 		vl_config.md5_key = md5_key;
 	}
 
 	if (argv_find(argv, argc, "authentication-key", &idx)) {
 		strlcpy(auth_key, argv[idx + 1]->arg, sizeof(auth_key));
-		if (host.obfuscate)
+		/*
+		 *  a) frr-restart (read_from_conf = 1) -->Decrypted password
+		 *  b) new config (read_from_conf = 0) --> Dont decrypt
+		 *
+		 *  NOTE: Internal cache always stores native passwords
+		 */
+		if (host.obfuscate && vty->read_from_conf)
 			caesar(false, (char *)auth_key, OSPF_PASSWD_OBFUSCATION_KEY);
 		vl_config.auth_key = auth_key;
 	}
@@ -7878,7 +7890,13 @@ DEFUN (ip_ospf_authentication_key,
 
 	strlcpy((char *)params->auth_simple, argv[3]->arg,
 		sizeof(params->auth_simple));
-	if (host.obfuscate)
+	/*
+	 *  a) frr-restart (read_from_conf = 1) -->Decrypted password
+	 *  b) new config (read_from_conf = 0) --> Dont decrypt
+	 *
+	 *  NOTE: Internal cache always stores native passwords
+	 */
+	if (host.obfuscate && vty->read_from_conf)
 		caesar(false, (char *)params->auth_simple, OSPF_PASSWD_OBFUSCATION_KEY);
 	SET_IF_PARAM(params, auth_simple);
 
@@ -7988,7 +8006,13 @@ DEFUN (ip_ospf_message_digest_key,
 	ck = ospf_crypt_key_new();
 	ck->key_id = (uint8_t)key_id;
 	strlcpy((char *)ck->auth_key, cryptkey, sizeof(ck->auth_key));
-	if (host.obfuscate)
+	/*
+	 *  a) frr-restart (read_from_conf = 1) -->Decrypted password
+	 *  b) new config (read_from_conf = 0) --> Dont decrypt
+	 *
+	 *  NOTE: Internal cache always stores native passwords
+	 */
+	if (host.obfuscate && vty->read_from_conf)
 		caesar(false, (char *)ck->auth_key, OSPF_PASSWD_OBFUSCATION_KEY);
 
 	ospf_crypt_key_add(params->auth_crypt, ck);
@@ -12734,12 +12758,14 @@ static int config_write_virtual_link(struct vty *vty, struct ospf *ospf)
 			ret = interface_config_auth_str(
 				IF_DEF_PARAMS(oi->ifp), buf2);
 			if (ret) {
-				if (host.obfuscate)
-					caesar(true, buf2, OSPF_PASSWD_OBFUSCATION_KEY);
 				vty_out(vty,
 					" area %s virtual-link %pI4 authentication%s\n",
 					buf, &vl_data->vl_peer, buf2);
 			}
+
+			if (host.obfuscate)
+				caesar(true, (char *)IF_DEF_PARAMS(vl_data->vl_oi->ifp)->auth_simple,
+				       OSPF_PASSWD_OBFUSCATION_KEY);
 			/* Auth key */
 			if (IF_DEF_PARAMS(vl_data->vl_oi->ifp)->auth_simple[0]
 			    != '\0')

@@ -218,6 +218,7 @@ DEFUN_NOSH(start_config, start_config_cmd, "XFRR_start_configuration",
 	callback.readin_time = monotime(NULL);
 
 	vty->pending_allowed = 1;
+	vty->read_from_conf = 1;
 
 	if (callback.start_config)
 		(*callback.start_config)();
@@ -239,6 +240,7 @@ DEFUN_NOSH(end_config, end_config_cmd, "XFRR_end_configuration",
 			    sizeof(readin_time_str));
 
 	vty->pending_allowed = 0;
+	vty->read_from_conf = 0;
 	ret = nb_cli_pending_commit_check(vty);
 
 	zlog_info("Configuration Read in Took: %s", readin_time_str);

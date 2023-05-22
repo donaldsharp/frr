@@ -272,9 +272,9 @@ DEFUN(isis_passwd, isis_passwd_cmd, "isis password <md5|clear> WORD",
 		return CMD_ERR_NO_MATCH;
 
 	if (argv[idx_encryption]->arg[0] == 'm')
-		rv = isis_circuit_passwd_hmac_md5_set(circuit, argv[idx_word]->arg);
+		rv = isis_circuit_passwd_hmac_md5_set(circuit, argv[idx_word]->arg, vty);
 	else
-		rv = isis_circuit_passwd_cleartext_set(circuit, argv[idx_word]->arg);
+		rv = isis_circuit_passwd_cleartext_set(circuit, argv[idx_word]->arg, vty);
 
 	CMD_FERR_RETURN(rv, "Failed to set circuit password: $ERR");
 	return CMD_SUCCESS;
@@ -1716,7 +1716,13 @@ static int area_passwd_set(struct vty *vty, int level,
 	char pass[strlen(passwd) + 1];
 	snprintf(pass, sizeof(pass), "%s", passwd);
 
-	if (host.obfuscate)
+	/*
+	 *  a) frr-restart (read_from_conf = 1) -->Decrypted password
+	 *  b) new config (read_from_conf = 0) --> Dont decrypt
+	 *
+	 *  NOTE: Internal cache always stores native passwords
+	 */
+	if (host.obfuscate && vty->read_from_conf)
 		caesar(false, pass, ISIS_PASSWD_OBFUSCATION_KEY);
 
 	type_set(area, level, pass, snp_auth);

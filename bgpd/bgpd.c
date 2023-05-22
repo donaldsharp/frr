@@ -6733,7 +6733,7 @@ int peer_local_as_unset(struct peer *peer)
 
 extern struct host host;
 /* Set password for authenticating with the peer. */
-int peer_password_set(struct peer *peer, const char *password)
+int peer_password_set(struct peer *peer, const char *password, struct vty *vty)
 {
 	struct peer *member;
 	struct listnode *node, *nnode;
@@ -6749,7 +6749,21 @@ int peer_password_set(struct peer *peer, const char *password)
 		return 0;
 	XFREE(MTYPE_PEER_PASSWORD, peer->password);
 	peer->password = XSTRDUP(MTYPE_PEER_PASSWORD, password);
-	if (host.obfuscate)
+	/*
+	 *  - peer->password should always have original configured password
+	 *  - read_from_conf = true when the frr.conf is read (frr
+	 * reload/restart)
+	 *
+	 * Case-1 (Obfuscation + write memory + restart)
+	 *  - After write mem, encrypted password is written into frr.conf.
+	 *  - After restart, read encrypted password is decrypted & saved
+	 *    in the peer->password.
+	 *
+	 * Case-2 (Obfuscation + New password config)
+	 *  - When a new nbr password is configured (not frr-restart case) we
+	 *    DO NOT decrypt the password (read_from_conf = false).
+	 */
+	if (host.obfuscate && vty->read_from_conf)
 		caesar(false, peer->password, BGP_PASSWD_OBFUSCATION_KEY);
 
 	/* Check if handling a regular peer. */
@@ -6790,7 +6804,7 @@ int peer_password_set(struct peer *peer, const char *password)
 		if (member->password)
 			XFREE(MTYPE_PEER_PASSWORD, member->password);
 		member->password = XSTRDUP(MTYPE_PEER_PASSWORD, password);
-		if (host.obfuscate)
+		if (host.obfuscate && vty->read_from_conf)
 			caesar(false, member->password, BGP_PASSWD_OBFUSCATION_KEY);
 
 		/* Send notification or reset peer depending on state. */

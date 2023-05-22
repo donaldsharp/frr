@@ -5448,7 +5448,7 @@ DEFUN (neighbor_password,
 	if (!peer)
 		return CMD_WARNING_CONFIG_FAILED;
 
-	ret = peer_password_set(peer, argv[idx_line]->arg);
+	ret = peer_password_set(peer, argv[idx_line]->arg, vty);
 	return bgp_vty_return(vty, ret);
 }
 

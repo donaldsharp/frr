@@ -2432,7 +2432,7 @@ extern int peer_advertise_map_set(struct peer *peer, afi_t afi, safi_t safi,
 				  struct route_map *condition_map,
 				  bool condition);
 
-extern int peer_password_set(struct peer *, const char *);
+extern int peer_password_set(struct peer *, const char *, struct vty *vty);
 extern int peer_password_unset(struct peer *);
 
 extern int peer_unsuppress_map_unset(struct peer *, afi_t, safi_t);
