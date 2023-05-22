@@ -1002,9 +1002,6 @@ struct attr *bgp_attr_aggregate_intern(
 		attr.aspath = aspath_empty();
 	attr.flag |= ATTR_FLAG_BIT(BGP_ATTR_AS_PATH);
 
-	/* Next hop attribute.  */
-	attr.flag |= ATTR_FLAG_BIT(BGP_ATTR_NEXT_HOP);
-
 	if (community) {
 		uint32_t gshut = COMMUNITY_GSHUT;
 
@@ -1040,6 +1037,21 @@ struct attr *bgp_attr_aggregate_intern(
 	else
 		attr.aggregator_as = bgp->as;
 	attr.aggregator_addr = bgp->router_id;
+
+	/* Aggregate are done for IPv4/IPv6 so checking ipv4 family,
+	 * This should only be set for IPv4 AFI type
+	 * based on RFC-4760:
+	 * "An UPDATE message that carries no NLRI,
+	 * other than the one encoded in
+	 * the MP_REACH_NLRI attribute,
+	 * SHOULD NOT carry the NEXT_HOP
+	 * attribute"
+	 */
+	if (p->family == AF_INET) {
+		/* Next hop attribute.  */
+		attr.flag |= ATTR_FLAG_BIT(BGP_ATTR_NEXT_HOP);
+		attr.mp_nexthop_len = IPV4_MAX_BYTELEN;
+	}
 
 	/* Apply route-map */
 	if (aggregate->rmap.name) {
