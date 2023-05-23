@@ -233,8 +233,6 @@ netlink_put_rule_update_msg(struct nl_batch *bth, struct zebra_dplane_ctx *ctx)
 		return 0;
 	}
 
-	ret = netlink_batch_add_msg(bth, ctx, netlink_rule_msg_encoder, false);
-
 	/**
 	 * Delete the old one.
 	 *
@@ -243,6 +241,8 @@ netlink_put_rule_update_msg(struct nl_batch *bth, struct zebra_dplane_ctx *ctx)
 	if (op == DPLANE_OP_RULE_UPDATE)
 		netlink_batch_add_msg(bth, ctx, netlink_oldrule_msg_encoder,
 				      true);
+
+	ret = netlink_batch_add_msg(bth, ctx, netlink_rule_msg_encoder, false);
 
 	return ret;
 }
