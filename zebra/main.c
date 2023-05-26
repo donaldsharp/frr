@@ -564,7 +564,9 @@ int main(int argc, char **argv)
 	zebra_error_init();
 
 #if defined(HAVE_CSMGR)
-	frr_csm_send_init_complete();
+	/* If we are restarting gracefully, delay INIT_COMPLETE */
+	if (!zrouter.graceful_restart)
+		frr_csm_send_init_complete();
 #endif
 
 	frr_run(zrouter.master);

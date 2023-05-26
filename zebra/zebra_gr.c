@@ -35,6 +35,10 @@
 
 DEFINE_MTYPE_STATIC(ZEBRA, ZEBRA_GR, "GR");
 
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#include "zebra/zebra_csm.h"
+#endif
+
 /*
  * Forward declaration.
  */
@@ -426,6 +430,7 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 			       api.safi);
 
 			info->af_enabled[api.afi] = true;
+			info->route_sync_done = false;
 		}
 		break;
 	}
@@ -472,6 +477,23 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct event *thread)
 
 		zebra_gr_delete_stale_client(info);
 	}
+
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+	/* Check to see if we have to send an INIT_COMPLETE */
+	if (zrouter.graceful_restart) {
+		TAILQ_FOREACH (info, &client->gr_info_queue, gr_info) {
+			if (!info->route_sync_done || info->t_stale_removal) {
+				LOG_GR("%s: Not done for %s, route_sync %d",
+				       __func__, vrf_id_to_name(info->vrf_id),
+				       info->route_sync_done);
+				return;
+			}
+		}
+		LOG_GR("%s: All instances GR done, triggering INIT_COMPLETE",
+		       __func__);
+		frr_csm_send_init_complete();
+	}
+#endif
 }
 
 
@@ -659,6 +681,7 @@ static void zebra_gr_process_client_stale_routes(struct zserv *client,
 	 * Also perform the cleanup if FRR itself is gracefully restarting.
 	 */
 	info->route_sync_done_time = monotime(NULL);
+	info->route_sync_done = true;
 	if (info->t_stale_removal || zrouter.graceful_restart) {
 		struct vrf *vrf = vrf_lookup_by_id(info->vrf_id);
 
