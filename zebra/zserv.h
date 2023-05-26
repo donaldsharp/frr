@@ -66,6 +66,7 @@ struct client_gr_info {
 	struct event *t_stale_removal;
 	void *client_ptr;
 	time_t route_sync_done_time;
+	bool route_sync_done;
 
 	TAILQ_ENTRY(client_gr_info) gr_info;
 };

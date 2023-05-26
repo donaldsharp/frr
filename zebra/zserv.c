@@ -1152,6 +1152,8 @@ static void zebra_show_client_detail(struct vty *vty, struct zserv *client)
 				}
 			}
 		}
+		vty_out(vty, "Route sync %s\n",
+			info->route_sync_done ? "DONE" : "NOT DONE");
 		if (route_sync_done) {
 			time_to_string(info->route_sync_done_time, timebuf);
 			vty_out(vty, "Route sync finished at %s", timebuf);
