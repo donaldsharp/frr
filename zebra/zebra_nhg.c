@@ -2391,13 +2391,26 @@ static int nexthop_active(struct nexthop *nexthop, struct nhg_hash_entry *nhe,
 
 			resolved = 0;
 
-			/* Only useful if installed */
-			if (!CHECK_FLAG(match->status, ROUTE_ENTRY_INSTALLED)) {
+			/* Only useful if queued or installed.
+			 *
+			 * If the route entry(re) corresponding to this
+			 * recursive nexthop is not installed, but if it's been
+			 * processed and queued for installation, then it's ok
+			 * to use this recursive nexthop.
+			 *
+			 * If in case the queued route entry failed to install
+			 * in kernel, then zebra will notify the route owner and
+			 * then the route owner can recalculate the bestpath for
+			 * affected routes and send the new bestpath to zebra.
+			 * In which case, this nexthop will be resolved over the
+			 * new bestpath entry from route owner.
+			 */
+			if (!CHECK_FLAG(match->status, ROUTE_ENTRY_INSTALLED) &&
+			    !(CHECK_FLAG(match->status, ROUTE_ENTRY_QUEUED))) {
 				if (IS_ZEBRA_DEBUG_RIB_DETAILED)
 					zlog_debug(
-						"%s: match %p (%pNG) not installed",
+						"%s: match %p (%pNG) not queued and not installed",
 						__func__, match, match->nhe);
-
 				goto done_with_match;
 			}
 
