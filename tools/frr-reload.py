@@ -1897,34 +1897,29 @@ def compare_context_objects(newconf, running):
                     candidates_to_add.append((newconf_ctx_keys, line))
 
             else:
-                lines_to_add.append((newconf_ctx_keys, None))
+                if "vrf default" == newconf_ctx_keys[0]:
+                    temp_lines = []
+                    #
+                    # Skip default vrf static routes if present in running config
+                    #
+                    for line in newconf_ctx.lines:
+                        if ((line.startswith("ip route") or
+                              line.startswith("ipv6 route")) and
+                            (line,) in running.contexts):
+                            continue
+                        temp_lines.append(line)
 
-                for line in newconf_ctx.lines:
+                    # Skip top-level key line if nothing to add
+                    if len(temp_lines) == 0:
+                        need_key = False
+
+                # Add key line(s), if needed
+                if need_key:
+                    lines_to_add.append((newconf_ctx_keys, None))
+
+                # Add remaining line(s), if any
+                for line in temp_lines:
                     lines_to_add.append((newconf_ctx_keys, line))
-
-            if "vrf default" == newconf_ctx_keys[0]:
-                temp_lines = []
-                #
-                # Skip default vrf static routes if present in running config
-                #
-                for line in newconf_ctx.lines:
-                    if ((line.startswith("ip route") or
-                          line.startswith("ipv6 route")) and
-                         (line,) in running.contexts):
-                        continue
-                    temp_lines.append(line)
-
-                # Skip top-level key line if nothing to add
-                if len(temp_lines) == 0:
-                    need_key = False
-
-            # Add key line(s), if needed
-            if need_key:
-                lines_to_add.append((newconf_ctx_keys, None))
-
-            # Add remaining line(s), if any
-            for line in temp_lines:
-                lines_to_add.append((newconf_ctx_keys, line))
 
     # if we have some candidate paths commands to add, append them to lines_to_add
     if len(candidates_to_add) > 0:
