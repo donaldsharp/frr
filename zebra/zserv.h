@@ -82,6 +82,7 @@ struct client_gr_info {
 	void *stale_client_ptr;
 	struct thread *t_stale_removal;
 	time_t route_sync_done_time;
+	bool route_sync_done;
 
 	TAILQ_ENTRY(client_gr_info) gr_info;
 };
