@@ -166,7 +166,7 @@ struct route_entry {
  * be useful when zebra is determing if a route can be
  * used for nexthops
  */
-#define ROUTE_ENTRY_ROUTE_REPLACING 0x80
+#define ROUTE_ENTRY_ROUTE_REPLACING 0x100
 
 	/* Sequence value incremented for each dataplane operation */
 	uint32_t dplane_sequence;
