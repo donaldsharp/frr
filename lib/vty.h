@@ -218,6 +218,10 @@ struct vty {
 	 * without any output. */
 	size_t frame_pos;
 	char frame[1024];
+	/*
+	 * Used for password-obfuscate to differentiate whether the passwords
+	 * are encrpyted or not after frr restart.*/
+	bool read_from_conf;
 };
 
 static inline void vty_push_context(struct vty *vty, int node, uint64_t id)
