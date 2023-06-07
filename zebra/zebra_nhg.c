@@ -2391,26 +2391,35 @@ static int nexthop_active(struct nexthop *nexthop, struct nhg_hash_entry *nhe,
 
 			resolved = 0;
 
-			/* Only useful if queued or installed.
-			 *
-			 * If the route entry(re) corresponding to this
-			 * recursive nexthop is not installed, but if it's been
-			 * processed and queued for installation, then it's ok
-			 * to use this recursive nexthop.
-			 *
-			 * If in case the queued route entry failed to install
-			 * in kernel, then zebra will notify the route owner and
-			 * then the route owner can recalculate the bestpath for
-			 * affected routes and send the new bestpath to zebra.
-			 * In which case, this nexthop will be resolved over the
-			 * new bestpath entry from route owner.
+			/*
+			 * Only useful if installed or being Route Replacing
+			 * Why Being Route Replaced as well?
+			 * Imagine a route A and route B( that depends on A )
+			 * for recursive resolution and A already exists in the
+			 * zebra rib.  If zebra receives the routes
+			 * for resolution at aproximately the same time in the [
+			 * B, A ] order on the workQ.  If this happens then
+			 * normal route resolution will happen and B will be
+			 * resolved successfully and then A will be resolved
+			 * successfully. Now imagine the reversed order [A, B].
+			 * A will be resolved and then scheduled for installed
+			 * (Thus not having the ROUTE_ENTRY_INSTALLED flag ).  B
+			 * will then get resolved and fail to be installed
+			 * because the original below test.  Let's `loosen` this
+			 * up a tiny bit and allow the
+			 * ROUTE_ENTRY_ROUTE_REPLACING flag ( that is set when a
+			 * Route Replace operation is being initiated on A now )
+			 * to now satisfy this situation.  This will allow
+			 * either order in the workQ to work properly.
 			 */
 			if (!CHECK_FLAG(match->status, ROUTE_ENTRY_INSTALLED) &&
-			    !(CHECK_FLAG(match->status, ROUTE_ENTRY_QUEUED))) {
+			    !CHECK_FLAG(match->status,
+					ROUTE_ENTRY_ROUTE_REPLACING)) {
 				if (IS_ZEBRA_DEBUG_RIB_DETAILED)
 					zlog_debug(
-						"%s: match %p (%pNG) not queued and not installed",
+						"%s: match %p (%pNG) not installed or being Route Replaced",
 						__func__, match, match->nhe);
+
 				goto done_with_match;
 			}
 

@@ -301,13 +301,16 @@ static char *_dump_re_status(const struct route_entry *re, char *buf,
 	}
 
 	snprintfrr(
-		buf, len, "%s%s%s%s%s%s%s",
+		buf, len, "%s%s%s%s%s%s%s%s",
 		CHECK_FLAG(re->status, ROUTE_ENTRY_REMOVED) ? "Removed " : "",
 		CHECK_FLAG(re->status, ROUTE_ENTRY_CHANGED) ? "Changed " : "",
 		CHECK_FLAG(re->status, ROUTE_ENTRY_LABELS_CHANGED)
 			? "Label Changed "
 			: "",
 		CHECK_FLAG(re->status, ROUTE_ENTRY_QUEUED) ? "Queued " : "",
+		CHECK_FLAG(re->status, ROUTE_ENTRY_ROUTE_REPLACING)
+			? "Replacing"
+			: "",
 		CHECK_FLAG(re->status, ROUTE_ENTRY_INSTALLED) ? "Installed "
 							      : "",
 		CHECK_FLAG(re->status, ROUTE_ENTRY_FAILED) ? "Failed " : "",
@@ -722,6 +725,7 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 
 		if (old) {
 			SET_FLAG(old->status, ROUTE_ENTRY_QUEUED);
+			SET_FLAG(re->status, ROUTE_ENTRY_ROUTE_REPLACING);
 
 			/* Free old FIB nexthop group */
 			UNSET_FLAG(old->status, ROUTE_ENTRY_USE_FIB_NHG);
@@ -1547,6 +1551,7 @@ static void zebra_rib_fixup_system(struct route_node *rn)
 
 		SET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
 		UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
+		UNSET_FLAG(re->status, ROUTE_ENTRY_ROUTE_REPLACING);
 
 		for (ALL_NEXTHOPS(re->nhe->nhg, nhop)) {
 			if (CHECK_FLAG(nhop->flags, NEXTHOP_FLAG_RECURSIVE))
@@ -2001,8 +2006,10 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 					"%s(%u):%pRN Stale dplane result for re %p",
 					VRF_LOGNAME(vrf),
 					dplane_ctx_get_vrf(ctx), rn, re);
-		} else
+		} else {
+			UNSET_FLAG(re->status, ROUTE_ENTRY_ROUTE_REPLACING);
 			UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
+		}
 	}
 
 	if (old_re) {
@@ -2257,8 +2264,10 @@ static void rib_process_dplane_notify(struct zebra_dplane_ctx *ctx)
 	}
 
 	/* Ensure we clear the QUEUED flag */
-	if (!zrouter.asic_offloaded)
+	if (!zrouter.asic_offloaded) {
 		UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
+		UNSET_FLAG(re->status, ROUTE_ENTRY_ROUTE_REPLACING);
+	}
 
 	/* Is this a notification that ... matters? We mostly care about
 	 * the route that is currently selected for installation; we may also
