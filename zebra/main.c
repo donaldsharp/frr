@@ -244,11 +244,17 @@ void zebra_finalize(struct thread *dummy)
 {
 	zlog_info("Zebra final shutdown");
 
+	/*
+	 * Stop dplane thread and finish any cleanup
+	 * This is before the zebra_ns_early_shutdown call
+	 * because sockets that the dplane depends on are closed
+	 * in those functions
+	 */
+	zebra_dplane_shutdown();
+
 	/* Final shutdown of ns resources */
 	ns_walk_func(zebra_ns_final_shutdown, NULL, NULL);
 
-	/* Stop dplane thread and finish any cleanup */
-	zebra_dplane_shutdown();
 
 	zebra_router_terminate();
 
