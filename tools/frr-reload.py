@@ -945,6 +945,19 @@ def bgp_remove_neighbor_cfg(lines_to_del, del_nbr_dict):
     for ctx_keys, line in lines_to_del_to_del:
         lines_to_del.remove((ctx_keys, line))
 
+def rearrange_lines(lines_to_add, lines_to_del):
+    # This method re-arranges the order of commands to be executed. Currently
+    # 'service password-obfuscation' is pushed to top of list (If configured)
+    #
+    # TODO: A more generic approach to push all the commands like vrf,
+    # prefix-set, etc.. before the commands inside router are executed.
+    for (ctx_keys, line) in lines_to_add:
+        password_obfuscation_found = re.search("service password-obfuscation$", ctx_keys[0])
+        if password_obfuscation_found:
+            lines_to_add.remove((ctx_keys, line))
+            lines_to_add.insert(0, ((ctx_keys, line)))
+
+    return (lines_to_add, lines_to_del)
 
 def bgp_delete_move_lines(lines_to_add, lines_to_del):
     # This method handles deletion of bgp peer group config.
@@ -2046,6 +2059,7 @@ def compare_context_objects(newconf, running):
     (lines_to_add, lines_to_del) = ignore_delete_re_add_lines(
         lines_to_add, lines_to_del
     )
+    (lines_to_add, lines_to_del) = rearrange_lines(lines_to_add, lines_to_del)
     (lines_to_add, lines_to_del) = delete_move_lines(lines_to_add, lines_to_del)
     (lines_to_add, lines_to_del) = ignore_unconfigurable_lines(
         lines_to_add, lines_to_del
