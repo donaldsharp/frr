@@ -356,7 +356,7 @@ static void frr_csm_fast_upgrade_triggered(void)
 static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 					   bool up)
 {
-	char *buf[256];
+	char buf[256];
 
 	if (up) {
 		/* We expect 'come up' only in the case of coming out of
