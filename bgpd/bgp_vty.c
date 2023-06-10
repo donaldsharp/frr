@@ -20081,6 +20081,9 @@ void bgp_vty_init(void)
 	/* "show [ip] bgp vrfs" commands. */
 	install_element(VIEW_NODE, &show_bgp_vrfs_cmd);
 
+	/* Some overall BGP information */
+	install_element(VIEW_NODE, &show_bgp_router_cmd);
+
 	/* Community-list. */
 	community_list_vty();
 
