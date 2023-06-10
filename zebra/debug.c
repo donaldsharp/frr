@@ -863,6 +863,7 @@ void zebra_debug_init(void)
 	install_element(ENABLE_NODE, &no_debug_zebra_rib_cmd);
 	install_element(ENABLE_NODE, &no_debug_zebra_fpm_cmd);
 	install_element(ENABLE_NODE, &no_debug_zebra_dplane_cmd);
+	install_element(ENABLE_NODE, &debug_zebra_csm_cmd);
 	install_element(ENABLE_NODE, &no_debug_zebra_pbr_cmd);
 	install_element(ENABLE_NODE, &debug_zebra_evpn_mh_cmd);
 
