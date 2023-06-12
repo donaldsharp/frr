@@ -710,6 +710,21 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 		break;
 	}
 	case ZEBRA_DPLANE_REQUEST_SUCCESS:
+		/*
+		 * There exists a code path in dplane_route_update
+		 * where the context is not sent down because of
+		 * the OFFLOADED flag.  If this is the case then
+		 * let's let upper level protocols know about this
+		 * being installed.
+		 */
+		if (CHECK_FLAG(re->flags, ZEBRA_FLAG_OFFLOADED))
+			zsend_route_notify_owner(rn, re, ZAPI_ROUTE_INSTALLED,
+						 info->afi, info->safi);
+		if (CHECK_FLAG(re->flags, ZEBRA_FLAG_OFFLOAD_FAILED))
+			zsend_route_notify_owner(rn, re,
+						 ZAPI_ROUTE_FAIL_INSTALL,
+						 info->afi, info->safi);
+
 		if (zvrf)
 			zvrf->installs++;
 		break;
