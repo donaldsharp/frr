@@ -3485,6 +3485,8 @@ static zclient_handler *const bgp_handlers[] = {
 	[ZEBRA_SRV6_LOCATOR_DELETE] = bgp_zebra_process_srv6_locator_delete,
 	[ZEBRA_SRV6_MANAGER_GET_LOCATOR_CHUNK] =
 		bgp_zebra_process_srv6_locator_chunk,
+	[ZEBRA_MAINTENANCE_MODE] = bgp_zebra_handle_maint_mode,
+	[ZEBRA_FAST_SHUTDOWN] = bgp_zebra_handle_fast_down,
 };
 
 static int bgp_if_new_hook(struct interface *ifp)
@@ -3524,8 +3526,6 @@ void bgp_zebra_init(struct thread_master *master, unsigned short instance)
 			      array_size(bgp_handlers));
 	zclient_init(zclient, ZEBRA_ROUTE_BGP, 0, &bgpd_privs);
 	zclient->zebra_connected = bgp_zebra_connected;
-	zclient->handle_maint_mode = bgp_zebra_handle_maint_mode;
-	zclient->handle_fast_down = bgp_zebra_handle_fast_down;
 	zclient->zebra_capabilities = bgp_zebra_capabilities;
 	zclient->instance = instance;
 }
