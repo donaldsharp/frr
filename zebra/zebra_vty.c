@@ -4308,11 +4308,15 @@ DEFUN (show_zebra,
 		mode_to_str(zrouter.csm_smode, buf1),
 		frr_csm_smode2str(zrouter.frr_csm_smode),
 		mode_to_str(zrouter.csm_cmode, buf2));
+	vty_out(vty, "CSM Load complete %s, %s %s \n",
+		zrouter.load_complete_failed ? "failed" : "succeeded",
+		safe_strerror(zrouter.csm_errno),
+		zrouter.csm_invalid_len ? "invalid length" : "");
 #endif
 	char timebuf[MONOTIME_STRLEN];
 
 	time_to_string(zrouter.startup_time, timebuf);
-	vty_out(vty, "Zebra started%s at time %s",
+	vty_out(vty, "Zebra started%s at time %s\n",
 		zrouter.graceful_restart ? " gracefully" : "", timebuf);
 
 	if (zrouter.t_rib_sweep)
@@ -4322,6 +4326,23 @@ DEFUN (show_zebra,
 	else {
 		time_to_string(zrouter.rib_sweep_time, timebuf);
 		vty_out(vty, "Zebra RIB sweep happened at %s", timebuf);
+	}
+
+	if (zrouter.graceful_restart) {
+		vty_out(vty, "All instances GR %s\n",
+			zrouter.all_instances_gr_done ? "done" : "NOT done");
+
+		if (zrouter.all_instances_gr_done) {
+			time_to_string(zrouter.gr_completion_time, timebuf);
+			vty_out(vty, "GR completion happened at %s", timebuf);
+		}
+
+		vty_out(vty, "Last route %s. ",
+			zrouter.gr_last_rt_installed ? "installed"
+						     : "NOT installed");
+
+		vty_out(vty, "Total GR routes: queued %u, processed %u\n",
+			z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
 	}
 
 	vty_out(vty,
