@@ -4438,7 +4438,6 @@ dplane_route_update_internal(struct route_node *rn,
  */
 static enum zebra_dplane_result dplane_route_update_last_internal(struct route_node *rn,
 								  struct route_entry *re,
-								  struct route_entry *old_re,
 								  enum dplane_op_e op)
 {
 	enum zebra_dplane_result result = ZEBRA_DPLANE_REQUEST_FAILURE;
@@ -4693,15 +4692,14 @@ enum zebra_dplane_result dplane_route_delete(struct route_node *rn,
 /*
  * Enqueue a route update compelete for the dataplane.
  */
-enum zebra_dplane_result dplane_route_update_last(struct route_node *rn, struct route_entry *re,
-						  struct route_entry *old_re)
+enum zebra_dplane_result dplane_route_update_last(struct route_node *rn, struct route_entry *re)
 {
 	enum zebra_dplane_result ret = ZEBRA_DPLANE_REQUEST_FAILURE;
 
 	if (rn == NULL || re == NULL)
 		goto done;
 
-	ret = dplane_route_update_last_internal(rn, re, old_re, DPLANE_OP_ROUTE_LAST);
+	ret = dplane_route_update_last_internal(rn, re, DPLANE_OP_ROUTE_LAST);
 done:
 	return ret;
 }

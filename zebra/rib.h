@@ -367,8 +367,9 @@ extern int zebra_check_addr(const struct prefix *p);
 
 extern void rib_delnode(struct route_node *rn, struct route_entry *re);
 extern void rib_install_kernel(struct route_node *rn, struct route_entry *re,
-			       struct route_entry *old);
+			       struct route_entry *old, bool last_route);
 extern void rib_uninstall_kernel(struct route_node *rn, struct route_entry *re);
+extern void zebra_gr_last_rt_reinstall_check(void);
 
 /* NOTE:
  * All rib_add function will not just add prefix into RIB, but
@@ -488,6 +489,9 @@ extern void zebra_rib_evaluate_rn_nexthops(struct route_node *rn, uint32_t seq,
  */
 extern struct route_node *
 rib_find_rn_from_ctx(const struct zebra_dplane_ctx *ctx);
+
+extern bool rib_route_match_ctx(const struct route_entry *re, const struct zebra_dplane_ctx *ctx,
+				bool is_update, bool async);
 
 /*
  * Inline functions.

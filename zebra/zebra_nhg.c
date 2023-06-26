@@ -3328,7 +3328,7 @@ void zebra_nhg_dplane_result(struct zebra_dplane_ctx *ctx)
 							"Rejected route re-install (RN:%p) on nexthop ID (%u) installation",
 							rn, id);
 					RNODE_FOREACH_RE (rn, re)
-						rib_install_kernel(rn, re, re); //, false);
+						rib_install_kernel(rn, re, re, false);
 				}
 				list_delete(&nhe->rejected_rn);
 			}

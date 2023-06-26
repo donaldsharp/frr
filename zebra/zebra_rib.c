@@ -636,8 +636,8 @@ int zebra_rib_labeled_unicast(struct route_entry *re)
 /* Update flag indicates whether this is a "replace" or not. Currently, this
  * is only used for IPv4.
  */
-void rib_install_kernel(struct route_node *rn, struct route_entry *re,
-			struct route_entry *old)
+void rib_install_kernel(struct route_node *rn, struct route_entry *re, struct route_entry *old,
+			bool last_route)
 {
 	struct nexthop *nexthop;
 	struct rib_table_info *info = srcdest_rnode_table_info(rn);
@@ -654,7 +654,6 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_FIB);
 		return;
 	}
-
 
 	/*
 	 * Install the resolved nexthop object first.
@@ -678,11 +677,18 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 	 */
 	hook_call(rib_update, rn, "installing in kernel");
 
-	/* Send add or update */
-	if (old)
-		ret = dplane_route_update(rn, re, old);
-	else
-		ret = dplane_route_add(rn, re);
+	/* Send add or update or last route*/
+	if (last_route) {
+		zlog_debug("GR %s: reinstalling %pRN (%p) with RTM_F_LAST_ROUTE flag on re %p",
+			   __func__, rn, rn, re);
+
+		ret = dplane_route_update_last(rn, re);
+	} else {
+		if (old)
+			ret = dplane_route_update(rn, re, old);
+		else
+			ret = dplane_route_add(rn, re);
+	}
 
 	switch (ret) {
 	case ZEBRA_DPLANE_REQUEST_QUEUED:
@@ -702,12 +708,13 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 
 		if (zvrf)
 			zvrf->installs_queued++;
+
 		break;
 	case ZEBRA_DPLANE_REQUEST_FAILURE:
 	{
 		flog_err(EC_ZEBRA_DP_INSTALL_FAIL,
-			 "%u:%u:%pRN: Failed to enqueue dataplane install",
-			 re->vrf_id, re->table, rn);
+			 "%u:%u:%pRN: Failed to enqueue dataplane %s install", re->vrf_id,
+			 re->table, rn, last_route ? "last route" : "");
 		break;
 	}
 	case ZEBRA_DPLANE_REQUEST_SUCCESS:
@@ -996,7 +1003,7 @@ static void rib_process_add_fib(struct zebra_vrf *zvrf, struct route_node *rn,
 	if (zebra_rib_labeled_unicast(new))
 		zebra_mpls_lsp_install(zvrf, rn, new);
 
-	rib_install_kernel(rn, new, NULL);
+	rib_install_kernel(rn, new, NULL, false);
 
 	UNSET_FLAG(new->status, ROUTE_ENTRY_CHANGED);
 }
@@ -1084,7 +1091,7 @@ static void rib_process_update_fib(struct zebra_vrf *zvrf,
 			if (zebra_rib_labeled_unicast(new))
 				zebra_mpls_lsp_install(zvrf, rn, new);
 
-			rib_install_kernel(rn, new, old);
+			rib_install_kernel(rn, new, old, false);
 		}
 
 		/*
@@ -1137,7 +1144,7 @@ static void rib_process_update_fib(struct zebra_vrf *zvrf,
 		 */
 		if (!CHECK_FLAG(new->status, ROUTE_ENTRY_INSTALLED) ||
 		    RIB_SYSTEM_ROUTE(new))
-			rib_install_kernel(rn, new, NULL);
+			rib_install_kernel(rn, new, NULL, false);
 	}
 
 	/* Update prior route. */
@@ -1522,9 +1529,8 @@ static void zebra_rib_evaluate_mpls(struct route_node *rn)
 /*
  * Utility to match route with dplane context data
  */
-static bool rib_route_match_ctx(const struct route_entry *re,
-				const struct zebra_dplane_ctx *ctx,
-				bool is_update, bool async)
+bool rib_route_match_ctx(const struct route_entry *re, const struct zebra_dplane_ctx *ctx,
+			 bool is_update, bool async)
 {
 	bool result = false;
 
@@ -1972,7 +1978,66 @@ done:
 	return rn;
 }
 
+/*
+ * Reinstalls the last route after GR is done
+ */
+void zebra_gr_last_rt_reinstall_check(void)
+{
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+	/*
+	 * Check to see if we have to reinstall the last route.
+	 *
+	 * If GR is enabled and if GR for all instances is done,
+	 * and if we haven't installed the last route yet,
+	 * then check if the total number of processed routes is
+	 * is greater than or equal to total number of queued routes.
+	 * If yes, then go ahead and install the last route.
+	 *
+	 * Checking if (z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt)
+	 * is to make sure that if zebra declares GR ready but if
+	 * some of the routes are still in early route metaQ, then
+	 * this check will make sure that we wait for those routes to be
+	 * processed before we install the last route.
+	 *
+	 * Last route needs to be installed only once.
+	 */
+	if (zrouter.graceful_restart && zrouter.all_instances_gr_done &&
+	    !zrouter.gr_last_rt_installed) {
+		GR_CTX_LOCK();
+		if ((z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt)) {
+			zrouter.gr_last_rt_installed = true;
 
+			zlog_debug("GR %s: All queued routes have been processed. Total queued %u, total processed %d",
+				   __func__, z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
+
+			/* Reinstall the last route */
+			if (z_gr_ctx.rn && z_gr_ctx.re) {
+				zlog_debug("GR %s: reinstalling last route %pRN %u:%u", __func__,
+					   z_gr_ctx.rn, z_gr_ctx.re->vrf_id, z_gr_ctx.re->table);
+				rib_install_last_route(z_gr_ctx.rn, z_gr_ctx.re);
+			} else {
+				zlog_warn("GR %s Last route not found. rn %p, re %p", __func__,
+					  z_gr_ctx.rn, z_gr_ctx.re);
+			}
+
+			zlog_debug("GR %s: IPv4 total route count: %u IPv6 total route count: %u",
+				   __func__, z_gr_ctx.af_installed_count[AFI_IP],
+				   z_gr_ctx.af_installed_count[AFI_IP6]);
+
+			frr_csm_send_network_layer_info(z_gr_ctx.af_installed_count[AFI_IP],
+							z_gr_ctx.af_installed_count[AFI_IP6]);
+
+			if (z_gr_ctx.rn)
+				route_unlock_node(z_gr_ctx.rn);
+
+			/* Reset the global pointers */
+			z_gr_ctx.rn = NULL;
+			z_gr_ctx.re = NULL;
+		}
+		GR_CTX_UNLOCK();
+	}
+#endif
+}
 
 /*
  * Route-update results processing after async dataplane update.
@@ -2077,11 +2142,26 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 			UNSET_FLAG(old_re->status, ROUTE_ENTRY_QUEUED);
 	}
 
-	if (op == DPLANE_OP_ROUTE_INSTALL || op == DPLANE_OP_ROUTE_UPDATE) {
+	/*
+	 * Check to see if last route needs to be reinstalled
+	 */
+	zebra_gr_last_rt_reinstall_check();
+
+	if (op == DPLANE_OP_ROUTE_INSTALL || op == DPLANE_OP_ROUTE_UPDATE ||
+	    op == DPLANE_OP_ROUTE_LAST) {
+		if (op == DPLANE_OP_ROUTE_LAST && re && z_gr_ctx.rn == rn && z_gr_ctx.re == re)
+			zlog_debug("%s(%u:%u):%pRN Update for last installed route, re %p, result %s",
+				   VRF_LOGNAME(vrf), dplane_ctx_get_vrf(ctx), re->table, rn, re,
+				   dplane_res2str(status));
+
 		if (status == ZEBRA_DPLANE_REQUEST_SUCCESS) {
 			if (re) {
 				UNSET_FLAG(re->status, ROUTE_ENTRY_FAILED);
 				SET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
+				if (op == DPLANE_OP_ROUTE_LAST)
+					zlog_debug("GR %s: Successfully reinstalled %pRN with RTM_F_LAST_ROUTE flag on re %p",
+						   __func__, rn, re);
+
 				if (re->nhe && re->nhe->rejected_rn) {
 					if (IS_ZEBRA_DEBUG_RIB_DETAILED)
 						zlog_debug(
@@ -2194,6 +2274,11 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 			zlog_warn("%s(%u:%u):%pRN: Route install failed",
 				  VRF_LOGNAME(vrf), dplane_ctx_get_vrf(ctx),
 				  dplane_ctx_get_table(ctx), rn);
+
+			if (op == DPLANE_OP_ROUTE_LAST)
+				zlog_warn("GR %s(%u:%u):%pRN: Last route reinstall failed",
+					  VRF_LOGNAME(vrf), dplane_ctx_get_vrf(ctx),
+					  dplane_ctx_get_table(ctx), rn);
 		}
 	} else if (op == DPLANE_OP_ROUTE_DELETE) {
 		rt_delete = true;
@@ -2238,6 +2323,7 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 
 	zebra_rib_evaluate_rn_nexthops(rn, seq, rt_delete);
 	zebra_rib_evaluate_mpls(rn);
+
 done:
 
 	if (rn)
@@ -3118,7 +3204,7 @@ static void process_subq_early_route_delete(struct zebra_early_route *ere)
 				 * has deleted a Zebra router from the kernel.
 				 * We will add it back
 				 */
-				rib_install_kernel(rn, fib, NULL);
+				rib_install_kernel(rn, fib, NULL, false);
 			}
 		} else {
 			if (IS_ZEBRA_DEBUG_RIB) {
@@ -3145,7 +3231,7 @@ static void process_subq_early_route_delete(struct zebra_early_route *ere)
 		if (ere->fromkernel &&
 		    CHECK_FLAG(ere->re->flags, ZEBRA_FLAG_SELFROUTE) &&
 		    !zrouter.allow_delete) {
-			rib_install_kernel(rn, same, NULL);
+			rib_install_kernel(rn, same, NULL, false);
 			route_unlock_node(rn);
 
 			early_route_memory_free(ere);
@@ -4315,6 +4401,18 @@ static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 			   ere->deletion ? "delete" : "add",
 			   subqueue2str(META_QUEUE_EARLY_ROUTE));
 
+	/*
+	 * Record the total BGP routes enqueued during GR
+	 */
+	if (zrouter.graceful_restart) {
+		struct zebra_vrf *zvrf = zebra_vrf_lookup_by_id(ere->re->vrf_id);
+		GR_CTX_LOCK();
+		/* This also takes into account route deletes */
+		if (!zrouter.gr_last_rt_installed && zvrf && zvrf->gr_enabled)
+			z_gr_ctx.total_queued_rt++;
+		GR_CTX_UNLOCK();
+	}
+
 	return 0;
 }
 
@@ -4925,6 +5023,7 @@ static void rib_process_dplane_results(struct event *thread)
 			case DPLANE_OP_ROUTE_INSTALL:
 			case DPLANE_OP_ROUTE_UPDATE:
 			case DPLANE_OP_ROUTE_DELETE:
+			case DPLANE_OP_ROUTE_LAST:
 				/* Bit of special case for route updates
 				 * that were generated by async notifications:
 				 * we don't want to continue processing these
