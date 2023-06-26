@@ -198,6 +198,7 @@ enum dplane_op_e {
 	DPLANE_OP_TC_INSTALL,
 	DPLANE_OP_TC_UPDATE,
 	DPLANE_OP_TC_DELETE,
+	DPLANE_OP_ROUTE_LAST,
 };
 
 /*
@@ -341,6 +342,8 @@ bool dplane_ctx_is_skip_kernel(const struct zebra_dplane_ctx *ctx);
 /* Control use of kernel NHGs */
 void dplane_ctx_set_no_nhg(struct zebra_dplane_ctx *ctx);
 bool dplane_ctx_is_no_nhg(const struct zebra_dplane_ctx *ctx);
+
+bool dplane_ctx_is_last_installed_route(const struct zebra_dplane_ctx *ctx);
 
 /* Source prefix is a little special - use convention to return NULL
  * to mean "no src prefix"
@@ -661,6 +664,10 @@ enum zebra_dplane_result dplane_route_add(struct route_node *rn,
 enum zebra_dplane_result dplane_route_update(struct route_node *rn,
 					     struct route_entry *re,
 					     struct route_entry *old_re);
+
+enum zebra_dplane_result dplane_route_update_last(struct route_node *rn,
+						  struct route_entry *re,
+						  struct route_entry *old_re);
 
 enum zebra_dplane_result dplane_route_delete(struct route_node *rn,
 					     struct route_entry *re);

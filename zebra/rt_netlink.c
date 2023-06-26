@@ -957,13 +957,13 @@ static int netlink_route_change_read_unicast(struct nlmsghdr *h, ns_id_t ns_id,
 		char buf2[PREFIX_STRLEN];
 
 		zlog_debug(
-			"%s %pFX%s%s vrf %s(%u) table_id: %u metric: %d Admin Distance: %d",
+			"%s %pFX%s%s vrf %s(%u) table_id: %u metric: %d Admin Distance: %d, rtm_flags: %x",
 			nl_msg_type_to_str(h->nlmsg_type), &p,
 			src_p.prefixlen ? " from " : "",
 			src_p.prefixlen ? prefix2str(&src_p, buf2, sizeof(buf2))
 					: "",
-			vrf_id_to_name(vrf_id), vrf_id, table, metric,
-			distance);
+			vrf_id_to_name(vrf_id), vrf_id, table, metric, distance,
+			rtm->rtm_flags);
 	}
 
 	afi_t afi = AFI_IP;
@@ -2113,6 +2113,22 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 	req->r.rtm_src_len = src_p ? src_p->prefixlen : 0;
 	req->r.rtm_scope = RT_SCOPE_UNIVERSE;
 
+	/*
+	 * Set the last route installed flag-RTM_F_LAST_ROUTE
+	 * and change the netlink mesg type to RTM_SETHWFLAGS
+	 * if the operation is to reinstall the last route.
+	 */
+#if defined(HAVE_CUMULUS)
+	if ((cmd == RTM_NEWROUTE) &&
+	    dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_LAST) {
+		req->r.rtm_flags |= RTM_F_LAST_ROUTE;
+		req->n.nlmsg_type = RTM_SETHWFLAGS;
+		zlog_debug("GR %s LAST_ROUTE flag set: %s %pFX vrf %u(%u)",
+			   __func__, nl_msg_type_to_str(cmd), p,
+			   dplane_ctx_get_vrf(ctx), dplane_ctx_get_table(ctx));
+	}
+#endif
+
 	if (cmd == RTM_DELROUTE)
 		req->r.rtm_protocol = zebra2proto(dplane_ctx_get_old_type(ctx));
 	else
@@ -2166,10 +2182,9 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 	}
 
 	if (IS_ZEBRA_DEBUG_KERNEL)
-		zlog_debug(
-			"%s: %s %pFX vrf %u(%u)", __func__,
-			nl_msg_type_to_str(cmd), p, dplane_ctx_get_vrf(ctx),
-			table_id);
+		zlog_debug("%s: %s %pFX vrf %u(%u) rtm_flags: 0x%x", __func__,
+			   nl_msg_type_to_str(cmd), p, dplane_ctx_get_vrf(ctx),
+			   table_id, req->r.rtm_flags);
 
 	/*
 	 * If we are not updating the route and we have received
@@ -2986,7 +3001,8 @@ netlink_put_route_update_msg(struct nl_batch *bth, struct zebra_dplane_ctx *ctx)
 		cmd = RTM_DELROUTE;
 	} else if (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_INSTALL) {
 		cmd = RTM_NEWROUTE;
-	} else if (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE) {
+	} else if (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE ||
+		   dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_LAST) {
 
 		if (p->family == AF_INET || v6_rr_semantics) {
 			/* Single 'replace' operation */
