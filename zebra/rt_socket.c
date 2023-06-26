@@ -321,12 +321,13 @@ enum zebra_dplane_result kernel_route_update(struct zebra_dplane_ctx *ctx)
 				kernel_rtm(RTM_DELETE, dplane_ctx_get_dest(ctx),
 					   dplane_ctx_get_ng(ctx),
 					   dplane_ctx_get_metric(ctx));
-		} else if (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_INSTALL) {
+		} else if ((dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_INSTALL)) {
 			if (!RSYSTEM_ROUTE(type))
 				kernel_rtm(RTM_ADD, dplane_ctx_get_dest(ctx),
 					   dplane_ctx_get_ng(ctx),
 					   dplane_ctx_get_metric(ctx));
-		} else if (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE) {
+		} else if (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE ||
+			   (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_LAST)) {
 			/* Must do delete and add separately -
 			 * no update available
 			 */
