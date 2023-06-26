@@ -1535,6 +1535,7 @@ void kernel_update_multi(struct dplane_ctx_list_head *ctx_list)
 		case DPLANE_OP_ROUTE_INSTALL:
 		case DPLANE_OP_ROUTE_UPDATE:
 		case DPLANE_OP_ROUTE_DELETE:
+		case DPLANE_OP_ROUTE_LAST:
 			res = kernel_route_update(ctx);
 			break;
 
