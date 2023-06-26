@@ -149,8 +149,8 @@ static int frr_csm_send_down_complete(Module mod)
 }
 
 /*
- * Send down action complete to CSM.
- * Called in zebra's main thread
+ * Right after initial registration, handshake with CSM to get our
+ * start mode.
  */
 static int frr_csm_get_start_mode(Mode *mode, State *state)
 {
@@ -158,26 +158,26 @@ static int frr_csm_get_start_mode(Mode *mode, State *state)
 	uint8_t rsp[MAX_MSG_LEN];
 	msg_pkg *m = (msg_pkg *)req;
 	msg *entry = (msg *)m->entry;
+	module_status *mod_status;
 	module_mode *mod_mode;
-	module_down_status *ms;
 	int nbytes;
 
 	*mode = REBOOT_COLD;
 	*state = UP;
 
-	entry->type = GO_DOWN;
-	entry->len = sizeof(*entry) + sizeof(*ms);
-	ms = (module_down_status *)entry->data;
-	ms->mod = zrouter.frr_csm_modid;
-	ms->mode.mod = zrouter.frr_csm_modid;
-	ms->mode.state = LOAD_COMPLETE;
-	ms->failure_reason = NO_ERROR;
+	/* Send load_complete */
+	entry->type = LOAD_COMPLETE;
+	entry->len = sizeof(*entry) + sizeof(*mod_status);
+	mod_status = (module_status *)entry->data;
+	mod_status->mode.mod = zrouter.frr_csm_modid;
+	mod_status->mode.state = LOAD_COMPLETE;
+	mod_status->failure_reason = NO_ERROR;
 	m->total_len = sizeof(*m) + entry->len;
 
 	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
 			    rsp);
 	if (nbytes == -1) {
-		zlog_err("FRRCSM: Failed to send down complete, error %s",
+		zlog_err("FRRCSM: Failed to send load complete, error %s",
 			 safe_strerror(errno));
 		return -1;
 	}
@@ -210,7 +210,6 @@ static int frr_csm_get_start_mode(Mode *mode, State *state)
 			mod_mode = (module_mode *)entry->data;
 			if (IS_ZEBRA_DEBUG_CSM) {
 				char buf[256];
-
 				zlog_debug(
 					"FRRCSM: ... Received start mode %s state %s",
 					mode_to_str(mod_mode->mode, buf),
