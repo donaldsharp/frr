@@ -1585,6 +1585,7 @@ static enum netlink_msg_status nl_put_msg(struct nl_batch *bth,
 	case DPLANE_OP_ROUTE_INSTALL:
 	case DPLANE_OP_ROUTE_UPDATE:
 	case DPLANE_OP_ROUTE_DELETE:
+	case DPLANE_OP_ROUTE_LAST:
 		return netlink_put_route_update_msg(bth, ctx);
 
 	case DPLANE_OP_NH_INSTALL:
@@ -1678,6 +1679,101 @@ static enum netlink_msg_status nl_put_msg(struct nl_batch *bth,
 	return FRR_NETLINK_ERROR;
 }
 
+void zebra_record_most_recent_route(struct zebra_dplane_ctx *ctx)
+{
+	struct zebra_vrf *zvrf = NULL;
+
+	zvrf = zebra_vrf_lookup_by_id(dplane_ctx_get_vrf(ctx));
+
+	if (zrouter.graceful_restart && zvrf && zvrf->gr_enabled) {
+		GR_CTX_LOCK();
+		/*
+		 * If GR is enabled for this VRF and if the last
+		 * BGP route has not been reinstalled yet, then
+		 * increment the total_processed_rt count and
+		 * if the op is route install/update and if this
+		 * BGP route was successfully installed, then record it.
+		 * Since this could be the last route installed.
+		 */
+		if (!zrouter.gr_last_rt_installed) {
+			struct route_node *rn = NULL;
+			struct route_entry *re = NULL;
+
+			/*
+			 * Record number of routes
+			 * added/deleted/updated.
+			 * Record this for both
+			 * success and error
+			 * case. rib_can_delete_dest
+			 */
+			z_gr_ctx.total_processed_rt++;
+
+			rn = rib_find_rn_from_ctx(ctx);
+			if (rn) {
+				RNODE_FOREACH_RE (rn, re) {
+					if (rib_route_match_ctx(re, ctx, false, false))
+						break;
+				}
+				if (re &&
+				    (dplane_ctx_get_status(ctx) == ZEBRA_DPLANE_REQUEST_SUCCESS) &&
+				    ((dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_INSTALL) ||
+				     (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE))) {
+					/*
+					 * If the route was successfully
+					 * installed and if the op is
+					 * DPLANE_OP_ROUTE_INSTALL or
+					 * DPLANE_OP_ROUTE_UPDATE,
+					 * update the count and record
+					 * the rn and re if it's a BGP
+					 * route
+					 */
+					z_gr_ctx.af_installed_count[dplane_ctx_get_afi(ctx)] += 1;
+					/*
+					 * If it's a BGP route then
+					 * record the rn and re in
+					 * z_gr_ctx
+					 */
+					if (re->type == ZEBRA_ROUTE_BGP) {
+						/*
+						 * Unlock the
+						 * previous
+						 * route node
+						 * since we have
+						 * a new last.
+						 * rib_find_rn_from_ctx()
+						 * increments
+						 * the ref count
+						 * of rn.
+						 */
+						if (z_gr_ctx.rn)
+							route_unlock_node(z_gr_ctx.rn);
+
+						z_gr_ctx.rn = rn;
+						z_gr_ctx.re = re;
+					} else {
+						/*
+						 * We ended up not recording
+						 * this rn. So decrement the
+						 * refcount.
+						 */
+						route_unlock_node(rn);
+					}
+
+				} else {
+					/*
+					 * We ended up not recording this rn.
+					 * So decrement its refcount since
+					 * rib_find_rn_from_ctx had incremented
+					 * rn's refcount.
+					 */
+					route_unlock_node(rn);
+				}
+			}
+		}
+		GR_CTX_UNLOCK();
+	}
+}
+
 void kernel_update_multi(struct dplane_ctx_list_head *ctx_list)
 {
 	struct nl_batch batch;
@@ -1709,6 +1805,8 @@ void kernel_update_multi(struct dplane_ctx_list_head *ctx_list)
 		if (res == FRR_NETLINK_ERROR)
 			dplane_ctx_set_status(ctx,
 					      ZEBRA_DPLANE_REQUEST_FAILURE);
+
+		zebra_record_most_recent_route(ctx);
 
 		if (batch.curlen > batch.limit)
 			nl_batch_send(&batch);

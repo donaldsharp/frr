@@ -565,8 +565,15 @@ int main(int argc, char **argv)
 
 #if defined(HAVE_CSMGR)
 	/* If we are restarting gracefully, delay INIT_COMPLETE */
-	if (!zrouter.graceful_restart)
+	if (!zrouter.graceful_restart) {
 		frr_csm_send_init_complete();
+		frr_csm_send_network_layer_info(0, 0);
+	}
+#endif
+
+#if defined(HAVE_CUMULUS)
+	if (zrouter.graceful_restart)
+		zebra_gr_ctx_init();
 #endif
 
 	frr_run(zrouter.master);

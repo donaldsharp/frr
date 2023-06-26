@@ -837,8 +837,7 @@ enum zebra_dplane_result dplane_route_update(struct route_node *rn,
 					     struct route_entry *re,
 					     struct route_entry *old_re);
 
-enum zebra_dplane_result dplane_route_update_last(struct route_node *rn, struct route_entry *re,
-						  struct route_entry *old_re);
+enum zebra_dplane_result dplane_route_update_last(struct route_node *rn, struct route_entry *re);
 
 enum zebra_dplane_result dplane_route_delete(struct route_node *rn,
 					     struct route_entry *re);
