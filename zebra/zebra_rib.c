@@ -3116,8 +3116,8 @@ static void process_subq_early_route_delete(struct zebra_early_route *ere)
 					       &(tmp_nh->gate.ipv6),
 					       sizeof(struct in6_addr));
 				}
-				zebra_rib_queue_evpn_route_del(
-					re->vrf_id, &vtep_ip, &ere->p);
+				// zebra_rib_queue_evpn_route_del(
+				//	re->vrf_id, &vtep_ip, &ere->p);
 			}
 		}
 
