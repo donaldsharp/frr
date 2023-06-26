@@ -161,6 +161,7 @@ static int frr_csm_get_start_mode(Mode *mode, State *state)
 	module_status *mod_status;
 	module_mode *mod_mode;
 	int nbytes;
+	char buf[256];
 
 	*mode = REBOOT_COLD;
 	*state = UP;
@@ -208,13 +209,10 @@ static int frr_csm_get_start_mode(Mode *mode, State *state)
 		switch (entry->type) {
 		case MODE_INFO:
 			mod_mode = (module_mode *)entry->data;
-			if (IS_ZEBRA_DEBUG_CSM) {
-				char buf[256];
-				zlog_debug(
-					"FRRCSM: ... Received start mode %s state %s",
-					mode_to_str(mod_mode->mode, buf),
-					mod_state_to_str(mod_mode->state));
-			}
+			if (IS_ZEBRA_DEBUG_CSM)
+				zlog_debug("FRRCSM: ... Received start mode %s state %s",
+					   mode_to_str(mod_mode->mode, buf),
+					   mod_state_to_str(mod_mode->state));
 			*mode = mod_mode->mode;
 			*state = mod_mode->state;
 			break;
@@ -372,6 +370,10 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 
 		zrouter.csm_cmode = mode;
 		zrouter.csm_cstate = state;
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug("FRRCSM: %s: Mode updated to: %u, state updated to: %u",
+				   __func__, mode, state);
+
 		frr_csm_exit_maintenance_mode();
 		return;
 	}
@@ -394,6 +396,9 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 
 	zrouter.csm_cmode = mode;
 	zrouter.csm_cstate = state;
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("FRRCSM: %s: Mode updated to: %u, state updated to: %u", __func__, mode,
+			   state);
 
 	if (IS_MODE_MAINTENANCE(mode)) {
 		frr_csm_enter_maintenance_mode();
@@ -414,6 +419,9 @@ static void frr_csm_update_state(Module mod, Mode mode, State state)
 {
 	if (mod != zrouter.frr_csm_modid)
 		return;
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("FRRCSM: Mode updated to: %u, state updated to: %u", mode, state);
 
 	zrouter.csm_cmode = mode;
 	zrouter.csm_cstate = state;
@@ -503,6 +511,8 @@ static int frr_csm_cb(int len, void *buf)
 	nbytes -= sizeof(*m);
 	entry = m->entry;
 	while (nbytes && nbytes >= entry->len) {
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug("FRRCSM: msg type: %u", entry->type);
 		switch (entry->type) {
 		case COME_UP:
 			mod_mode = (module_mode *)entry->data;
@@ -573,17 +583,8 @@ static int frr_csm_cb(int len, void *buf)
 			frr_csm_send_keep_rsp(kr->seq);
 			break;
 		case NETWORK_LAYER_INFO:
-			mod_status = (module_status *)entry->data;
-			mod_mode = &mod_status->mode;
 			if (IS_ZEBRA_DEBUG_CSM) {
-				char buf[256];
-
-				zlog_debug(
-					"FRRCSM: ... NL Info for %s, mode %s State %s failure-reason %d",
-					mod_id_to_str(mod_mode->mod),
-					mode_to_str(mod_mode->mode, buf),
-					mod_state_to_str(mod_mode->state),
-					mod_status->failure_reason);
+				zlog_debug("FRRCSM: ... NL Info");
 			}
 			/* TBD: Should we do anything with this? */
 			break;
@@ -685,18 +686,91 @@ int frr_csm_send_init_complete()
 	entry->len = sizeof(*entry) + sizeof(*mod_status);
 	mod_status = (module_status *)entry->data;
 	mod_status->mode.mod = zrouter.frr_csm_modid;
+	mod_status->mode.mode = zrouter.csm_smode;
 	mod_status->mode.state = INIT_COMPLETE;
 	mod_status->failure_reason = NO_ERROR;
 	m->total_len = sizeof(*m) + entry->len;
 
-	if (IS_ZEBRA_DEBUG_CSM)
+	if (IS_ZEBRA_DEBUG_CSM) {
+		char buf1[256];
+		char buf2[256];
+
 		zlog_debug("FRRCSM: Sending init complete");
+		zlog_debug("FRRCSM: %s: csm_cmode %s, csm_smode %s frr_mode %s GR enabled %u",
+			   __func__, mode_to_str(zrouter.csm_cmode, buf2),
+			   mode_to_str(zrouter.csm_smode, buf1),
+			   frr_csm_smode2str(zrouter.frr_csm_smode), zrouter.graceful_restart);
+	}
+
 
 	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
 			    rsp);
 	if (nbytes == -1) {
 		zlog_err("FRRCSM: Failed to send init complete, error %s",
 			 safe_strerror(errno));
+		return -1;
+	}
+
+	/* We don't care about the response */
+	return 0;
+}
+
+/* Send NETWORK_LAYER_INFO on restart complete. */
+
+int frr_csm_send_network_layer_info(uint32_t ipv4_count, uint32_t ipv6_count)
+{
+	uint8_t req[MAX_MSG_LEN];
+	uint8_t rsp[MAX_MSG_LEN];
+	msg_pkg *m = (msg_pkg *)req;
+	msg *entry = (msg *)m->entry;
+	int nbytes;
+
+	/* Send init_complete */
+	if (!zrouter.frr_csm_regd)
+		return 0;
+
+	/* build out the length incrementally. */
+
+	m->total_len = sizeof(*m);
+
+	entry->type = NETWORK_LAYER_INFO;
+	entry->len = sizeof(*entry);
+
+	nl_data *nl = (nl_data *)(req + sizeof(msg_pkg) + sizeof(msg));
+
+	nl->total_len = sizeof(nl_data);
+
+	nl_hal_info *hal_item = (nl_hal_info *)(nl->data);
+
+	/* first ipv4, then ipv6. */
+
+	hal_item->type = IPV4;
+	hal_item->len = sizeof(nl_hal_info) + sizeof(nl_ipv4_info);
+	nl_ipv4_info *v4 = (nl_ipv4_info *)(hal_item->data);
+	v4->fib_entries = ipv4_count;
+
+	nl->total_len += hal_item->len;
+
+	/* v6 */
+
+	hal_item = (nl_hal_info *)((char *)hal_item + hal_item->len);
+
+	hal_item->type = IPV6;
+	hal_item->len = sizeof(nl_hal_info) + sizeof(nl_ipv6_info);
+	nl_ipv6_info *v6 = (nl_ipv6_info *)(hal_item->data);
+	v6->fib_entries = ipv6_count;
+
+	nl->total_len += hal_item->len;
+
+	entry->len += nl->total_len;
+	m->total_len += entry->len;
+
+	if (IS_ZEBRA_DEBUG_CSM)
+		zlog_debug("FRRCSM: Sending NETWORK_LAYER_INFO");
+
+	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN, rsp);
+	if (nbytes == -1) {
+		zlog_err("FRRCSM: Failed to send network layer info %s", safe_strerror(errno));
 		return -1;
 	}
 
@@ -770,7 +844,9 @@ void frr_csm_register()
 		zrouter.csm_smode = zrouter.csm_cmode = REBOOT_COLD;
 		zrouter.csm_cstate = UP;
 		zrouter.frr_csm_smode = COLD_START;
+		zrouter.load_complete_failed = true;
 	} else {
+		zrouter.load_complete_failed = false;
 		char buf[256];
 
 		zlog_err("FRRCSM: Start mode is %s (converted to %s), state %s",
@@ -779,6 +855,8 @@ void frr_csm_register()
 		zrouter.csm_smode = zrouter.csm_cmode = mode;
 		zrouter.csm_cstate = state;
 		zrouter.frr_csm_smode = smode;
+		zlog_err("FRRCSM: mode %s is smode is  %s, ", mode_to_str(mode, buf),
+			 frr_csm_smode_str[smode]);
 	}
 }
 #else

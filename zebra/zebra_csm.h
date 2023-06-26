@@ -42,9 +42,11 @@ extern void zebra_csm_maint_mode_client_ack(struct zserv *client, bool enter);
 extern int frr_csm_send_init_complete(void);
 extern void frr_csm_unregister(void);
 extern void frr_csm_register(void);
+extern int frr_csm_send_network_layer_info(uint32_t ipv4_count, uint32_t ipv6_count);
 
 static inline const char *frr_csm_smode2str(enum frr_csm_smode smode)
 {
 	return (frr_csm_smode_str[smode]);
 }
+
 #endif
