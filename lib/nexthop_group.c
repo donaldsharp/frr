@@ -1105,7 +1105,10 @@ void nexthop_group_json_nexthop(json_object *j, const struct nexthop *nh)
 
 	if (nh->vrf_id != VRF_DEFAULT) {
 		vrf = vrf_lookup_by_id(nh->vrf_id);
-		json_object_string_add(j, "targetVrf", vrf->name);
+		/* When VRF is not initialized, show the target VRF as none */
+		json_object_string_add(j, "targetVrf",
+				       (nh->vrf_id == VRF_UNKNOWN) ? "-"
+								   : vrf->name);
 	}
 
 	if (nh->nh_label && nh->nh_label->num_labels > 0) {
