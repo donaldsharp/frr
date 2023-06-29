@@ -1979,6 +1979,46 @@ done:
 }
 
 /*
+ * Caller of this function must hold the GR_CTX_LOCK
+ * before calling this function
+ */
+static void zebra_gr_reinstall_last_route(void)
+{
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+	zrouter.gr_last_rt_installed = true;
+
+	zlog_debug("GR %s: All queued routes have been processed. Total queued %u, total processed %d",
+		   __func__, z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
+
+	/* Reinstall the last route */
+	if (z_gr_ctx.rn && z_gr_ctx.re) {
+		zlog_debug("GR %s: Reinstalling last route %pRN %u:%u", __func__, z_gr_ctx.rn,
+			   z_gr_ctx.re->vrf_id, z_gr_ctx.re->table);
+
+		rib_install_kernel(z_gr_ctx.rn, z_gr_ctx.re, NULL, true);
+	} else {
+		zlog_info("GR %s Last route not found. rn %p, re %p", __func__, z_gr_ctx.rn,
+			  z_gr_ctx.re);
+	}
+
+	zlog_debug("GR %s: IPv4 total route count: %u IPv6 total route count: %u", __func__,
+		   z_gr_ctx.af_installed_count[AFI_IP], z_gr_ctx.af_installed_count[AFI_IP6]);
+
+	frr_csm_send_network_layer_info(z_gr_ctx.af_installed_count[AFI_IP],
+					z_gr_ctx.af_installed_count[AFI_IP6]);
+
+	if (z_gr_ctx.rn)
+		route_unlock_node(z_gr_ctx.rn);
+
+	/* Reset the global pointers */
+	z_gr_ctx.rn = NULL;
+	z_gr_ctx.re = NULL;
+
+#endif
+}
+
+
+/*
  * Reinstalls the last route after GR is done
  */
 void zebra_gr_last_rt_reinstall_check(void)
@@ -1990,7 +2030,7 @@ void zebra_gr_last_rt_reinstall_check(void)
 	 * If GR is enabled and if GR for all instances is done,
 	 * and if we haven't installed the last route yet,
 	 * then check if the total number of processed routes is
-	 * is greater than or equal to total number of queued routes.
+	 * greater than or equal to total number of queued routes.
 	 * If yes, then go ahead and install the last route.
 	 *
 	 * Checking if (z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt)
@@ -2005,34 +2045,9 @@ void zebra_gr_last_rt_reinstall_check(void)
 	    !zrouter.gr_last_rt_installed) {
 		GR_CTX_LOCK();
 		if ((z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt)) {
-			zrouter.gr_last_rt_installed = true;
-
-			zlog_debug("GR %s: All queued routes have been processed. Total queued %u, total processed %d",
-				   __func__, z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
-
-			/* Reinstall the last route */
-			if (z_gr_ctx.rn && z_gr_ctx.re) {
-				zlog_debug("GR %s: reinstalling last route %pRN %u:%u", __func__,
-					   z_gr_ctx.rn, z_gr_ctx.re->vrf_id, z_gr_ctx.re->table);
-				rib_install_last_route(z_gr_ctx.rn, z_gr_ctx.re);
-			} else {
-				zlog_warn("GR %s Last route not found. rn %p, re %p", __func__,
-					  z_gr_ctx.rn, z_gr_ctx.re);
-			}
-
-			zlog_debug("GR %s: IPv4 total route count: %u IPv6 total route count: %u",
-				   __func__, z_gr_ctx.af_installed_count[AFI_IP],
-				   z_gr_ctx.af_installed_count[AFI_IP6]);
-
-			frr_csm_send_network_layer_info(z_gr_ctx.af_installed_count[AFI_IP],
-							z_gr_ctx.af_installed_count[AFI_IP6]);
-
-			if (z_gr_ctx.rn)
-				route_unlock_node(z_gr_ctx.rn);
-
-			/* Reset the global pointers */
-			z_gr_ctx.rn = NULL;
-			z_gr_ctx.re = NULL;
+			zlog_debug("GR %s: Reinstalling last route and sending NL INFO to CSMgr",
+				   __func__);
+			zebra_gr_reinstall_last_route();
 		}
 		GR_CTX_UNLOCK();
 	}
@@ -4840,6 +4855,24 @@ void rib_sweep_table(struct route_table *table)
 		zlog_debug("%s: ends", __func__);
 }
 
+void zebra_declare_gr_done(void)
+{
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+	if ((zrouter.graceful_restart)) {
+		GR_CTX_LOCK();
+
+		zlog_debug("GR %s: GR complete NOT recieved from BGP. Triggering INIT_COMPLETE",
+			   __func__);
+		frr_csm_send_init_complete();
+
+		zlog_debug("GR %s: Reinstall last route and send NL INFO to CSMgr", __func__);
+		zebra_gr_reinstall_last_route();
+
+		GR_CTX_UNLOCK();
+	}
+#endif
+}
+
 /* Sweep all RIB tables.  */
 void rib_sweep_route(struct event *t)
 {
@@ -4860,6 +4893,21 @@ void rib_sweep_route(struct event *t)
 
 	zebra_router_sweep_route();
 	zebra_router_sweep_nhgs();
+
+	/*
+	 * If none of the BGP peers are configured or are UP,
+	 * then BGP will not send ZEBRA_CLIENT_ROUTE_UPDATE_PENDING and
+	 * ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE to zebra. In this case, though
+	 * BGP doesn't indicate GR completion to zebra, zebra is still
+	 * required to send INIT_COMPLETE, reinstall last route if
+	 * present and send the NETWORK_LAYER_INFO to CSMgr.
+	 *
+	 * This function is called when GR clean up timer expires.
+	 * Which means that GR is not complete for all the instances.
+	 * In this case, zebra can go ahead and send the INIT_COMPLETE,
+	 * NETWORK_LAYER_INFO to CSMgr and reinstall the last route.
+	 */
+	zebra_declare_gr_done();
 }
 
 /* Remove specific by protocol routes from 'table'. */
