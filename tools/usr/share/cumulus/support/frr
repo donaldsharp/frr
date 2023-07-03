@@ -138,7 +138,7 @@ func_frr()
 
     exec_cmd evpn.local_mac.all  vtysh -c "show evpn local-mac"
 
-    sed -i -e 's/authentication-key [^ ]*/ authentication-key SSSS/' -e '/password/s/ [^ ]*$/ SSSS/' -e '/message-digest/s/md5 [^ ]*/md5 SSSS/' -e '/authentication string/s/ [^ ]*$/ SSSS/' -e '/key-string/s/ [^ ]*$/ SSSS/' *.show_running
+    sed -i -e 's/authentication-key [^ ]*/ authentication-key SSSS/' -e '/password /s/ [^ ]*$/ SSSS/' -e '/message-digest/s/md5 [^ ]*/md5 SSSS/' -e '/authentication string/s/ [^ ]*$/ SSSS/' -e '/key-string/s/ [^ ]*$/ SSSS/' *.show_running
 
     [ $SUP_SECURE -eq 0 ] && {
         [ $SUP_VERBOSE -eq 1 ] &&
