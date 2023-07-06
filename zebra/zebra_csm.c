@@ -587,9 +587,33 @@ static int frr_csm_cb(int len, void *buf)
 			break;
 		case NETWORK_LAYER_INFO:
 			if (IS_ZEBRA_DEBUG_CSM) {
-				char buf[256];
+				nl_data *nl = entry->data;
+				nl_hal_info *hal_item =
+					(nl_hal_info *)(nl->data);
+				nl_ipv4_info *v4 = NULL;
+				nl_ipv4_info *v6 = NULL;
 
-				zlog_debug("FRRCSM: ... NL Info");
+				if (hal_item) {
+					v4 = (nl_ipv4_info *)(hal_item->data);
+					/* v6 */
+					hal_item =
+						(nl_hal_info
+							 *)((char *)hal_item +
+							    hal_item->len);
+					if (hal_item)
+						v6 = (nl_ipv6_info
+							      *)(hal_item->data);
+				}
+
+				zlog_debug(
+					"FRRCSM: ... NL Info. IPv4 count 0x%x (%u)",
+					v4 ? v4->fib_entries : 0,
+					v4 ? v4->fib_entries : 0);
+
+				zlog_debug(
+					"FRRCSM: ... NL Info. IPv6 count 0x%x (%u)",
+					v6 ? v6->fib_entries : 0,
+					v6 ? v6->fib_entries : 0);
 			}
 			/* TBD: Should we do anything with this? */
 			break;
@@ -776,7 +800,9 @@ int frr_csm_send_network_layer_info(uint32_t ipv4_count, uint32_t ipv6_count)
 	m->total_len += entry->len;
 
 	if (IS_ZEBRA_DEBUG_CSM)
-		zlog_debug("FRRCSM: Sending NETWORK_LAYER_INFO");
+		zlog_debug(
+			"FRRCSM: Sending NETWORK_LAYER_INFO. IPv4 count 0x%x (%u), IPv6 count 0x%x (%u)",
+			ipv4_count, ipv4_count, ipv6_count, ipv6_count);
 
 	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
 			    rsp);
