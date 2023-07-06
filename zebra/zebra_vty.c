@@ -4249,6 +4249,9 @@ DEFUN (show_zebra,
 
 		vty_out(vty, "Total GR routes: queued %u, processed %u\n", z_gr_ctx.total_queued_rt,
 			z_gr_ctx.total_processed_rt);
+
+		vty_out(vty, "%u IPv4 routes, %u IPv6 routes sent to CSmgr\n",
+			z_gr_ctx.af_installed_count[AFI_IP], z_gr_ctx.af_installed_count[AFI_IP6]);
 	}
 
 	vty_out(vty,
