@@ -1412,8 +1412,14 @@ void show_nexthop_json_helper(json_object *json_nexthop,
 		     label_index < nexthop->nh_label->num_labels; label_index++)
 			json_object_array_add(
 				json_labels,
-				json_object_new_int(
-					nexthop->nh_label->label[label_index]));
+				json_object_new_int((
+					(nexthop->nh_label_type ==
+					 ZEBRA_LSP_EVPN)
+						? label2vni(
+							  &nexthop->nh_label->label
+								   [label_index])
+						: nexthop->nh_label->label
+							  [label_index])));
 
 		json_object_object_add(json_nexthop, "labels", json_labels);
 	}
