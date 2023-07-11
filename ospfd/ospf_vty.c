@@ -3648,7 +3648,8 @@ static void show_ip_ospf_interface_sub(struct vty *vty, struct ospf *ospf,
 		if (oi == NULL)
 			continue;
 
-		json_oi = json_object_new_object();
+		if (use_json)
+			json_oi = json_object_new_object();
 
 		if (CHECK_FLAG(oi->connected->flags, ZEBRA_IFA_UNNUMBERED)) {
 			if (use_json)
@@ -4120,6 +4121,9 @@ static int show_ip_ospf_interface_traffic_common(
 			for (rn = route_top(IF_OIFS(ifp)); rn;
 			     rn = route_next(rn)) {
 				oi = rn->info;
+
+				if (oi == NULL)
+					continue;
 
 				if (use_json) {
 					json_interface_sub =
