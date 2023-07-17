@@ -669,7 +669,7 @@ static void dplane_ctx_free_internal(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_SYS_ROUTE_ADD:
 	case DPLANE_OP_SYS_ROUTE_DELETE:
 	case DPLANE_OP_ROUTE_NOTIFY:
-
+	case DPLANE_OP_ROUTE_LAST:
 		/* Free allocated nexthops */
 		if (ctx->u.rinfo.zd_ng.nexthop) {
 			/* This deals with recursive nexthops too */
@@ -997,6 +997,9 @@ const char *dplane_op2str(enum dplane_op_e op)
 		break;
 	case DPLANE_OP_ROUTE_NOTIFY:
 		ret = "ROUTE_NOTIFY";
+		break;
+	case DPLANE_OP_ROUTE_LAST:
+		ret = "ROUTE_LAST";
 		break;
 
 	/* Nexthop update */
@@ -2796,10 +2799,11 @@ int dplane_ctx_route_init(struct zebra_dplane_ctx *ctx, enum dplane_op_e op,
 		 * matters for INSTALL/UPDATE.
 		 */
 		if (route_use_kernel_nhg(re) &&
-		    ((op == DPLANE_OP_ROUTE_INSTALL)
-		     || (op == DPLANE_OP_ROUTE_UPDATE))
-		    && !CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED)
-		    && !CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_QUEUED)) {
+		    ((op == DPLANE_OP_ROUTE_INSTALL) ||
+		     (op == DPLANE_OP_ROUTE_UPDATE) ||
+		     (op == DPLANE_OP_ROUTE_LAST)) &&
+		    !CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED) &&
+		    !CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_QUEUED)) {
 			ret = ENOENT;
 			goto done;
 		}
@@ -3582,6 +3586,45 @@ dplane_route_update_internal(struct route_node *rn,
 	return result;
 }
 
+
+/*
+ * Utility that prepares the last route update and enqueues it for processing
+ */
+static enum zebra_dplane_result
+dplane_route_update_last_internal(struct route_node *rn, struct route_entry *re,
+				  enum dplane_op_e op)
+{
+	enum zebra_dplane_result result = ZEBRA_DPLANE_REQUEST_FAILURE;
+	int ret = EINVAL;
+	struct zebra_dplane_ctx *ctx = NULL;
+
+	/* Obtain context block */
+	ctx = dplane_ctx_alloc();
+
+	/* Init context with info from zebra data structs */
+	ret = dplane_ctx_route_init(ctx, op, rn, re);
+	if (ret == AOK) {
+		/* Enqueue context for processing */
+		ret = dplane_update_enqueue(ctx);
+	}
+
+	/* Update counter */
+	atomic_fetch_add_explicit(&zdplane_info.dg_routes_in, 1,
+				  memory_order_relaxed);
+
+	if (ret == AOK)
+		result = ZEBRA_DPLANE_REQUEST_QUEUED;
+	else {
+		atomic_fetch_add_explicit(&zdplane_info.dg_route_errors, 1,
+					  memory_order_relaxed);
+		if (ctx)
+			dplane_ctx_free(&ctx);
+	}
+
+	return result;
+}
+
+
 static enum zebra_dplane_result dplane_tc_update_internal(enum dplane_op_e op)
 {
 	enum zebra_dplane_result result = ZEBRA_DPLANE_REQUEST_FAILURE;
@@ -3716,6 +3759,22 @@ enum zebra_dplane_result dplane_route_delete(struct route_node *rn,
 	ret = dplane_route_update_internal(rn, re, NULL,
 					   DPLANE_OP_ROUTE_DELETE);
 
+done:
+	return ret;
+}
+
+/*
+ * Enqueue a route update compelete for the dataplane.
+ */
+enum zebra_dplane_result dplane_route_update_last(struct route_node *rn,
+						  struct route_entry *re)
+{
+	enum zebra_dplane_result ret = ZEBRA_DPLANE_REQUEST_FAILURE;
+
+	if (rn == NULL || re == NULL)
+		goto done;
+
+	ret = dplane_route_update_last_internal(rn, re, DPLANE_OP_ROUTE_LAST);
 done:
 	return ret;
 }
@@ -5652,6 +5711,7 @@ static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_ROUTE_INSTALL:
 	case DPLANE_OP_ROUTE_UPDATE:
 	case DPLANE_OP_ROUTE_DELETE:
+	case DPLANE_OP_ROUTE_LAST:
 		zlog_debug("%u:%pFX Dplane route update ctx %p op %s",
 			   dplane_ctx_get_vrf(ctx), dplane_ctx_get_dest(ctx),
 			   ctx, dplane_op2str(dplane_ctx_get_op(ctx)));
@@ -5840,6 +5900,7 @@ static void kernel_dplane_handle_result(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_ROUTE_INSTALL:
 	case DPLANE_OP_ROUTE_UPDATE:
 	case DPLANE_OP_ROUTE_DELETE:
+	case DPLANE_OP_ROUTE_LAST:
 		if (res != ZEBRA_DPLANE_REQUEST_SUCCESS)
 			atomic_fetch_add_explicit(&zdplane_info.dg_route_errors,
 						  1, memory_order_relaxed);

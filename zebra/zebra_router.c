@@ -41,6 +41,8 @@ struct zebra_router zrouter = {
 	.ipv4_multicast_mode = MCAST_NO_CONFIG,
 };
 
+struct zebra_gr_ctx z_gr_ctx;
+
 static inline int
 zebra_router_table_entry_compare(const struct zebra_router_table *e1,
 				 const struct zebra_router_table *e2);
@@ -334,4 +336,12 @@ void zebra_router_init(bool asic_offload, bool notify_on_ack)
 
 	/* OS-specific init */
 	kernel_router_init();
+}
+
+void zebra_gr_ctx_init(void)
+{
+	memset(&z_gr_ctx, 0, sizeof(z_gr_ctx));
+	zrouter.gr_last_rt_installed = false;
+	zrouter.all_instances_gr_done = false;
+	pthread_mutex_init(&z_gr_ctx.gr_ctx_mutex, NULL);
 }

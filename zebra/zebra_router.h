@@ -222,6 +222,9 @@ struct zebra_router {
 	time_t rib_sweep_time;
 	/* FRR fast/graceful restart info */
 	bool graceful_restart;
+	bool gr_last_rt_installed;
+	bool all_instances_gr_done;
+	time_t gr_completion_time;
 	int gr_cleanup_time;
 
 #define ZEBRA_GR_DEFAULT_RIB_SWEEP_TIME 500
@@ -238,6 +241,9 @@ struct zebra_router {
 	Mode csm_cmode;
 	State csm_cstate;
 	Module frr_csm_modid;
+	int csm_errno;
+	bool csm_invalid_len;
+	bool load_complete_failed;
 #endif
 
 	/*
@@ -272,6 +278,22 @@ struct zebra_router {
 
 extern struct zebra_router zrouter;
 extern uint32_t rcvbufsize;
+
+struct zebra_gr_ctx {
+	struct route_node *rn;
+	struct route_entry *re;
+	uint32_t af_installed_count[AFI_MAX];
+	pthread_mutex_t gr_ctx_mutex;
+	uint32_t total_queued_rt;
+	uint32_t total_processed_rt;
+};
+
+extern struct zebra_gr_ctx z_gr_ctx;
+
+#define GR_CTX_LOCK() pthread_mutex_lock(&z_gr_ctx.gr_ctx_mutex)
+#define GR_CTX_UNLOCK() pthread_mutex_unlock(&z_gr_ctx.gr_ctx_mutex)
+
+extern void zebra_gr_ctx_init(void);
 
 extern void zebra_router_init(bool asic_offload, bool notify_on_ack);
 extern void zebra_router_cleanup(void);

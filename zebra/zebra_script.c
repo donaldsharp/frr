@@ -423,6 +423,7 @@ void lua_pushzebra_dplane_ctx(lua_State *L, const struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_TC_INSTALL:
 	case DPLANE_OP_TC_UPDATE:
 	case DPLANE_OP_TC_DELETE:
+	case DPLANE_OP_ROUTE_LAST:
 		break;
 	} /* Dispatch by op code */
 }
