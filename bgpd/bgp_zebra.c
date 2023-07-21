@@ -1267,17 +1267,16 @@ static bool update_ipv6nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 	return true;
 }
 
-static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, struct attr *attr,
-					uint64_t tot_bw, uint32_t *nh_weight)
+static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
+					uint64_t tot_bw, uint32_t *nh_weight,
+					uint32_t base)
 {
-	uint32_t bw;
 	uint64_t tmp;
 
-	bw = attr->link_bw;
 	/* zero link-bandwidth and link-bandwidth not present are treated
 	 * as the same situation.
 	 */
-	if (!bw) {
+	if (!attr_bw) {
 		/* the only situations should be if we're either told
 		 * to skip or use default weight.
 		 */
@@ -1285,8 +1284,10 @@ static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, struct attr *attr,
 			return false;
 		*nh_weight = BGP_ZEBRA_DEFAULT_NHOP_WEIGHT;
 	} else {
-		tmp = (uint64_t)bw * 100;
+		tmp = (uint64_t)attr_bw * base;
 		*nh_weight = ((uint32_t)(tmp / tot_bw));
+		if (*nh_weight > 255)
+			*nh_weight = 255;
 	}
 
 	return true;
@@ -1300,6 +1301,8 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	struct zapi_nexthop *api_nh;
 	int nh_family;
 	unsigned int valid_nh_count = 0;
+	uint32_t max_mpath = 0;
+	uint32_t wecmp_base = 0;
 	bool allow_recursion = false;
 	uint8_t distance;
 	struct peer *peer;
@@ -1412,6 +1415,17 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		mpinfo = info;
 	}
 
+	if (mpinfo)
+		max_mpath = MIN(bgp_path_info_mpath_count(mpinfo) + 1,
+				multipath_num);
+	if (max_mpath && do_wt_ecmp) {
+		wecmp_base = MAX(max_mpath * max_mpath, 100);
+		if (bgp_debug_zebra(&api.prefix)) {
+			zlog_debug("WECMP - For %pFX max_mpath %d cum_bw %ld base %d",
+				   p, max_mpath, cum_bw, wecmp_base);
+		}
+	}
+
 	for (; mpinfo; mpinfo = bgp_path_info_mpath_next(mpinfo)) {
 		uint32_t nh_weight;
 		bool is_evpn;
@@ -1439,9 +1453,15 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		 * in some situations.
 		 */
 		if (do_wt_ecmp) {
-			if (!bgp_zebra_use_nhop_weighted(bgp, mpinfo->attr,
-							 cum_bw, &nh_weight))
+			if (!bgp_zebra_use_nhop_weighted(bgp,
+				mpinfo->attr->link_bw, cum_bw, &nh_weight,
+				wecmp_base))
 				continue;
+			if (bgp_debug_zebra(&api.prefix)) {
+				zlog_debug("%pFX nh#%d path_bw %ld weight %d",
+					   p, valid_nh_count+1,
+					   mpinfo->attr->link_bw, nh_weight);
+			}
 		}
 		api_nh = &api.nexthops[valid_nh_count];
 
