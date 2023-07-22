@@ -11699,11 +11699,22 @@ static int bgp_show_summary(struct vty *vty, struct bgp *bgp, int afi, int safi,
 						     ? peer->change_local_as
 						     : peer->local_as,
 					     bgp->asnotation);
+
+				size_t bytes_rcvd =
+					atomic_load_explicit(&peer->bytes_read,
+							     memory_order_relaxed);
+				size_t packets = PEER_TOTAL_RX(peer);
+
 				json_object_int_add(json_peer, "version", 4);
+
 				json_object_int_add(json_peer, "msgRcvd",
-						    PEER_TOTAL_RX(peer));
+						    packets);
+				json_object_int_add(json_peer, "msgRcvdBytes",
+						    bytes_rcvd);
 				json_object_int_add(json_peer, "msgSent",
 						    PEER_TOTAL_TX(peer));
+				json_object_int_add(json_peer, "avgMsgRcvdBytes",
+						    bytes_rcvd / packets);
 
 				atomic_size_t outq_count, inq_count;
 				outq_count = atomic_load_explicit(
@@ -14721,13 +14732,23 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, bool use_json,
 				    atomic_load_explicit(&p->dynamic_cap_in,
 							 memory_order_relaxed));
 		json_object_int_add(json_stat, "totalSent", PEER_TOTAL_TX(p));
-		json_object_int_add(json_stat, "totalRecv", PEER_TOTAL_RX(p));
+
+		size_t packets = PEER_TOTAL_RX(p);
+
+		json_object_int_add(json_stat, "totalRecv", packets);
+
+		size_t recv_bytes = atomic_load_explicit(&p->bytes_read,
+							 memory_order_relaxed);
+		json_object_int_add(json_stat, "totalRecvBytes", recv_bytes);
+		json_object_int_add(json_stat, "avgRecBytes",
+				    recv_bytes / packets);
 		json_object_object_add(json_neigh, "messageStats", json_stat);
 	} else {
 		atomic_size_t outq_count, inq_count, open_out, open_in,
 			notify_out, notify_in, update_out, update_in,
 			keepalive_out, keepalive_in, refresh_out, refresh_in,
-			dynamic_cap_out, dynamic_cap_in;
+			dynamic_cap_out, dynamic_cap_in, bytes_read, packets_rx;
+
 		outq_count = atomic_load_explicit(&p->obuf->count,
 						  memory_order_relaxed);
 		inq_count = atomic_load_explicit(&p->ibuf->count,
@@ -14756,6 +14777,9 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, bool use_json,
 						       memory_order_relaxed);
 		dynamic_cap_in = atomic_load_explicit(&p->dynamic_cap_in,
 						      memory_order_relaxed);
+		bytes_read = atomic_load_explicit(&p->bytes_read,
+						  memory_order_relaxed);
+		packets_rx = PEER_TOTAL_RX(p);
 
 		/* Packet counts. */
 		vty_out(vty, "  Message statistics:\n");
@@ -14774,8 +14798,10 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, bool use_json,
 			refresh_in);
 		vty_out(vty, "    Capability:    %10zu %10zu\n",
 			dynamic_cap_out, dynamic_cap_in);
-		vty_out(vty, "    Total:         %10u %10u\n",
-			(uint32_t)PEER_TOTAL_TX(p), (uint32_t)PEER_TOTAL_RX(p));
+		vty_out(vty, "    Total:         %10u %10u %10u %10u\n",
+			(uint32_t)PEER_TOTAL_TX(p), (uint32_t)packets_rx,
+			(uint32_t)bytes_read,
+			(uint32_t)bytes_read / (uint32_t)packets_rx);
 	}
 
 	if (use_json) {

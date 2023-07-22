@@ -191,6 +191,7 @@ static int read_ibuf_work(struct peer *peer)
 		return 0;
 
 	pkt = stream_new(pktsize);
+
 	assert(STREAM_WRITEABLE(pkt) == pktsize);
 	assert(ringbuf_get(ibw, pkt->data, pktsize) == pktsize);
 	stream_set_endp(pkt, pktsize);

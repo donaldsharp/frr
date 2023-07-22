@@ -1585,6 +1585,7 @@ struct peer {
 	_Atomic uint32_t refresh_out;     /* Route Refresh output count */
 	_Atomic uint32_t dynamic_cap_in;  /* Dynamic Capability input count.  */
 	_Atomic uint32_t dynamic_cap_out; /* Dynamic Capability output count. */
+	_Atomic uint32_t bytes_read;
 
 	uint32_t stat_pfx_filter;
 	uint32_t stat_pfx_aspath_loop;

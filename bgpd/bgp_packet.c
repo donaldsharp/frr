@@ -2898,6 +2898,13 @@ void bgp_process_packet(struct event *thread)
 		if (peer->curr == NULL) // no packets to process, hmm...
 			return;
 
+		/*
+		 * I'd really like this to 64 bit, but we'll live
+		 */
+		atomic_fetch_add_explicit(&peer->bytes_read,
+					  stream_get_size(peer->curr),
+					  memory_order_relaxed);
+
 		/* skip the marker and copy the packet length */
 		stream_forward_getp(peer->curr, BGP_MARKER_SIZE);
 		memcpy(notify_data_length, stream_pnt(peer->curr), 2);
