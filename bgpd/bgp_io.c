@@ -232,7 +232,6 @@ static void bgp_process_reads(struct thread *thread)
 	bool fatal = false;		// whether fatal error occurred
 	bool added_pkt = false;		// whether we pushed onto ->ibuf
 	int code = 0;			// FSM code if error occurred
-	bool ibuf_full = false; 	// Is peer fifo IN Buffer full
 	static bool ibuf_full_logged; // Have we logged full already
 	int ret = 1;
 	/* clang-format on */
@@ -279,7 +278,6 @@ static void bgp_process_reads(struct thread *thread)
 		fatal = true;
 		break;
 	case -ENOMEM:
-		ibuf_full = true;
 		if (!ibuf_full_logged) {
 			flog_warn(
 				EC_BGP_UPDATE_RCV,
@@ -300,10 +298,6 @@ done:
 		ringbuf_wipe(peer->ibuf_work);
 		return;
 	}
-
-	/* ringbuf should be fully drained unless ibuf is full */
-	if (!ibuf_full)
-		assert(ringbuf_space(peer->ibuf_work) >= peer->max_packet_size);
 
 	thread_add_read(fpt->master, bgp_process_reads, peer, peer->fd,
 			&peer->t_read);
