@@ -1049,7 +1049,8 @@ static void gm_t_expire(struct event *t)
 	struct gm_if *gm_ifp = EVENT_ARG(t);
 	struct gm_packet_state *pkt;
 
-	zlog_info(log_ifp("general expiry timer"));
+	if (PIM_DEBUG_GM_EVENTS)
+		zlog_debug(log_ifp("general expiry timer"));
 
 	while (gm_ifp->n_pending) {
 		struct gm_general_pending *pend = gm_ifp->pending;
