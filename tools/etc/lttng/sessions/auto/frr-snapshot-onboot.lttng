@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <sessions>
 	<session>
-		<name>frr-snapshot-zebra-onboot</name>
+		<name>frr-snapshot-onboot</name>
 		<domains>
 			<domain>
 				<type>UST</type>
 				<buffer_type>PER_UID</buffer_type>
 				<channels>
 					<channel>
-						<name>channel1</name>
+						<name>channel0</name>
 						<enabled>true</enabled>
 						<overwrite_mode>OVERWRITE</overwrite_mode>
 						<subbuffer_size>524288</subbuffer_size>
@@ -23,7 +23,7 @@
 						<live_timer_interval>0</live_timer_interval>
 						<events>
 							<event>
-								<name>frr_zebra:*</name>
+								<name>frr_bgp:evpn*</name>
 								<enabled>true</enabled>
 								<type>TRACEPOINT</type>
 								<loglevel_type>ALL</loglevel_type>
@@ -62,7 +62,7 @@
 					<consumer_output>
 						<enabled>true</enabled>
 						<destination>
-							<path>/var/log/lttng-traces/frr-snapshot-zebra-onboot</path>
+							<path>/var/log/lttng-traces/frr-snapshot-onboot</path>
 						</destination>
 					</consumer_output>
 				</output>
