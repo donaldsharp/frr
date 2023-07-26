@@ -1170,6 +1170,16 @@ def ignore_delete_re_add_lines(lines_to_add, lines_to_del):
     # Quite possibly the most confusing (while accurate) variable names in history
     lines_to_add_to_del = []
     lines_to_del_to_del = []
+    validate_by_encrypt = False
+    validate_by_decrypt = False
+
+    for add_line in lines_to_add:
+        if add_line[1] is None and 'service password-obfuscation' in add_line[0]:
+            validate_by_encrypt = True
+
+    for del_line in lines_to_del:
+        if del_line[1] is None and 'service password-obfuscation' in del_line[0]:
+            validate_by_decrypt = True
 
     index = -1
     for ctx_keys, line in lines_to_del:
@@ -1307,6 +1317,45 @@ def ignore_delete_re_add_lines(lines_to_add, lines_to_del):
 
                                 if found_add_bfd_nbr:
                                     lines_to_del_to_del.append((ctx_keys, line))
+
+                # Toggling the service password-obfuscation should not result
+                # in executing add/del for nbr passwords causing the peers to
+                # flap the session unnecessarily.
+                #
+                # Note: This for loop is an iteration of lines_to_del
+                #
+                # When a password-obfuscation is enabled:
+                #  - lines_to_add will have password-obfuscation
+                #  - Idea is to encrypt the Nbr password in lines_to_del and
+                #    check if the string exists in lines_to_add
+                #
+                # When a password-obfuscation is disabled:
+                #  - lines_to_del will have password-obfuscation
+                #  - Idea is to decrypt the Nbr password in lines_to_del and
+                #    check if the string exists in lines_to_add
+                #
+                # If string match is found in one of the above case, we delete
+                # the entry in lines_to_add and lines_to_del
+                #
+                if validate_by_encrypt or validate_by_decrypt:
+                    nbr_pswd = re.search(r"neighbor (\S+) password (\S+)", line)
+                    if nbr_pswd:
+                        nbr = nbr_pswd.group(1)
+                        if validate_by_encrypt:
+                            pwd = caesar(1, nbr_pswd.group(2), 1)
+                        else:
+                            pwd = caesar(0, nbr_pswd.group(2), 1)
+                        nbr_str = "neighbor %s" %nbr +" password %s" %pwd
+
+                    for (ctx_keys, add_line) in lines_to_add:
+                        if (
+                            ctx_keys[0].startswith("router bgp")
+                            and add_line
+                            and add_line.startswith("neighbor ")
+                            and nbr_str == add_line
+                        ):
+                            lines_to_add_to_del.append((ctx_keys, add_line))
+                            lines_to_del_to_del.append((ctx_keys, line))
 
                 # Neighbor changes of route-maps need to be accounted for in
                 # that we do not want to do a `no route-map...` `route-map
@@ -2056,10 +2105,10 @@ def compare_context_objects(newconf, running):
     if len(candidates_to_add) > 0:
         lines_to_add.extend(candidates_to_add)
 
+    (lines_to_add, lines_to_del) = rearrange_lines(lines_to_add, lines_to_del)
     (lines_to_add, lines_to_del) = ignore_delete_re_add_lines(
         lines_to_add, lines_to_del
     )
-    (lines_to_add, lines_to_del) = rearrange_lines(lines_to_add, lines_to_del)
     (lines_to_add, lines_to_del) = delete_move_lines(lines_to_add, lines_to_del)
     (lines_to_add, lines_to_del) = ignore_unconfigurable_lines(
         lines_to_add, lines_to_del
@@ -2090,6 +2139,34 @@ def is_evpn_enabled():
             evpn_enabled = True
 
     return evpn_enabled
+
+
+def caesar(encrypt, text, is_bgp):
+    # Replica of frr internal code including the key
+    if is_bgp:
+        key = "71c990efaec2a62d95c768341563bc0c"
+    else:
+        key = "4d48bc58afd8379d2795926dc3484c00"
+
+    kl = len(key)
+    tl = len(text)
+    w = [0] * (tl + 1)
+
+    for i in range(tl):
+        if not (ord(text[i]) >= 33 and ord(text[i]) <= 126):
+            return None
+
+    for i in range(tl):
+        w[i] = ord(text[i])
+        w[i] += -33 + (2 * encrypt - 1) * ord(key[int(i) % kl])
+        w[i] = (w[i] % (127 - 33)) + 33
+
+    result_string = ""
+    text = w[0:tl]
+    for value in text:
+        result_string += chr(value)
+
+    return result_string
 
 
 if __name__ == "__main__":
