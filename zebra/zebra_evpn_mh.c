@@ -4545,9 +4545,6 @@ void zebra_evpn_mh_config_write(struct vty *vty)
 		vty_out(vty, "evpn mh neigh-holdtime %d\n",
 			zmh_info->neigh_hold_time);
 
-	if (zmh_info->flags & ZEBRA_EVPN_MH_REDIRECT_OFF)
-		vty_out(vty, "evpn mh redirect-off\n");
-
 	if (zmh_info->flags & ZEBRA_EVPN_MH_NEIGH_GRAT_FLOOD_OFF)
 		vty_out(vty, "evpn mh garp-flood-off\n");
 
