@@ -155,6 +155,26 @@ end destination.
    according to the nexthop(s) specified.
 
 
+.. clicmd:: set nexthop-group NAME
+
+   Action:
+   forward the packet using nexthop-group NAME.
+
+.. clicmd:: set nexthop [A.B.C.D|X:X::X:XX|blackhole] [interface] [nexthop-vrf NAME]
+
+   Action:
+   forward the packet using the specified single nexthop.
+   If `blackhole`, packets will be sent to a blackhole route and dropped.
+
+.. clicmd:: set vrf unchanged|NAME
+
+   Action:
+   If set to ``unchanged``, the rule will use the vrf table the interface
+   is in as its lookup.
+   If set to NAME, the rule will use that vrf table as its lookup.
+
+   Not supported with NETNS VRF backend.
+
 .. clicmd:: set queue-id (1-65535)
 
    Set the egress port queue identifier for matched packets. The Linux Kernel
@@ -178,24 +198,6 @@ end destination.
 
    Strip inner vlan tags from matched packets. The Linux Kernel provider does not currently support packet mangling, so this field will be ignored unless another provider is used. It is invalid to specify both a `strip` and `set
    vlan` action.
-
-.. clicmd:: set nexthop-group NAME
-
-   Use the nexthop-group NAME as the place to forward packets when the match
-   commands have matched a packet.
-
-.. clicmd:: set nexthop [A.B.C.D|X:X::X:XX] [interface] [nexthop-vrf NAME]
-
-   Use this individual nexthop as the place to forward packets when the match
-   commands have matched a packet.
-
-.. clicmd:: set vrf unchanged|NAME
-
-   If unchanged is set, the rule will use the vrf table the interface is in
-   as its lookup. If NAME is specified, the rule will use that vrf table as
-   its lookup.
-
-   Not supported with NETNS VRF backend.
 
 .. clicmd:: show pbr map [NAME] [detail|json]
 
