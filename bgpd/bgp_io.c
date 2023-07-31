@@ -232,7 +232,6 @@ static void bgp_process_reads(struct thread *thread)
 	bool fatal = false;		// whether fatal error occurred
 	bool added_pkt = false;		// whether we pushed onto ->ibuf
 	int code = 0;			// FSM code if error occurred
-	bool ibuf_full = false; 	// Is peer fifo IN Buffer full
 	static bool ibuf_full_logged; // Have we logged full already
 	int ret = 1;
 	/* clang-format on */
@@ -279,7 +278,6 @@ static void bgp_process_reads(struct thread *thread)
 		fatal = true;
 		break;
 	case -ENOMEM:
-		ibuf_full = true;
 		if (!ibuf_full_logged) {
 			flog_warn(
 				EC_BGP_UPDATE_RCV,
@@ -300,10 +298,6 @@ done:
 		ringbuf_wipe(peer->ibuf_work);
 		return;
 	}
-
-	/* ringbuf should be fully drained unless ibuf is full */
-	if (!ibuf_full)
-		assert(ringbuf_space(peer->ibuf_work) >= peer->max_packet_size);
 
 	thread_add_read(fpt->master, bgp_process_reads, peer, peer->fd,
 			&peer->t_read);
@@ -493,6 +487,7 @@ done : {
 	return status;
 }
 
+uint8_t ibuf_scratch[BGP_EXTENDED_MESSAGE_MAX_PACKET_SIZE * BGP_READ_PACKET_MAX];
 /*
  * Reads a chunk of data from peer->fd into peer->ibuf_work.
  *
@@ -500,6 +495,10 @@ done : {
  *    Pointer to location to store FSM event code in case of fatal error.
  *
  * @return status flag (see top-of-file)
+ *
+ * PLEASE NOTE:  If we ever transform the bgp_read to be a pthread
+ * per peer then we need to rethink the global ibuf_scratch
+ * data structure above.
  */
 static uint16_t bgp_read(struct peer *peer, int *code_p)
 {
@@ -515,9 +514,9 @@ static uint16_t bgp_read(struct peer *peer, int *code_p)
 		return status;
 	}
 
-	readsize = MIN(ibuf_work_space, sizeof(peer->ibuf_scratch));
+	readsize = MIN(ibuf_work_space, sizeof(ibuf_scratch));
 
-	nbytes = read(peer->fd, peer->ibuf_scratch, readsize);
+	nbytes = read(peer->fd, ibuf_scratch, readsize);
 
 	/* EAGAIN or EWOULDBLOCK; come back later */
 	if (nbytes < 0 && ERRNO_IO_RETRY(errno)) {
@@ -546,8 +545,8 @@ static uint16_t bgp_read(struct peer *peer, int *code_p)
 
 		SET_FLAG(status, BGP_IO_FATAL_ERR);
 	} else {
-		assert(ringbuf_put(peer->ibuf_work, peer->ibuf_scratch, nbytes)
-		       == (size_t)nbytes);
+		assert(ringbuf_put(peer->ibuf_work, ibuf_scratch, nbytes) ==
+		       (size_t)nbytes);
 	}
 
 	return status;
