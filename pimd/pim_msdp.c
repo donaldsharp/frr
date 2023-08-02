@@ -1034,23 +1034,20 @@ struct pim_msdp_peer *pim_msdp_peer_add(struct pim_instance *pim,
 	struct pim_msdp_peer *mp = NULL;
 	struct in_addr peer_addr;
 	struct in_addr local_addr;
-	const char *peer_str = inet_ntoa(*peer);
-	const char *local_str = inet_ntoa(*local);
 	int ret = PIM_MSDP_ERR_NONE;
 
 	// do not process invalid IP
-	// ret gets '0' if the ip address is invalid
-	ret = inet_pton(AF_INET, peer_str, &peer_addr);
+	ret = inet_pton(AF_INET, peer, &peer_addr);
 	if (ret <= PIM_MSDP_ERR_NONE) {
-		zlog_debug("Invalid peer address %s: errno=%d: %s\n", peer_str,
+		zlog_debug("Invalid peer address %s: errno=%d: %s\n", peer,
 			   errno, safe_strerror(errno));
 		return mp;
 	}
 
-	ret = inet_pton(AF_INET, local_str, &local_addr);
+	ret = inet_pton(AF_INET, local, &local_addr);
 	if (ret <= PIM_MSDP_ERR_NONE) {
-		zlog_debug("Invalid source address %s: errno=%d: %s\n",
-			   local_str, errno, safe_strerror(errno));
+		zlog_debug("Invalid source address %s: errno=%d: %s\n", local,
+			   errno, safe_strerror(errno));
 		return mp;
 	}
 
