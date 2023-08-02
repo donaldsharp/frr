@@ -1946,9 +1946,9 @@ done:
  * Caller of this function must hold the GR_CTX_LOCK
  * before calling this function
  */
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 static void zebra_gr_reinstall_last_route(void)
 {
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 	zrouter.gr_last_rt_installed = true;
 
 	zlog_debug(
@@ -1982,10 +1982,8 @@ static void zebra_gr_reinstall_last_route(void)
 	/* Reset the global pointers */
 	z_gr_ctx.rn = NULL;
 	z_gr_ctx.re = NULL;
-
-#endif
 }
-
+#endif
 
 /*
  * Reinstalls the last route after GR is done
@@ -4709,10 +4707,10 @@ void rib_sweep_table(struct route_table *table)
 		zlog_debug("%s: ends", __func__);
 }
 
-void zebra_declare_gr_done(void)
+static void zebra_declare_gr_done(void)
 {
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
-	if ((zrouter.graceful_restart)) {
+	if ((zrouter.graceful_restart)) {gi
 		GR_CTX_LOCK();
 
 		zlog_debug(

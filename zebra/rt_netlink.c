@@ -2248,10 +2248,8 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 	     && /* CUMULUS ONLY */ !nexthop_group_has_label(
 		     dplane_ctx_get_ng(ctx)))
 	    || (fpm && force_nhg)) {
-		char buf[2];
 		uint32_t nhg_id;
 
-		buf[0] = '\0';
 		nhg_id = dplane_ctx_get_nhe_id(ctx);
 
 		/* Kernel supports nexthop objects */

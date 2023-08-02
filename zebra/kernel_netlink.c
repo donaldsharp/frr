@@ -1674,7 +1674,7 @@ static enum netlink_msg_status nl_put_msg(struct nl_batch *bth,
 	return FRR_NETLINK_ERROR;
 }
 
-void zebra_record_most_recent_route(struct zebra_dplane_ctx *ctx)
+static void zebra_record_most_recent_route(struct zebra_dplane_ctx *ctx)
 {
 	struct zebra_vrf *zvrf = NULL;
 

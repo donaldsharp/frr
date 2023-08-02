@@ -1421,8 +1421,9 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	if (max_mpath && do_wt_ecmp) {
 		wecmp_base = MAX(max_mpath * max_mpath, 100);
 		if (bgp_debug_zebra(&api.prefix)) {
-			zlog_debug("WECMP - For %pFX max_mpath %d cum_bw %ld base %d",
-				   p, max_mpath, cum_bw, wecmp_base);
+			zlog_debug(
+				"WECMP - For %pFX max_mpath %d cum_bw %llu base %d",
+				p, max_mpath, cum_bw, wecmp_base);
 		}
 	}
 
@@ -1458,8 +1459,8 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 				wecmp_base))
 				continue;
 			if (bgp_debug_zebra(&api.prefix)) {
-				zlog_debug("%pFX nh#%d path_bw %ld weight %d",
-					   p, valid_nh_count+1,
+				zlog_debug("%pFX nh#%d path_bw %u weight %d", p,
+					   valid_nh_count + 1,
 					   mpinfo->attr->link_bw, nh_weight);
 			}
 		}

@@ -372,7 +372,6 @@ static void bgp_evpn_show_route_header(struct vty *vty, struct bgp *bgp,
 static void display_l3vni(struct vty *vty, struct bgp *bgp_vrf,
 			  json_object *json)
 {
-	char buf1[INET6_ADDRSTRLEN];
 	char *ecom_str;
 	struct listnode *node, *nnode;
 	struct vrf_route_target *l3rt;
