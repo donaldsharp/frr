@@ -12239,6 +12239,16 @@ static void bgp_show_peer_gr_info_afi_safi(struct vty *vty, struct peer *peer,
 					thread_timer_remain_second(
 						peer->bgp->gr_info[afi][safi]
 							.t_select_deferral));
+			if (peer->bgp->gr_multihop_peer_exists) {
+				vty_out(vty,
+					"        Multihop GR peer exists\n");
+				if (peer->bgp->gr_info[afi][safi].t_select_deferral_tier2 != NULL)
+					vty_out(vty,
+					"        Selection Deferral Tier2 Time Remaining(sec): %ld\n",
+					thread_timer_remain_second(
+						peer->bgp->gr_info[afi][safi]
+							.t_select_deferral_tier2));
+			}
 		}
 		if (use_json) {
 			json_object_object_add(json_afi_safi, "endOfRibStatus",
