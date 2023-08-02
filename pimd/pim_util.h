@@ -41,5 +41,6 @@ bool pim_addr_is_multicast(pim_addr addr);
  *    The RP address that was received.
  */
 bool pim_is_rp_allowed(struct pim_interface *pim_ifp, pim_addr *rp);
+bool pim_is_valid_ipddress(const struct ipaddr *ip);
 
 #endif /* PIM_UTIL_H */

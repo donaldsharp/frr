@@ -192,3 +192,20 @@ bool pim_is_rp_allowed(struct pim_interface *pim_ifp, pim_addr *rp)
 	pl = prefix_list_lookup(AFI_IP, pim_ifp->allow_rp_plist);
 	return pl ? prefix_list_apply(pl, &rp_pfx) == PREFIX_PERMIT : false;
 }
+/*ip address with -1, or 0 */
+bool pim_is_valid_ipddress(const struct ipaddr *ip)
+{
+	if (ip->ipa_type == IPADDR_V4) {
+		return (ip->ip._v4_addr.s_addr == 0 ||
+			ip->ip._v4_addr.s_addr == 0xFFFFFFFF);
+	} else if (ip->ipa_type == IPADDR_V6) {
+		/*
+		 * In this case,check the IPv6 address if needed,
+		 * assuming its valid all the time
+		 */
+		return false;
+	} else {
+		/* Invalid IP address type */
+		return true;
+	}
+}
