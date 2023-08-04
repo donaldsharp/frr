@@ -4235,6 +4235,14 @@ DEFUN (show_zebra,
 		vty_out(vty, "Zebra RIB sweep happened at %s", timebuf);
 	}
 
+	if (zrouter.t_gr_no_clients)
+		vty_out(vty, "Zebra GR clients timer running, remaining time %lds\n",
+			event_timer_remain_second(zrouter.t_gr_no_clients));
+	else {
+		time_to_string(zrouter.rib_no_gr_client_time, timebuf);
+		vty_out(vty, "Zebra GR client timer timed out at %s", timebuf);
+	}
+
 	if (zrouter.graceful_restart) {
 		vty_out(vty, "All instances GR %s\n",
 			zrouter.all_instances_gr_done ? "done" : "NOT done");

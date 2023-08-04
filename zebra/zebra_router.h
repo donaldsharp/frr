@@ -218,6 +218,10 @@ struct zebra_router {
 #define ZEBRA_GR_DEFAULT_RIB_SWEEP_TIME 500
 	struct event *t_rib_sweep;
 
+#define ZEBRA_GR_DEFAULT_TRIGGER_TIME 60
+	struct event *t_gr_no_clients;
+	time_t rib_no_gr_client_time;
+
 	bool maint_mode;
 
 #if defined(HAVE_CSMGR)

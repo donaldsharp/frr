@@ -362,11 +362,24 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 			client->gr_instance_count--;
 
 		zebra_gr_client_info_delete(client, info);
+
+		if (client->gr_instance_count == 0) {
+			LOG_GR("GR %s: There are 0 GR clients. Starting no GR client timer",
+			       __func__);
+			event_add_timer(zrouter.master, rib_do_gr_completion, NULL,
+					ZEBRA_GR_DEFAULT_TRIGGER_TIME, &zrouter.t_gr_no_clients);
+		}
 		break;
 	case ZEBRA_CLIENT_GR_CAPABILITIES:
 		/* Allocate bgp info */
 		if (!info)
 			info = zebra_gr_client_info_create(client);
+
+		/*
+		 * Atleast 1 GR client exists. Turn off the no clients
+		 * GR timer
+		 */
+		EVENT_OFF(zrouter.t_gr_no_clients);
 
 		/* Update other parameters */
 		if (!info->gr_enable) {
