@@ -4873,6 +4873,21 @@ void zebra_declare_gr_done(void)
 #endif
 }
 
+/*
+ * zebra has no GR clients, send INIT_COMPLETE
+ * and NL_INFO to Csmgr
+ */
+void rib_do_gr_completion(struct event *t)
+{
+	if (IS_ZEBRA_DEBUG_EVENT)
+		zlog_debug("GR %s: There are no GR clients. Sending INIT_COMPLETE and NL_INFO to CSmgr",
+			   __func__);
+
+	zrouter.rib_no_gr_client_time = monotime(NULL);
+
+	zebra_declare_gr_done();
+}
+
 /* Sweep all RIB tables.  */
 void rib_sweep_route(struct event *t)
 {
@@ -4907,7 +4922,8 @@ void rib_sweep_route(struct event *t)
 	 * In this case, zebra can go ahead and send the INIT_COMPLETE,
 	 * NETWORK_LAYER_INFO to CSMgr and reinstall the last route.
 	 */
-	zebra_declare_gr_done();
+	if (!zrouter.gr_last_rt_installed)
+		zebra_declare_gr_done();
 }
 
 /* Remove specific by protocol routes from 'table'. */
