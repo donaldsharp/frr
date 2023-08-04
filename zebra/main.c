@@ -499,6 +499,13 @@ int main(int argc, char **argv)
 					  : ZEBRA_GR_DEFAULT_RIB_SWEEP_TIME;
 		thread_add_timer(zrouter.master, rib_sweep_route, NULL,
 				 gr_cleanup_time, &zrouter.t_rib_sweep);
+
+		/*
+		 * Timer to trigger GR completion if zebra has no GR clients
+		 */
+		thread_add_timer(zrouter.master, rib_do_gr_completion, NULL,
+				 ZEBRA_GR_DEFAULT_TRIGGER_TIME,
+				 &zrouter.t_gr_no_clients);
 	}
 
 	/* Needed for BSD routing socket. */
@@ -526,7 +533,10 @@ int main(int argc, char **argv)
 	zebra_error_init();
 
 #if defined(HAVE_CSMGR)
-	/* If we are restarting gracefully, delay INIT_COMPLETE */
+	/*
+	 * If we are not restarting gracefully, send INIT_COMPLETE
+	 * and NL_INFO immediately
+	 */
 	if (!zrouter.graceful_restart) {
 		frr_csm_send_init_complete();
 		frr_csm_send_network_layer_info(0, 0);
