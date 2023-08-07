@@ -230,6 +230,10 @@ struct zebra_router {
 #define ZEBRA_GR_DEFAULT_RIB_SWEEP_TIME 500
 	struct thread *t_rib_sweep;
 
+#define ZEBRA_GR_DEFAULT_TRIGGER_TIME 60
+	struct thread *t_gr_no_clients;
+	time_t rib_no_gr_client_time;
+
 	struct thread *sweeper;
 
 	bool maint_mode;
