@@ -8,6 +8,10 @@
 
 #include <zebra.h>
 
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include "command.h"
 #include "hash.h"
 #include "if.h"
@@ -70,6 +74,68 @@ esi_t zero_esi_buf, *zero_esi = &zero_esi_buf;
 #define TC_BIN_STR  "/usr/sbin/tc"
 
 extern struct zebra_privs_t zserv_privs;
+static int zebra_program_using_fork_exec(char *cmd, int debug)
+{
+#define PCONDCHECK(x)                                                          \
+	if (!(x)) {                                                            \
+		perror(#x " failed"); /* abort(); */                           \
+	}
+	pid_t pid;
+	int exitstat;
+	/* Block SIGINT */
+	sigset_t sigs, prevsigs;
+
+	sigemptyset(&sigs);
+	sigaddset(&sigs, SIGINT);
+	/* Block SIGINT for parent */
+	PCONDCHECK(sigprocmask(SIG_BLOCK, &sigs, &prevsigs) == 0);
+
+	if (debug)
+		zlog_debug("%s cmd %s is forked ", __func__, cmd);
+
+	pid = fork();
+	if (pid < 0) {
+		zlog_warn("%s Can't fork: %s", __func__, safe_strerror(errno));
+		return -1;
+	} else if (pid == 0) {
+		/* Decouple child' process group from parent
+		 * which means decouple signals.
+		 * Child will not receive SIGINT.
+		 */
+		if (setpgid(0, 0) < 0)
+			zlog_warn("%s FAILED setpgid for child: %s cmd %s",
+				  __func__, safe_strerror(errno), cmd);
+		execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+		exit(0);
+	}
+
+	/* parent also tries to decouple process group for the child
+	 * while it can execute prior to child,
+	 * the reason do this is before parent ublocks sigint
+	 * child is decoupled from process group.
+	 */
+	if (setpgid(pid, pid) < 0 && errno != EACCES)
+		zlog_warn(
+			"%s FAILED child pid %u decouple process group cmd %s",
+			__func__, pid, cmd);
+
+	/* Unblock SIGINT for parent */
+	PCONDCHECK(sigprocmask(SIG_SETMASK, &prevsigs, NULL) == 0);
+
+	/* wait on the child to finish
+	 * it is okay to get inturrpted via SIGINT
+	 * Child will not receive SIGINT and it ought to
+	 * run to completion.
+	 */
+	if (waitpid(pid, &exitstat, 0) == -1) {
+		zlog_warn("%s FAILED waitpid for pid %u: %s cmd %s", __func__,
+			  pid, safe_strerror(errno), cmd);
+		return -1;
+	}
+	return 0;
+}
+
+
 static void zebra_evpn_mh_tc_program(char *cmd)
 {
 	int rc = 0;
@@ -81,14 +147,11 @@ static void zebra_evpn_mh_tc_program(char *cmd)
 	}
 
 	frr_with_privs (&zserv_privs) {
-		rc = system(cmd);
+		rc = zebra_program_using_fork_exec(cmd,
+						   IS_ZEBRA_DEBUG_EVPN_MH_ES);
 	}
-	if (rc) {
-		zlog_warn("%d:%s", rc, cmd);
-	} else {
-		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-			zlog_debug("%d:%s", rc, cmd);
-	}
+	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+		zlog_debug("%s rc %d cmd %s", __func__, rc, cmd);
 }
 
 /*****************************************************************************/
