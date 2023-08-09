@@ -1245,6 +1245,7 @@ void dplane_rib_add_multipath(afi_t afi, safi_t safi, struct prefix *p,
 
 enum zebra_dplane_startup_notifications
 dplane_ctx_get_startup_spot(struct zebra_dplane_ctx *ctx);
+void zebra_gr_increment_processed_rt_count(struct route_node *rn, vrf_id_t vrf_id, bool check_safi);
 
 #ifdef __cplusplus
 }
