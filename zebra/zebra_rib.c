@@ -2085,11 +2085,11 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 	vrf = vrf_lookup_by_id(dplane_ctx_get_vrf(ctx));
 
 	/*
-	 * Increment the total processed routes
+	 * Increment the total processed routes. SAFI check is not required here
+	 * since this function is called only for unicast SAFI.
 	 */
-	if (zrouter.graceful_restart && zvrf && zvrf->gr_enabled &&
-	    !zrouter.gr_last_rt_installed)
-		z_gr_ctx.total_processed_rt++;
+	zebra_gr_increment_processed_rt_count(NULL, dplane_ctx_get_vrf(ctx),
+					      false);
 
 	/* Locate rn and re(s) from ctx */
 	rn = rib_find_rn_from_ctx(ctx);
@@ -2110,10 +2110,11 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 
 	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL || IS_ZEBRA_DEBUG_RIB_DETAILED)
 		zlog_debug(
-			"%s(%u:%u):%pRN Processing dplane result ctx %p, op %s result %s",
+			"%s(%u:%u):%pRN Processing dplane result ctx %p, op %s result %s, processed %d, AFI:%u, SAFI:%u",
 			VRF_LOGNAME(vrf), dplane_ctx_get_vrf(ctx),
 			dplane_ctx_get_table(ctx), rn, ctx, dplane_op2str(op),
-			dplane_res2str(status));
+			dplane_res2str(status), z_gr_ctx.total_processed_rt,
+			info->afi, info->safi);
 
 	/*
 	 * Update is a bit of a special case, where we may have both old and new
@@ -2964,8 +2965,9 @@ static void process_subq_early_route_add(struct zebra_early_route *ere)
 	if (IS_ZEBRA_DEBUG_RIB) {
 		rnode_debug(
 			rn, re->vrf_id,
-			"Inserting route rn %p, re %p (%s) existing %p, same_count %d",
-			rn, re, zebra_route_string(re->type), same, same_count);
+			"Inserting route rn %p, re %p (%s) existing %p, same_count %d, AFI:%u, SAFI:%u",
+			rn, re, zebra_route_string(re->type), same, same_count,
+			ere->afi, ere->safi);
 
 		if (IS_ZEBRA_DEBUG_RIB_DETAILED)
 			route_entry_dump(
@@ -3388,6 +3390,8 @@ static int rib_meta_queue_add(struct meta_queue *mq, void *data)
 			rnode_debug(rn, re->vrf_id,
 				    "rn %p is already queued in sub-queue %s",
 				    (void *)rn, subqueue2str(qindex));
+
+		zebra_gr_increment_processed_rt_count(rn, re->vrf_id, true);
 		return -1;
 	}
 
@@ -4313,14 +4317,15 @@ static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 
 	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
 		zlog_debug(
-			"Route %pFX(%u) queued for processing into sub-queue %s",
+			"Route %pFX(%u) queued for processing into sub-queue %s, AFI:%u, SAFI %u",
 			&ere->p, ere->re->vrf_id,
-			subqueue2str(META_QUEUE_EARLY_ROUTE));
+			subqueue2str(META_QUEUE_EARLY_ROUTE), ere->afi,
+			ere->safi);
 
 	/*
-	 * Record the total BGP routes enqueued during GR
+	 * Record the total unicast routes enqueued during GR
 	 */
-	if (zrouter.graceful_restart) {
+	if (zrouter.graceful_restart && ere->safi == SAFI_UNICAST) {
 		struct zebra_vrf *zvrf =
 			zebra_vrf_lookup_by_id(ere->re->vrf_id);
 
