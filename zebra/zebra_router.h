@@ -296,9 +296,6 @@ struct zebra_gr_ctx {
 
 extern struct zebra_gr_ctx z_gr_ctx;
 
-#define GR_CTX_LOCK()	pthread_mutex_lock(&z_gr_ctx.gr_ctx_mutex)
-#define GR_CTX_UNLOCK() pthread_mutex_unlock(&z_gr_ctx.gr_ctx_mutex)
-
 extern void zebra_gr_ctx_init(void);
 
 extern void zebra_router_init(bool asic_offload, bool notify_on_ack,

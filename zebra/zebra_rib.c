@@ -1978,10 +1978,6 @@ done:
 	return rn;
 }
 
-/*
- * Caller of this function must hold the GR_CTX_LOCK
- * before calling this function
- */
 static void zebra_gr_reinstall_last_route(void)
 {
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
@@ -1991,11 +1987,13 @@ static void zebra_gr_reinstall_last_route(void)
 		   __func__, z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
 
 	/* Reinstall the last route */
-	if (z_gr_ctx.rn && z_gr_ctx.re) {
+	if (z_gr_ctx.rn && z_gr_ctx.re && !CHECK_FLAG(z_gr_ctx.re->status, ROUTE_ENTRY_REMOVED)) {
 		zlog_debug("GR %s: Reinstalling last route %pRN %u:%u", __func__, z_gr_ctx.rn,
 			   z_gr_ctx.re->vrf_id, z_gr_ctx.re->table);
 
+		route_lock_node(z_gr_ctx.rn);
 		rib_install_kernel(z_gr_ctx.rn, z_gr_ctx.re, NULL, true);
+		route_unlock_node(z_gr_ctx.rn);
 	} else {
 		zlog_info("GR %s Last route not found. rn %p, re %p", __func__, z_gr_ctx.rn,
 			  z_gr_ctx.re);
@@ -2006,9 +2004,6 @@ static void zebra_gr_reinstall_last_route(void)
 
 	frr_csm_send_network_layer_info(z_gr_ctx.af_installed_count[AFI_IP],
 					z_gr_ctx.af_installed_count[AFI_IP6]);
-
-	if (z_gr_ctx.rn)
-		route_unlock_node(z_gr_ctx.rn);
 
 	/* Reset the global pointers */
 	z_gr_ctx.rn = NULL;
@@ -2043,15 +2038,53 @@ void zebra_gr_last_rt_reinstall_check(void)
 	 */
 	if (zrouter.graceful_restart && zrouter.all_instances_gr_done &&
 	    !zrouter.gr_last_rt_installed) {
-		GR_CTX_LOCK();
 		if ((z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt)) {
 			zlog_debug("GR %s: Reinstalling last route and sending NL INFO to CSMgr",
 				   __func__);
 			zebra_gr_reinstall_last_route();
 		}
-		GR_CTX_UNLOCK();
 	}
 #endif
+}
+
+/*
+ * Record the most recently installed BGP route
+ */
+static void zebra_record_most_recent_route(struct zebra_dplane_ctx *ctx, struct zebra_vrf *zvrf,
+					   struct route_node *rn, struct route_entry *re)
+{
+	if (!re || !zrouter.graceful_restart || !zvrf || (zvrf && !zvrf->gr_enabled))
+		return;
+
+	/*
+	 * Last route already installed. Nothing to do
+	 */
+	if (zrouter.gr_last_rt_installed)
+		return;
+
+	/*
+	 * GR is enabled for this VRF and last
+	 * BGP route has not been reinstalled yet.
+	 * If the op is route install/update and if this request
+	 * was successful the increment af_installed_count.
+	 * And, if this is a BGP route, then record it.
+	 */
+	if ((dplane_ctx_get_status(ctx) == ZEBRA_DPLANE_REQUEST_SUCCESS) &&
+	    ((dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_INSTALL) ||
+	     (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE))) {
+		/*
+		 * Update the per-afi route installed count
+		 */
+		z_gr_ctx.af_installed_count[dplane_ctx_get_afi(ctx)] += 1;
+		/*
+		 * If it's a BGP route then record the rn and re in
+		 * z_gr_ctx
+		 */
+		if (re->type == ZEBRA_ROUTE_BGP) {
+			z_gr_ctx.rn = rn;
+			z_gr_ctx.re = re;
+		}
+	}
 }
 
 /*
@@ -2074,6 +2107,12 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 
 	zvrf = zebra_vrf_lookup_by_id(dplane_ctx_get_vrf(ctx));
 	vrf = vrf_lookup_by_id(dplane_ctx_get_vrf(ctx));
+
+	/*
+	 * Increment the total processed routes
+	 */
+	if (zrouter.graceful_restart && zvrf && zvrf->gr_enabled && !zrouter.gr_last_rt_installed)
+		z_gr_ctx.total_processed_rt++;
 
 	/* Locate rn and re(s) from ctx */
 	rn = rib_find_rn_from_ctx(ctx);
@@ -2157,8 +2196,11 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 			UNSET_FLAG(old_re->status, ROUTE_ENTRY_QUEUED);
 	}
 
+	/* Record most recent route that was successfully installed */
+	zebra_record_most_recent_route(ctx, zvrf, rn, re);
+
 	/*
-	 * Check to see if last route needs to be reinstalled
+	 * Check to if last route needs to be reinstalled
 	 */
 	zebra_gr_last_rt_reinstall_check();
 
@@ -4421,11 +4463,10 @@ static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 	 */
 	if (zrouter.graceful_restart) {
 		struct zebra_vrf *zvrf = zebra_vrf_lookup_by_id(ere->re->vrf_id);
-		GR_CTX_LOCK();
+
 		/* This also takes into account route deletes */
 		if (!zrouter.gr_last_rt_installed && zvrf && zvrf->gr_enabled)
 			z_gr_ctx.total_queued_rt++;
-		GR_CTX_UNLOCK();
 	}
 
 	return 0;
@@ -4859,16 +4900,12 @@ void zebra_declare_gr_done(void)
 {
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 	if ((zrouter.graceful_restart)) {
-		GR_CTX_LOCK();
-
 		zlog_debug("GR %s: GR complete NOT recieved from BGP. Triggering INIT_COMPLETE",
 			   __func__);
 		frr_csm_send_init_complete();
 
 		zlog_debug("GR %s: Reinstall last route and send NL INFO to CSMgr", __func__);
 		zebra_gr_reinstall_last_route();
-
-		GR_CTX_UNLOCK();
 	}
 #endif
 }

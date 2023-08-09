@@ -454,8 +454,10 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 	}
 }
 
-static void zebra_gr_complete_check(struct client_gr_info *info, struct zserv *client)
+static void zebra_gr_complete_check(struct zserv *client)
 {
+	struct client_gr_info *info;
+
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 	/* Check to see if we have to send an INIT_COMPLETE */
 	if (zrouter.graceful_restart) {
@@ -525,7 +527,16 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct event *thread)
 		zebra_gr_delete_stale_client(info);
 	}
 
-	zebra_gr_complete_check(info, client);
+	/*
+	 * This is required because, let's say there are 4 GR enabled BGP VRFs.
+	 * Out of the 4 GR enabled BGP VRFs, let's say 3 of them completed GR
+	 * and zebra is waiting for thr 4th VRF to complete GR. But before the
+	 * 4th VRF could complete GR, let's say GR was disabled. In such a
+	 * scenario, we will endup in this function. So now we have 3 GR enabled
+	 * BGP VRFs and since all of them have completed GR, zebra can declare
+	 * GR complete. So check if zebra can declare GR complete.
+	 */
+	zebra_gr_complete_check(client);
 }
 
 /*
@@ -567,7 +578,6 @@ static void zebra_gr_delete_stale_route_table_afi(struct event *event)
 	struct zebra_vrf *zvrf = zebra_vrf_lookup_by_id(gac->info->vrf_id);
 	int32_t n = 0;
 	struct zserv *client = zserv_find_client(gac->proto, gac->instance);
-	struct client_gr_info *info = gac->info;
 	bool timer_restarted = false;
 
 	if (!zvrf)
@@ -608,7 +618,7 @@ static void zebra_gr_delete_stale_route_table_afi(struct event *event)
 	}
 
 	if (!timer_restarted)
-		zebra_gr_complete_check(info, client);
+		zebra_gr_complete_check(client);
 
 done:
 	XFREE(MTYPE_ZEBRA_GR, gac);
