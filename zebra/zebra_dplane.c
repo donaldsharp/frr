@@ -125,6 +125,7 @@ struct dplane_route_info {
 	uint32_t zd_nexthop_mtu;
 
 	uint32_t zd_flags;
+	uint32_t zd_old_flags;
 
 	/* Nexthop hash entry info */
 	struct dplane_nexthop_info nhe;
@@ -1964,6 +1965,13 @@ uint32_t dplane_ctx_get_old_metric(const struct zebra_dplane_ctx *ctx)
 	return ctx->u.rinfo.zd_old_metric;
 }
 
+uint32_t dplane_ctx_get_old_flags(const struct zebra_dplane_ctx *ctx)
+{
+	DPLANE_CTX_VALID(ctx);
+
+	return ctx->u.rinfo.zd_old_flags;
+}
+
 uint32_t dplane_ctx_get_mtu(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
@@ -3422,6 +3430,7 @@ int dplane_ctx_route_init_basic(struct zebra_dplane_ctx *ctx,
 	ctx->zd_vrf_id = re->vrf_id;
 	ctx->u.rinfo.zd_mtu = re->mtu;
 	ctx->u.rinfo.zd_flags = re->flags;
+	ctx->u.rinfo.zd_old_flags = re->flags;
 	ctx->u.rinfo.zd_nexthop_mtu = re->nexthop_mtu;
 	ctx->u.rinfo.zd_instance = re->instance;
 	ctx->u.rinfo.zd_tag = re->tag;
@@ -4269,7 +4278,7 @@ dplane_route_update_internal(struct route_node *rn,
 	enum zebra_dplane_result result = ZEBRA_DPLANE_REQUEST_FAILURE;
 	int ret = EINVAL;
 	struct zebra_dplane_ctx *ctx = NULL;
-	uint32_t flags;
+	uint32_t flags, old_flags;
 
 	/* Obtain context block */
 	ctx = dplane_ctx_alloc();
@@ -4289,6 +4298,7 @@ dplane_route_update_internal(struct route_node *rn,
 
 			ctx->u.rinfo.zd_old_tag = old_re->tag;
 			ctx->u.rinfo.zd_old_type = old_re->type;
+			ctx->u.rinfo.zd_old_flags = old_re->flags;
 			ctx->u.rinfo.zd_old_instance = old_re->instance;
 			ctx->u.rinfo.zd_old_distance = old_re->distance;
 			ctx->u.rinfo.zd_old_metric = old_re->metric;
@@ -4322,13 +4332,18 @@ dplane_route_update_internal(struct route_node *rn,
 		 * same route again.
 		 */
 		flags = dplane_ctx_get_flags(ctx);
+		old_flags = dplane_ctx_get_old_flags(ctx);
 		if ((dplane_ctx_get_type(ctx) == dplane_ctx_get_old_type(ctx)) &&
 		    (((dplane_ctx_get_nhe_id(ctx) == dplane_ctx_get_old_nhe_id(ctx)) &&
 		      (dplane_ctx_get_nhe_id(ctx) >= ZEBRA_NHG_PROTO_LOWER)) ||
 		     (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE &&
 		      (CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOADED) ||
 		       CHECK_FLAG(flags, ZEBRA_FLAG_TRAPPED) ||
-		       CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOAD_FAILED))))) {
+		       CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOAD_FAILED))) ||
+		     ((dplane_ctx_get_nhe_id(ctx) == dplane_ctx_get_old_nhe_id(ctx)) &&
+		      (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE) &&
+		      (CHECK_FLAG(old_flags, ZEBRA_FLAG_OFFLOADED) ||
+		       CHECK_FLAG(old_flags, ZEBRA_FLAG_OFFLOAD_FAILED))))) {
 			struct nexthop *nexthop;
 
 			if (IS_ZEBRA_DEBUG_DPLANE_DETAIL) {
