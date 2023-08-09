@@ -710,6 +710,12 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 		break;
 	}
 	case ZEBRA_DPLANE_REQUEST_SUCCESS:
+		if (old) {
+			if (CHECK_FLAG(old->flags, ZEBRA_FLAG_OFFLOADED))
+				SET_FLAG(re->flags, ZEBRA_FLAG_OFFLOADED);
+			if (CHECK_FLAG(old->flags, ZEBRA_FLAG_OFFLOAD_FAILED))
+				SET_FLAG(re->flags, ZEBRA_FLAG_OFFLOAD_FAILED);
+		}
 		/*
 		 * There exists a code path in dplane_route_update
 		 * where the context is not sent down because of
