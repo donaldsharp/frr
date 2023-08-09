@@ -4303,6 +4303,25 @@ static int dplane_update_enqueue(struct zebra_dplane_ctx *ctx)
 	return ret;
 }
 
+void zebra_gr_increment_processed_rt_count(struct route_node *rn, vrf_id_t vrf_id, bool check_safi)
+{
+	struct zebra_vrf *zvrf;
+
+	zvrf = vrf_info_lookup(vrf_id);
+
+	if (zrouter.graceful_restart && !zrouter.gr_last_rt_installed && zvrf && zvrf->gr_enabled) {
+		if (!check_safi) {
+			z_gr_ctx.total_processed_rt++;
+		} else {
+			struct rib_table_info *info;
+
+			info = srcdest_rnode_table_info(rn);
+			if (info && info->safi == SAFI_UNICAST)
+				z_gr_ctx.total_processed_rt++;
+		}
+	}
+}
+
 /*
  * Utility that prepares a route update and enqueues it for processing
  */
@@ -4408,6 +4427,8 @@ dplane_route_update_internal(struct route_node *rn,
 			    (old_re != re) &&
 			    !CHECK_FLAG(re->status, ROUTE_ENTRY_INSTALLED))
 				SET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
+
+			zebra_gr_increment_processed_rt_count(rn, re->vrf_id, true);
 
 			dplane_ctx_free(&ctx);
 			return ZEBRA_DPLANE_REQUEST_SUCCESS;
