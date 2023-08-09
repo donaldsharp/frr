@@ -95,6 +95,22 @@ static void zebra_evpn_mh_tc_program(char *cmd)
 	frr_with_privs (&zserv_privs) {
 		rc = system(cmd);
 	}
+
+	/* system() ignores SIGINT, during this if zebra receives
+	 * SIGINT signal, it is ignored by system call, so check
+	 * return code and re raise the signal again to proceed
+	 * with cleanup.
+	 * NOTE: FRR does not respond to SIGQUIT so ignored it
+	 * in this context.
+	 */
+	if (WIFSIGNALED(rc) && WTERMSIG(rc) == SIGINT) {
+		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
+			zlog_debug(
+				"%s during system call for cmd %s SIGINT igorned so re raise it.",
+				__func__, cmd);
+		raise(SIGINT);
+	}
+
 	if (rc) {
 		zlog_warn("%d:%s", rc, cmd);
 	} else {
