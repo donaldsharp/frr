@@ -336,10 +336,15 @@ void zebra_router_init(bool asic_offload, bool notify_on_ack,
 	 */
 	struct stat pfile;
 	if (stat("/usr/bin/platform-detect", &pfile) >= 0) {
-		if (system("/usr/bin/platform-detect | grep vx") == 0)
+		int rc = 0;
+
+		if ((rc = system("/usr/bin/platform-detect | grep vx")) == 0)
 			zrouter.asic_offloaded = false;
 		else
 			zrouter.asic_offloaded = true;
+
+		if (WIFSIGNALED(rc) && WTERMSIG(rc) == SIGINT)
+			raise(SIGINT);
 	} else
 		zrouter.asic_offloaded = asic_offload;
 
