@@ -6753,27 +6753,6 @@ static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 	}
 }
 
-extern enum zebra_dplane_result kernel_br_port_update_ctx(struct zebra_dplane_ctx *ctx);
-/*
- * Handler for kernel-facing bridge port updates
- */
-static enum zebra_dplane_result kernel_dplane_br_port_update(struct zebra_dplane_ctx *ctx)
-{
-	enum zebra_dplane_result res;
-
-
-	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL)
-		zlog_debug("Dplane br-port update %s, idx %u", dplane_ctx_get_ifname(ctx),
-			   dplane_ctx_get_ifindex(ctx));
-
-	res = kernel_br_port_update_ctx(ctx);
-
-	if (res != ZEBRA_DPLANE_REQUEST_SUCCESS)
-		atomic_fetch_add_explicit(&zdplane_info.dg_br_port_errors, 1, memory_order_relaxed);
-
-	return res;
-}
-
 static void kernel_dplane_handle_result(struct zebra_dplane_ctx *ctx)
 {
 	enum zebra_dplane_result res = dplane_ctx_get_status(ctx);
@@ -6927,12 +6906,17 @@ static void kernel_dplane_handle_result(struct zebra_dplane_ctx *ctx)
 						  1, memory_order_relaxed);
 		break;
 
+	case DPLANE_OP_BR_PORT_UPDATE:
+		if (res != ZEBRA_DPLANE_REQUEST_SUCCESS)
+			atomic_fetch_add_explicit(&zdplane_info.dg_br_port_errors, 1,
+						  memory_order_relaxed);
+		break;
+
 	/* Ignore 'notifications' - no-op */
 	case DPLANE_OP_SYS_ROUTE_ADD:
 	case DPLANE_OP_SYS_ROUTE_DELETE:
 	case DPLANE_OP_ROUTE_NOTIFY:
 	case DPLANE_OP_LSP_NOTIFY:
-	case DPLANE_OP_BR_PORT_UPDATE:
 		break;
 
 	/* TODO -- error counters for incoming events? */
@@ -7027,8 +7011,6 @@ static int kernel_dplane_process_func(struct zebra_dplane_provider *prov)
 			  || dplane_ctx_get_op(ctx)
 				     == DPLANE_OP_IPSET_ENTRY_DELETE))
 			kernel_dplane_process_ipset_entry(prov, ctx);
-		else if (dplane_ctx_get_op(ctx) == DPLANE_OP_BR_PORT_UPDATE)
-			kernel_dplane_br_port_update(ctx);
 		else
 			dplane_ctx_list_add_tail(&work_list, ctx);
 	}
