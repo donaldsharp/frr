@@ -227,6 +227,7 @@ daemon_stop() {
 	fi
 
 	debug "kill -2 $pid, cnt $cnt"
+	log_success_msg "Stopping $dmninst, pid $pid, cnt $cnt ..."
 	kill -2 "$pid"
 
 	while kill -0 "$pid" 2>/dev/null; do
