@@ -1036,6 +1036,9 @@ void zebra_dplane_pre_finish(void);
 void zebra_dplane_finish(void);
 void zebra_dplane_shutdown(void);
 
+void zebra_gr_increment_processed_rt_count(struct route_node *rn,
+					   vrf_id_t vrf_id, bool check_safi);
+
 #ifdef __cplusplus
 }
 #endif
