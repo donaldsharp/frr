@@ -482,6 +482,7 @@ static int frr_csm_cb(int len, void *buf)
 	keepalive_request *kr;
 	module_mode *mod_mode;
 	module_status *mod_status;
+	nl_data *nl;
 
 	/* Set RCU information in the pthread */
 	if (!csm_rcu_set) {
@@ -586,34 +587,29 @@ static int frr_csm_cb(int len, void *buf)
 			frr_csm_send_keep_rsp(kr->seq);
 			break;
 		case NETWORK_LAYER_INFO:
-			if (IS_ZEBRA_DEBUG_CSM) {
-				nl_data *nl = entry->data;
-				nl_hal_info *hal_item =
-					(nl_hal_info *)(nl->data);
-				nl_ipv4_info *v4 = NULL;
-				nl_ipv4_info *v6 = NULL;
+			nl = (nl_data *)entry->data;
+			char *data = nl->data;
+			if (!data)
+				break;
 
-				if (hal_item) {
-					v4 = (nl_ipv4_info *)(hal_item->data);
-					/* v6 */
-					hal_item =
-						(nl_hal_info
-							 *)((char *)hal_item +
-							    hal_item->len);
-					if (hal_item)
-						v6 = (nl_ipv6_info
-							      *)(hal_item->data);
-				}
+			if (IS_ZEBRA_DEBUG_CSM) {
+				nl_hal_info *hal_info = (nl_hal_info *)(data);
+				unsigned int v4 =
+					((nl_ipv4_info *)(hal_info->data))
+						->fib_entries;
+
+				hal_info =
+					(nl_hal_info *)(data + hal_info->len);
+				unsigned int v6 =
+					((nl_ipv6_info *)(hal_info->data))
+						->fib_entries;
 
 				zlog_debug(
 					"FRRCSM: ... NL Info. IPv4 count 0x%x (%u)",
-					v4 ? v4->fib_entries : 0,
-					v4 ? v4->fib_entries : 0);
-
+					v4, v4);
 				zlog_debug(
 					"FRRCSM: ... NL Info. IPv6 count 0x%x (%u)",
-					v6 ? v6->fib_entries : 0,
-					v6 ? v6->fib_entries : 0);
+					v6, v6);
 			}
 			/* TBD: Should we do anything with this? */
 			break;
@@ -727,7 +723,6 @@ int frr_csm_send_init_complete()
 		char buf1[256];
 		char buf2[256];
 
-		zlog_debug("FRRCSM: Sending init complete, %u");
 		zlog_debug(
 			"FRRCSM: %s: csm_cmode %s, csm_smode %s frr_mode %s GR enabled %u",
 			__func__, mode_to_str(zrouter.csm_cmode, buf2),
@@ -777,7 +772,6 @@ int frr_csm_send_network_layer_info(uint32_t ipv4_count, uint32_t ipv6_count)
 	nl_hal_info *hal_item = (nl_hal_info *)(nl->data);
 
 	/* first ipv4, then ipv6. */
-
 	hal_item->type = IPV4;
 	hal_item->len = sizeof(nl_hal_info) + sizeof(nl_ipv4_info);
 	nl_ipv4_info *v4 = (nl_ipv4_info *)(hal_item->data);
@@ -786,12 +780,10 @@ int frr_csm_send_network_layer_info(uint32_t ipv4_count, uint32_t ipv6_count)
 	nl->total_len += hal_item->len;
 
 	/* v6 */
-
 	hal_item = (nl_hal_info *)((char *)hal_item + hal_item->len);
-
 	hal_item->type = IPV6;
 	hal_item->len = sizeof(nl_hal_info) + sizeof(nl_ipv6_info);
-	nl_ipv4_info *v6 = (nl_ipv6_info *)(hal_item->data);
+	nl_ipv6_info *v6 = (nl_ipv6_info *)(hal_item->data);
 	v6->fib_entries = ipv6_count;
 
 	nl->total_len += hal_item->len;
