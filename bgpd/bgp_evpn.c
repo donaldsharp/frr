@@ -4005,8 +4005,11 @@ static int install_uninstall_routes_for_vrf(struct bgp *bgp_vrf, bool install)
 			     pi = pi->next) {
 				ret = bgp_evpn_route_entry_install_if_vrf_match(
 					bgp_vrf, pi, install);
-				if (ret)
+				if (ret) {
+					bgp_dest_unlock_node(rd_dest);
+					bgp_dest_unlock_node(dest);
 					return ret;
+				}
 			}
 		}
 	}
