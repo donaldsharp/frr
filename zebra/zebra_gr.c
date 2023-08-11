@@ -456,9 +456,10 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 
 static void zebra_gr_complete_check(struct zserv *client)
 {
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+
 	struct client_gr_info *info;
 
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 	/* Check to see if we have to send an INIT_COMPLETE */
 	if (zrouter.graceful_restart) {
 		TAILQ_FOREACH (info, &client->gr_info_queue, gr_info) {
