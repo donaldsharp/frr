@@ -1978,9 +1978,9 @@ done:
 	return rn;
 }
 
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 static void zebra_gr_reinstall_last_route(void)
 {
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 	zrouter.gr_last_rt_installed = true;
 
 	zlog_debug("GR %s: All queued routes have been processed. Total queued %u, total processed %d",
@@ -2008,10 +2008,8 @@ static void zebra_gr_reinstall_last_route(void)
 	/* Reset the global pointers */
 	z_gr_ctx.rn = NULL;
 	z_gr_ctx.re = NULL;
-
-#endif
 }
-
+#endif
 
 /*
  * Reinstalls the last route after GR is done
