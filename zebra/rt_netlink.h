@@ -69,6 +69,9 @@ extern ssize_t netlink_mpls_multipath_msg_encode(int cmd,
 						 struct zebra_dplane_ctx *ctx,
 						 void *buf, size_t buflen);
 
+extern ssize_t kernel_br_port_update_ctx(struct zebra_dplane_ctx *ctx,
+					 void *buf, size_t buflen);
+
 extern ssize_t netlink_route_multipath_msg_encode(int cmd,
 						  struct zebra_dplane_ctx *ctx,
 						  uint8_t *data, size_t datalen,
@@ -124,7 +127,9 @@ extern enum netlink_msg_status
 netlink_put_lsp_update_msg(struct nl_batch *bth, struct zebra_dplane_ctx *ctx);
 extern enum netlink_msg_status
 netlink_put_pw_update_msg(struct nl_batch *bth, struct zebra_dplane_ctx *ctx);
-
+extern enum netlink_msg_status
+netlink_put_br_port_update_msg(struct nl_batch *bth,
+			       struct zebra_dplane_ctx *ctx);
 #ifdef NETLINK_DEBUG
 const char *nlmsg_type2str(uint16_t type);
 const char *af_type2str(int type);

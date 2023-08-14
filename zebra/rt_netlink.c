@@ -4047,7 +4047,7 @@ ssize_t netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx, void *data,
 /*
  * Handler for kernel-facing bridge port updates
  */
-ssize_t kernel_br_port_update_ctx(const struct zebra_dplane_ctx *ctx, void *buf,
+ssize_t kernel_br_port_update_ctx(struct zebra_dplane_ctx *ctx, void *buf,
 				  size_t buflen)
 {
 	struct {
