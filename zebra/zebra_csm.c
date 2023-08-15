@@ -354,6 +354,7 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 					   bool up)
 {
 	char buf[256];
+	Mode curr_mode = zrouter.csm_cmode;
 
 	if (up) {
 		/* We expect 'come up' only in the case of coming out of
@@ -401,14 +402,42 @@ static void frr_csm_handle_up_down_trigger(Module mod, Mode mode, State state,
 
 	if (IS_MODE_MAINTENANCE(mode)) {
 		frr_csm_enter_maintenance_mode();
-	} else if (IS_BOOT_FAST(mode) || IS_BOOT_WARM(mode)) {
+	} else if ((IS_BOOT_FAST(mode)) ||
+		   (IS_BOOT_WARM(mode) && IS_BOOT_WARM(curr_mode))) {
+		/*
+		 * When zebra gets a GoDown with the mode as 'warm', it should
+		 * execute fast shutdown only if the current mode is 'warm';
+		 * otherwise, it should effectively do nothing (i.e., act as if
+		 * the request is for a cold boot)
+		 */
+		char buf1[256];
+		char buf2[256];
+
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug(
+				"FRRCSM: %s: Fast shutdown required. Curr mode: %s, Mode updated to: %s, state updated to: %s",
+				__func__, mode_to_str(curr_mode, buf1),
+				mode_to_str(mode, buf2),
+				mod_state_to_str(state));
+
 		if (IS_SYS_UPGRADE(mode)) {
 			frr_csm_fast_upgrade_triggered();
 		} else {
 			frr_csm_fast_restart_triggered();
 		}
-	} else
+	} else {
+		char buf1[256];
+		char buf2[256];
+
+		if (IS_ZEBRA_DEBUG_CSM)
+			zlog_debug(
+				"FRRCSM: %s: Normal shutdown required. Curr mode: %s,Mode updated to: %s, state updated to: %s",
+				__func__, mode_to_str(curr_mode, buf1),
+				mode_to_str(mode, buf2),
+				mod_state_to_str(state));
+
 		frr_csm_send_down_complete(mod);
+	}
 }
 
 /*
