@@ -4024,15 +4024,26 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 			   disable ? "dis" : "en", bgp->name_pretty);
 
 	if (zclient == NULL) {
-		if (BGP_DEBUG(zebra, ZEBRA))
+		if (BGP_DEBUG(zebra, ZEBRA) ||
+		    BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 			zlog_debug("%s: %s zclient invalid", __func__,
 				   bgp->name_pretty);
 		return BGP_GR_FAILURE;
 	}
 
+	if (bgp->vrf_id == VRF_UNKNOWN) {
+		if (BGP_DEBUG(zebra, ZEBRA) ||
+		    BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+			zlog_debug("%s: %s VRF ID invalid", __func__,
+				   bgp->name_pretty);
+		return BGP_GR_FAILURE;
+	}
+
+
 	/* Check if the client is connected */
 	if ((zclient->sock < 0) || (zclient->t_connect)) {
-		if (BGP_DEBUG(zebra, ZEBRA))
+		if (BGP_DEBUG(zebra, ZEBRA) ||
+		    BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 			zlog_debug("%s: %s client not connected", __func__,
 				   bgp->name_pretty);
 		return BGP_GR_FAILURE;
@@ -4062,7 +4073,8 @@ int bgp_zebra_send_capabilities(struct bgp *bgp, bool disable)
 		else
 			bgp->present_zebra_gr_state = ZEBRA_GR_ENABLE;
 
-		if (BGP_DEBUG(zebra, ZEBRA))
+		if (BGP_DEBUG(zebra, ZEBRA) ||
+		    BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 			zlog_debug("%s: %s send capabilty success", __func__,
 				   bgp->name_pretty);
 		ret = BGP_GR_SUCCESS;
