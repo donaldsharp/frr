@@ -629,8 +629,11 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 	char up_str[MONOTIME_STRLEN];
 	bool first_p = true;
 	bool nhg_from_backup = false;
+	time_t epoch_tbuf;
+	char epoch_str_buf[MONOTIME_STRLEN];
 
 	uptime2str(re->uptime, up_str, sizeof(up_str));
+	epoch_tbuf = time(NULL) - (monotime(NULL) - (UPTIMESECS(re->uptime)));
 
 	/* If showing fib information, use the fib view of the
 	 * nexthops.
@@ -804,7 +807,7 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 		}
 
 		show_route_nexthop_helper(vty, re, nexthop);
-		vty_out(vty, ", %s\n", up_str);
+		vty_out(vty, ", %s, %s\n", up_str, ctime_r(&epoch_tbuf, epoch_str_buf));
 	}
 
 	/* If we only had backup nexthops, we're done */
@@ -1197,9 +1200,10 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 	json_object *json = NULL;
 	json_object *json_backup_nexthop_array = NULL;
 	json_object *json_backup_nexthops = NULL;
-
+	time_t epoch_tbuf;
 
 	uptime2str(nhe->uptime, up_str, sizeof(up_str));
+	epoch_tbuf = time(NULL) - (monotime(NULL) - (UPTIMESECS(nhe->uptime)));
 
 	if (json_nhe_hdr)
 		json = json_object_new_object();
@@ -1219,6 +1223,8 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 				       vrf_id_to_name(nhe->vrf_id));
 
 	} else {
+		char epoch_str_buf[MONOTIME_STRLEN];
+
 		vty_out(vty, "ID: %u (%s)\n", nhe->id,
 			zebra_route_string(nhe->type));
 		vty_out(vty, "     RefCnt: %u", nhe->refcnt);
@@ -1229,7 +1235,7 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 						      nhe->timer));
 		vty_out(vty, "\n");
 
-		vty_out(vty, "     Uptime: %s\n", up_str);
+		vty_out(vty, "     Uptime: %s, %s\n", up_str, ctime_r(&epoch_tbuf, epoch_str_buf));
 		vty_out(vty, "     VRF: %s\n", vrf_id_to_name(nhe->vrf_id));
 	}
 
