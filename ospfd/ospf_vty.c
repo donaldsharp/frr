@@ -4445,9 +4445,6 @@ static void show_ip_ospf_neighbour_brief(struct vty *vty,
 						sizeof(timebuf)));
 			json_object_int_add(json_neighbor,
 					    "ospfNeighUptimeEpoch", epoch_tbuf);
-			json_object_string_add(json_neighbor,
-					       "ospfNeighUptimeEpochStr",
-					       ctime(&epoch_tbuf));
 		} else {
 			json_object_string_add(json_neighbor, "deadTimeMsecs",
 					       "inactive");

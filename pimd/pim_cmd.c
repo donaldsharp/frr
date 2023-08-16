@@ -861,8 +861,6 @@ static void igmp_source_json_helper(struct gm_source *src,
 				IGMP_SOURCE_TEST_FORWARDING(src->source_flags));
 	json_object_string_add(json_source, "uptime", uptime);
 	json_object_int_add(json_source, "grpUptimeEpoch", epoch_tbuf);
-	json_object_string_add(json_source, "grpUptimeEpochStr",
-			       ctime(&epoch_tbuf));
 	json_object_array_add(json_sources, json_source);
 }
 
@@ -925,9 +923,6 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 			json_object_string_add(json_group, "uptime", uptime);
 			json_object_int_add(json_group, "igmpGrpUptimeEpoch",
 					    epoch_tbuf);
-			json_object_string_add(json_group,
-					       "igmpGrpUptimeEpochStr",
-					       ctime(&epoch_tbuf));
 			json_object_array_add(json_groups, json_group);
 
 			if (detail) {

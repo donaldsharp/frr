@@ -1253,8 +1253,6 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 		json_object_string_add(json, "uptime", up_str);
 		json_object_int_add(json, "nhGrpUptimeEstablishedEpoch",
 				    epoch_tbuf);
-		json_object_string_add(json, "nhGrpUptimeEstablishedEpochStr",
-				       ctime(&epoch_tbuf));
 		json_object_string_add(json, "vrf",
 				       vrf_id_to_name(nhe->vrf_id));
 	} else {
