@@ -155,9 +155,16 @@ DEFPY (show_ip_rpf,
 		.multi = false,
 	};
 
-	return do_show_ip_route(vty, VRF_DEFAULT_NAME, ip ? AFI_IP : AFI_IP6,
-				SAFI_MULTICAST, false, NULL, uj, 0, NULL, false,
-				0, 0, 0, false, &ctx);
+	if (uj)
+		vty_out(vty, "{\n");
+
+	do_show_ip_route(vty, VRF_DEFAULT_NAME, ip ? AFI_IP : AFI_IP6, SAFI_MULTICAST, false, NULL,
+			 uj, 0, NULL, false, 0, 0, 0, false, &ctx);
+
+	if (uj)
+		vty_out(vty, "}\n");
+
+	return CMD_SUCCESS;
 }
 
 DEFPY (show_ip_rpf_addr,
@@ -746,8 +753,9 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 					       json_nexthops);
 		}
 		zebra_show_ip_route_opaque(NULL, re, json_route);
+		vty_json_no_pretty(vty, json_route);
+		json_object_free(json_route);
 
-		json_object_array_add(json, json_route);
 		return;
 	}
 
@@ -843,15 +851,17 @@ static void vty_show_ip_route_detail_json(struct vty *vty,
 					  struct route_node *rn, bool use_fib)
 {
 	json_object *json = NULL;
-	json_object *json_prefix = NULL;
 	struct route_entry *re;
 	char buf[BUFSIZ];
 	rib_dest_t *dest;
+	struct route_entry *re_next;
+	int next = 0;
 
 	dest = rib_dest_from_rnode(rn);
 
 	json = json_object_new_object();
-	json_prefix = json_object_new_array();
+	prefix2str(&rn->p, buf, sizeof(buf));
+	vty_out(vty, "{\"%s\":[", buf);
 
 	RNODE_FOREACH_RE (rn, re) {
 		/*
@@ -860,12 +870,21 @@ static void vty_show_ip_route_detail_json(struct vty *vty,
 		 */
 		if (use_fib && re != dest->selected_fib)
 			continue;
-		vty_show_ip_route(vty, rn, re, json_prefix, use_fib, false);
+
+		re_next = re;
+		if (RNODE_NEXT_RE(rn, re_next) == NULL)
+			next = 0;
+		else
+			next = 1;
+
+		vty_show_ip_route(vty, rn, re, json, use_fib, false);
+
+		if (next == 1)
+			vty_out(vty, ",");
 	}
 
-	prefix2str(&rn->p, buf, sizeof(buf));
-	json_object_object_add(json, buf, json_prefix);
-	vty_json(vty, json);
+	vty_out(vty, "]}\n");
+	json_object_free(json);
 }
 
 static void
@@ -881,9 +900,11 @@ do_show_route_helper(struct vty *vty, struct zebra_vrf *zvrf,
 	int first = 1;
 	rib_dest_t *dest;
 	json_object *json = NULL;
-	json_object *json_prefix = NULL;
 	uint32_t addr;
 	char buf[BUFSIZ];
+	int prefix_found = 0;
+	int re_first = 1, prefix_first = 1, next = 1;
+	struct route_entry *re_next;
 
 	/*
 	 * ctx->multi indicates if we are dumping multiple tables or vrfs.
@@ -896,12 +917,11 @@ do_show_route_helper(struct vty *vty, struct zebra_vrf *zvrf,
 	 *   => display the VRF and table if specific
 	 */
 
-	if (use_json && !vrf_json)
-		json = json_object_new_object();
-
 	/* Show all routes. */
 	for (rn = route_top(table); rn; rn = srcdest_route_next(rn)) {
 		dest = rib_dest_from_rnode(rn);
+		if (use_json)
+			re_first = 1;
 
 		RNODE_FOREACH_RE (rn, re) {
 			if (use_fib && re != dest->selected_fib)
@@ -936,57 +956,63 @@ do_show_route_helper(struct vty *vty, struct zebra_vrf *zvrf,
 				|| re->instance != ospf_instance_id))
 				continue;
 
-			if (use_json) {
-				if (!json_prefix)
-					json_prefix = json_object_new_array();
-			} else if (first) {
-				if (!ctx->header_done) {
-					if (afi == AFI_IP)
-						vty_out(vty,
-							SHOW_ROUTE_V4_HEADER);
-					else
-						vty_out(vty,
-							SHOW_ROUTE_V6_HEADER);
+			if (!use_json) {
+				if (first) {
+					if (!ctx->header_done) {
+						if (afi == AFI_IP)
+							vty_out(vty, SHOW_ROUTE_V4_HEADER);
+						else
+							vty_out(vty, SHOW_ROUTE_V6_HEADER);
+					}
+					if (ctx->multi && ctx->header_done)
+						vty_out(vty, "\n");
+					if (ctx->multi || zvrf_id(zvrf) != VRF_DEFAULT || tableid) {
+						if (!tableid)
+							vty_out(vty, "VRF %s:\n", zvrf_name(zvrf));
+						else
+							vty_out(vty, "VRF %s table %u:\n",
+								zvrf_name(zvrf), tableid);
+					}
+					ctx->header_done = true;
+					first = 0;
 				}
-				if (ctx->multi && ctx->header_done)
-					vty_out(vty, "\n");
-				if (ctx->multi || zvrf_id(zvrf) != VRF_DEFAULT
-				    || tableid) {
-					if (!tableid)
-						vty_out(vty, "VRF %s:\n",
-							zvrf_name(zvrf));
-					else
-						vty_out(vty,
-							"VRF %s table %u:\n",
-							zvrf_name(zvrf),
-							tableid);
-				}
-				ctx->header_done = true;
-				first = 0;
 			}
 
-			vty_show_ip_route(vty, rn, re, json_prefix, use_fib,
-					  show_ng);
+			if (use_json && !vrf_json) {
+				json = json_object_new_object();
+				re_next = re;
+				prefix2str(&rn->p, buf, sizeof(buf));
+				if (RNODE_NEXT_RE(rn, re_next) == NULL)
+					next = 0;
+				else
+					next = 1;
+
+				if (prefix_first) {
+					vty_out(vty, "\"%s\":[", buf);
+					prefix_first = 0;
+					prefix_found = 1;
+				} else if ((re_first) && (!prefix_first)) {
+					vty_out(vty, ",\"%s\":[", buf);
+					prefix_found = 1;
+				}
+				re_first = 0;
+			}
+
+			vty_show_ip_route(vty, rn, re, json, use_fib, show_ng);
+
+			if (use_json) {
+				if (next == 1)
+					vty_out(vty, ",");
+
+				json_object_free(json);
+			}
 		}
 
-		if (json_prefix) {
-			prefix2str(&rn->p, buf, sizeof(buf));
-			if (!vrf_json)
-				json_object_object_add(json, buf, json_prefix);
-			else
-				json_object_object_add(vrf_json, buf,
-						       json_prefix);
-			json_prefix = NULL;
+		if (use_json) {
+			if (prefix_found == 1)
+				vty_out(vty, "]");
+			prefix_found = 0;
 		}
-	}
-
-	/*
-	 * This is an extremely expensive operation at scale
-	 * and non-pretty reduces memory footprint significantly.
-	 */
-	if (use_json && !vrf_json) {
-		vty_json_no_pretty(vty, json);
-		json = NULL;
 	}
 }
 
@@ -1767,6 +1793,8 @@ DEFPY (show_route,
 		.multi = vrf_all || table_all,
 	};
 	json_object *root_json = NULL;
+	bool uj = !!json;
+	struct vrf *next_vrf;
 
 	if (!vrf_is_backend_netns()) {
 		if ((vrf_all || vrf_name) && (table || table_all)) {
@@ -1790,6 +1818,9 @@ DEFPY (show_route,
 	if (vrf_all) {
 		if (!!json)
 			root_json = json_object_new_object();
+		if (uj)
+			vty_out(vty, "{\n");
+
 		RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
 			json_object *vrf_json = NULL;
 
@@ -1799,6 +1830,8 @@ DEFPY (show_route,
 
 			if (!!json)
 				vrf_json = json_object_new_object();
+			if (uj)
+				vty_out(vty, "\"%s\":{\n", zvrf_name(zvrf));
 
 			if (table_all)
 				do_show_ip_route_all(vty, zvrf, afi, !!fib,
@@ -1820,7 +1853,16 @@ DEFPY (show_route,
 				json_object_object_add(root_json,
 						       zvrf_name(zvrf),
 						       vrf_json);
+			if (uj) {
+				next_vrf = RB_NEXT(vrf_name_head, vrf);
+				if (!next_vrf)
+					vty_out(vty, "}\n");
+				else
+					vty_out(vty, "},\n");
+			}
 		}
+		if (uj)
+			vty_out(vty, "}\n");
 		if (!!json) {
 			vty_json_no_pretty(vty, root_json);
 			root_json = NULL;
@@ -1838,6 +1880,9 @@ DEFPY (show_route,
 		if (!zvrf)
 			return CMD_SUCCESS;
 
+		if (uj)
+			vty_out(vty, "{\n");
+
 		if (table_all)
 			do_show_ip_route_all(vty, zvrf, afi, !!fib, NULL, !!json,
 					     tag, prefix_str ? prefix : NULL,
@@ -1849,6 +1894,9 @@ DEFPY (show_route,
 					 prefix_str ? prefix : NULL,
 					 !!supernets_only, type,
 					 ospf_instance_id, table, !!ng, &ctx);
+
+		if (uj)
+			vty_out(vty, "}\n");
 	}
 
 	return CMD_SUCCESS;
