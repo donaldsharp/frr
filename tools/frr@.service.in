@@ -17,7 +17,6 @@ WatchdogSec=60s
 RestartSec=5
 Restart=always
 LimitNOFILE=1024
-PIDFile=@e_frr_runstatedir@/%I/watchfrr.pid
 ExecStart=@e_sbindir@/frrinit.sh start %I
 ExecStop=@e_sbindir@/frrinit.sh stop %I
 ExecReload=@e_sbindir@/frrinit.sh reload %I
