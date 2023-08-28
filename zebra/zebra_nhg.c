@@ -3083,6 +3083,12 @@ static uint8_t zebra_nhg_nhe2grp_internal(struct nh_grp *grp,
 					zlog_debug(
 						"%s: Nexthop ID (%u) not installed or queued for install, not appending to dataplane install group",
 						__func__, depend->id);
+				if (depend->rejected_rn) {
+					if (IS_ZEBRA_DEBUG_NHG_DETAIL)
+						zlog_debug(
+							"Deleting the NHE list of rejected routes");
+					list_delete(&depend->rejected_rn);
+				}
 				continue;
 			}
 
@@ -3193,6 +3199,12 @@ void zebra_nhg_uninstall_kernel(struct nhg_hash_entry *nhe)
 			break;
 		case ZEBRA_DPLANE_REQUEST_SUCCESS:
 			UNSET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
+			if (nhe->rejected_rn) {
+				if (IS_ZEBRA_DEBUG_NHG_DETAIL)
+					zlog_debug(
+						"Deleting the NHE list holding rejected routes");
+				list_delete(&nhe->rejected_rn);
+			}
 			break;
 		}
 	}
@@ -3241,7 +3253,28 @@ void zebra_nhg_dplane_result(struct zebra_dplane_ctx *ctx)
 			SET_FLAG(nhe->flags, NEXTHOP_GROUP_VALID);
 			SET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
 			zebra_nhg_handle_install(nhe, true);
+			/* Intermittently there are scenarios when NH
+			 * installation fails due to which routes remain in
+			 * rejected state. NHE holds a cache of such rejected
+			 * routes which needs to be walked on successful NH
+			 * installation and re-installed */
 
+			if (nhe->rejected_rn &&
+			    !list_isempty(nhe->rejected_rn)) {
+				struct listnode *node;
+				struct route_node *rn;
+				for (ALL_LIST_ELEMENTS_RO(nhe->rejected_rn,
+							  node, rn)) {
+					struct route_entry *re = NULL;
+					if (IS_ZEBRA_DEBUG_NHG)
+						zlog_debug(
+							"Rejected route re-install (RN:%p) on nexthop ID (%u) installation",
+							rn, id);
+					RNODE_FOREACH_RE (rn, re)
+						rib_install_kernel(rn, re, re); //, false);
+				}
+				list_delete(&nhe->rejected_rn);
+			}
 			/* If daemon nhg, send it an update */
 			if (PROTO_OWNED(nhe))
 				zsend_nhg_notify(nhe->type, nhe->zapi_instance,

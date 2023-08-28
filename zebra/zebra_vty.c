@@ -1217,7 +1217,10 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 		json_object_string_add(json, "uptime", up_str);
 		json_object_string_add(json, "vrf",
 				       vrf_id_to_name(nhe->vrf_id));
-
+		json_object_int_add(json, "rejectRtCnt",
+				    nhe->rejected_rn
+					    ? (int)listcount(nhe->rejected_rn)
+					    : 0);
 	} else {
 		vty_out(vty, "ID: %u (%s)\n", nhe->id,
 			zebra_route_string(nhe->type));
@@ -1231,6 +1234,9 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 
 		vty_out(vty, "     Uptime: %s\n", up_str);
 		vty_out(vty, "     VRF: %s\n", vrf_id_to_name(nhe->vrf_id));
+		vty_out(vty, "     RejectRtCnt: %d\n",
+			nhe->rejected_rn ? (int)listcount(nhe->rejected_rn)
+					 : 0);
 	}
 
 	if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_VALID)) {
