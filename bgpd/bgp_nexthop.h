@@ -126,6 +126,8 @@ struct bgp_dest;
 struct attr;
 
 #define BNC_FLAG_DUMP_SIZE 180
+#define bool_string(value) (value ? "true" : "false")
+
 extern char *bgp_nexthop_dump_bnc_flags(struct bgp_nexthop_cache *bnc,
 					char *buf, size_t len);
 extern char *bgp_nexthop_dump_bnc_change_flags(struct bgp_nexthop_cache *bnc,
