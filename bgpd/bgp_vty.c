@@ -834,7 +834,6 @@ int bgp_vty_return(struct vty *vty, enum bgp_create_error_code ret)
 	case BGP_INSTANCE_EXISTS:
 		break;
 	case BGP_GR_NO_OPERATION:
-		str = "The Graceful Restart No Operation was executed as cmd same as previous one.";
 		/* A NO-OP is silently ignored and treated as a success. */
 		break;
 	case BGP_ERR_INVALID_VALUE:
