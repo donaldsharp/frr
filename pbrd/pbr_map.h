@@ -115,6 +115,9 @@ struct pbr_map_sequence {
 	uint8_t dsfield;
 	uint32_t mark;
 
+	uint8_t match_flags;
+#define PBR_MATCH_DSCP (1 << 0)
+#define PBR_MATCH_ECN  (1 << 1)
 	/*****************************************************************
 	 * Action fields
 	 *****************************************************************/
