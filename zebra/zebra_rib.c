@@ -2234,6 +2234,14 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 			if (re) {
 				UNSET_FLAG(re->status, ROUTE_ENTRY_FAILED);
 				SET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
+				if (re->nhe->rejected_rn) {
+					if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+						zlog_debug(
+							"Remove (RN:%p) from NHE list of rejected routes",
+							rn);
+					listnode_delete(re->nhe->rejected_rn,
+							rn);
+				}
 			}
 			/*
 			 * On an update operation from the same route type
@@ -2311,6 +2319,16 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 				UNSET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
 			} if (old_re)
 				SET_FLAG(old_re->status, ROUTE_ENTRY_FAILED);
+			if (!re->nhe->rejected_rn)
+				re->nhe->rejected_rn = list_new();
+			/* NHE will maintain a list of failed route entries to
+			 * be re-installed again when nexthop is installed.
+			 */
+			listnode_add(re->nhe->rejected_rn, rn);
+			if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+				zlog_debug(
+					"Route (RN:%p) added to NHE rejected list count %d",
+					rn, listcount(re->nhe->rejected_rn));
 			if (re)
 				zsend_route_notify_owner(
 					rn, re, ZAPI_ROUTE_FAIL_INSTALL,
