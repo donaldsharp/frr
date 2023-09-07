@@ -902,6 +902,44 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_proc_remote_nh, TRACE_INFO)
 
 TRACEPOINT_EVENT(
 	frr_zebra,
+	evpn_dplane_remote_nh_add,
+	TP_ARGS(
+		struct ethaddr *, mac,
+		struct ipaddr *, ip,
+		vrf_id_t, vrf_id,
+		const struct interface *, ifp),
+	TP_FIELDS(
+		ctf_array(unsigned char, rmac, mac,
+			  sizeof(struct ethaddr))
+		ctf_array(unsigned char, nh_ip, ip,
+			  sizeof(struct ipaddr))
+		ctf_integer(int, vrf_id, vrf_id)
+		ctf_integer(unsigned int, ifindex, ifp->ifindex)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, evpn_dplane_remote_nh_add, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	evpn_dplane_remote_nh_del,
+	TP_ARGS(
+		struct ethaddr *, mac,
+		struct ipaddr *, ip,
+		const struct interface *, ifp),
+	TP_FIELDS(
+		ctf_array(unsigned char, rmac, mac,
+			  sizeof(struct ethaddr))
+		ctf_array(unsigned char, nh_ip, ip,
+			  sizeof(struct ipaddr))
+		ctf_integer(unsigned int, ifindex, ifp->ifindex)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, evpn_dplane_remote_nh_del, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
 	zebra_evpn_proc_remote_es,
 	TP_ARGS(
 		struct in_addr, vtep_ip,
@@ -915,6 +953,48 @@ TRACEPOINT_EVENT(
 	)
 
 TRACEPOINT_LOGLEVEL(frr_zebra, zebra_evpn_proc_remote_es, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	evpn_dplane_remote_rmac_add,
+	TP_ARGS(
+		struct zebra_mac *, zrmac,
+		struct in_addr, vtep_ip,
+		vni_t, vni,
+		vlanid_t, vid,
+		const struct interface *, vxlan_if),
+	TP_FIELDS(
+		ctf_array(unsigned char, rmac, &zrmac->macaddr,
+			  sizeof(struct ethaddr))
+		ctf_string(vtep_ip, inet_ntoa(vtep_ip))
+		ctf_integer(vni_t, vni, vni)
+		ctf_integer(uint16_t, vlan_id, vid)
+		ctf_integer(unsigned int, vxlan_if, vxlan_if->ifindex)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, evpn_dplane_remote_rmac_add, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	evpn_dplane_remote_rmac_del,
+	TP_ARGS(
+		struct zebra_mac *, zrmac,
+		struct in_addr, vtep_ip,
+		vni_t, vni,
+		vlanid_t, vid,
+		const struct interface *, vxlan_if),
+	TP_FIELDS(
+		ctf_array(unsigned char, rmac, &zrmac->macaddr,
+			  sizeof(struct ethaddr))
+		ctf_string(vtep_ip, inet_ntoa(vtep_ip))
+		ctf_integer(vni_t, vni, vni)
+		ctf_integer(uint16_t, vlan_id, vid)
+		ctf_integer(unsigned int, vxlan_if, vxlan_if->ifindex)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, evpn_dplane_remote_rmac_del, TRACE_INFO)
 
 TRACEPOINT_EVENT(
 	frr_zebra,
