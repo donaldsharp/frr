@@ -424,6 +424,40 @@ def parse_frr_zebra_zebra_evpn_proc_remote_nh(event):
 
     parse_event(event, field_parsers)
 
+def parse_frr_zebra_evpn_dplane_remote_nh_add(event):
+    """
+    dplane enqued zebra evpn remote nh (neigh) add entry
+    """
+    field_parsers = {"nh_ip": print_ip_addr,
+                     "rmac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_evpn_dplane_remote_nh_del(event):
+    """
+    dplane enqued zebra evpn remote nh (neigh) del entry
+    """
+    field_parsers = {"nh_ip": print_ip_addr,
+                     "rmac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_evpn_dplane_remote_rmac_add(event):
+    """
+    dplane enqued zebra evpn remote rmac (FDB) entry
+    """
+    field_parsers = {"rmac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_evpn_dplane_remote_rmac_del(event):
+    """
+    dplane enqued zebra evpn remote rmac (FDB) entry
+    """
+    field_parsers = {"rmac": print_mac}
+
+    parse_event(event, field_parsers)
+
 def parse_frr_zebra_zebra_evpn_proc_remote_es(event):
     """
     ctf_array(unsigned char, esi, esi, sizeof(esi_t))
@@ -494,6 +528,14 @@ def main():
                      parse_frr_zebra_zebra_vxlan_remote_macip_del,
                      "frr_zebra:zebra_evpn_proc_remote_nh":
                      parse_frr_zebra_zebra_evpn_proc_remote_nh,
+                     "frr_zebra:evpn_dplane_remote_nh_add":
+                     parse_frr_zebra_evpn_dplane_remote_nh_add,
+                     "frr_zebra:evpn_dplane_remote_nh_del":
+                     parse_frr_zebra_evpn_dplane_remote_nh_del,
+                     "frr_zebra:evpn_dplane_remote_rmac_add":
+                     parse_frr_zebra_evpn_dplane_remote_rmac_add,
+                     "frr_zebra:evpn_dplane_remote_rmac_del":
+                     parse_frr_zebra_evpn_dplane_remote_rmac_del,
                      "frr_zebra:zebra_evpn_proc_remote_es":
                      parse_frr_zebra_zebra_evpn_proc_remote_es,
 }
