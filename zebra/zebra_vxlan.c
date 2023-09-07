@@ -1297,6 +1297,9 @@ static int zl3vni_rmac_install(struct zebra_l3vni *zl3vni,
 	else
 		vid = 0;
 
+	frrtrace(5, frr_zebra, evpn_dplane_remote_rmac_add, zrmac,
+		 zrmac->fwd_info.r_vtep_ip, vni->vni, vid, zl3vni->vxlan_if);
+
 	res = dplane_rem_mac_add(zl3vni->vxlan_if, br_ifp, vid, &zrmac->macaddr,
 				 vni->vni, zrmac->fwd_info.r_vtep_ip, 0, 0,
 				 false /*was_static*/);
@@ -1345,6 +1348,9 @@ static int zl3vni_rmac_uninstall(struct zebra_l3vni *zl3vni,
 		vid = vni->access_vlan;
 	else
 		vid = 0;
+
+	frrtrace(5, frr_zebra, evpn_dplane_remote_rmac_del, zrmac,
+		 zrmac->fwd_info.r_vtep_ip, vni->vni, vid, zl3vni->vxlan_if);
 
 	res = dplane_rem_mac_del(zl3vni->vxlan_if, br_ifp, vid, &zrmac->macaddr,
 				 vni->vni, zrmac->fwd_info.r_vtep_ip);
@@ -1670,6 +1676,9 @@ static int _nh_install(struct zebra_l3vni *zl3vni, struct interface *ifp,
 	if (n->flags & ZEBRA_NEIGH_ROUTER_FLAG)
 		flags |= DPLANE_NTF_ROUTER;
 
+	frrtrace(4, frr_zebra, evpn_dplane_remote_nh_add, &n->emac, &n->ip,
+		 zl3vni->vrf_id, ifp);
+
 	dplane_rem_neigh_add(ifp, &n->ip, &n->emac, flags,
 			     false /*was_static*/);
 
@@ -1687,6 +1696,9 @@ static int _nh_uninstall(struct interface *ifp, struct zebra_neigh *n)
 
 	if (!ifp || !if_is_operative(ifp))
 		return 0;
+
+	frrtrace(3, frr_zebra, evpn_dplane_remote_nh_del, &n->emac, &n->ip,
+		 ifp);
 
 	dplane_rem_neigh_delete(ifp, &n->ip);
 
