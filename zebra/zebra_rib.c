@@ -2324,12 +2324,15 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 			/* NHE will maintain a list of failed route entries to
 			 * be re-installed again when nexthop is installed.
 			 */
-			if (re && re->nhe)
+			if (re && re->nhe) {
 				listnode_add(re->nhe->rejected_rn, rn);
-			if (IS_ZEBRA_DEBUG_RIB_DETAILED)
-				zlog_debug(
-					"Route (RN:%p) added to NHE rejected list count %d",
-					rn, listcount(re->nhe->rejected_rn));
+				if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+					zlog_debug(
+						"Route (RN:%p) added to NHE rejected list count %d",
+						rn,
+						listcount(
+							re->nhe->rejected_rn));
+			}
 			if (re)
 				zsend_route_notify_owner(
 					rn, re, ZAPI_ROUTE_FAIL_INSTALL,
