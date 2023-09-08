@@ -9,7 +9,7 @@
 				<channels>
 					<channel>
 						<name>channel1</name>
-						<enabled>true</enabled>
+						<enabled>false</enabled>
 						<overwrite_mode>OVERWRITE</overwrite_mode>
 						<subbuffer_size>524288</subbuffer_size>
 						<subbuffer_count>4</subbuffer_count>
@@ -24,7 +24,7 @@
 						<events>
 							<event>
 								<name>frr_zebra:*</name>
-								<enabled>true</enabled>
+								<enabled>false</enabled>
 								<type>TRACEPOINT</type>
 								<loglevel_type>ALL</loglevel_type>
 							</event>
@@ -50,9 +50,9 @@
 				<channels/>
 			</domain>
 		</domains>
-		<started>true</started>
+		<started>false</started>
 		<attributes>
-			<snapshot_mode>true</snapshot_mode>
+			<snapshot_mode>false</snapshot_mode>
 		</attributes>
 		<output>
 			<snapshot_outputs>
@@ -60,7 +60,7 @@
 					<name>snapshot-1</name>
 					<max_size>0</max_size>
 					<consumer_output>
-						<enabled>true</enabled>
+						<enabled>false</enabled>
 						<destination>
 							<path>/var/log/lttng-traces/frr-snapshot-zebra-onboot</path>
 						</destination>
