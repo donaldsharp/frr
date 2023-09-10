@@ -3103,8 +3103,6 @@ static int install_evpn_route_entry_in_vrf(struct bgp *bgp_vrf,
 	/* Process for route leaking. */
 	vpn_leak_from_vrf_update(bgp_get_default(), bgp_vrf, pi);
 
-	bgp_dest_unlock_node(dest);
-
 	if (bgp_debug_zebra(NULL)) {
 		struct ipaddr nhip = {};
 
@@ -3121,6 +3119,8 @@ static int install_evpn_route_entry_in_vrf(struct bgp *bgp_vrf,
 			   bgp_dest_get_lock_count(dest), pi, pi->lock,
 			   pi->flags, &nhip);
 	}
+
+	bgp_dest_unlock_node(dest);
 
 	return ret;
 }
