@@ -121,6 +121,7 @@ func_frr()
     exec_cmd $jexec bgp.evpn.importrt vtysh -c "show bgp l2vpn evpn import-rt $json"
     exec_cmd bgp.evpn.update_group vtysh -c "show bgp l2vpn evpn update-groups"
     exec_cmd bgp.mac_hash vtysh -c "show bgp mac hash"
+    exec_cmd $jexec bgp.evpn.nexthops vtysh -c "show bgp l2vpn evpn next-hops $json"
 
     exec_cmd $jexec pbr.map vtysh -c "show pbr map $json"
     exec_cmd $jexec pbr.intf vtysh -c "show pbr interface $json"
