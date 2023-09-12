@@ -93,4 +93,8 @@ configure)
 	;;
 esac
 
+# Remove ulimits on address space and data segment size from sudo, to support
+# running vtysh under AddressSanitizer
+echo "session optional pam_limits.so conf=/etc/frr/cumulus-limits-override.conf" >> /etc/pam.d/sudo
+
 #DEBHELPER#
