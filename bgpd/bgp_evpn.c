@@ -1461,6 +1461,18 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	safi_t safi = SAFI_EVPN;
 	int ret = 0;
 
+	/* If the flag BGP_NODE_SELECT_DEFER is set, do not add route to
+	 * the workqueue
+	 */
+	if (CHECK_FLAG(dest->flags, BGP_NODE_SELECT_DEFER)) {
+		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+			zlog_debug(
+				"%s: SELECT_DEFER flag set for EVPN route %pRN, dest %p",
+				bgp->name_pretty, dest, dest);
+
+		return ret;
+	}
+
 	/* Compute the best path. */
 	bgp_best_selection(bgp, dest, &bgp->maxpaths[afi][safi], &old_and_new,
 			   afi, safi);
@@ -3070,6 +3082,8 @@ static int install_evpn_route_entry_in_vrf(struct bgp *bgp_vrf,
 		pi->uptime = monotime(NULL);
 	}
 
+	bgp_dest_set_defer_flag(dest, false);
+
 	/* Gateway IP nexthop should be resolved */
 	if (attr.evpn_overlay.type == OVERLAY_INDEX_GATEWAY_IP) {
 		if (bgp_find_or_add_nexthop(bgp_vrf, bgp_vrf, afi, safi, pi,
@@ -3204,6 +3218,8 @@ static int install_evpn_route_entry_in_vni_common(
 		pi->attr = attr_new;
 		pi->uptime = monotime(NULL);
 	}
+
+	bgp_dest_set_defer_flag(dest, false);
 
 	/* Add this route to remote IP hashtable */
 	bgp_evpn_remote_ip_hash_add(vpn, pi);
@@ -3471,7 +3487,8 @@ static int install_evpn_route_entry(struct bgp *bgp, struct bgpevpn *vpn,
 {
 	int ret = 0;
 
-	if (bgp_debug_update(parent_pi->peer, NULL, NULL, 1))
+	if (bgp_debug_update(parent_pi->peer, NULL, NULL, 1) ||
+	    bgp_debug_zebra(NULL))
 		zlog_debug(
 			"%s (%u): Installing EVPN %pFX route in VNI %u IP/MAC table",
 			vrf_id_to_name(bgp->vrf_id), bgp->vrf_id, p, vpn->vni);

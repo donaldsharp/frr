@@ -110,6 +110,9 @@ static inline int is_route_parent_evpn(struct bgp_path_info *ri)
 	return 0;
 }
 
+#define IS_PATH_IMPORTED_FROM_EVPN_TABLE(pi)                                   \
+	(pi->sub_type == BGP_ROUTE_IMPORTED && is_route_parent_evpn(pi))
+
 /* Flag if the route path's family is EVPN. */
 static inline bool is_pi_family_evpn(struct bgp_path_info *pi)
 {

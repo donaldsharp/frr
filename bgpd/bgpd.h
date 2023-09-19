@@ -326,6 +326,14 @@ enum bgp_instance_type {
 	   (!bgp->gr_info[afi][safi].af_enabled &&                             \
 	    !bgp_in_graceful_restart()))))
 
+/*
+ * Checks is tier1 or tier2 GR select deferral timer is
+ * running for given afi safi in given BGP instance
+ */
+#define BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(bgp, afi, safi)                \
+	(bgp->gr_info[afi][safi].t_select_deferral ||                          \
+	 bgp->gr_info[afi][safi].t_select_deferral_tier2)
+
 /* BGP GR Global ds */
 
 #define BGP_GLOBAL_GR_MODE 4
