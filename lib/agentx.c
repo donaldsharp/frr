@@ -22,6 +22,7 @@
 #include "hook.h"
 #include "libfrr.h"
 #include "xref.h"
+#include "frrevent.h"
 
 XREF_SETUP();
 
@@ -248,6 +249,19 @@ bool smux_enabled(void)
 	return agentx_enabled;
 }
 
+static int snmp_setup_session_cb(int majorID, int minorID, void *serverarg, void *clientarg)
+{
+	netsnmp_session *sess = serverarg;
+	if (serverarg == NULL)
+		return 0;
+	/* Because ping are done synchronously, we do everything to
+	   avoid to block too long. Better disconnect from the master
+	   agent than waiting for him... */
+	sess->timeout = ONE_SEC / 3;
+	sess->retries = 0;
+	return 0;
+}
+
 void smux_init(struct event_loop *tm)
 {
 	agentx_tm = tm;
@@ -257,6 +271,10 @@ void smux_init(struct event_loop *tm)
 	snmp_enable_calllog();
 	snmp_register_callback(SNMP_CALLBACK_LIBRARY, SNMP_CALLBACK_LOGGING,
 			       agentx_log_callback, NULL);
+	/* We also register a callback to modify default timeout and
+	   retries value. */
+	snmp_register_callback(SNMP_CALLBACK_LIBRARY, SNMP_CALLBACK_SESSION_INIT,
+			       snmp_setup_session_cb, NULL);
 	init_agent(FRR_SMUX_NAME);
 
 	install_node(&agentx_node);
