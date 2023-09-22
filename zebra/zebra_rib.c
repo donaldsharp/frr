@@ -2241,6 +2241,11 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 							rn);
 					listnode_delete(re->nhe->rejected_rn,
 							rn);
+					if (list_isempty(
+						    re->nhe->rejected_rn)) {
+						list_delete(
+							&re->nhe->rejected_rn);
+					}
 				}
 			}
 			/*

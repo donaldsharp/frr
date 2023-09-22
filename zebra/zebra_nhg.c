@@ -3220,8 +3220,8 @@ void zebra_nhg_dplane_result(struct zebra_dplane_ctx *ctx)
 			 * installation fails due to which routes remain in
 			 * rejected state. NHE holds a cache of such rejected
 			 * routes which needs to be walked on successful NH
-			 * installtion and re-installed
-			 */
+			 * installation and re-installed */
+
 			if (nhe->rejected_rn &&
 			    !list_isempty(nhe->rejected_rn)) {
 				struct listnode *node;
@@ -3236,8 +3236,8 @@ void zebra_nhg_dplane_result(struct zebra_dplane_ctx *ctx)
 					RNODE_FOREACH_RE (rn, re)
 						rib_install_kernel(rn, re, re,
 								   false);
-					listnode_delete(nhe->rejected_rn, rn);
 				}
+				list_delete(&nhe->rejected_rn);
 			}
 			/* If daemon nhg, send it an update */
 			if (PROTO_OWNED(nhe))
