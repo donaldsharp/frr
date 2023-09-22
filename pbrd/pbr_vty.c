@@ -327,6 +327,7 @@ DEFPY(pbr_map_match_dscp, pbr_map_match_dscp_cmd,
 	}
 
 	if (!no) {
+		SET_FLAG(pbrms->match_flags, PBR_MATCH_DSCP);
 		if (((pbrms->dsfield & PBR_DSFIELD_DSCP) >> 2) == rawDscp)
 			return CMD_SUCCESS;
 
@@ -335,6 +336,7 @@ DEFPY(pbr_map_match_dscp, pbr_map_match_dscp_cmd,
 			(pbrms->dsfield & ~PBR_DSFIELD_DSCP) | (rawDscp << 2);
 	} else {
 		pbrms->dsfield &= ~PBR_DSFIELD_DSCP;
+		UNSET_FLAG(pbrms->match_flags, PBR_MATCH_DSCP);
 	}
 
 	pbr_map_check(pbrms, true);
@@ -355,12 +357,14 @@ DEFPY(pbr_map_match_ecn, pbr_map_match_ecn_cmd,
 		return CMD_WARNING_CONFIG_FAILED;
 
 	if (!no) {
+		SET_FLAG(pbrms->match_flags, PBR_MATCH_ECN);
 		if ((pbrms->dsfield & PBR_DSFIELD_ECN) == ecn)
 			return CMD_SUCCESS;
 
 		/* Set the ECN bits of the DSField */
 		pbrms->dsfield = (pbrms->dsfield & ~PBR_DSFIELD_ECN) | ecn;
 	} else {
+		UNSET_FLAG(pbrms->match_flags, PBR_MATCH_ECN);
 		pbrms->dsfield &= ~PBR_DSFIELD_ECN;
 	}
 
@@ -1308,10 +1312,13 @@ static int pbr_vty_map_config_write_sequence(struct vty *vty,
 	 *  bits, allowing for four ECN codepoints from '00' to '11'. DSCP/ECN
 	 * with a value of 0 should be treated like any other value and its
 	 * valid. This also applies to  the 6 bits of DSCP in the IP header.*/
-	vty_out(vty, " match dscp %u\n",
-		(pbrms->dsfield & PBR_DSFIELD_DSCP) >> 2);
+	if (CHECK_FLAG(pbrms->match_flags, PBR_MATCH_DSCP))
+		vty_out(vty, " match dscp %u\n",
+			(pbrms->dsfield & PBR_DSFIELD_DSCP) >> 2);
 
-	vty_out(vty, " match ecn %u\n", pbrms->dsfield & PBR_DSFIELD_ECN);
+	if (CHECK_FLAG(pbrms->match_flags, PBR_MATCH_ECN))
+		vty_out(vty, " match ecn %u\n",
+			pbrms->dsfield & PBR_DSFIELD_ECN);
 
 	if (pbrms->mark)
 		vty_out(vty, " match mark %u\n", pbrms->mark);
