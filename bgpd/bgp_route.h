@@ -884,4 +884,5 @@ extern void subgroup_announce_reset_nhop(uint8_t family, struct attr *attr);
 const char *
 bgp_path_selection_reason2str(enum bgp_path_selection_reason reason);
 extern bool bgp_addpath_encode_rx(struct peer *peer, afi_t afi, safi_t safi);
+extern bool bgp_path_suppressed(struct bgp_path_info *pi);
 #endif /* _QUAGGA_BGP_ROUTE_H */
