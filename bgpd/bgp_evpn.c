@@ -343,9 +343,12 @@ bool is_route_injectable_into_evpn(struct bgp_path_info *pi)
 	struct bgp_table *table;
 	struct bgp_dest *dest;
 
-	/* do not import aggr suppressed routes */
-	if (bgp_path_suppressed(pi))
+	/* Do not import aggr suppressed routes */
+	if (bgp_path_suppressed(pi)) {
+		frrtrace(2, frr_bgp, evpn_ignore_suppress_route, pi->net,
+			 pi->peer);
 		return false;
+	}
 
 	if (pi->sub_type != BGP_ROUTE_IMPORTED || !pi->extra ||
 	    !pi->extra->parent)
