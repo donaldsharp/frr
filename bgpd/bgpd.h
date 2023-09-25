@@ -2435,6 +2435,7 @@ extern void bgp_process_fast_down(bool upgrade);
 int bgp_global_gr_init(struct bgp *bgp);
 int bgp_peer_gr_init(struct peer *peer);
 
+static inline bool bgp_gr_supported_for_afi_safi(afi_t afi, safi_t safi);
 
 #define BGP_GR_ROUTER_DETECT_AND_SEND_CAPABILITY_TO_ZEBRA(_bgp, _peer_list)    \
 	do {                                                                   \
@@ -2675,6 +2676,7 @@ static inline bool bgp_is_graceful_restart_complete(void)
 		return true;
 	return false;
 }
+
 static inline void bgp_update_gr_completion(void)
 {
 	struct listnode *node, *nnode;

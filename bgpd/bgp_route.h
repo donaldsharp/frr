@@ -886,4 +886,6 @@ bgp_path_selection_reason2str(enum bgp_path_selection_reason reason);
 extern bool bgp_addpath_encode_rx(struct peer *peer, afi_t afi, safi_t safi);
 extern bool bgp_path_suppressed(struct bgp_path_info *pi);
 extern int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete);
+extern void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest,
+				 afi_t afi, safi_t safi);
 #endif /* _QUAGGA_BGP_ROUTE_H */
