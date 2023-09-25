@@ -943,4 +943,5 @@ extern int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 	bgp_path_info_add_with_caller(__func__, (A), (B))
 #define bgp_path_info_free(B) bgp_path_info_free_with_caller(__func__, (B))
 extern int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete);
+extern void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, safi_t safi);
 #endif /* _QUAGGA_BGP_ROUTE_H */
