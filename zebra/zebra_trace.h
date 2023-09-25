@@ -1011,6 +1011,166 @@ TRACEPOINT_EVENT(
 	)
 
 TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_remote_vtep_add, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_nhg_install_kernel,
+    TP_ARGS(
+        int, nhe),
+    TP_FIELDS(
+        ctf_integer(int, nexthop_id, nhe)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_install_kernel, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_nhg_uninstall_kernel_rejlist_del,
+    TP_ARGS(
+        int, nhe),
+    TP_FIELDS(
+        ctf_integer(int, nexthop_id, nhe)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_uninstall_kernel_rejlist_del, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_nhg_uninstall_kernel,
+    TP_ARGS(
+        int, nhe),
+    TP_FIELDS(
+        ctf_integer(int, nexthop_id, nhe)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_uninstall_kernel, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_nhg_dplane_result,
+    TP_ARGS(
+        struct zebra_dplane_ctx *, ctx,
+        const char *, op,
+        int, id,
+        const char *, status),
+    TP_FIELDS(
+        ctf_integer_hex(intptr_t, ctx, ctx)
+        ctf_string(op, op)
+        ctf_integer(int, nexthop_id, id)
+        ctf_string(status, status)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_dplane_result, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_interface_nhg_reinstall,
+    TP_ARGS(
+        const struct interface *, ifp),
+    TP_FIELDS(
+        ctf_string(ifp, ifp->name)
+        ctf_integer(unsigned int, ifindex, ifp->ifindex)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_interface_nhg_reinstall, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_nhg_id_counter_wrapped,
+    TP_ARGS(
+        int, id),
+    TP_FIELDS(
+        ctf_integer(int, counter_id, id)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_id_counter_wrapped, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_nhg_dep,
+    TP_ARGS(
+        int, nhe_id,
+        int, dep_id),
+    TP_FIELDS(
+        ctf_integer(int, nhe_id, nhe_id)
+        ctf_integer(int, dep_id, dep_id)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_dep, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_nhg_intf_lkup_failed,
+    TP_ARGS(
+        int, ifindex,
+        int, vrf_id,
+        struct nhg_hash_entry *, nhe),
+    TP_FIELDS(
+        ctf_integer(int, if_index, ifindex)
+        ctf_integer(int, vrf_id, vrf_id)
+        ctf_integer_hex(intptr_t, nhe_id, nhe->id)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_intf_lkup_failed, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    nhg_ctx_process_new_nhe,
+    TP_ARGS(
+        int, id),
+    TP_FIELDS(
+        ctf_integer(int, nhe_id, id)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, nhg_ctx_process_new_nhe, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_nhg_nhe2grp_internal_failure,
+    TP_ARGS(
+        int, id),
+    TP_FIELDS(
+        ctf_integer(int, depend_id, id)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_nhe2grp_internal_failure, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_nhg_free_nhe_refcount,
+    TP_ARGS(
+        int, id,
+        int, refcount),
+    TP_FIELDS(
+        ctf_integer_hex(intptr_t, nhe_id, id)
+        ctf_integer(int, ref_cnt, refcount)
+        )
+    )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_free_nhe_refcount, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    rib_process_subq_dequeue,
+    TP_ARGS(
+        int, qindex),
+    TP_FIELDS(
+        ctf_integer(int, qindex, qindex)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, rib_process_subq_dequeue, TRACE_INFO)
+
 /* clang-format on */
 #include <lttng/tracepoint-event.h>
 
