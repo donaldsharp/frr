@@ -2236,6 +2236,9 @@ static void bgp_update_receive_eor(struct bgp *bgp, struct peer *peer,
 					zlog_debug(
 						"%s: check for path-selection",
 						bgp->name_pretty);
+
+				frrtrace(4, frr_bgp, gr_eors, bgp->name_pretty, afi, safi, 6);
+
 				bgp_gr_check_path_select(bgp, afi, safi);
 			}
 		}
