@@ -3,8 +3,6 @@ etc/
 tools/etc/frr/frr.conf etc/frr/
 tools/frr-reload usr/lib/frr/
 tools/usr/share/cumulus/* usr/share/cumulus
-tools/cumulus-limits-override.conf etc/frr
-
 usr/bin/mtracebis
 usr/bin/vtysh
 usr/lib/*/frr/libfrr.*
