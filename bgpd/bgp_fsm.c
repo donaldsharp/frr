@@ -2635,6 +2635,7 @@ static int bgp_establish(struct peer *peer)
 	safi_t safi;
 	int ret = 0;
 	struct peer *other;
+	struct peer *orig = peer;
 
 	other = peer->doppelganger;
 	hash_release(peer->bgp->peerhash, peer);
@@ -2651,7 +2652,7 @@ static int bgp_establish(struct peer *peer)
 		 * connections are rejected, as that the peer is not found
 		 * when a lookup is done
 		 */
-		(void)hash_get(peer->bgp->peerhash, peer, hash_alloc_intern);
+		(void)hash_get(orig->bgp->peerhash, orig, hash_alloc_intern);
 		if (other)
 			(void)hash_get(other->bgp->peerhash, other,
 				       hash_alloc_intern);
