@@ -393,13 +393,6 @@ if test "$enable_address_sanitizer" = "yes"; then
     SAN_FLAGS="$SAN_FLAGS -fsanitize=address"
   ])
 fi
-if test "$enable_address_sanitizer" = "yes"; then
-  AC_C_FLAG([-fsanitize-recover=address], [
-    AC_MSG_ERROR([$CC does not support Recover Address Sanitizer.])
-  ], [
-    SAN_FLAGS="$SAN_FLAGS -fsanitize-recover=address"
-  ])
-fi
 if test "$enable_thread_sanitizer" = "yes"; then
   AC_C_FLAG([-fsanitize=thread], [
     AC_MSG_ERROR([$CC does not support Thread Sanitizer.])
