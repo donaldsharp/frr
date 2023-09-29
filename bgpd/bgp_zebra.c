@@ -1271,8 +1271,6 @@ static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
 					uint64_t tot_bw, uint32_t *nh_weight,
 					uint32_t base)
 {
-	uint64_t tmp;
-
 	/* zero link-bandwidth and link-bandwidth not present are treated
 	 * as the same situation.
 	 */
@@ -1283,12 +1281,8 @@ static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
 		if (bgp->lb_handling == BGP_LINK_BW_SKIP_MISSING)
 			return false;
 		*nh_weight = BGP_ZEBRA_DEFAULT_NHOP_WEIGHT;
-	} else {
-		tmp = (uint64_t)attr_bw * base;
-		*nh_weight = ((uint32_t)(tmp / tot_bw));
-		if (*nh_weight > 255)
-			*nh_weight = 255;
-	}
+	} else
+		*nh_weight = attr_bw;
 
 	return true;
 }
