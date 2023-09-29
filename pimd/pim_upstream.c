@@ -932,9 +932,15 @@ static struct pim_upstream *pim_upstream_new(struct pim_instance *pim,
 				false /*update_mroute*/);
 		pim_upstream_mroute_iif_update(up->channel_oil, __func__);
 
-		if (PIM_UPSTREAM_FLAG_TEST_SRC_NOCACHE(up->flags))
+		if (PIM_UPSTREAM_FLAG_TEST_SRC_NOCACHE(up->flags)) {
+			/*
+			 * Set the right RPF so that future changes will
+			 * be right
+			 */
+			rpf_result = pim_rpf_update(pim, up, NULL, __func__);
 			pim_upstream_keep_alive_timer_start(
 				up, pim->keep_alive_time);
+		}
 	} else if (!pim_addr_is_any(up->upstream_addr)) {
 		pim_upstream_update_use_rpt(up,
 				false /*update_mroute*/);
