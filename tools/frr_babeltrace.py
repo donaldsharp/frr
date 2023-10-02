@@ -20,6 +20,68 @@ import babeltrace
 import datetime
 
 ########################### common parsers - start ############################
+def location_if_add_del_upd(field_val):
+    if field_val == 0:
+        return ("Interface Delete")
+    elif field_val == 1:
+        return ("Interface Index Add")
+    elif field_val == 2:
+        return ("Interface Index is Shutdown. Wont Wake it up")
+
+def location_if_protodown(field_val):
+    if field_val == 1:
+        return ("Intf Update Protodown")
+    elif field_val == 2:
+        return ("Early return if already down & reason bitfield matches")
+    elif field_val == 3:
+        return ("Early return if already set queued to dplane & reason bitfield matches")
+    elif field_val == 4:
+        return ("Early return if already unset queued to dplane & reason bitfield matches")
+    elif field_val == 5:
+        return ("Intf protodown dplane change")
+    elif field_val == 6:
+        return ("Bond Mbr Protodown on Rcvd but already sent to dplane")
+    elif field_val == 7:
+        return ("Bond Mbr Protodown off  Rcvd but already sent to dplane")
+    elif field_val == 8:
+        return ("Bond Mbr reinstate protodown in the dplane")
+    elif field_val == 9:
+        return ("Intf Sweeping Protodown")
+
+def location_if_upd_ctx_dplane_res(field_val):
+    if field_val == 0:
+        return ("Zebra Inf Upd Success")
+    elif field_val == 1:
+        return ("Int Zebra INFO Ptr is NULL")
+    elif field_val == 2:
+        return ("Int Zebra Upd Failed")
+
+def location_if_vrf_change(field_val):
+    if field_val == 0:
+        return ("DPLANE_OP_INTF_DELETE")
+    elif field_val == 1:
+        return ("DPLANE_OP_INTF_UPDATE")
+
+def location_if_dplane_ifp_handling(field_val):
+    if field_val == 0:
+        return ("RTM_DELLINK")
+    elif field_val == 1:
+        return ("RTM_NEWLINK UPD: Intf has gone Down-1")
+    elif field_val == 2:
+        return ("RTM_NEWLINK UPD: Intf PTM up, Notifying clients")
+    elif field_val == 3:
+        return ("RTM_NEWLINK UPD: Intf Br changed MAC Addr")
+    elif field_val == 4:
+        return ("RTM_NEWLINK UPD: Intf has come Up")
+    elif field_val == 5:
+        return ("RTM_NEWLINK UPD: Intf has gone Down-2")
+
+def location_if_dplane_ifp_handling_new(field_val):
+    if field_val == 0:
+        return ("RTM_NEWLINK ADD")
+    elif field_val == 1:
+        return ("RTM_NEWLINK UPD")
+
 def print_prefix_addr(field_val):
     """
     pretty print "struct prefix"
@@ -466,6 +528,30 @@ def parse_frr_zebra_zebra_evpn_proc_remote_es(event):
 
     parse_event(event, field_parsers)
 
+def parse_frr_zebra_if_add_del_update(event):
+    field_parsers = {"location" : location_if_add_del_upd}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_if_protodown(event):
+    field_parsers = {"location" : location_if_protodown}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_if_upd_ctx_dplane_result(event):
+    field_parsers = {"location" : location_if_upd_ctx_dplane_res}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_if_vrf_change(event):
+    field_parsers = {"location" : location_if_vrf_change}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_if_dplane_ifp_handling(event):
+    field_parsers = {"location" : location_if_dplane_ifp_handling}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_if_dplane_ifp_handling_new(event):
+    field_parsers = {"location" : location_if_dplane_ifp_handling_new}
+    parse_event(event, field_parsers)
+
 ############################ evpn parsers - end *#############################
 
 def main():
@@ -538,6 +624,18 @@ def main():
                      parse_frr_zebra_evpn_dplane_remote_rmac_del,
                      "frr_zebra:zebra_evpn_proc_remote_es":
                      parse_frr_zebra_zebra_evpn_proc_remote_es,
+                     "frr_zebra:if_add_del_update":
+                     parse_frr_zebra_if_add_del_update,
+                     "frr_zebra:if_protodown":
+                     parse_frr_zebra_if_protodown,
+                     "frr_zebra:if_upd_ctx_dplane_result":
+                     parse_frr_zebra_if_upd_ctx_dplane_result,
+                     "frr_zebra:if_vrf_change":
+                     parse_frr_zebra_if_vrf_change,
+                     "frr_zebra:if_dplane_ifp_handling":
+                     parse_frr_zebra_if_dplane_ifp_handling,
+                     "frr_zebra:if_dplane_ifp_handling_new":
+                     parse_frr_zebra_if_dplane_ifp_handling_new,
 }
 
     # get the trace path from the first command line argument
