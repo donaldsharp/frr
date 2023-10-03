@@ -178,20 +178,220 @@ TRACEPOINT_EVENT(
 
 TRACEPOINT_LOGLEVEL(frr_zebra, zebra_ipmr_route_stats, TRACE_INFO)
 
+/*
+ * Loc 0 -> Interface Delete
+ * Loc 1 -> Interface Index Add
+ * Loc 2 -> Interface Index is Shutdown. Wont wake it up
+ */
 TRACEPOINT_EVENT(
 	frr_zebra,
-	if_add_update,
+	if_add_del_update,
 	TP_ARGS(
-		struct interface *, ifp),
+		struct interface *, ifp,
+        uint8_t, loc),
 	TP_FIELDS(
-		ctf_integer(unsigned int, ifindex, ifp->ifindex)
 		ctf_integer(unsigned int, vrfid, ifp->vrf->vrf_id)
-		ctf_string(ifp, ifp->name)
-		ctf_string(interface, "Interface Index added")
+		ctf_string(interface_name, ifp->name)
+		ctf_integer(ifindex_t, ifindex, ifp->ifindex)
+		ctf_integer(uint8_t, ifstatus, ifp->status)
+		ctf_integer(uint8_t, location, loc)
 		)
 	)
 
-TRACEPOINT_LOGLEVEL(frr_zebra, if_add_update, TRACE_INFO)
+TRACEPOINT_LOGLEVEL(frr_zebra, if_add_del_update, TRACE_INFO)
+
+/*
+ * Loc 1 -> Intf Update Protodown
+ * Loc 2 -> Early return if already down & reason bitfield matches
+ * Loc 3 -> Early return if already set queued to dplane & reason bitfield matches
+ * Loc 3 -> Early return if already unset queued to dplane & reason bitfield matches
+ * Loc 5 -> Intf protodown dplane change
+ * Loc 6 -> Bond Mbr Protodown on Rcvd but already sent to dplane
+ * Loc 7 -> Bond Mbr Protodown off  Rcvd but already sent to dplane
+ * Loc 8 -> Bond Mbr reinstate protodown in the dplane
+ * Loc 9 -> Intf Sweeping Protodown
+ */
+TRACEPOINT_EVENT(
+	frr_zebra,
+	if_protodown,
+	TP_ARGS(
+		struct interface *, ifp,
+        bool, new_down,
+        uint32_t, old_bitfield,
+        uint32_t, new_bitfield,
+        uint8_t, loc),
+	TP_FIELDS(
+		ctf_string(interface_name, ifp->name)
+		ctf_integer(ifindex_t, ifindex, ifp->ifindex)
+		ctf_integer(bool, protodown , new_down)
+		ctf_integer(uint32_t, old_bitfield, old_bitfield)
+		ctf_integer(uint32_t, new_bitfield, new_bitfield)
+		ctf_integer(uint8_t, location, loc)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_protodown, TRACE_INFO)
+
+/*
+ * Loc 0 -> Zebra Interface Upd Success
+ * Loc 1 -> Interface Zebra Info Ptr is NULL
+ * Loc 2 -> Interface Dplane Update Failed
+ */
+TRACEPOINT_EVENT(
+	frr_zebra,
+	if_upd_ctx_dplane_result,
+	TP_ARGS(
+		struct interface *, ifp,
+        bool, down,
+        bool, pd_reason_val,
+        const char*, oper,
+        uint8_t, loc),
+	TP_FIELDS(
+		ctf_string(oper, oper)
+		ctf_string(interface_name, ifp->name)
+		ctf_integer(ifindex_t, ifindex, ifp->ifindex)
+		ctf_integer(bool, down , down)
+		ctf_integer(bool, pd_reason_val , pd_reason_val)
+		ctf_integer(uint8_t, location, loc)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_upd_ctx, TRACE_INFO)
+
+/*
+ * Loc 0 -> DPLANE_OP_INTF_DELETE 
+ * Loc 1 -> DPLANE_OP_INTF_UPDATE
+ */
+TRACEPOINT_EVENT(
+	frr_zebra,
+	if_vrf_change,
+	TP_ARGS(
+        ifindex_t, ifindex,
+        const char*, name,
+        uint32_t, tableid,
+        uint8_t, loc),
+	TP_FIELDS(
+		ctf_integer(ifindex_t, ifindex, ifindex)
+		ctf_string(vrf_name, name)
+		ctf_integer(uint32_t, tableid, tableid)
+		ctf_integer(uint8_t, location, loc)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_vrf_change, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	if_br_vxlan_upd,
+	TP_ARGS(
+		struct interface *, ifp,
+        vlanid_t, vid),
+	TP_FIELDS(
+		ctf_string(interface_name, ifp->name)
+		ctf_integer(ifindex_t, ifindex, ifp->ifindex)
+		ctf_integer(vlanid_t, access_vlan_id, vid)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_br_vxlan_upd, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	if_dplane_result,
+	TP_ARGS(
+        struct zebra_dplane_ctx*, ctx,
+        const char*, oper,
+        const char*, dplane_result,
+        ns_id_t, ns_id,
+		struct interface *, ifp),
+	TP_FIELDS(
+		ctf_integer_hex(intptr_t, ctx, ctx)
+		ctf_string(oper, oper)
+		ctf_string(interface_name, ifp ? ifp->name : " ")
+		ctf_integer(ifindex_t, ifindex, ifp ? ifp->ifindex : -1)
+		ctf_string(dplane_result, dplane_result)
+		ctf_integer(ns_id_t, ns_id, ns_id)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_dplane_result, TRACE_INFO)
+
+
+/*
+ * Loc 0 -> RTM_DELLINK
+ * Loc 1 -> RTM_NEWLINK UPD: Intf has gone Down-1
+ * Loc 2 -> RTM_NEWLINK UPD: Intf PTM up, Notifying clients
+ * Loc 3 -> RTM_NEWLINK UPD: Intf Br changed MAC Addr
+ * Loc 4 -> RTM_NEWLINK UPD: Intf has come Up
+ * Loc 5 -> RTM_NEWLINK UPD: Intf has gone Down-2
+ */
+TRACEPOINT_EVENT(
+	frr_zebra,
+	if_dplane_ifp_handling,
+	TP_ARGS(
+        struct zebra_dplane_ctx*, ctx,
+		const char*, name,
+        ifindex_t, ifindex,
+        uint8_t, loc),
+	TP_FIELDS(
+		ctf_integer_hex(intptr_t, ctx, ctx)
+		ctf_string(interface_name, name)
+		ctf_integer(ifindex_t, ifindex, ifindex)
+		ctf_integer(uint8_t, location, loc)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_dplane_ifp_handling, TRACE_INFO)
+
+/*
+ * Loc 0 -> RTM_NEWLINK ADD
+ * Loc 1 -> RTM_NEWLINK UPD
+ */
+TRACEPOINT_EVENT(
+	frr_zebra,
+	if_dplane_ifp_handling_new,
+	TP_ARGS(
+        struct zebra_dplane_ctx*, ctx,
+		const char*, name,
+        ifindex_t, ifindex,
+        vrf_id_t, vrf_id,
+		enum zebra_iftype, zif_type,
+		enum zebra_slave_iftype, zif_slave_type,
+        ifindex_t, master_ifindex,
+        uint64_t, flags,
+        uint8_t, loc),
+	TP_FIELDS(
+		ctf_integer_hex(intptr_t, ctx, ctx)
+		ctf_string(interface_name, name)
+		ctf_integer(ifindex_t, ifindex, ifindex)
+		ctf_integer(vrf_id_t, vrf_id, vrf_id)
+		ctf_integer(uint16_t, zif_type, zif_type)
+		ctf_integer(uint16_t, zif_slave_type, zif_slave_type )
+		ctf_integer(ifindex_t, master_ifindex, master_ifindex)
+		ctf_integer(uint64_t, flags, flags)
+		ctf_integer(uint8_t, location, loc)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_dplane_ifp_handling_new, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	if_dplane_ifp_handling_vrf_change,
+	TP_ARGS(
+		const char*, name,
+        ifindex_t, ifindex,
+        vrf_id_t, old_vrf_id,
+        vrf_id_t, vrf_id),
+	TP_FIELDS(
+		ctf_string(interface_name, name)
+		ctf_integer(ifindex_t, ifindex, ifindex)
+		ctf_integer(vrf_id_t, old_vrf_id, old_vrf_id)
+		ctf_integer(vrf_id_t, vrf_id, vrf_id)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_dplane_ifp_handling_vrf_change, TRACE_INFO)
 
 TRACEPOINT_EVENT(
 	frr_zebra,
