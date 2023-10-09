@@ -236,8 +236,10 @@ static struct thread *vtysh_rl_read_thread;
 
 static void vtysh_rl_read(struct thread *thread)
 {
-	thread_add_read(master, vtysh_rl_read, NULL, STDIN_FILENO,
-			&vtysh_rl_read_thread);
+	bool *suppress_warnings = THREAD_ARG(thread);
+
+	thread_add_read(master, vtysh_rl_read, suppress_warnings, STDIN_FILENO,
+		       &vtysh_rl_read_thread);
 	rl_callback_read_char();
 }
 
@@ -245,11 +247,12 @@ static void vtysh_rl_read(struct thread *thread)
 static void vtysh_rl_run(void)
 {
 	struct thread thread;
+	bool suppress_warnings = true;
 
 	master = thread_master_create(NULL);
 
 	rl_callback_handler_install(vtysh_prompt(), vtysh_rl_callback);
-	thread_add_read(master, vtysh_rl_read, NULL, STDIN_FILENO,
+	thread_add_read(master, vtysh_rl_read, &suppress_warnings, STDIN_FILENO,
 			&vtysh_rl_read_thread);
 
 	while (!vtysh_loop_exited && thread_fetch(master, &thread))
