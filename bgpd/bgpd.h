@@ -322,7 +322,9 @@ enum bgp_instance_type {
 	(!CHECK_FLAG(bgp->flags, BGP_FLAG_GR_DISABLE_EOR) &&                   \
 	 (!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) ||                  \
 	  ((!bgp->gr_multihop_peer_exists && !bgp_in_graceful_restart()) ||    \
-	   BGP_GR_MULTIHOP_SELECT_DEFER_DONE(bgp, afi, safi))))
+	   BGP_GR_MULTIHOP_SELECT_DEFER_DONE(bgp, afi, safi) ||                \
+	   (!bgp->gr_info[afi][safi].af_enabled &&                             \
+	    !bgp_in_graceful_restart()))))
 
 /* BGP GR Global ds */
 

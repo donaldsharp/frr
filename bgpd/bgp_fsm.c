@@ -1632,34 +1632,9 @@ static void bgp_gr_evaluate_mix_peer_type(struct bgp *bgp)
 				if (PEER_IS_MULTIHOP(peer) &&
 				    peer->afc[afi][safi]) {
 					bgp->gr_multihop_peer_exists = true;
-					break;
+					return;
 				}
 			}
-			if (bgp->gr_multihop_peer_exists)
-				break;
-		}
-		if (bgp->gr_multihop_peer_exists)
-			break;
-	}
-
-	if (!bgp->gr_multihop_peer_exists)
-		return;
-
-	/*
-	 * start the GR deferral timer for all GR supported afi-safis
-	 * if multihop peer is present
-	 */
-	for (afi = AFI_IP; afi < AFI_MAX; afi++) {
-		for (safi = SAFI_UNICAST; safi <= SAFI_MPLS_VPN; safi++) {
-			struct graceful_restart_info *gr_info = NULL;
-
-			if (!bgp_gr_supported_for_afi_safi(afi, safi))
-				continue;
-
-			gr_info = &(bgp->gr_info[afi][safi]);
-			if (!gr_info->t_select_deferral)
-				bgp_start_deferral_timer(bgp, afi, safi,
-							 gr_info);
 		}
 	}
 }
@@ -1708,6 +1683,25 @@ static void bgp_start_deferral_timer(struct bgp *bgp, afi_t afi, safi_t safi,
 
 	frrtrace(5, frr_bgp, gr_deferral_timer_start, bgp->name_pretty, afi,
 		 safi, bgp->select_defer_time, 1);
+}
+
+/*
+ * start the GR deferral timer for all GR supported afi-safis
+ */
+void bgp_gr_start_all_deferral_timers(struct bgp *bgp)
+{
+	struct graceful_restart_info *gr_info;
+	afi_t afi;
+	safi_t safi;
+
+	FOREACH_AFI_SAFI_NSF (afi, safi) {
+		if (!bgp_gr_supported_for_afi_safi(afi, safi))
+			continue;
+
+		gr_info = &(bgp->gr_info[afi][safi]);
+		if (!gr_info->t_select_deferral)
+			bgp_start_deferral_timer(bgp, afi, safi, gr_info);
+	}
 }
 
 static void bgp_gr_process_peer_up_ignore(struct bgp *bgp, struct peer *peer)
@@ -1845,6 +1839,14 @@ static bool gr_path_select_deferral_applicable(struct bgp *bgp)
 		for (safi = SAFI_UNICAST; safi <= SAFI_MPLS_VPN; safi++) {
 			if (!bgp_gr_supported_for_afi_safi(afi, safi))
 				continue;
+			/*
+			 * If GR is not enabled for this VRF,
+			 * select-deferral-timer will not be started for any of
+			 * the GR supported AFI-SAFIs. In that case, continue
+			 */
+			if (!bgp->gr_info[afi][safi].af_enabled)
+				continue;
+
 
 			if (!BGP_GR_SELECT_DEFER_DONE(bgp, afi, safi))
 				return true;
