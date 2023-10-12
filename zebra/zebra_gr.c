@@ -197,7 +197,8 @@ int32_t zebra_gr_client_disconnect(struct zserv *client)
 /*
  * Function to delete stale client
  */
-static void zebra_gr_delete_stale_client(struct client_gr_info *info)
+static struct client_gr_info *
+zebra_gr_delete_stale_client(struct client_gr_info *info)
 {
 	struct client_gr_info *bgp_info;
 	struct zserv *s_client = NULL;
@@ -206,7 +207,7 @@ static void zebra_gr_delete_stale_client(struct client_gr_info *info)
 	s_client = info->stale_client_ptr;
 
 	if (!s_client || !info->stale_client)
-		return;
+		return info;
 
 	/*
 	 * If there are bgp instances with the stale delete timer pending
@@ -223,7 +224,7 @@ static void zebra_gr_delete_stale_client(struct client_gr_info *info)
 
 	TAILQ_FOREACH (bgp_info, &s_client->gr_info_queue, gr_info) {
 		if (bgp_info->t_stale_removal != NULL)
-			return;
+			return info;
 	}
 
 	LOG_GR("%s: Client %s vrf %s(%u) is being deleted", __func__,
@@ -235,6 +236,7 @@ static void zebra_gr_delete_stale_client(struct client_gr_info *info)
 	if (info->stale_client)
 		XFREE(MTYPE_TMP, s_client);
 	XFREE(MTYPE_TMP, info);
+	return NULL;
 }
 
 /*
@@ -557,7 +559,7 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread)
 		       __func__, zebra_route_string(client->proto),
 		       VRF_LOGNAME(vrf), info->vrf_id);
 
-		zebra_gr_delete_stale_client(info);
+		info = zebra_gr_delete_stale_client(info);
 	}
 
 	/*
@@ -568,8 +570,14 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread)
 	 * scenario, we will endup in this function. So now we have 3 GR enabled
 	 * BGP VRFs and since all of them have completed GR, zebra can declare
 	 * GR complete. So check if zebra can declare GR complete.
+	 *
+	 * zebra_gr_delete_stale_client() can free up the info thereby making
+	 * the client an invalid ptr. So invoke the below only if there are some
+	 * valid clients i.e. info is not freed.
 	 */
-	zebra_gr_complete_check(client);
+
+	if (info)
+		zebra_gr_complete_check(client);
 }
 
 /*
