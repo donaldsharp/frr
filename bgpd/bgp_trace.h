@@ -738,6 +738,18 @@ TRACEPOINT_EVENT(
 	)
 )
 TRACEPOINT_LOGLEVEL(frr_bgp, gr_zebra_update, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_bgp,
+	evpn_ignore_suppress_route,
+	TP_ARGS(struct bgp_dest *, dest, struct peer *, peer),
+	TP_FIELDS(
+		ctf_string(prefix, bgp_dest_get_prefix_str(dest))
+		ctf_string(peer, PEER_HOSTNAME(peer))
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, evpn_ignore_suppress_route, TRACE_INFO)
+
 /* clang-format on */
 
 #include <lttng/tracepoint-event.h>
