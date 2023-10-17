@@ -299,7 +299,8 @@ static int bgp_vrf_enable(struct vrf *vrf)
 	int ret = BGP_GR_FAILURE;
 
 	if (BGP_DEBUG(zebra, ZEBRA))
-		zlog_debug("VRF enable add %s id %u", vrf->name, vrf->vrf_id);
+		zlog_debug("VRF enable add %s id %u ret %u",
+			   vrf->name, vrf->vrf_id, ret);
 
 	bgp = bgp_lookup_by_name(vrf->name);
 	if (bgp && bgp->vrf_id != vrf->vrf_id) {
