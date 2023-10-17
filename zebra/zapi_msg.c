@@ -1772,6 +1772,18 @@ static bool zapi_read_nexthops(struct zserv *client, struct prefix *p,
 	for (i = 0; i < nexthop_num; i++) {
 		znh = &nhops[i];
 
+		/*
+		 * Find the maximum weight.  If
+		 * the current max_weight is less
+		 * then the nexthops weight then
+		 * we should use the new higher weight.
+		 * When we are looking at the first nexthop
+		 * and the weight for the nexthop is
+		 * not 1 then we should note that the
+		 * same_weight is going to be true
+		 * This will allow us to actually
+		 * do the conversion
+		 */
 		if (max_weight < znh->weight) {
 			if (i != 0 || znh->weight != 1)
 				same_weight = false;
