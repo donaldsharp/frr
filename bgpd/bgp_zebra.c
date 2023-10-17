@@ -1268,8 +1268,7 @@ static bool update_ipv6nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 }
 
 static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
-					uint32_t *nh_weight,
-					uint32_t base)
+					uint32_t *nh_weight)
 {
 	/* zero link-bandwidth and link-bandwidth not present are treated
 	 * as the same situation.
@@ -1295,8 +1294,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	struct zapi_nexthop *api_nh;
 	int nh_family;
 	unsigned int valid_nh_count = 0;
-	uint32_t max_mpath = 0;
-	uint32_t wecmp_base = 0;
 	bool allow_recursion = false;
 	uint8_t distance;
 	struct peer *peer;
@@ -1406,19 +1403,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		mpinfo = info;
 	}
 
-	if (mpinfo)
-		max_mpath = MIN(bgp_path_info_mpath_count(mpinfo) + 1,
-				multipath_num);
-	if (max_mpath && do_wt_ecmp) {
-		wecmp_base = MAX(max_mpath * max_mpath, 100);
-		if (bgp_debug_zebra(&api.prefix)) {
-			zlog_debug(
-				"WECMP - For %pFX max_mpath %d cum_bw %" PRIu64
-				"base %u",
-				p, max_mpath, cum_bw, wecmp_base);
-		}
-	}
-
 	for (; mpinfo; mpinfo = bgp_path_info_mpath_next(mpinfo)) {
 		uint32_t nh_weight;
 		bool is_evpn;
@@ -1446,15 +1430,9 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		 * in some situations.
 		 */
 		if (do_wt_ecmp) {
-			if (!bgp_zebra_use_nhop_weighted(bgp,
-				mpinfo->attr->link_bw, &nh_weight,
-				wecmp_base))
+			if (!bgp_zebra_use_nhop_weighted(
+				    bgp, mpinfo->attr->link_bw, &nh_weight))
 				continue;
-			if (bgp_debug_zebra(&api.prefix)) {
-				zlog_debug("%pFX nh#%d path_bw %u weight %d", p,
-					   valid_nh_count + 1,
-					   mpinfo->attr->link_bw, nh_weight);
-			}
 		}
 		api_nh = &api.nexthops[valid_nh_count];
 
@@ -1715,13 +1693,13 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 					 prefix_mac2str(&api_nh->rmac,
 							buf1, sizeof(buf1)));
 #endif
+			if (has_valid_label)
+				snprintf(label_buf, sizeof(label_buf),
+					 "label %u", api_nh->labels[0]);
 			zlog_debug("  nhop [%d]: %s if %u VRF %u wt %u %s %s",
 				   i + 1, nh_buf, api_nh->ifindex,
 				   api_nh->vrf_id, api_nh->weight,
 				   label_buf, segs_buf);
-			if (has_valid_label)
-				snprintf(label_buf, sizeof(label_buf),
-					"label %u", api_nh->labels[0]);
 		}
 
 		int recursion_flag = 0;
