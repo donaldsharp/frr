@@ -1140,23 +1140,41 @@ void pim_show_state(struct pim_instance *pim, struct vty *vty,
 				json_ifp_in = json_object_new_object();
 				json_object_object_add(json_source, in_ifname,
 						       json_ifp_in);
+				json_object_int_add(json_source, "Installed",
+						    c_oil->installed);
 				json_object_int_add(json_source, "installed",
 						    c_oil->installed);
 				json_object_boolean_add(json_source, "isRpt",
 							isRpt);
+				json_object_int_add(json_source, "RefCount",
+						    c_oil->oil_ref_count);
 				json_object_int_add(json_source, "refCount",
 						    c_oil->oil_ref_count);
+				json_object_int_add(json_source, "OilListSize",
+						    c_oil->oil_size);
 				json_object_int_add(json_source, "oilListSize",
 						    c_oil->oil_size);
 				json_object_int_add(
+					json_source, "OilRescan",
+					c_oil->oil_inherited_rescan);
+				json_object_int_add(
 					json_source, "oilRescan",
 					c_oil->oil_inherited_rescan);
+				json_object_int_add(json_source, "LastUsed",
+						    c_oil->cc.lastused);
 				json_object_int_add(json_source, "lastUsed",
 						    c_oil->cc.lastused);
+				json_object_int_add(json_source, "PacketCount",
+						    c_oil->cc.pktcnt);
 				json_object_int_add(json_source, "packetCount",
 						    c_oil->cc.pktcnt);
+				json_object_int_add(json_source, "ByteCount",
+						    c_oil->cc.bytecnt);
 				json_object_int_add(json_source, "byteCount",
 						    c_oil->cc.bytecnt);
+				json_object_int_add(json_source,
+						    "WrongInterface",
+						    c_oil->cc.wrong_if);
 				json_object_int_add(json_source,
 						    "wrongInterface",
 						    c_oil->cc.wrong_if);
