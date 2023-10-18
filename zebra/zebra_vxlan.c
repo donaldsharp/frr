@@ -1283,6 +1283,8 @@ static struct zebra_mac *zl3vni_rmac_add(struct zebra_l3vni *zl3vni,
 	SET_FLAG(zrmac->flags, ZEBRA_MAC_REMOTE);
 	SET_FLAG(zrmac->flags, ZEBRA_MAC_REMOTE_RMAC);
 
+	zrmac->gr_refresh_time = monotime_nano();
+
 	return zrmac;
 }
 
@@ -1456,6 +1458,8 @@ static int zl3vni_remote_rmac_add(struct zebra_l3vni *zl3vni,
 		/* install rmac in kernel */
 		zl3vni_rmac_install(zl3vni, zrmac);
 	} else {
+		zrmac->gr_refresh_time = monotime_nano();
+
 		/* Add to nh_list, use ipv6 still if mapped */
 		vtep = XCALLOC(MTYPE_EVPN_VTEP, sizeof(struct ipaddr));
 		memcpy(vtep, vtep_ip, sizeof(struct ipaddr));
