@@ -133,6 +133,9 @@ static struct zebra_vxlan_sg *zebra_vxlan_sg_do_ref(struct zebra_vrf *vrf,
 						    struct in_addr sip,
 						    struct in_addr mcast_grp);
 static void zebra_vxlan_cleanup_sg_table(struct zebra_vrf *zvrf);
+static void zl3vni_stale_remote_nh_read_add(struct zebra_l3vni *zl3vni,
+					    struct ipaddr *ip,
+					    struct ethaddr *macaddr);
 
 bool zebra_evpn_do_dup_addr_detect(struct zebra_vrf *zvrf)
 {
@@ -4177,8 +4180,13 @@ int zebra_vxlan_handle_kernel_neigh_update(struct interface *ifp,
 	 * next-hop
 	 */
 	zl3vni = zl3vni_from_svi(ifp, link_if);
-	if (zl3vni)
+	if (zl3vni) {
+		/* Restore remote nexthops if zebra started gracefully*/
+		if (zrouter.graceful_restart && is_ext)
+			zl3vni_stale_remote_nh_read_add(zl3vni, ip, macaddr);
+
 		return zl3vni_local_nh_add_update(zl3vni, ip, state);
+	}
 
 	/* We are only interested in neighbors on an SVI that resides on top
 	 * of a VxLAN bridge.
@@ -4212,7 +4220,8 @@ int zebra_vxlan_handle_kernel_neigh_update(struct interface *ifp,
 						     is_router, local_inactive,
 						     dp_static);
 
-	return zebra_evpn_remote_neigh_update(zevpn, ifp, ip, macaddr, state);
+	return zebra_evpn_remote_neigh_update(zevpn, ifp, ip, macaddr, state,
+					      is_router);
 }
 
 static int32_t
@@ -6420,6 +6429,33 @@ void zebra_vxlan_stale_remote_mac_add_l3vni(struct zebra_l3vni *zl3vni,
 
 	if (IS_ZEBRA_DEBUG_VXLAN)
 		zlog_debug(
-			"EVPN-GR: Added stale RMAC %pEA (%p) zl3vni %p,remote vtep %pI4 L3VNI %d",
+			"EVPN-GR: Added stale RMAC %pEA (%p) zl3vni %p, VTEP %pI4 L3VNI %d",
 			macaddr, zrmac, zl3vni, &vtep_ip, zl3vni->vni);
+}
+
+static void zl3vni_stale_remote_nh_read_add(struct zebra_l3vni *zl3vni,
+					    struct ipaddr *ip,
+					    struct ethaddr *macaddr)
+{
+#ifdef GNU_LINUX
+	struct zebra_neigh *n = NULL;
+
+	/* Return if the NH exists */
+	if (zl3vni_nh_lookup(zl3vni, ip))
+		return;
+
+	/* Create remote NH */
+	n = zl3vni_nh_add(zl3vni, ip, macaddr);
+	if (!n) {
+		zlog_debug(
+			"EVPN-GR: Failed to add remote NH:IP %pIA MAC %pEA, L3VNI %u)",
+			ip, macaddr, zl3vni->vni);
+		return;
+	}
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug(
+			"EVPN-GR: Added stale remote NH entry: IP %pIA MAC %pEA, L3VNI %u",
+			ip, macaddr, zl3vni->vni);
+#endif
 }
