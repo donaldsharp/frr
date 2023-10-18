@@ -4904,6 +4904,7 @@ void rib_sweep_route(struct thread *t)
 
 	zebra_router_sweep_route();
 	zebra_router_sweep_nhgs();
+	zebra_evpn_stale_entries_cleanup(zrouter.startup_time);
 
 	/*
 	 * If none of the BGP peers are configured or are UP,

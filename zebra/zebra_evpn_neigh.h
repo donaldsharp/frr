@@ -147,6 +147,9 @@ struct neigh_walk_ctx {
 	uint32_t count;		  /* Used by VTY handlers */
 	uint8_t addr_width;       /* Used by VTY handlers */
 	struct json_object *json; /* Used for JSON Output */
+	bool gr_stale_cleanup;	  /* Used for cleaning up stale entries after GR
+				   */
+	uint64_t gr_cleanup_time;
 };
 
 /**************************** SYNC neigh handling **************************/
@@ -241,7 +244,8 @@ struct zebra_neigh *zebra_evpn_proc_sync_neigh_update(
 	const struct ipaddr *ipaddr, uint8_t flags, uint32_t seq,
 	const esi_t *esi, struct zebra_mac *mac);
 void zebra_evpn_neigh_del_all(struct zebra_evpn *zevpn, int uninstall,
-			      int upd_client, uint32_t flags);
+			      int upd_client, uint32_t flags,
+			      struct l2vni_walk_ctx *l2_wctx);
 struct zebra_neigh *zebra_evpn_neigh_lookup(struct zebra_evpn *zevpn,
 					    const struct ipaddr *ip);
 
