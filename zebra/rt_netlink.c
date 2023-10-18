@@ -3883,11 +3883,25 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	if (h->nlmsg_type == RTM_NEWNEIGH) {
                 /* Drop "permanent" entries. */
 		if (!vni_mcast_grp && (ndm->ndm_state & NUD_PERMANENT)) {
+			/*
+			 * If zebra started gracefully and if this is a HREP
+			 * entry, then restore it.
+			 */
+			if (zrouter.graceful_restart && is_zero_mac(&mac))
+				zebra_vxlan_stale_hrep_add(vtep_ip, vni);
+
 			if (IS_ZEBRA_DEBUG_KERNEL)
 				zlog_debug(
 					"        Dropping entry because of NUD_PERMANENT");
 			return 0;
 		}
+
+		/*
+		 * If zebra started gracefully and if this is a remote MAC/RMAC
+		 * entry, then restore it.
+		 */
+		if (zrouter.graceful_restart && CHECK_FLAG(ndm->ndm_flags, NTF_EXT_LEARNED))
+			zebra_vxlan_stale_remote_mac_add(&mac, vtep_ip, sticky, vni);
 
 		if (IS_ZEBRA_IF_VXLAN(ifp)) {
 			if (!dst_present)
