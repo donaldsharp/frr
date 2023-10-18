@@ -1345,6 +1345,7 @@ struct zebra_vtep *zebra_evpn_vtep_add(struct zebra_evpn *zevpn,
 
 	zvtep->vtep_ip = *vtep_ip;
 	zvtep->flood_control = flood_control;
+	zvtep->gr_refresh_time = monotime_nano();
 
 	if (zevpn->vteps)
 		zevpn->vteps->prev = zvtep;
@@ -1611,6 +1612,8 @@ void zebra_evpn_rem_macip_add(vni_t vni, const struct ethaddr *macaddr,
 			}
 
 			zebra_evpn_vtep_install(zevpn, zvtep);
+		} else {
+			zvtep->gr_refresh_time = monotime_nano();
 		}
 	}
 
