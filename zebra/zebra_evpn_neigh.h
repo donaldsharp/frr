@@ -115,9 +115,14 @@ struct zebra_neigh {
 	time_t dad_dup_detect_time;
 
 	time_t uptime;
-
 	/* used for ageing out the PEER_ACTIVE flag */
 	struct thread *hold_timer;
+
+	/*
+	 * Timestamp of when this entry was created/refreshed.
+	 * This field is used to do GR stale entry cleanup
+	 */
+	uint64_t gr_refresh_time;
 };
 
 /*
