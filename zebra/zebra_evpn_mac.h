@@ -286,6 +286,9 @@ int zebra_evpn_mac_add_local_mac(struct interface *br_if, vlanid_t vid,
 				 bool dp_static, void *arg);
 void zebra_evpn_mac_ifp_del(struct interface *ifp);
 void zebra_evpn_mac_clear_fwd_info(struct zebra_mac *zmac);
+extern void zebra_vxlan_stale_remote_mac_add(struct ethaddr *macaddr,
+					     struct in_addr vtep_ip,
+					     bool sticky, vni_t vni);
 
 extern void zebra_macfdb_dplane_result(struct zebra_dplane_ctx *ctx);
 
