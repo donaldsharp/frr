@@ -2016,6 +2016,8 @@ static void zebra_gr_reinstall_last_route(void)
 		"GR %s: All queued routes have been processed. Total queued %u, total processed %d",
 		__func__, z_gr_ctx.total_queued_rt,
 		z_gr_ctx.total_processed_rt);
+	frrtrace(2, frr_zebra, gr_ready_to_reinstall_last_route,
+		 z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
 
 	/* Reinstall the last route */
 	if (z_gr_ctx.rn && z_gr_ctx.re &&
@@ -2027,6 +2029,13 @@ static void zebra_gr_reinstall_last_route(void)
 		route_lock_node(z_gr_ctx.rn);
 		rib_install_kernel(z_gr_ctx.rn, z_gr_ctx.re, NULL, true);
 		route_unlock_node(z_gr_ctx.rn);
+
+		char trace_pfx_buf[PREFIX_STRLEN];
+
+		prefix2str(&z_gr_ctx.rn->p, trace_pfx_buf,
+			   sizeof(trace_pfx_buf));
+		frrtrace(2, frr_zebra, gr_reinstalled_last_route,
+			 vrf_id_to_name(z_gr_ctx.re->vrf_id), trace_pfx_buf);
 	} else {
 		zlog_info("GR %s Last route not found. rn %p, re %p", __func__,
 			  z_gr_ctx.rn, z_gr_ctx.re);
@@ -2036,6 +2045,9 @@ static void zebra_gr_reinstall_last_route(void)
 		"GR %s: IPv4 total route count: %u IPv6 total route count: %u",
 		__func__, z_gr_ctx.af_installed_count[AFI_IP],
 		z_gr_ctx.af_installed_count[AFI_IP6]);
+	frrtrace(2, frr_zebra, gr_complete_route_count,
+		 z_gr_ctx.af_installed_count[AFI_IP],
+		 z_gr_ctx.af_installed_count[AFI_IP6]);
 
 	frr_csm_send_network_layer_info(z_gr_ctx.af_installed_count[AFI_IP],
 					z_gr_ctx.af_installed_count[AFI_IP6]);

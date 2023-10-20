@@ -45,7 +45,7 @@
 #include "zebra/zebra_router.h"
 #include "zebra/debug.h"
 #include "zebra/zapi_msg.h"
-
+#include "zebra/zebra_trace.h"
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 #include "zebra/zebra_csm.h"
 #endif
@@ -374,6 +374,9 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 		       __func__, zebra_route_string(client->proto),
 		       client->gr_instance_count);
 
+		frrtrace(3, frr_zebra, gr_client_capability, api.cap,
+			 api.vrf_id, client->gr_instance_count);
+
 		if ((info->gr_enable) && (client->gr_instance_count > 0))
 			client->gr_instance_count--;
 
@@ -408,6 +411,9 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 			       VRF_LOGNAME(vrf), api.vrf_id,
 			       client->gr_instance_count);
 
+			frrtrace(3, frr_zebra, gr_client_capability, api.cap,
+				 api.vrf_id, client->gr_instance_count);
+
 			info->capabilities = api.cap;
 			info->stale_removal_time = api.stale_removal_time;
 			info->vrf_id = api.vrf_id;
@@ -426,6 +432,9 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 			       info->stale_removal_time,
 			       api.stale_removal_time);
 
+			frrtrace(3, frr_zebra, gr_client_stale_time, api.cap,
+				 api.vrf_id, api.stale_removal_time);
+
 			info->stale_removal_time = api.stale_removal_time;
 		}
 
@@ -441,6 +450,10 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 		LOG_GR("GR %s: Client %s vrf %s(%u) route update complete for AFI %d, SAFI %d",
 		       __func__, zebra_route_string(client->proto),
 		       VRF_LOGNAME(vrf), info->vrf_id, api.afi, api.safi);
+
+		frrtrace(4, frr_zebra, gr_client_update, api.cap, info->vrf_id,
+			 api.afi, api.safi);
+
 		info->route_sync[api.afi] = true;
 
 		restart_time = client->restart_time;
@@ -462,6 +475,9 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 			       __func__, zebra_route_string(client->proto),
 			       VRF_LOGNAME(vrf), info->vrf_id, api.afi,
 			       api.safi);
+
+			frrtrace(4, frr_zebra, gr_client_update, api.cap,
+				 info->vrf_id, api.afi, api.safi);
 
 			info->af_enabled[api.afi] = true;
 			info->route_sync_done = false;
@@ -503,6 +519,9 @@ static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
 				LOG_GR("GR %s: Not done for %s, route_sync %d",
 				       __func__, vrf_id_to_name(info->vrf_id),
 				       info->route_sync_done);
+				frrtrace(2, frr_zebra, gr_complete_check,
+					 vrf_id_to_name(info->vrf_id),
+					 info->route_sync_done);
 				return;
 			}
 		}
@@ -511,9 +530,10 @@ static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
 			zebra_evpn_stale_entries_cleanup(restart_time);
 
 		if (!zrouter.all_instances_gr_done) {
-			zlog_debug(
-				"GR %s: All instances GR done, triggering INIT_COMPLETE",
-				__func__);
+			LOG_GR("GR %s: All instances GR done, triggering INIT_COMPLETE",
+			       __func__);
+
+			frrtrace(1, frr_zebra, gr_complete, 1);
 			frr_csm_send_init_complete();
 			zrouter.all_instances_gr_done = true;
 			zrouter.gr_completion_time = monotime(NULL);
@@ -630,6 +650,9 @@ static void zebra_gr_delete_stale_route_table_afi(struct thread *event)
 
 	LOG_GR("%s: Deleting stale routes for %s, afi %d", __func__,
 	       zvrf->vrf->name, gac->afi);
+
+	frrtrace(2, frr_zebra, gr_delete_stale_route_table_afi, zvrf->vrf->name,
+		 gac->afi);
 
 	if (gac->afi == AFI_L2VPN)
 		goto complete;
@@ -773,6 +796,9 @@ static void zebra_gr_process_client_stale_routes(struct zserv *client,
 			LOG_GR("%s: Client %s vrf: %s(%u) route update not completed for AFI %d",
 			       __func__, zebra_route_string(client->proto),
 			       VRF_LOGNAME(vrf), info->vrf_id, afi);
+			frrtrace(4, frr_zebra, gr_process_client_stale_routes,
+				 zebra_route_string(client->proto),
+				 VRF_LOGNAME(vrf), afi, 1);
 			return;
 		}
 	}
@@ -789,6 +815,9 @@ static void zebra_gr_process_client_stale_routes(struct zserv *client,
 		LOG_GR("%s: Client %s vrf %s(%u) route update complete for all AFI/SAFI",
 		       __func__, zebra_route_string(client->proto),
 		       VRF_LOGNAME(vrf), info->vrf_id);
+		frrtrace(4, frr_zebra, gr_process_client_stale_routes,
+			 zebra_route_string(client->proto), VRF_LOGNAME(vrf),
+			 afi, 0);
 		THREAD_OFF(info->t_stale_removal);
 	}
 }
