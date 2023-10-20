@@ -2221,10 +2221,10 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 	     && /* CUMULUS ONLY */ !nexthop_group_has_label(
 		     dplane_ctx_get_ng(ctx)))
 	    || (fpm && force_nhg)) {
-		char buf[2];
+		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
 		uint32_t nhg_id;
+		struct nhg_hash_entry *nhe;
 
-		buf[0] = '\0';
 		nhg_id = dplane_ctx_get_nhe_id(ctx);
 
 		/* Kernel supports nexthop objects */
@@ -2255,6 +2255,9 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 					return 0;
 			}
 		}
+
+		nhe = zebra_nhg_lookup_id(nhg_id);
+		snprintfrr(buf, sizeof(buf), "%pNG", nhe);
 		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p,
 			 cmd, nhg_id, buf, datalen);
 
