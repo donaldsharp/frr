@@ -50,6 +50,17 @@
 #include "zebra/zebra_csm.h"
 #endif
 
+
+struct zebra_gr_afi_clean {
+	struct client_gr_info *info;
+	afi_t afi;
+	uint8_t proto;
+	uint8_t instance;
+	uint64_t restart_time;
+
+	struct thread *t_gac;
+};
+
 /*
  * Forward declaration.
  */
@@ -59,6 +70,10 @@ static int32_t zebra_gr_delete_stale_routes(struct client_gr_info *info);
 static void zebra_gr_process_client_stale_routes(struct zserv *client,
 						 struct client_gr_info *info);
 static void zebra_gr_delete_stale_route_table_afi(struct thread *event);
+static bool zebra_gr_unicast_stale_route_delete(struct route_table *table,
+						struct zebra_gr_afi_clean *gac,
+						bool no_max);
+
 /*
  * Debug macros.
  */
@@ -304,16 +319,6 @@ void zebra_gr_client_reconnect(struct zserv *client)
 	XFREE(MTYPE_TMP, old_client);
 }
 
-struct zebra_gr_afi_clean {
-	struct client_gr_info *info;
-	afi_t afi;
-	uint8_t proto;
-	uint8_t instance;
-	uint64_t restart_time;
-
-	struct thread *t_gac;
-};
-
 /*
  * Functions to deal with capabilities
  */
@@ -505,8 +510,57 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 	}
 }
 
+/*
+ * Cleans up stale ipv4 and ipv6 unicast routes that
+ * were imported from default EVPN VRF into GR disabled
+ * destination VRF and installed in kernel in that
+ * destination VRF.
+ */
+static void zebra_gr_cleanup_of_non_gr_vrf(struct zebra_gr_afi_clean *gac)
+{
+	struct vrf *vrf;
+	struct zebra_vrf *zvrf;
+	struct route_table *table;
+	afi_t afi;
+
+	RB_FOREACH (vrf, vrf_id_head, &vrfs_by_id) {
+		zvrf = vrf->info;
+		if (!zvrf)
+			continue;
+
+		/*
+		 * Skip if this is default EVPN VRF
+		 */
+		if (zvrf == zebra_vrf_get_evpn())
+			continue;
+
+		/*
+		 * If GR is enabled for this VRF, then zebra
+		 * would have done the stale cleanup when BGP
+		 * indicated UPDATE_COMPLETE for this VRF for
+		 * all gr-enabled afi-safis. So skip such VRFs.
+		 */
+		if (zvrf->gr_enabled)
+			continue;
+
+		for (afi = AFI_IP; afi <= AFI_IP6; afi++) {
+			table = zvrf->table[afi][SAFI_UNICAST];
+			if (!table)
+				continue;
+
+			LOG_GR("EVPN-GR: Cleaning up imported stale afi:%d unicast routes in %s(%u)",
+			       afi, vrf->name, vrf->vrf_id);
+
+			/*
+			 * Cleanup stale unicast routes
+			 */
+			zebra_gr_unicast_stale_route_delete(table, gac, true);
+		}
+	}
+}
+
 static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
-				    uint64_t restart_time)
+				    struct zebra_gr_afi_clean *gac)
 {
 #if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 
@@ -526,8 +580,21 @@ static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
 			}
 		}
 
-		if (do_evpn_cleanup)
-			zebra_evpn_stale_entries_cleanup(restart_time);
+		if (do_evpn_cleanup && gac) {
+			/*
+			 * Before we cleanup l2vpn entries from kernel, we
+			 * need to cleanup stale ipv4 & ipv6 unicast routes that
+			 * were imported from default EVPN VRF into GR disabled
+			 * destination VRF and installed in kernel in that
+			 * destination VRF.
+			 */
+			zebra_gr_cleanup_of_non_gr_vrf(gac);
+
+			/*
+			 * Clean up evpn entries
+			 */
+			zebra_evpn_stale_entries_cleanup(gac->restart_time);
+		}
 
 		if (!zrouter.all_instances_gr_done) {
 			LOG_GR("GR %s: All instances GR done, triggering INIT_COMPLETE",
@@ -604,7 +671,7 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread)
 	 * valid clients i.e. info is not freed.
 	 */
 	if (info)
-		zebra_gr_complete_check(client, false, 0);
+		zebra_gr_complete_check(client, false, NULL);
 }
 
 /*
@@ -635,31 +702,13 @@ static bool zebra_gr_process_route_entry(struct route_node *rn,
 	return false;
 }
 
-static void zebra_gr_delete_stale_route_table_afi(struct thread *event)
+static bool zebra_gr_unicast_stale_route_delete(struct route_table *table,
+						struct zebra_gr_afi_clean *gac,
+						bool no_max)
 {
-	struct zebra_gr_afi_clean *gac = THREAD_ARG(event);
-	struct route_table *table;
 	struct route_node *rn;
 	struct route_entry *re, *next;
-	struct zebra_vrf *zvrf = zebra_vrf_lookup_by_id(gac->info->vrf_id);
-	int32_t n = 0;
-	struct zserv *client = zserv_find_client(gac->proto, gac->instance);
-
-	if (!zvrf)
-		goto done;
-
-	LOG_GR("%s: Deleting stale routes for %s, afi %d", __func__,
-	       zvrf->vrf->name, gac->afi);
-
-	frrtrace(2, frr_zebra, gr_delete_stale_route_table_afi, zvrf->vrf->name,
-		 gac->afi);
-
-	if (gac->afi == AFI_L2VPN)
-		goto complete;
-
-	table = zvrf->table[gac->afi][SAFI_UNICAST];
-	if (!table)
-		goto done;
+	uint32_t n = 0;
 
 	for (rn = route_top(table); rn; rn = srcdest_route_next(rn)) {
 		RNODE_FOREACH_RE_SAFE (rn, re, next) {
@@ -682,21 +731,50 @@ static void zebra_gr_delete_stale_route_table_afi(struct thread *event)
 			 * Store the current prefix and afi
 			 */
 			if ((n >= ZEBRA_MAX_STALE_ROUTE_COUNT) &&
-			    (gac->info->do_delete == false)) {
-				LOG_GR("%s: Stale routes deleted %d. Restarting timer.",
-				       __func__, n);
+			    (gac->info->do_delete == false) && !no_max) {
+				LOG_GR("GR: Stale routes deleted %d. Restarting timer.",
+				       n);
 				thread_add_timer(
 					zrouter.master,
 					zebra_gr_delete_stale_route_table_afi,
 					gac, ZEBRA_DEFAULT_STALE_UPDATE_DELAY,
 					&gac->t_gac);
-				return;
+				return true;
 			}
 		}
 	}
+	return false;
+}
+
+static void zebra_gr_delete_stale_route_table_afi(struct thread *event)
+{
+	struct zebra_gr_afi_clean *gac = THREAD_ARG(event);
+	struct route_table *table;
+	struct zebra_vrf *zvrf = zebra_vrf_lookup_by_id(gac->info->vrf_id);
+	struct zserv *client = zserv_find_client(gac->proto, gac->instance);
+
+	if (!zvrf)
+		goto done;
+
+	LOG_GR("GR: Deleting stale routes for %s, afi %d", zvrf->vrf->name,
+	       gac->afi);
+
+	frrtrace(2, frr_zebra, gr_delete_stale_route_table_afi, zvrf->vrf->name,
+		 gac->afi);
+
+	if (gac->afi == AFI_L2VPN)
+		goto complete;
+
+	table = zvrf->table[gac->afi][SAFI_UNICAST];
+	if (!table)
+		goto done;
+
+	/* Return if timer was restarted */
+	if (zebra_gr_unicast_stale_route_delete(table, gac, false))
+		return;
 
 complete:
-	zebra_gr_complete_check(client, true, gac->restart_time);
+	zebra_gr_complete_check(client, true, gac);
 
 done:
 	XFREE(MTYPE_TMP, gac);
