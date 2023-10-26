@@ -7159,6 +7159,14 @@ void bgp_evpn_cleanup(struct bgp *bgp)
 	hash_free(bgp->vnihash);
 	bgp->vnihash = NULL;
 
+	/*
+	 * All hash frees and marking pointer to NULL has to be done in the
+	 * respective cleanup functions. Hence moving this from
+	 * bgp_evpn_nh_finish
+	 */
+	hash_free(bgp->evpn_nh_table);
+	bgp->evpn_nh_table = NULL;
+
 	list_delete(&bgp->vrf_import_rtl);
 	list_delete(&bgp->vrf_export_rtl);
 	list_delete(&bgp->l2vnis);
