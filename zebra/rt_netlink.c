@@ -2390,7 +2390,8 @@ ssize_t netlink_route_multipath_msg_encode(int cmd, struct zebra_dplane_ctx *ctx
 					return 0;
 			}
 		}
-		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p, cmd, nhg_id, buf,
+
+		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p, cmd, nhg_id, "",
 			 datalen);
 
 		return NLMSG_ALIGN(req->n.nlmsg_len);
