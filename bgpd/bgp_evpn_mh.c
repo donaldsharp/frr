@@ -4620,8 +4620,6 @@ void bgp_evpn_nh_finish(struct bgp *bgp_vrf)
 		(void (*)(struct hash_bucket *, void *))bgp_evpn_nh_flush_cb,
 		NULL);
 	hash_clean(bgp_vrf->evpn_nh_table, (void (*)(void *))hash_evpn_nh_free);
-	hash_free(bgp_vrf->evpn_nh_table);
-	bgp_vrf->evpn_nh_table = NULL;
 }
 
 static void bgp_evpn_nh_update_ref_pi(struct bgp_evpn_nh *nh)
