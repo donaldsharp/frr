@@ -2221,9 +2221,7 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 	     && /* CUMULUS ONLY */ !nexthop_group_has_label(
 		     dplane_ctx_get_ng(ctx)))
 	    || (fpm && force_nhg)) {
-		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
 		uint32_t nhg_id;
-		struct nhg_hash_entry *nhe;
 
 		nhg_id = dplane_ctx_get_nhe_id(ctx);
 
@@ -2256,10 +2254,8 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 			}
 		}
 
-		nhe = zebra_nhg_lookup_id(nhg_id);
-		snprintfrr(buf, sizeof(buf), "%pNG", nhe);
 		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p,
-			 cmd, nhg_id, buf, datalen);
+			 cmd, nhg_id, "", datalen);
 
 		return NLMSG_ALIGN(req->n.nlmsg_len);
 	}
