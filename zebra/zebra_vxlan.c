@@ -4446,7 +4446,7 @@ static int zebra_vxlan_check_del_local_mac(struct interface *ifp,
 			macaddr, ifp->name, ifp->ifindex, vni, mac->flags);
 
 	/* Remove MAC from BGP. */
-	zebra_evpn_mac_send_del_to_client(zevpn->vni, macaddr, mac->flags,
+	zebra_evpn_mac_send_del_to_client(zevpn, macaddr, mac->flags,
 					  false /* force */);
 
 	/*
