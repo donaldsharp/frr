@@ -1247,9 +1247,8 @@ static void zebra_evpn_mac_del_hash_entry(struct hash_bucket *bucket, void *arg)
 
 	if (zebra_evpn_check_mac_del_from_db(wctx, mac)) {
 		if (wctx->upd_client && (mac->flags & ZEBRA_MAC_LOCAL)) {
-			zebra_evpn_mac_send_del_to_client(wctx->zevpn->vni,
-							  &mac->macaddr,
-							  mac->flags, false);
+			zebra_evpn_mac_send_del_to_client(wctx->zevpn, &mac->macaddr, mac->flags,
+							  false);
 		}
 		if (wctx->uninstall) {
 			if (zebra_evpn_mac_is_static(mac))
@@ -1342,10 +1341,11 @@ int zebra_evpn_mac_send_add_to_client(vni_t vni, const struct ethaddr *macaddr,
 /*
  * Inform BGP about local MAC deletion.
  */
-int zebra_evpn_mac_send_del_to_client(vni_t vni, const struct ethaddr *macaddr,
+int zebra_evpn_mac_send_del_to_client(struct zebra_evpn *zevpn, const struct ethaddr *macaddr,
 				      uint32_t flags, bool force)
 {
 	int state = ZEBRA_NEIGH_ACTIVE;
+	struct zebra_vrf *zvrf;
 
 	if (!force) {
 		if (CHECK_FLAG(flags, ZEBRA_MAC_LOCAL_INACTIVE)
@@ -1353,18 +1353,19 @@ int zebra_evpn_mac_send_del_to_client(vni_t vni, const struct ethaddr *macaddr,
 			/* the host was not advertised - nothing  to delete */
 			return 0;
 
-		/* MAC is LOCAL and DUP_DETECTED, this local mobility event
-		 * is not known to bgpd. Upon receiving local delete
-		 * ask bgp to reinstall the best route (remote entry).
-		 */
-		if (CHECK_FLAG(flags, ZEBRA_MAC_LOCAL) &&
-		    CHECK_FLAG(flags, ZEBRA_MAC_DUPLICATE))
+		/* Duplicate detect action is freeze enabled and
+		 * Local MAC is duplicate deteced, this local
+		 * mobility event is not known to bgpd.
+		 * Upon receiving local delete ask bgp to reinstall
+		 * the best route (remote entry).
+		*/
+		zvrf = zebra_vrf_lookup_by_id(zevpn->vrf_id);
+		if (zvrf && zvrf->dad_freeze && CHECK_FLAG(flags, ZEBRA_MAC_DUPLICATE))
 			state = ZEBRA_NEIGH_INACTIVE;
 	}
 
-	return zebra_evpn_macip_send_msg_to_client(
-		vni, macaddr, NULL, 0 /* flags */, 0 /* seq */, state, NULL,
-		ZEBRA_MACIP_DEL);
+	return zebra_evpn_macip_send_msg_to_client(zevpn->vni, macaddr, NULL, 0 /* flags */,
+						   0 /* seq */, state, NULL, ZEBRA_MACIP_DEL);
 }
 
 /*
@@ -1503,8 +1504,7 @@ void zebra_evpn_mac_send_add_del_to_client(struct zebra_mac *mac,
 						  &mac->macaddr, mac->flags,
 						  mac->loc_seq, mac->es);
 	else if (old_bgp_ready)
-		zebra_evpn_mac_send_del_to_client(mac->zevpn->vni,
-						  &mac->macaddr, mac->flags,
+		zebra_evpn_mac_send_del_to_client(mac->zevpn, &mac->macaddr, mac->flags,
 						  true /* force */);
 }
 
@@ -2163,8 +2163,7 @@ int zebra_evpn_mac_remote_macip_add(struct zebra_evpn *zevpn,
 			}
 
 			zebra_evpn_mac_clear_sync_info(mac);
-			zebra_evpn_mac_send_del_to_client(zevpn->vni, macaddr,
-							  mac->flags,
+			zebra_evpn_mac_send_del_to_client(zevpn, macaddr, mac->flags,
 							  false /* force */);
 		}
 
@@ -2518,7 +2517,7 @@ int zebra_evpn_del_local_mac(struct zebra_evpn *zevpn, struct zebra_mac *mac,
 	zebra_evpn_process_neigh_on_local_mac_del(zevpn, mac);
 
 	/* Remove MAC from BGP. */
-	zebra_evpn_mac_send_del_to_client(zevpn->vni, &mac->macaddr, mac->flags,
+	zebra_evpn_mac_send_del_to_client(zevpn, &mac->macaddr, mac->flags,
 					  clear_static /* force */);
 
 	zebra_evpn_es_mac_deref_entry(mac);
