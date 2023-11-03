@@ -902,6 +902,11 @@ int frr_csm_send_network_layer_info(void)
 			z_gr_ctx.hrep_cnt, z_gr_ctx.hrep_cnt);
 	}
 
+	frrtrace(2, frr_zebra, gr_complete_route_count,
+		 z_gr_ctx.af_installed_count[AFI_IP],
+		 z_gr_ctx.af_installed_count[AFI_IP6]);
+	frrtrace(3, frr_zebra, gr_complete_evpn_count, z_gr_ctx.rmac_cnt,
+		 z_gr_ctx.rneigh_cnt, z_gr_ctx.hrep_cnt);
 
 	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
 			    rsp);
