@@ -2012,8 +2012,7 @@ static void zebra_gr_reinstall_last_route(void)
 	frrtrace(2, frr_zebra, gr_complete_route_count, z_gr_ctx.af_installed_count[AFI_IP],
 		 z_gr_ctx.af_installed_count[AFI_IP6]);
 
-	frr_csm_send_network_layer_info(z_gr_ctx.af_installed_count[AFI_IP],
-					z_gr_ctx.af_installed_count[AFI_IP6]);
+	frr_csm_send_network_layer_info();
 
 	/* Reset the global pointers */
 	z_gr_ctx.rn = NULL;
