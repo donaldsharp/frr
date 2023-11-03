@@ -539,7 +539,7 @@ int main(int argc, char **argv)
 	 */
 	if (!zrouter.graceful_restart) {
 		frr_csm_send_init_complete();
-		frr_csm_send_network_layer_info(0, 0);
+		frr_csm_send_network_layer_info();
 	}
 #endif
 

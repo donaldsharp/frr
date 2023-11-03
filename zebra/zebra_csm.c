@@ -42,6 +42,7 @@
 #include "zebra/zebra_errors.h"
 #include "zebra/debug.h"
 #include "zebra/zebra_ns.h"
+#include "zebra/zebra_trace.h"
 
 const char *frr_csm_smode_str[] = {"cold start", "fast start", "warm start",
 				   "maintenance"};
@@ -622,23 +623,67 @@ static int frr_csm_cb(int len, void *buf)
 				break;
 
 			if (IS_ZEBRA_DEBUG_CSM) {
-				nl_hal_info *hal_info = (nl_hal_info *)(data);
-				unsigned int v4 =
-					((nl_ipv4_info *)(hal_info->data))
-						->fib_entries;
+				nl_hal_info *hal_info;
+				int data_len = nl->total_len - sizeof(nl_data);
 
-				hal_info =
-					(nl_hal_info *)(data + hal_info->len);
-				unsigned int v6 =
-					((nl_ipv6_info *)(hal_info->data))
-						->fib_entries;
-
-				zlog_debug(
-					"FRRCSM: ... NL Info. IPv4 count 0x%x (%u)",
-					v4, v4);
-				zlog_debug(
-					"FRRCSM: ... NL Info. IPv6 count 0x%x (%u)",
-					v6, v6);
+				while (data_len > 0) {
+					hal_info = (nl_hal_info *)(data);
+					switch (hal_info->type) {
+					case IPV4:;
+						unsigned int v4 =
+							((nl_ipv4_info
+								  *)(hal_info->data))
+								->fib_entries;
+						zlog_debug(
+							"FRRCSM: ... NL Info. IPv4 count %u",
+							v4);
+						break;
+					case IPV6:;
+						unsigned int v6 =
+							((nl_ipv6_info
+								  *)(hal_info->data))
+								->fib_entries;
+						zlog_debug(
+							"FRRCSM: ... NL Info. IPv6 count %u",
+							v6);
+						break;
+					case RMAC:;
+						unsigned int rmac_cnt =
+							((nl_rmac_info
+								  *)(hal_info->data))
+								->rmac_entries;
+						zlog_debug(
+							"FRRCSM: ... NL Info. RMAC count %u",
+							rmac_cnt);
+						break;
+					case RNEIGH:;
+						unsigned int rneigh_cnt =
+							((nl_rneigh_info
+								  *)(hal_info->data))
+								->rneigh_entries;
+						zlog_debug(
+							"FRRCSM: ... NL Info. RNEIGH count %u",
+							rneigh_cnt);
+						break;
+					case HEREPL:;
+						unsigned int hrep_cnt =
+							((nl_herepl_info
+								  *)(hal_info->data))
+								->herepl_entries;
+						zlog_debug(
+							"FRRCSM: ... NL Info. HREP count %u",
+							hrep_cnt);
+						break;
+					default:
+						zlog_debug(
+							"FRRCSM: ... NL Info. Unknown type %d, data_len - %d",
+							hal_info->type,
+							data_len);
+						break;
+					}
+					data += hal_info->len;
+					data_len -= hal_info->len;
+				}
 			}
 			/* TBD: Should we do anything with this? */
 			break;
@@ -775,7 +820,7 @@ int frr_csm_send_init_complete()
 
 /* Send NETWORK_LAYER_INFO on restart complete. */
 
-int frr_csm_send_network_layer_info(uint32_t ipv4_count, uint32_t ipv6_count)
+int frr_csm_send_network_layer_info(void)
 {
 	uint8_t req[MAX_MSG_LEN];
 	uint8_t rsp[MAX_MSG_LEN];
@@ -804,8 +849,7 @@ int frr_csm_send_network_layer_info(uint32_t ipv4_count, uint32_t ipv6_count)
 	hal_item->type = IPV4;
 	hal_item->len = sizeof(nl_hal_info) + sizeof(nl_ipv4_info);
 	nl_ipv4_info *v4 = (nl_ipv4_info *)(hal_item->data);
-	v4->fib_entries = ipv4_count;
-
+	v4->fib_entries = z_gr_ctx.af_installed_count[AFI_IP];
 	nl->total_len += hal_item->len;
 
 	/* v6 */
@@ -813,17 +857,51 @@ int frr_csm_send_network_layer_info(uint32_t ipv4_count, uint32_t ipv6_count)
 	hal_item->type = IPV6;
 	hal_item->len = sizeof(nl_hal_info) + sizeof(nl_ipv6_info);
 	nl_ipv6_info *v6 = (nl_ipv6_info *)(hal_item->data);
-	v6->fib_entries = ipv6_count;
+	v6->fib_entries = z_gr_ctx.af_installed_count[AFI_IP6];
+	nl->total_len += hal_item->len;
 
+	/* RMAC */
+	hal_item = (nl_hal_info *)((char *)hal_item + hal_item->len);
+	hal_item->type = RMAC;
+	hal_item->len = sizeof(nl_hal_info) + sizeof(nl_rmac_info);
+	nl_rmac_info *rmac = (nl_rmac_info *)(hal_item->data);
+	rmac->rmac_entries = z_gr_ctx.rmac_cnt;
+	nl->total_len += hal_item->len;
+
+	/* RNEIGH */
+	hal_item = (nl_hal_info *)((char *)hal_item + hal_item->len);
+	hal_item->type = RNEIGH;
+	hal_item->len = sizeof(nl_hal_info) + sizeof(nl_rneigh_info);
+	nl_rneigh_info *rneigh = (nl_rneigh_info *)(hal_item->data);
+	rneigh->rneigh_entries = z_gr_ctx.rneigh_cnt;
+	nl->total_len += hal_item->len;
+
+	/* HEREPL */
+	hal_item = (nl_hal_info *)((char *)hal_item + hal_item->len);
+	hal_item->type = HEREPL;
+	hal_item->len = sizeof(nl_hal_info) + sizeof(nl_herepl_info);
+	nl_herepl_info *hrep = (nl_herepl_info *)(hal_item->data);
+	hrep->herepl_entries = z_gr_ctx.hrep_cnt;
 	nl->total_len += hal_item->len;
 
 	entry->len += nl->total_len;
 	m->total_len += entry->len;
 
-	if (IS_ZEBRA_DEBUG_CSM)
+	if (IS_ZEBRA_DEBUG_CSM) {
 		zlog_debug(
 			"FRRCSM: Sending NETWORK_LAYER_INFO. IPv4 count 0x%x (%u), IPv6 count 0x%x (%u)",
-			ipv4_count, ipv4_count, ipv6_count, ipv6_count);
+			z_gr_ctx.af_installed_count[AFI_IP],
+			z_gr_ctx.af_installed_count[AFI_IP],
+			z_gr_ctx.af_installed_count[AFI_IP6],
+			z_gr_ctx.af_installed_count[AFI_IP6]);
+
+		zlog_debug(
+			"FRRCSM: Sending NETWORK_LAYER_INFO. RMAC count 0x%x(%u), RNEIGH count 0x%x(%u), HREP count 0x%x(%u)",
+			z_gr_ctx.rmac_cnt, z_gr_ctx.rmac_cnt,
+			z_gr_ctx.rneigh_cnt, z_gr_ctx.rneigh_cnt,
+			z_gr_ctx.hrep_cnt, z_gr_ctx.hrep_cnt);
+	}
+
 
 	nbytes = csmgr_send(zrouter.frr_csm_modid, m->total_len, m, MAX_MSG_LEN,
 			    rsp);
