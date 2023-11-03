@@ -519,7 +519,7 @@ int main(int argc, char **argv)
 	 */
 	zrouter.startup_time = monotime_nano();
 
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#if defined(HAVE_CSMGR)
 	if (zrouter.frr_csm_smode == FAST_START ||
 	    zrouter.frr_csm_smode == WARM_START)
 		zrouter.graceful_restart = true;
@@ -569,6 +569,7 @@ int main(int argc, char **argv)
 	/* Error init */
 	zebra_error_init();
 
+	zebra_gr_ctx_init();
 #if defined(HAVE_CSMGR)
 	/*
 	 * If we are not restarting gracefully, send INIT_COMPLETE
@@ -578,11 +579,6 @@ int main(int argc, char **argv)
 		frr_csm_send_init_complete();
 		frr_csm_send_network_layer_info();
 	}
-#endif
-
-#if defined(HAVE_CUMULUS)
-	if (zrouter.graceful_restart)
-		zebra_gr_ctx_init();
 #endif
 
 	frr_run(zrouter.master);
