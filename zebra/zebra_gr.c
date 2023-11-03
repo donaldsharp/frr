@@ -46,7 +46,7 @@
 #include "zebra/debug.h"
 #include "zebra/zapi_msg.h"
 #include "zebra/zebra_trace.h"
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#if defined(HAVE_CSMGR)
 #include "zebra/zebra_csm.h"
 #endif
 
@@ -562,7 +562,7 @@ static void zebra_gr_cleanup_of_non_gr_vrf(struct zebra_gr_afi_clean *gac)
 static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
 				    struct zebra_gr_afi_clean *gac)
 {
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#if defined(HAVE_CSMGR)
 
 	struct client_gr_info *info;
 

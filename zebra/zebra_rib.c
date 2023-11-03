@@ -2007,7 +2007,7 @@ done:
 	return rn;
 }
 
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#if defined(HAVE_CSMGR)
 static void zebra_gr_reinstall_last_route(void)
 {
 	zrouter.gr_last_rt_installed = true;
@@ -2062,7 +2062,7 @@ static void zebra_gr_reinstall_last_route(void)
  */
 void zebra_gr_last_rt_reinstall_check(void)
 {
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#if defined(HAVE_CSMGR)
 	/*
 	 * Check to see if we have to reinstall the last route.
 	 *
@@ -2101,9 +2101,8 @@ static void zebra_record_most_recent_route(struct zebra_dplane_ctx *ctx,
 					   struct route_node *rn,
 					   struct route_entry *re)
 {
-
-	if (!re || !zrouter.graceful_restart || !zvrf ||
-	    (zvrf && !zvrf->gr_enabled))
+#if defined(HAVE_CSMGR)
+	if (!re || !zrouter.graceful_restart || !zvrf || !zvrf->gr_enabled)
 		return;
 
 	/*
@@ -2135,6 +2134,7 @@ static void zebra_record_most_recent_route(struct zebra_dplane_ctx *ctx,
 			z_gr_ctx.re = re;
 		}
 	}
+#endif
 }
 
 /*
@@ -4423,6 +4423,7 @@ static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 			subqueue2str(META_QUEUE_EARLY_ROUTE), ere->afi,
 			ere->safi);
 
+#if defined(HAVE_CSMGR)
 	/*
 	 * Record the total unicast routes enqueued during GR
 	 */
@@ -4434,7 +4435,7 @@ static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 		if (!zrouter.gr_last_rt_installed && zvrf && zvrf->gr_enabled)
 			z_gr_ctx.total_queued_rt++;
 	}
-
+#endif
 	return 0;
 }
 
@@ -4864,7 +4865,7 @@ void rib_sweep_table(struct route_table *table)
 
 static void zebra_declare_gr_done(void)
 {
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#if defined(HAVE_CSMGR)
 	if ((zrouter.graceful_restart)) {
 		zlog_debug(
 			"GR %s: GR complete NOT recieved from BGP. Triggering INIT_COMPLETE",

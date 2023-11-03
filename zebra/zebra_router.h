@@ -291,7 +291,6 @@ struct zebra_gr_ctx {
 	struct route_node *rn;
 	struct route_entry *re;
 	uint32_t af_installed_count[AFI_MAX];
-	pthread_mutex_t gr_ctx_mutex;
 	uint32_t total_queued_rt;
 	uint32_t total_processed_rt;
 };

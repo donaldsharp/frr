@@ -352,5 +352,4 @@ void zebra_gr_ctx_init(void)
 	memset(&z_gr_ctx, 0, sizeof(z_gr_ctx));
 	zrouter.gr_last_rt_installed = false;
 	zrouter.all_instances_gr_done = false;
-	pthread_mutex_init(&z_gr_ctx.gr_ctx_mutex, NULL);
 }
