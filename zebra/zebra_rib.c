@@ -2043,9 +2043,12 @@ void zebra_gr_last_rt_reinstall_check(void)
 	 *
 	 * Last route needs to be installed only once.
 	 */
+	z_gr_ctx.total_evpn_entries_queued = zebra_gr_queued_cnt_get();
+
 	if (zrouter.graceful_restart && zrouter.all_instances_gr_done &&
 	    !zrouter.gr_last_rt_installed) {
-		if ((z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt)) {
+		if ((z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt) &&
+		    (z_gr_ctx.total_evpn_entries_processed >= z_gr_ctx.total_evpn_entries_queued)) {
 			zlog_debug("GR %s: Reinstalling last route and sending NL INFO to CSMgr",
 				   __func__);
 			zebra_gr_reinstall_last_route();
@@ -3894,8 +3897,7 @@ int zebra_rib_queue_evpn_rem_vtep_add(vrf_id_t vrf_id, vni_t vni,
 	w->flags = flood_control;
 
 	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
-		zlog_debug("%s: vrf %u, vtep %pI4 enqueued", __func__, vrf_id,
-			   &vtep_ip);
+		zlog_debug("%s: vrf %u, vtep %pI4 VNI %u enqueued", __func__, vrf_id, &vtep_ip, vni);
 
 	return mq_add_handler(w, rib_meta_queue_evpn_add);
 }
@@ -5177,12 +5179,10 @@ static void rib_process_dplane_results(struct event *thread)
 			case DPLANE_OP_SYS_ROUTE_ADD:
 			case DPLANE_OP_SYS_ROUTE_DELETE:
 				break;
-
 			case DPLANE_OP_MAC_INSTALL:
 			case DPLANE_OP_MAC_DELETE:
 				zebra_vxlan_handle_result(ctx);
 				break;
-
 			case DPLANE_OP_RULE_ADD:
 			case DPLANE_OP_RULE_DELETE:
 			case DPLANE_OP_RULE_UPDATE:
@@ -5194,7 +5194,6 @@ static void rib_process_dplane_results(struct event *thread)
 			case DPLANE_OP_IPSET_ENTRY_DELETE:
 				zebra_pbr_dplane_result(ctx);
 				break;
-
 			case DPLANE_OP_INTF_ADDR_ADD:
 			case DPLANE_OP_INTF_ADDR_DEL:
 			case DPLANE_OP_INTF_INSTALL:
@@ -5217,6 +5216,7 @@ static void rib_process_dplane_results(struct event *thread)
 			/* Some op codes not handled here */
 			case DPLANE_OP_ADDR_INSTALL:
 			case DPLANE_OP_ADDR_UNINSTALL:
+				break;
 			case DPLANE_OP_NEIGH_INSTALL:
 			case DPLANE_OP_NEIGH_UPDATE:
 			case DPLANE_OP_NEIGH_DELETE:
@@ -5225,6 +5225,8 @@ static void rib_process_dplane_results(struct event *thread)
 			case DPLANE_OP_VTEP_ADD:
 			case DPLANE_OP_VTEP_DELETE:
 			case DPLANE_OP_NEIGH_DISCOVER:
+				zebra_vxlan_handle_result(ctx);
+				break;
 			case DPLANE_OP_BR_PORT_UPDATE:
 			case DPLANE_OP_NEIGH_TABLE_UPDATE:
 			case DPLANE_OP_GRE_SET:

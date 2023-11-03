@@ -1286,6 +1286,10 @@ enum zebra_dplane_startup_notifications
 dplane_ctx_get_startup_spot(struct zebra_dplane_ctx *ctx);
 void zebra_gr_increment_processed_rt_count(struct route_node *rn, vrf_id_t vrf_id, bool check_safi);
 
+#if defined(HAVE_CSMGR)
+uint32_t zebra_gr_queued_cnt_get(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
