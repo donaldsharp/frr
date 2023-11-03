@@ -1983,10 +1983,14 @@ static void zebra_gr_reinstall_last_route(void)
 {
 	zrouter.gr_last_rt_installed = true;
 
-	zlog_debug("GR %s: All queued routes have been processed. Total queued %u, total processed %d",
-		   __func__, z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
-	frrtrace(2, frr_zebra, gr_ready_to_reinstall_last_route, z_gr_ctx.total_queued_rt,
+	zlog_debug("GR %s: Routes: Total queued %u, total processed %d. EVPN entries: Total queued %u, total processed %u",
+		   __func__, z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt,
+		   z_gr_ctx.total_evpn_entries_queued, z_gr_ctx.total_evpn_entries_processed);
+
+	frrtrace(3, frr_zebra, gr_ready_to_reinstall_last_route, "Routes", z_gr_ctx.total_queued_rt,
 		 z_gr_ctx.total_processed_rt);
+	frrtrace(3, frr_zebra, gr_ready_to_reinstall_last_route, "EVPN entries",
+		 z_gr_ctx.total_evpn_entries_queued, z_gr_ctx.total_evpn_entries_processed);
 
 	/* Reinstall the last route */
 	if (z_gr_ctx.rn && z_gr_ctx.re && !CHECK_FLAG(z_gr_ctx.re->status, ROUTE_ENTRY_REMOVED)) {
@@ -2009,8 +2013,6 @@ static void zebra_gr_reinstall_last_route(void)
 
 	zlog_debug("GR %s: IPv4 total route count: %u IPv6 total route count: %u", __func__,
 		   z_gr_ctx.af_installed_count[AFI_IP], z_gr_ctx.af_installed_count[AFI_IP6]);
-	frrtrace(2, frr_zebra, gr_complete_route_count, z_gr_ctx.af_installed_count[AFI_IP],
-		 z_gr_ctx.af_installed_count[AFI_IP6]);
 
 	frr_csm_send_network_layer_info();
 
