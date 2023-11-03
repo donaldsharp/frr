@@ -1176,8 +1176,21 @@ def ignore_delete_re_add_lines(lines_to_add, lines_to_del):
         if del_line[1] is None and 'service password-obfuscation' in del_line[0]:
             validate_by_decrypt = True
 
+    index = 0
     for (ctx_keys, line) in lines_to_del:
         deleted = False
+
+        # no form of route-map description command only
+        # accept 'no description', replace 'no description blah'
+        # to just 'no description'.
+        index = index + 1
+        if (
+            ctx_keys[0].startswith("route-map")
+            and line
+            and line.startswith("description ")
+        ):
+            lines_to_del.remove((ctx_keys, line))
+            lines_to_del.insert(index, (ctx_keys, "description"))
 
         # If there is a change in the segment routing block ranges, do it
         # in-place, to avoid requesting spurious label chunks which might fail
