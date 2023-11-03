@@ -674,6 +674,24 @@ neigh_update_internal(enum dplane_op_e op, const struct interface *ifp,
  * Public APIs
  */
 
+#if defined(HAVE_CSMGR)
+/*
+ * Return the total successfully enqueued MAC and
+ * neigh entries
+ */
+uint32_t zebra_gr_queued_cnt_get(void)
+{
+	return atomic_load_explicit(&zdplane_info.dg_neighs_in,
+				    memory_order_relaxed) +
+	       atomic_load_explicit(&zdplane_info.dg_macs_in,
+				    memory_order_relaxed) -
+	       atomic_load_explicit(&zdplane_info.dg_mac_errors,
+				    memory_order_relaxed) -
+	       atomic_load_explicit(&zdplane_info.dg_neigh_errors,
+				    memory_order_relaxed);
+}
+#endif
+
 /* Obtain thread_master for dataplane thread */
 struct thread_master *dplane_get_thread_master(void)
 {

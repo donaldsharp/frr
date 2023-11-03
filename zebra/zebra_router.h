@@ -293,6 +293,12 @@ struct zebra_gr_ctx {
 	uint32_t af_installed_count[AFI_MAX];
 	uint32_t total_queued_rt;
 	uint32_t total_processed_rt;
+	/* L2vpn counts */
+	uint32_t rmac_cnt;
+	uint32_t rneigh_cnt;
+	uint32_t hrep_cnt;
+	uint32_t total_evpn_entries_queued;
+	uint32_t total_evpn_entries_processed;
 };
 
 extern struct zebra_gr_ctx z_gr_ctx;

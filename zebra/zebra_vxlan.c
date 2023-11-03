@@ -6445,6 +6445,77 @@ static int zebra_evpn_cfg_clean_up(struct zserv *client)
  */
 extern void zebra_vxlan_handle_result(struct zebra_dplane_ctx *ctx)
 {
+#if defined(HAVE_CSMGR)
+	struct zebra_vrf *zvrf = NULL;
+
+	zvrf = vrf_info_lookup(dplane_ctx_get_vrf(ctx));
+
+	if (!zrouter.graceful_restart || zrouter.gr_last_rt_installed)
+		return;
+
+	/*
+	 * If the notification is for installation of remote MAC, RMAC, remote
+	 * neigh or VTEP entry then increment the total_evpn_entries_processed
+	 * count. This count must be incremented irrespective of if the entry
+	 * was successfully installed or not.
+	 *
+	 * Increment the global rmac_cnt or rneigh_cnt or hrep_cnt if the remote
+	 * MAC, RAMC, remote neigh or VTEP entry was successfully installed in
+	 * kernel.
+	 */
+	if (IS_ZEBRA_DEBUG_DPLANE_DETAIL || IS_ZEBRA_DEBUG_RIB_DETAILED)
+		zlog_debug("%s: op %s status %s, gr_evpn_processed_cnt %d",
+			   __func__, dplane_op2str(dplane_ctx_get_op(ctx)),
+			   dplane_res2str(dplane_ctx_get_status(ctx)),
+			   z_gr_ctx.total_evpn_entries_processed);
+
+	switch (dplane_ctx_get_op(ctx)) {
+	case DPLANE_OP_MAC_INSTALL:
+		z_gr_ctx.total_evpn_entries_processed++;
+
+		if (zvrf && zvrf->gr_enabled &&
+		    CHECK_FLAG(dplane_ctx_get_mac_update_flags(ctx),
+			       DPLANE_MAC_REMOTE) &&
+		    dplane_ctx_get_status(ctx) == ZEBRA_DPLANE_REQUEST_SUCCESS)
+			z_gr_ctx.rmac_cnt += 1;
+
+		break;
+	case DPLANE_OP_VTEP_ADD:
+		z_gr_ctx.total_evpn_entries_processed++;
+
+		if (zvrf && zvrf->gr_enabled &&
+		    dplane_ctx_get_status(ctx) == ZEBRA_DPLANE_REQUEST_SUCCESS)
+			z_gr_ctx.hrep_cnt += 1;
+
+		break;
+	case DPLANE_OP_NEIGH_INSTALL:
+	case DPLANE_OP_NEIGH_UPDATE:
+		z_gr_ctx.total_evpn_entries_processed++;
+
+		if (zvrf && zvrf->gr_enabled &&
+		    CHECK_FLAG(dplane_ctx_neigh_get_update_flags(ctx),
+			       DPLANE_NEIGH_REMOTE) &&
+		    dplane_ctx_get_status(ctx) == ZEBRA_DPLANE_REQUEST_SUCCESS)
+			z_gr_ctx.rneigh_cnt += 1;
+
+		break;
+	case DPLANE_OP_MAC_DELETE:
+	case DPLANE_OP_NEIGH_DELETE:
+	case DPLANE_OP_NEIGH_IP_INSTALL:
+	case DPLANE_OP_NEIGH_IP_DELETE:
+	case DPLANE_OP_VTEP_DELETE:
+	case DPLANE_OP_NEIGH_DISCOVER:
+		z_gr_ctx.total_evpn_entries_processed++;
+		break;
+	default:
+		return;
+	}
+
+	/*
+	 * Check if last route needs to be reinstalled
+	 */
+	zebra_gr_last_rt_reinstall_check();
+#endif
 	return;
 }
 

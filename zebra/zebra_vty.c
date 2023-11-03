@@ -4459,17 +4459,25 @@ DEFUN (show_zebra,
 			time_to_string(zrouter.gr_completion_time, timebuf);
 			vty_out(vty, "GR completion happened at %s", timebuf);
 		}
-
+#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
 		vty_out(vty, "Last route %s. ",
 			zrouter.gr_last_rt_installed ? "installed"
 						     : "NOT installed");
 
 		vty_out(vty, "Total GR routes: queued %u, processed %u\n",
 			z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
-
 		vty_out(vty, "%u IPv4 routes, %u IPv6 routes sent to CSmgr\n",
 			z_gr_ctx.af_installed_count[AFI_IP],
 			z_gr_ctx.af_installed_count[AFI_IP6]);
+
+		vty_out(vty, "Total GR EVPN routes: queued %u, processed %u\n",
+			z_gr_ctx.total_evpn_entries_queued,
+			z_gr_ctx.total_evpn_entries_processed);
+		vty_out(vty, "L2VPN entries sent to CSmgr:\n");
+		vty_out(vty, "   Remote MACs: %d\n", z_gr_ctx.rmac_cnt);
+		vty_out(vty, "   Remote Neighs: %d\n", z_gr_ctx.rneigh_cnt);
+		vty_out(vty, "   HREP: %d\n", z_gr_ctx.hrep_cnt);
+#endif
 	}
 
 	vty_out(vty,
