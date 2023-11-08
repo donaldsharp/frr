@@ -1,3 +1,9 @@
+frr (8.4.3-0+cl5.9.0u1) unstable; urgency=medium
+
+  * Changes for Cumulus Linux
+
+ -- dev-support <dev-support@cumulusnetworks.com>  Fri, 02 Nov 2023 15:09:23 -0700
+
 frr (8.4.3-0) unstable; urgency=medium
 
   * New upstream release FRR 8.4.3
