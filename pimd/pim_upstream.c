@@ -932,14 +932,21 @@ static struct pim_upstream *pim_upstream_new(struct pim_instance *pim,
 				false /*update_mroute*/);
 		pim_upstream_mroute_iif_update(up->channel_oil, __func__);
 
-		if (PIM_UPSTREAM_FLAG_TEST_SRC_NOCACHE(up->flags))
+		if (PIM_UPSTREAM_FLAG_TEST_SRC_NOCACHE(up->flags)) {
+			/*
+			 * Set the right RPF so that future changes will
+			 * be right
+			 */
+			rpf_result = pim_rpf_update(pim, up, NULL, __func__);
 			pim_upstream_keep_alive_timer_start(
 				up, pim->keep_alive_time);
+		}
 	} else if (!pim_addr_is_any(up->upstream_addr)) {
 		pim_upstream_update_use_rpt(up,
 				false /*update_mroute*/);
 		rpf_result = pim_rpf_update(pim, up, NULL, __func__);
 		if (rpf_result == PIM_RPF_FAILURE) {
+			up->channel_oil->oil_inherited_rescan = 1;
 			if (PIM_DEBUG_PIM_TRACE)
 				zlog_debug(
 					"%s: Attempting to create upstream(%s), Unable to RPF for source",
@@ -1741,6 +1748,7 @@ static void pim_upstream_register_stop_timer(struct thread *t)
 				zlog_debug("%s: up %s RPF is not present",
 					   __func__, up->sg_str);
 			up->reg_state = PIM_REG_NOINFO;
+			PIM_UPSTREAM_FLAG_UNSET_FHR(up->flags);
 			return;
 		}
 
@@ -2006,7 +2014,7 @@ static bool pim_upstream_kat_start_ok(struct pim_upstream *up)
 	if (!pim_ifp || !c_oil)
 		return false;
 
-	if (pim_ifp->mroute_vif_index != *oil_parent(c_oil))
+	if (pim_ifp->mroute_vif_index != *oil_incoming_vif(c_oil))
 		return false;
 
 	if (pim_if_connected_to_source(up->rpf.source_nexthop.interface,
