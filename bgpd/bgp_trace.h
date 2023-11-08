@@ -1157,6 +1157,31 @@ TRACEPOINT_EVENT(
 )
 TRACEPOINT_LOGLEVEL(frr_bgp, upd_send_withdraw_default_originate, TRACE_INFO)
 
+TRACEPOINT_EVENT(
+	frr_bgp,
+	eor_send,
+	TP_ARGS(char *, bgp_name, uint8_t, afi, uint8_t, safi,
+		char *, peer_name),
+	TP_FIELDS(ctf_string(bgp_instance, bgp_name)
+		ctf_integer(uint8_t, afi, afi)
+		ctf_integer(uint8_t, safi, safi)
+		ctf_string(peer, peer_name)
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, eor_send, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_bgp,
+	eor_received,
+	TP_ARGS(char *, bgp_name, uint8_t, afi, uint8_t, safi,
+		char *, peer_name),
+	TP_FIELDS(ctf_string(bgp_instance, bgp_name)
+		ctf_integer(uint8_t, afi, afi)
+		ctf_integer(uint8_t, safi, safi)
+		ctf_string(peer, peer_name)
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, eor_received, TRACE_INFO)
 
 /* clang-format on */
 
