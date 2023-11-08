@@ -128,7 +128,6 @@ Depends: frr (<< ${source:Upstream-Version}.0-~),
          frr (>= ${source:Version}~),
          python3:any,
          python3-babeltrace,
-	 python-ipaddress,
          ${misc:Depends}
 Description: FRRouting suite - Python tools
  The FRRouting suite uses a small Python tool to provide configuration
