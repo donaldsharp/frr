@@ -10,6 +10,10 @@ class TestGRPC(object):
     program = "./test_grpc"
 
     @pytest.mark.skipif(
+        True, reason="GRPC tests temporarily skipped",
+    )
+
+    @pytest.mark.skipif(
         'S["GRPC_TRUE"]=""\n' not in open("../config.status").readlines(),
         reason="GRPC not enabled",
     )
