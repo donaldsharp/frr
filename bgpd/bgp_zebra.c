@@ -1268,11 +1268,8 @@ static bool update_ipv6nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 }
 
 static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
-					uint64_t tot_bw, uint32_t *nh_weight,
-					uint32_t base)
+					uint32_t *nh_weight)
 {
-	uint64_t tmp;
-
 	/* zero link-bandwidth and link-bandwidth not present are treated
 	 * as the same situation.
 	 */
@@ -1283,12 +1280,8 @@ static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
 		if (bgp->lb_handling == BGP_LINK_BW_SKIP_MISSING)
 			return false;
 		*nh_weight = BGP_ZEBRA_DEFAULT_NHOP_WEIGHT;
-	} else {
-		tmp = (uint64_t)attr_bw * base;
-		*nh_weight = ((uint32_t)(tmp / tot_bw));
-		if (*nh_weight > 255)
-			*nh_weight = 255;
-	}
+	} else
+		*nh_weight = attr_bw;
 
 	return true;
 }
@@ -1301,8 +1294,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	struct zapi_nexthop *api_nh;
 	int nh_family;
 	unsigned int valid_nh_count = 0;
-	uint32_t max_mpath = 0;
-	uint32_t wecmp_base = 0;
 	bool allow_recursion = false;
 	uint8_t distance;
 	struct peer *peer;
@@ -1322,7 +1313,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	int has_valid_label = 0;
 	bool nh_updated = false;
 	bool do_wt_ecmp;
-	uint64_t cum_bw = 0;
 	uint32_t nhg_id = 0;
 	bool is_add;
 	uint32_t ttl = 0;
@@ -1402,8 +1392,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 
 	/* Determine if we're doing weighted ECMP or not */
 	do_wt_ecmp = bgp_path_info_mpath_chkwtd(bgp, info);
-	if (do_wt_ecmp)
-		cum_bw = bgp_path_info_mpath_cumbw(info);
 
 	/* EVPN MAC-IP routes are installed with a L3 NHG id */
 	if (bgp_evpn_path_es_use_nhg(bgp, info, &nhg_id)) {
@@ -1413,19 +1401,6 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 			SET_FLAG(api.message, ZAPI_MESSAGE_NHG);
 	} else {
 		mpinfo = info;
-	}
-
-	if (mpinfo)
-		max_mpath = MIN(bgp_path_info_mpath_count(mpinfo) + 1,
-				multipath_num);
-	if (max_mpath && do_wt_ecmp) {
-		wecmp_base = MAX(max_mpath * max_mpath, 100);
-		if (bgp_debug_zebra(&api.prefix)) {
-			zlog_debug(
-				"WECMP - For %pFX max_mpath %d cum_bw %" PRIu64
-				"base %u",
-				p, max_mpath, cum_bw, wecmp_base);
-		}
 	}
 
 	for (; mpinfo; mpinfo = bgp_path_info_mpath_next(mpinfo)) {
@@ -1455,15 +1430,9 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		 * in some situations.
 		 */
 		if (do_wt_ecmp) {
-			if (!bgp_zebra_use_nhop_weighted(bgp,
-				mpinfo->attr->link_bw, cum_bw, &nh_weight,
-				wecmp_base))
+			if (!bgp_zebra_use_nhop_weighted(
+				    bgp, mpinfo->attr->link_bw, &nh_weight))
 				continue;
-			if (bgp_debug_zebra(&api.prefix)) {
-				zlog_debug("%pFX nh#%d path_bw %u weight %d", p,
-					   valid_nh_count + 1,
-					   mpinfo->attr->link_bw, nh_weight);
-			}
 		}
 		api_nh = &api.nexthops[valid_nh_count];
 
@@ -1724,13 +1693,13 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 					 prefix_mac2str(&api_nh->rmac,
 							buf1, sizeof(buf1)));
 #endif
+			if (has_valid_label)
+				snprintf(label_buf, sizeof(label_buf),
+					 "label %u", api_nh->labels[0]);
 			zlog_debug("  nhop [%d]: %s if %u VRF %u wt %u %s %s",
 				   i + 1, nh_buf, api_nh->ifindex,
 				   api_nh->vrf_id, api_nh->weight,
 				   label_buf, segs_buf);
-			if (has_valid_label)
-				snprintf(label_buf, sizeof(label_buf),
-					"label %u", api_nh->labels[0]);
 		}
 
 		int recursion_flag = 0;
