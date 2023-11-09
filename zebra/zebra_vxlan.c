@@ -72,6 +72,8 @@ DEFINE_HOOK(zebra_rmac_update,
 	     const char *reason),
 	    (rmac, zl3vni, delete, reason));
 
+int num_evpn_l2vnis = 0;
+
 /* config knobs */
 static bool accept_bgp_seq = true;
 
@@ -520,7 +522,7 @@ static void zevpn_print_mac_hash_all_evpn_detail(struct hash_bucket *bucket,
 					       void *ctxt)
 {
 	struct vty *vty;
-	json_object *json = NULL, *json_evpn = NULL;
+	json_object *json = NULL;
 	json_object *json_mac = NULL;
 	struct zebra_evpn *zevpn;
 	uint32_t num_macs;
@@ -541,25 +543,33 @@ static void zevpn_print_mac_hash_all_evpn_detail(struct hash_bucket *bucket,
 	/*We are iterating over a new EVPN, set the count to 0*/
 	wctx->count = 0;
 
+	if (json) {
+		snprintf(vni_str, VNI_STR_LEN, "%u", zevpn->vni);
+		if (num_evpn_l2vnis == 0) {
+			vty_out(vty, "\"%s\":{", vni_str);
+			num_evpn_l2vnis = 1;
+		} else {
+			vty_out(vty, ",\"%s\":{", vni_str);
+		}
+	}
+
 	num_macs = num_valid_macs(zevpn);
-	if (!num_macs)
+	if (!num_macs) {
+		vty_out(vty, "}\n");
 		return;
+	}
 
 	if (wctx->print_dup && (num_dup_detected_macs(zevpn) == 0))
 		return;
 
-	if (json) {
-		json_evpn = json_object_new_object();
+	if (json)
 		json_mac = json_object_new_object();
-		snprintf(vni_str, VNI_STR_LEN, "%u", zevpn->vni);
-	}
 
 	if (!CHECK_FLAG(wctx->flags, SHOW_REMOTE_MAC_FROM_VTEP)) {
 		if (json == NULL) {
 			vty_out(vty, "\nVNI %u #MACs (local and remote) %u\n\n",
 				zevpn->vni, num_macs);
-		} else
-			json_object_int_add(json_evpn, "numMacs", num_macs);
+		}
 	}
 	/* assign per-evpn to wctx->json object to fill macs
 	 * under the evpn. Re-assign primary json object to fill
@@ -573,10 +583,15 @@ static void zevpn_print_mac_hash_all_evpn_detail(struct hash_bucket *bucket,
 		hash_iterate(zevpn->mac_table, zebra_evpn_print_mac_hash_detail,
 			     wctx);
 	wctx->json = json;
+
 	if (json) {
-		if (wctx->count)
-			json_object_object_add(json_evpn, "macs", json_mac);
-		json_object_object_add(json, vni_str, json_evpn);
+		vty_out(vty, "\"numMacs\":%u", num_macs);
+		if (num_macs) {
+			vty_out(vty, ",\"macs\":");
+			vty_json_no_pretty(vty, json_mac);
+		}
+		vty_out(vty, "}\n");
+		json_object_free(json_mac);
 	}
 }
 
@@ -3239,7 +3254,6 @@ void zebra_vxlan_print_macs_vni(struct vty *vty, struct zebra_vrf *zvrf,
 	struct zebra_evpn *zevpn;
 	uint32_t num_macs;
 	struct mac_walk_ctx wctx;
-	json_object *json = NULL;
 	json_object *json_mac = NULL;
 
 	if (!is_evpn_enabled()) {
@@ -3260,10 +3274,8 @@ void zebra_vxlan_print_macs_vni(struct vty *vty, struct zebra_vrf *zvrf,
 	if (!num_macs)
 		return;
 
-	if (use_json) {
-		json = json_object_new_object();
+	if (use_json)
 		json_mac = json_object_new_object();
-	}
 
 	memset(&wctx, 0, sizeof(wctx));
 	wctx.zevpn = zevpn;
@@ -3284,8 +3296,7 @@ void zebra_vxlan_print_macs_vni(struct vty *vty, struct zebra_vrf *zvrf,
 				"Type", "Flags", "Intf/Remote ES/VTEP", "VLAN",
 				"Seq #'s");
 		}
-	} else
-		json_object_int_add(json, "numMacs", num_macs);
+	}
 
 	if (detail)
 		hash_iterate(zevpn->mac_table, zebra_evpn_print_mac_hash_detail,
@@ -3295,12 +3306,12 @@ void zebra_vxlan_print_macs_vni(struct vty *vty, struct zebra_vrf *zvrf,
 			     &wctx);
 
 	if (use_json) {
-		json_object_object_add(json, "macs", json_mac);
-		/*
-		 * This is an extremely expensive operation at scale
-		 * and non-pretty reduces memory footprint significantly.
-		 */
-		vty_json_no_pretty(vty, json);
+		vty_out(vty, "{\n");
+		vty_out(vty, "\"numMacs\":%u,", num_macs);
+		vty_out(vty, "\"macs\":");
+		vty_json_no_pretty(vty, json_mac);
+		vty_out(vty, "}\n");
+		json_object_free(json_mac);
 	}
 }
 
@@ -3349,6 +3360,9 @@ void zebra_vxlan_print_macs_all_vni_detail(struct vty *vty,
 		return;
 	}
 
+	if (use_json)
+		vty_out(vty, "{\n");
+
 	memset(&wctx, 0, sizeof(wctx));
 	wctx.vty = vty;
 	wctx.json = json;
@@ -3356,8 +3370,11 @@ void zebra_vxlan_print_macs_all_vni_detail(struct vty *vty,
 	hash_iterate(zvrf->evpn_table, zevpn_print_mac_hash_all_evpn_detail,
 		     &wctx);
 
-	if (use_json)
-		vty_json(vty, json);
+	if (use_json) {
+		vty_out(vty, "}\n");
+		num_evpn_l2vnis = 0;
+		json_object_free(json);
+	}
 }
 
 /*
