@@ -1,9 +1,7 @@
 [Unit]
 Description=FRRouting
 Documentation=https://frrouting.readthedocs.io/en/latest/setup.html
-Wants=network.target
-After=network-pre.target systemd-sysctl.service csmgrd.service
-Before=network.target
+After=networking.service systemd-sysctl.service csmgrd.service
 OnFailure=heartbeat-failed@%n
 
 [Service]
