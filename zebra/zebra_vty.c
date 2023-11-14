@@ -4336,163 +4336,386 @@ static int config_write_protocol(struct vty *vty)
 	return 1;
 }
 
-DEFUN (show_zebra,
-       show_zebra_cmd,
-       "show zebra",
-       SHOW_STR
-       ZEBRA_STR)
+DEFPY(show_zebra_csm,
+      show_zebra_csm_cmd,
+      "show zebra csm [json]",
+      SHOW_STR
+      ZEBRA_STR
+      "CSMgr information\n"
+      JSON_STR)
 {
-	struct vrf *vrf;
-	struct ttable *table = ttable_new(&ttable_styles[TTSTYLE_BLANK]);
-	char *out;
+	u_char uj = use_json(argc, argv);
+	json_object *json = NULL;
 
-	ttable_rowseps(table, 0, BOTTOM, true, '-');
-	ttable_add_row(table, "OS|%s(%s)", cmd_system_get(), cmd_release_get());
-	ttable_add_row(table, "ECMP Maximum|%d", zrouter.multipath_num);
-	ttable_add_row(table, "v4 Forwarding|%s", ipforward() ? "On" : "Off");
-	ttable_add_row(table, "v6 Forwarding|%s",
-		       ipforward_ipv6() ? "On" : "Off");
-	ttable_add_row(table, "MPLS|%s", mpls_enabled ? "On" : "Off");
-	ttable_add_row(table, "EVPN|%s", is_evpn_enabled() ? "On" : "Off");
-	ttable_add_row(table, "Kernel socket buffer size|%d", rcvbufsize);
-
-
-#ifdef GNU_LINUX
-	if (!vrf_is_backend_netns())
-		ttable_add_row(table, "VRF|l3mdev Available");
-	else
-		ttable_add_row(table, "VRF|Namespaces");
-#else
-	ttable_add_row(table, "VRF|Not Available");
-#endif
-
-	ttable_add_row(table, "ASIC offload|%s",
-		       zrouter.asic_offloaded ? "Used" : "Unavailable");
-
-	ttable_add_row(table, "RA|%s",
-		       rtadv_compiled_in() ? "Compiled in" : "Not Compiled in");
-	ttable_add_row(table, "RFC 5549|%s",
-		       rtadv_get_interfaces_configured_from_bgp()
-			       ? "BGP is using"
-			       : "BGP is not using");
-
-	ttable_add_row(table, "Kernel NHG|%s",
-		       zrouter.supports_nhgs ? "Available" : "Unavailable");
-
-	ttable_add_row(table, "Allow Non FRR route deletion|%s",
-		       zrouter.allow_delete ? "Yes" : "No");
-	ttable_add_row(table, "v4 All LinkDown Routes|%s",
-		       zrouter.all_linkdownv4 ? "On" : "Off");
-	ttable_add_row(table, "v4 Default LinkDown Routes|%s",
-		       zrouter.default_linkdownv4 ? "On" : "Off");
-	ttable_add_row(table, "v6 All LinkDown Routes|%s",
-		       zrouter.all_linkdownv6 ? "On" : "Off");
-	ttable_add_row(table, "v6 Default LinkDown Routes|%s",
-		       zrouter.default_linkdownv6 ? "On" : "Off");
-
-	ttable_add_row(table, "v4 All MC Forwarding|%s",
-		       zrouter.all_mc_forwardingv4 ? "On" : "Off");
-	ttable_add_row(table, "v4 Default MC Forwarding|%s",
-		       zrouter.default_mc_forwardingv4 ? "On" : "Off");
-	ttable_add_row(table, "v6 All MC Forwarding|%s",
-		       zrouter.all_mc_forwardingv6 ? "On" : "Off");
-	ttable_add_row(table, "v6 Default MC Forwarding|%s",
-		       zrouter.default_mc_forwardingv6 ? "On" : "Off");
-
-	out = ttable_dump(table, "\n");
-	vty_out(vty, "%s\n", out);
-	XFREE(MTYPE_TMP, out);
-
-	ttable_del(table);
-	if (zrouter.asic_offloaded) {
-		if (!zrouter.notify_on_ack)
-			vty_out(vty, "Asic Offload is being used\n");
-		else
-			vty_out(vty, "Asic Offload notification is available but not being used\n");
-	} else
-		vty_out(vty, "There is no Asic offload\n");
+	if (uj)
+		json = json_object_new_object();
 
 #if defined(HAVE_CSMGR)
 	char buf1[256];
 	char buf2[256];
 
-	vty_out(vty,
-		"%s with CSM, CSM start mode %s (mapped to %s), current mode %s\n",
-		zrouter.frr_csm_regd ? "Registered" : "Not registered",
-		mode_to_str(zrouter.csm_smode, buf1),
-		frr_csm_smode2str(zrouter.frr_csm_smode),
-		mode_to_str(zrouter.csm_cmode, buf2));
-	vty_out(vty, "CSM Load complete %s, %s %s \n",
-		zrouter.load_complete_failed ? "failed" : "succeeded",
-		safe_strerror(zrouter.csm_errno),
-		zrouter.csm_invalid_len ? "invalid length" : "");
+	if (uj) {
+		json_object_string_add(json, "registeredWithCsm",
+				       zrouter.frr_csm_regd ? "Yes" : "No");
+		json_object_string_add(json, "csmStartMode",
+				       mode_to_str(zrouter.csm_smode, buf1));
+		json_object_string_add(
+			json, "csmStartModeMappedTo",
+			frr_csm_smode2str(zrouter.frr_csm_smode));
+		json_object_string_add(json, "csmCurrentMode",
+				       mode_to_str(zrouter.csm_cmode, buf2));
+		json_object_string_add(
+			json, "csmLoadComplete",
+			zrouter.load_complete_failed ? "failed" : "succeeded");
+		json_object_string_add(json, "csmLoadCompleteRet",
+				       safe_strerror(zrouter.csm_errno));
+	} else {
+		vty_out(vty,
+			"%s with CSM, CSM start mode %s (mapped to %s), current mode %s\n",
+			zrouter.frr_csm_regd ? "Registered" : "Not registered",
+			mode_to_str(zrouter.csm_smode, buf1),
+			frr_csm_smode2str(zrouter.frr_csm_smode),
+			mode_to_str(zrouter.csm_cmode, buf2));
+		vty_out(vty, "CSM Load complete %s, %s %s \n",
+			zrouter.load_complete_failed ? "failed" : "succeeded",
+			safe_strerror(zrouter.csm_errno),
+			zrouter.csm_invalid_len ? "invalid length" : "");
+	}
 #endif
 	char timebuf[MONOTIME_STRLEN];
 
-	time_to_string(zrouter.startup_time, timebuf);
-	vty_out(vty, "Zebra started%s at time %s\n",
-		zrouter.graceful_restart ? " gracefully" : "", timebuf);
+	time_to_string(UPTIMESECS(zrouter.startup_time), timebuf);
 
-	if (zrouter.t_rib_sweep)
-		vty_out(vty,
-			"Zebra RIB sweep timer running, remaining time %lds\n",
-			thread_timer_remain_second(zrouter.t_rib_sweep));
-	else {
-		time_to_string(zrouter.rib_sweep_time, timebuf);
-		vty_out(vty, "Zebra RIB sweep happened at %s", timebuf);
+	if (uj) {
+		json_object_string_add(json, "zebraStartedAt", timebuf);
+		json_object_string_add(json, "zebraStartedGracefully",
+				       zrouter.graceful_restart ? "Yes" : "No");
+	} else {
+		vty_out(vty, "Zebra started%s at time %s",
+			zrouter.graceful_restart ? " gracefully" : "", timebuf);
 	}
 
-	if (zrouter.t_gr_no_clients)
-		vty_out(vty,
-			"Zebra GR clients timer running, remaining time %lds\n",
-			thread_timer_remain_second(zrouter.t_gr_no_clients));
-	else {
+	if (zrouter.t_rib_sweep) {
+		if (uj)
+			json_object_string_addf(json, "ribSweepRemainingTime",
+						"%lds",
+						thread_timer_remain_second(
+							zrouter.t_rib_sweep));
+		else
+			vty_out(vty,
+				"Zebra RIB sweep timer running, remaining time %lds\n",
+				thread_timer_remain_second(
+					zrouter.t_rib_sweep));
+	} else {
+		time_to_string(zrouter.rib_sweep_time, timebuf);
+		if (uj)
+			json_object_string_add(json, "ribSweepHappenedAt",
+					       timebuf);
+		else
+			vty_out(vty, "Zebra RIB sweep happened at %s", timebuf);
+	}
+
+	if (zrouter.t_gr_no_clients) {
+		if (uj)
+			json_object_string_addf(
+				json, "noGrClientsRemainingTime", "%lds",
+				thread_timer_remain_second(
+					zrouter.t_gr_no_clients));
+		else
+			vty_out(vty,
+				"Zebra GR clients timer running, remaining time %lds\n",
+				thread_timer_remain_second(
+					zrouter.t_gr_no_clients));
+	} else {
 		time_to_string(zrouter.rib_no_gr_client_time, timebuf);
-		vty_out(vty, "Zebra GR client timer timed out at %s", timebuf);
+		if (uj)
+			json_object_string_add(
+				json, "noGrClientsTimerExpiredAt", timebuf);
+		else
+			vty_out(vty, "Zebra GR client timer timed out at %s",
+				timebuf);
 	}
 
 	if (zrouter.graceful_restart) {
-		vty_out(vty, "All instances GR %s\n",
-			zrouter.all_instances_gr_done ? "done" : "NOT done");
+		if (uj)
+			json_object_string_add(
+				json, "allInstancesGrDone",
+				zrouter.all_instances_gr_done ? "Yes" : "No");
+		else
+			vty_out(vty, "All instances GR %s\n",
+				zrouter.all_instances_gr_done ? "done"
+							      : "NOT done");
 
 		if (zrouter.all_instances_gr_done) {
 			time_to_string(zrouter.gr_completion_time, timebuf);
-			vty_out(vty, "GR completion happened at %s", timebuf);
+			if (uj)
+				json_object_string_add(json,
+						       "grCompletionHappenedAt",
+						       timebuf);
+			else
+				vty_out(vty, "GR completion happened at %s",
+					timebuf);
 		}
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
-		vty_out(vty, "Last route %s. ",
-			zrouter.gr_last_rt_installed ? "installed"
-						     : "NOT installed");
+#if defined(HAVE_CSMGR)
+		if (uj) {
+			json_object_string_add(
+				json, "lastRouteInstalled",
+				zrouter.gr_last_rt_installed ? "Yes" : "No");
+			json_object_int_add(json, "routesQueued",
+					    z_gr_ctx.total_queued_rt);
+			json_object_int_add(json, "routesProcessed",
+					    z_gr_ctx.total_processed_rt);
+			json_object_int_add(json, "evpnEntriesQueued",
+					    z_gr_ctx.total_evpn_entries_queued);
+			json_object_int_add(
+				json, "evpnEntriesProcessed",
+				z_gr_ctx.total_evpn_entries_processed);
 
-		vty_out(vty, "Total GR routes: queued %u, processed %u\n",
-			z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
-		vty_out(vty, "%u IPv4 routes, %u IPv6 routes sent to CSmgr\n",
-			z_gr_ctx.af_installed_count[AFI_IP],
-			z_gr_ctx.af_installed_count[AFI_IP6]);
+			json_object *json_csm = json_object_new_object();
 
-		vty_out(vty, "Total GR EVPN routes: queued %u, processed %u\n",
-			z_gr_ctx.total_evpn_entries_queued,
-			z_gr_ctx.total_evpn_entries_processed);
-		vty_out(vty, "L2VPN entries sent to CSmgr:\n");
-		vty_out(vty, "   Remote MACs: %d\n", z_gr_ctx.rmac_cnt);
-		vty_out(vty, "   Remote Neighs: %d\n", z_gr_ctx.rneigh_cnt);
-		vty_out(vty, "   HREP: %d\n", z_gr_ctx.hrep_cnt);
+			json_object_int_add(
+				json_csm, "ipv4Routes",
+				z_gr_ctx.af_installed_count[AFI_IP]);
+			json_object_int_add(
+				json_csm, "ipv6Routes",
+				z_gr_ctx.af_installed_count[AFI_IP6]);
+			json_object_int_add(json_csm, "remoteMacs",
+					    z_gr_ctx.rmac_cnt);
+			json_object_int_add(json_csm, "remoteNeighs",
+					    z_gr_ctx.rneigh_cnt);
+			json_object_int_add(json_csm, "hrep",
+					    z_gr_ctx.hrep_cnt);
+
+			json_object_object_add(json, "countSentToCsmgr",
+					       json_csm);
+		} else {
+			vty_out(vty, "Last route %s\n",
+				zrouter.gr_last_rt_installed ? "installed"
+							     : "NOT installed");
+			vty_out(vty, "Routes: queued %u, processed %u\n",
+				z_gr_ctx.total_queued_rt,
+				z_gr_ctx.total_processed_rt);
+			vty_out(vty, "EVPN entries: queued %u, processed %u\n",
+				z_gr_ctx.total_evpn_entries_queued,
+				z_gr_ctx.total_evpn_entries_processed);
+
+			vty_out(vty, "Count sent to CSmgr:\n");
+			vty_out(vty, "   IPv4 routes: %u\n",
+				z_gr_ctx.af_installed_count[AFI_IP]);
+			vty_out(vty, "   IPv6 routes: %u\n",
+				z_gr_ctx.af_installed_count[AFI_IP6]);
+			vty_out(vty, "   Remote MACs: %d\n", z_gr_ctx.rmac_cnt);
+			vty_out(vty, "   Remote Neighs: %d\n",
+				z_gr_ctx.rneigh_cnt);
+			vty_out(vty, "   HREP: %d\n", z_gr_ctx.hrep_cnt);
+		}
 #endif
 	}
 
-	vty_out(vty,
-		"                            Route      Route      Neighbor   LSP        LSP\n");
-	vty_out(vty,
-		"VRF                         Installs   Removals    Updates   Installs   Removals\n");
+	if (uj)
+		vty_json(vty, json);
+
+	return CMD_SUCCESS;
+}
+
+
+DEFPY(show_zebra,
+      show_zebra_cmd,
+      "show zebra [json]",
+      SHOW_STR
+      ZEBRA_STR
+      JSON_STR)
+{
+	struct vrf *vrf;
+	struct ttable *table = ttable_new(&ttable_styles[TTSTYLE_BLANK]);
+	char *out;
+	u_char uj = use_json(argc, argv);
+	json_object *json = NULL;
+
+	if (uj)
+		json = json_object_new_object();
+
+	if (uj) {
+		json_object_string_addf(json, "os", "%s(%s)", cmd_system_get(),
+					cmd_release_get());
+		json_object_int_add(json, "ecmpMaximum", zrouter.multipath_num);
+		json_object_string_add(json, "v4Forwarding",
+				       ipforward() ? "On" : "Off");
+		json_object_string_add(json, "v6Forwarding",
+				       ipforward_ipv6() ? "On" : "Off");
+		json_object_string_add(json, "mpls",
+				       mpls_enabled ? "On" : "Off");
+		json_object_string_add(json, "evpn",
+				       is_evpn_enabled() ? "On" : "Off");
+		json_object_int_add(json, "kernelSocketBufSize", rcvbufsize);
+	} else {
+		ttable_rowseps(table, 0, BOTTOM, true, '-');
+		ttable_add_row(table, "OS|%s(%s)", cmd_system_get(),
+			       cmd_release_get());
+		ttable_add_row(table, "ECMP Maximum|%d", zrouter.multipath_num);
+		ttable_add_row(table, "v4 Forwarding|%s",
+			       ipforward() ? "On" : "Off");
+		ttable_add_row(table, "v6 Forwarding|%s",
+			       ipforward_ipv6() ? "On" : "Off");
+		ttable_add_row(table, "MPLS|%s", mpls_enabled ? "On" : "Off");
+		ttable_add_row(table, "EVPN|%s",
+			       is_evpn_enabled() ? "On" : "Off");
+		ttable_add_row(table, "Kernel socket buffer size|%d",
+			       rcvbufsize);
+	}
+
+#ifdef GNU_LINUX
+	if (!vrf_is_backend_netns()) {
+		if (uj)
+			json_object_string_add(json, "vrf", "l3mdev Available");
+		else
+			ttable_add_row(table, "VRF|l3mdev Available");
+	} else {
+		if (uj)
+			json_object_string_add(json, "vrf", "Namespaces");
+		else
+			ttable_add_row(table, "VRF|Namespaces");
+	}
+#else
+	if (uj)
+		json_object_string_add(json, "vrf", "Not Available");
+	else
+		ttable_add_row(table, "VRF|Not Available");
+#endif
+
+	if (uj) {
+		json_object_string_add(json, "asicOffload",
+				       zrouter.asic_offloaded ? "Used"
+							      : "Unavailable");
+		json_object_string_add(json, "ra",
+				       rtadv_compiled_in() ? "Compiled in"
+							   : "Not Compiled in");
+		json_object_string_add(
+			json, "rfc5549",
+			rtadv_get_interfaces_configured_from_bgp()
+				? "BGP is using"
+				: "BGP is not using");
+		json_object_string_add(json, "kernelNhg",
+				       zrouter.supports_nhgs ? "Available"
+							     : "Unavailable");
+		json_object_string_add(json, "allowNonFrrRouteDeletion",
+				       zrouter.allow_delete ? "Yes" : "No");
+		json_object_string_add(json, "v4AllLinkDownRoutes",
+				       zrouter.all_linkdownv4 ? "On" : "Off");
+		json_object_string_add(json, "v4DefaultLinkDownRoutes",
+				       zrouter.default_linkdownv4 ? "On"
+								  : "Off");
+		json_object_string_add(json, "v6AllLinkDownRoutes",
+				       zrouter.all_linkdownv6 ? "On" : "Off");
+		json_object_string_add(json, "v6DefaultLinkDownRoutes",
+				       zrouter.default_linkdownv6 ? "On"
+								  : "Off");
+		json_object_string_add(json, "v4AllMcForwarding",
+				       zrouter.all_mc_forwardingv4 ? "On"
+								   : "Off");
+		json_object_string_add(json, "v4DefaultMcForwarding",
+				       zrouter.default_mc_forwardingv4 ? "On"
+								       : "Off");
+		json_object_string_add(json, "v6AllMcForwarding",
+				       zrouter.all_mc_forwardingv6 ? "On"
+								   : "Off");
+		json_object_string_add(json, "v6DefaultMcForwarding",
+				       zrouter.default_mc_forwardingv6 ? "On"
+								       : "Off");
+		if (zrouter.asic_offloaded) {
+			if (!zrouter.notify_on_ack)
+				json_object_string_add(json,
+						       "asicOffloadNotify",
+						       "Unavailable");
+			else
+				json_object_string_add(json,
+						       "asicOffloadNotify",
+						       "Available but unused");
+		}
+	} else {
+		ttable_add_row(table, "ASIC offload|%s",
+			       zrouter.asic_offloaded ? "Used" : "Unavailable");
+		ttable_add_row(table, "RA|%s",
+			       rtadv_compiled_in() ? "Compiled in"
+						   : "Not Compiled in");
+		ttable_add_row(table, "RFC 5549|%s",
+			       rtadv_get_interfaces_configured_from_bgp()
+				       ? "BGP is using"
+				       : "BGP is not using");
+		ttable_add_row(table, "Kernel NHG|%s",
+			       zrouter.supports_nhgs ? "Available"
+						     : "Unavailable");
+		ttable_add_row(table, "Allow Non FRR route deletion|%s",
+			       zrouter.allow_delete ? "Yes" : "No");
+		ttable_add_row(table, "v4 All LinkDown Routes|%s",
+			       zrouter.all_linkdownv4 ? "On" : "Off");
+		ttable_add_row(table, "v4 Default LinkDown Routes|%s",
+			       zrouter.default_linkdownv4 ? "On" : "Off");
+		ttable_add_row(table, "v6 All LinkDown Routes|%s",
+			       zrouter.all_linkdownv6 ? "On" : "Off");
+		ttable_add_row(table, "v6 Default LinkDown Routes|%s",
+			       zrouter.default_linkdownv6 ? "On" : "Off");
+		ttable_add_row(table, "v4 All MC Forwarding|%s",
+			       zrouter.all_mc_forwardingv4 ? "On" : "Off");
+		ttable_add_row(table, "v4 Default MC Forwarding|%s",
+			       zrouter.default_mc_forwardingv4 ? "On" : "Off");
+		ttable_add_row(table, "v6 All MC Forwarding|%s",
+			       zrouter.all_mc_forwardingv6 ? "On" : "Off");
+		ttable_add_row(table, "v6 Default MC Forwarding|%s",
+			       zrouter.default_mc_forwardingv6 ? "On" : "Off");
+		out = ttable_dump(table, "\n");
+		vty_out(vty, "%s\n", out);
+		XFREE(MTYPE_TMP, out);
+		ttable_del(table);
+		if (zrouter.asic_offloaded) {
+			if (!zrouter.notify_on_ack)
+				vty_out(vty, "Asic Offload is being used\n");
+			else
+				vty_out(vty,
+					"Asic Offload notification is available but not being used\n");
+		} else
+			vty_out(vty, "There is no Asic offload\n");
+	}
+
+	if (!uj) {
+		vty_out(vty,
+			"                            Route      Route      Neighbor   LSP        LSP\n");
+		vty_out(vty,
+			"VRF                         Installs   Removals    Updates   Installs   Removals\n");
+	}
 
 	RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
 		struct zebra_vrf *zvrf = vrf->info;
 
-		vty_out(vty, "%-25s %10" PRIu64 " %10" PRIu64 " %10" PRIu64" %10" PRIu64 " %10" PRIu64 "\n",
-			vrf->name, zvrf->installs, zvrf->removals,
-			zvrf->neigh_updates, zvrf->lsp_installs,
-			zvrf->lsp_removals);
+		if (uj) {
+			json_object *json_vrf = json_object_new_object();
+
+			json_object_int_add(json_vrf, "installs",
+					    zvrf->installs);
+			json_object_int_add(json_vrf, "routeInstalls",
+					    zvrf->installs);
+			json_object_int_add(json_vrf, "routeRemovals",
+					    zvrf->removals);
+			json_object_int_add(json_vrf, "neighUpdates",
+					    zvrf->neigh_updates);
+			json_object_int_add(json_vrf, "lspInstalls",
+					    zvrf->lsp_installs);
+			json_object_int_add(json_vrf, "lspRemovals",
+					    zvrf->lsp_removals);
+
+			json_object_object_add(json, vrf->name, json_vrf);
+		} else {
+			vty_out(vty,
+				"%-25s %10" PRIu64 " %10" PRIu64 " %10" PRIu64
+				" %10" PRIu64 " %10" PRIu64 "\n",
+				vrf->name, zvrf->installs, zvrf->removals,
+				zvrf->neigh_updates, zvrf->lsp_installs,
+				zvrf->lsp_removals);
+		}
 	}
+
+	if (uj)
+		vty_json(vty, json);
 
 	return CMD_SUCCESS;
 }
@@ -5071,6 +5294,8 @@ void zebra_vty_init(void)
 
 	install_element(VIEW_NODE, &show_dataplane_cmd);
 	install_element(VIEW_NODE, &show_dataplane_providers_cmd);
+	install_element(VIEW_NODE, &show_zebra_csm_cmd);
+
 	install_element(CONFIG_NODE, &zebra_dplane_queue_limit_cmd);
 	install_element(CONFIG_NODE, &no_zebra_dplane_queue_limit_cmd);
 
