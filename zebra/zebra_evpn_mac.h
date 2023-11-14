@@ -243,7 +243,8 @@ void zebra_evpn_mac_del_all(struct zebra_evpn *zevi, int uninstall,
 int zebra_evpn_mac_send_add_to_client(vni_t vni, const struct ethaddr *macaddr,
 				      uint32_t mac_flags, uint32_t seq,
 				      struct zebra_evpn_es *es);
-int zebra_evpn_mac_send_del_to_client(vni_t vni, const struct ethaddr *macaddr,
+int zebra_evpn_mac_send_del_to_client(struct zebra_evpn *zevpn,
+				      const struct ethaddr *macaddr,
 				      uint32_t flags, bool force);
 void zebra_evpn_send_mac_list_to_client(struct zebra_evpn *zevi);
 struct zebra_mac *zebra_evpn_proc_sync_mac_update(struct zebra_evpn *zevi,
