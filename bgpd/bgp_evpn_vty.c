@@ -3303,7 +3303,6 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 
 		if (json) {
 			if (add_rd_to_json) {
-				json_object_object_add(json, rd_str, json_rd);
 				vty_json_no_pretty(vty, json_rd);
 			} else {
 				vty_out(vty, "{}");
