@@ -10485,33 +10485,78 @@ DEFPY (show_bgp_vrfs,
 	return CMD_SUCCESS;
 }
 
-DEFPY (show_bgp_router,
-       show_bgp_router_cmd,
-       "show bgp router",
-       SHOW_STR
-       BGP_STR
-       "Overall BGP information\n")
+DEFPY(show_bgp_router,
+      show_bgp_router_cmd,
+      "show bgp router [json]",
+      SHOW_STR
+      BGP_STR
+      "Overall BGP information\n"
+      JSON_STR)
 {
 	char timebuf[MONOTIME_STRLEN];
+	u_char uj = use_json(argc, argv);
+	json_object *json = NULL;
+
+	if (uj)
+		json = json_object_new_object();
 
 	time_to_string(bm->start_time, timebuf);
+
+	if (uj) {
+		json_object_string_add(json, "bgpStartedAt", timebuf);
+		json_object_string_add(
+			json, "bgpStartedGracefully",
+			CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) ? "Yes"
+									: "No");
+	}
+
 	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART)) {
-		vty_out(vty, "BGP started gracefully at %s", timebuf);
+		if (!uj)
+			vty_out(vty, "BGP started gracefully at %s", timebuf);
+		else
+			json_object_string_add(
+				json, "grComplete",
+				CHECK_FLAG(bm->flags, BM_FLAG_GR_COMPLETE)
+					? "Yes"
+					: "No");
+
 		if (CHECK_FLAG(bm->flags, BM_FLAG_GR_COMPLETE)) {
 			time_to_string(bm->gr_completion_time, timebuf);
-			vty_out(vty, "Graceful restart completed at %s",
-				timebuf);
-		} else
-			vty_out(vty, "Graceful restart is in progress\n");
-	} else
-		vty_out(vty, "BGP started at %s", timebuf);
+			if (uj)
+				json_object_string_add(json, "grCompletedAt",
+						       timebuf);
+			else
+				vty_out(vty, "Graceful restart completed at %s",
+					timebuf);
+		} else {
+			if (!uj)
+				vty_out(vty,
+					"Graceful restart is in progress\n");
+		}
+	} else {
+		if (!uj)
+			vty_out(vty, "BGP started at %s", timebuf);
+	}
 
-	if (CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE))
+	if (uj) {
+		json_object_string_add(
+			json, "bgpInMaintenanceMode",
+			(CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE))
+				? "Yes"
+				: "No");
+		json_object_int_add(json, "bgpInstanceCount",
+				    listcount(bm->bgp));
+
+		vty_json(vty, json);
+	} else {
+		if (CHECK_FLAG(bm->flags, BM_FLAG_MAINTENANCE_MODE))
+			vty_out(vty,
+				"BGP is in Maintenance mode (BGP GSHUT is in effect)\n");
+
 		vty_out(vty,
-			"BGP is in Maintenance mode (BGP GSHUT is in effect)\n");
-
-	vty_out(vty, "Number of BGP instances (including default): %d\n",
-		listcount(bm->bgp));
+			"Number of BGP instances (including default): %d\n",
+			listcount(bm->bgp));
+	}
 
 	return CMD_SUCCESS;
 }
