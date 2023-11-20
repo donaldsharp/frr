@@ -2130,6 +2130,11 @@ void zebra_evpn_neigh_remote_macip_add(struct zebra_evpn *zevpn,
 	 * change. If so, create or update and then install the entry.
 	 */
 	n = zebra_evpn_neigh_lookup(zevpn, ipaddr);
+	if (n) {
+		/* Refresh entry */
+		n->gr_refresh_time = monotime_nano();
+	}
+
 	if (!n || !CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE)
 	    || is_router != !!CHECK_FLAG(n->flags, ZEBRA_NEIGH_ROUTER_FLAG)
 	    || (memcmp(&n->emac, &mac->macaddr, sizeof(struct ethaddr)) != 0)
@@ -2141,9 +2146,6 @@ void zebra_evpn_neigh_remote_macip_add(struct zebra_evpn *zevpn,
 			n = zebra_evpn_neigh_add(zevpn, ipaddr, &mac->macaddr,
 						 mac, 0);
 		} else {
-			/* Refresh entry */
-			n->gr_refresh_time = monotime_nano();
-
 			/* When host moves but changes its (MAC,IP)
 			 * binding, BGP may install a MACIP entry that
 			 * corresponds to "older" location of the host
