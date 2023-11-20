@@ -987,10 +987,19 @@ static void do_show_route_helper(struct vty *vty, struct zebra_vrf *zvrf,
 				json = json_object_new_object();
 				re_next = re;
 				prefix2str(&rn->p, buf, sizeof(buf));
-				if (RNODE_NEXT_RE(rn, re_next) == NULL)
+
+				if (RNODE_NEXT_RE(rn, re_next) == NULL) {
 					next = 0;
-				else
-					next = 1;
+				} else {
+					if ((!type) ||
+					    (re->type == ZEBRA_ROUTE_CONNECT))
+						next = 1;
+					else if (re->type == type)
+						/* no multiple entries per
+						 * prefix for protocol routes
+						 * except connected */
+						next = 0;
+				}
 
 				if (prefix_first) {
 					vty_out(vty, "\"%s\":[", buf);
