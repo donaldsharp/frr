@@ -1192,6 +1192,17 @@ def ignore_delete_re_add_lines(lines_to_add, lines_to_del):
             lines_to_del.remove((ctx_keys, line))
             lines_to_del.insert(index, (ctx_keys, "description"))
 
+        # no form of route-map on-match goto & continue command only
+        # accept 'no on-match goto', replace 'no on-match goto <rule>'
+        # to 'no on-match goto'.
+        if (
+            ctx_keys[0].startswith("route-map")
+            and line
+            and line.startswith("on-match goto ")
+        ):
+            lines_to_del.remove((ctx_keys, line))
+            lines_to_del.insert(index, (ctx_keys, "on-match goto"))
+
         # If there is a change in the segment routing block ranges, do it
         # in-place, to avoid requesting spurious label chunks which might fail
         if line and "segment-routing global-block" in line:
