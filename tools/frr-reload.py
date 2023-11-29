@@ -1192,6 +1192,17 @@ def ignore_delete_re_add_lines(lines_to_add, lines_to_del):
             lines_to_del.remove((ctx_keys, line))
             lines_to_del.insert(index, (ctx_keys, "description"))
 
+        # interface x ; description blah
+        # no form of description does not accept any argument,
+        # strip arg before rendering
+        if (
+            ctx_keys[0].startswith("interface ")
+            and line
+            and line.startswith("description ")
+        ):
+            lines_to_del.remove((ctx_keys, line))
+            lines_to_del.insert(index, (ctx_keys, "description"))
+
         # no form of route-map on-match goto & continue command only
         # accept 'no on-match goto', replace 'no on-match goto <rule>'
         # to 'no on-match goto'.
