@@ -3457,7 +3457,7 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 		thread_info->afi = afi;
 		thread_info->safi = safi;
 		thread_info->bgp = bgp;
-		
+
 		/* If there are more routes to be processed, start the
 		 * selection timer
 		 */
@@ -10249,8 +10249,6 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 					vty_out(vty, " VNI %s", tag_buf);
 			} else {
 				if (tag_buf[0]) {
-					json_object_string_add(json_path, "VNI",
-							       tag_buf);
 					json_object_string_add(json_path, "vni",
 							       tag_buf);
 				}
