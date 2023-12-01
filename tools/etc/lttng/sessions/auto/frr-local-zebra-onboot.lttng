@@ -16,7 +16,7 @@
                         <output_type>MMAP</output_type>
 						<blocking_timeout>0</blocking_timeout>
 						<monitor_timer_interval>1000000</monitor_timer_interval>
-						<tracefile_size>3048576</tracefile_size>
+						<tracefile_size>2048576</tracefile_size>
 						<tracefile_count>4</tracefile_count>
 						<live_timer_interval>0</live_timer_interval>
 						<events>
