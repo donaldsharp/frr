@@ -1456,9 +1456,9 @@ static int zl3vni_remote_rmac_add(struct zebra_l3vni *zl3vni,
 				    &ipv4_vtep.ipaddr_v4)) {
 			if (IS_ZEBRA_DEBUG_VXLAN)
 				zlog_debug(
-					"L3VNI %u Remote VTEP change(%pIA -> %pIA) for RMAC %pEA",
+					"L3VNI %u Remote VTEP change(%pI4 -> %pIA) for RMAC %pEA",
 					zl3vni->vni, &zrmac->fwd_info.r_vtep_ip,
-					&vtep->ipaddr_v4, rmac);
+					vtep_ip, rmac);
 
 			zrmac->fwd_info.r_vtep_ip = ipv4_vtep.ipaddr_v4;
 
