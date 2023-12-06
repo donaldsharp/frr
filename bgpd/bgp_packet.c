@@ -2032,7 +2032,12 @@ static int bgp_update_receive(struct peer *peer, bgp_size_t size)
 	/* Network Layer Reachability Information. */
 	update_len = end - stream_pnt(s);
 
-	if (update_len && attribute_len) {
+	/* If we received MP_UNREACH_NLRI attribute, but also NLRIs, then
+	 * NLRIs should be handled as a new data. Though, if we received
+	 * NLRIs without mandatory attributes, they should be ignored.
+	 */
+	if (update_len && attribute_len &&
+	    attr_parse_ret != BGP_ATTR_PARSE_MISSING_MANDATORY) {
 		/* Set NLRI portion to structure. */
 		nlris[NLRI_UPDATE].afi = AFI_IP;
 		nlris[NLRI_UPDATE].safi = SAFI_UNICAST;
@@ -2108,8 +2113,7 @@ static int bgp_update_receive(struct peer *peer, bgp_size_t size)
 	 * Non-MP IPv4/Unicast EoR is a completely empty UPDATE
 	 * and MP EoR should have only an empty MP_UNREACH
 	 */
-	if ((!update_len && !withdraw_len && nlris[NLRI_MP_UPDATE].length == 0)
-	    || (attr_parse_ret == BGP_ATTR_PARSE_EOR)) {
+	if (!update_len && !withdraw_len && nlris[NLRI_MP_UPDATE].length == 0) {
 		afi_t afi = 0;
 		safi_t safi;
 		/* Non-MP IPv4/Unicast is a completely emtpy UPDATE - already
@@ -2123,9 +2127,6 @@ static int bgp_update_receive(struct peer *peer, bgp_size_t size)
 			   && nlris[NLRI_MP_WITHDRAW].length == 0) {
 			afi = nlris[NLRI_MP_WITHDRAW].afi;
 			safi = nlris[NLRI_MP_WITHDRAW].safi;
-		} else if (attr_parse_ret == BGP_ATTR_PARSE_EOR) {
-			afi = nlris[NLRI_MP_UPDATE].afi;
-			safi = nlris[NLRI_MP_UPDATE].safi;
 		}
 
 		if (afi && peer->afc[afi][safi])

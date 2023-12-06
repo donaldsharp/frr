@@ -2244,7 +2244,7 @@ int bgp_mp_reach_parse(struct bgp_attr_parser_args *args,
 
 		mp_update->afi = afi;
 		mp_update->safi = safi;
-		return BGP_ATTR_PARSE_EOR;
+		return bgp_attr_malformed(args, BGP_NOTIFY_UPDATE_MAL_ATTR, 0);
 	}
 
 	mp_update->afi = afi;
@@ -3147,23 +3147,19 @@ bgp_attr_unknown(struct bgp_attr_parser_args *args)
 }
 
 /* Well-known attribute check. */
-static int bgp_attr_check(struct peer *peer, struct attr *attr)
+static int bgp_attr_check(struct peer *peer, struct attr *attr,
+			  bgp_size_t length)
 {
 	uint8_t type = 0;
 
 	/* BGP Graceful-Restart End-of-RIB for IPv4 unicast is signaled as an
-	 * empty UPDATE.  */
-	if (CHECK_FLAG(peer->cap, PEER_CAP_RESTART_RCV) && !attr->flag)
-		return BGP_ATTR_PARSE_PROCEED;
-
-	/* "An UPDATE message that contains the MP_UNREACH_NLRI is not required
-	   to carry any other path attributes.", though if MP_REACH_NLRI or NLRI
-	   are present, it should.  Check for any other attribute being present
-	   instead.
+	 * empty UPDATE. Treat-as-withdraw, otherwise if we just ignore it,
+	 * we will pass it to be processed as a normal UPDATE without mandatory
+	 * attributes, that could lead to harmful behavior.
 	 */
-	if ((!CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&
-	     CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI))))
-		return BGP_ATTR_PARSE_PROCEED;
+	if (CHECK_FLAG(peer->cap, PEER_CAP_RESTART_RCV) && !attr->flag &&
+	    !length)
+		return BGP_ATTR_PARSE_WITHDRAW;
 
 	if (!CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_ORIGIN)))
 		type = BGP_ATTR_ORIGIN;
@@ -3182,6 +3178,16 @@ static int bgp_attr_check(struct peer *peer, struct attr *attr)
 	if (peer->sort == BGP_PEER_IBGP
 	    && !CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_LOCAL_PREF)))
 		type = BGP_ATTR_LOCAL_PREF;
+
+	/* An UPDATE message that contains the MP_UNREACH_NLRI is not required
+	 * to carry any other path attributes. Though if MP_REACH_NLRI or NLRI
+	 * are present, it should. Check for any other attribute being present
+	 * instead.
+	 */
+	if (!CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&
+	    CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI)))
+		return type ? BGP_ATTR_PARSE_MISSING_MANDATORY
+			    : BGP_ATTR_PARSE_PROCEED;
 
 	/* If any of the well-known mandatory attributes are not present
 	 * in an UPDATE message, then "treat-as-withdraw" MUST be used.
@@ -3205,7 +3211,7 @@ enum bgp_attr_parse_ret bgp_attr_parse(struct peer *peer, struct attr *attr,
 	enum bgp_attr_parse_ret ret;
 	uint8_t flag = 0;
 	uint8_t type = 0;
-	bgp_size_t length;
+	bgp_size_t length = 0;
 	uint8_t *startp, *endp;
 	uint8_t *attr_endp;
 	uint8_t seen[BGP_ATTR_BITMAP_SIZE];
@@ -3452,10 +3458,6 @@ enum bgp_attr_parse_ret bgp_attr_parse(struct peer *peer, struct attr *attr,
 			goto done;
 		}
 
-		if (ret == BGP_ATTR_PARSE_EOR) {
-			goto done;
-		}
-
 		if (ret == BGP_ATTR_PARSE_ERROR) {
 			flog_warn(EC_BGP_ATTRIBUTE_PARSE_ERROR,
 				  "%s: Attribute %s, parse error", peer->host,
@@ -3527,7 +3529,7 @@ enum bgp_attr_parse_ret bgp_attr_parse(struct peer *peer, struct attr *attr,
 	}
 
 	/* Check all mandatory well-known attributes are present */
-	ret = bgp_attr_check(peer, attr);
+	ret = bgp_attr_check(peer, attr, length);
 	if (ret < 0)
 		goto done;
 
@@ -3583,7 +3585,13 @@ done:
 	aspath_unintern(&as4_path);
 
 	transit = bgp_attr_get_transit(attr);
-	if (ret != BGP_ATTR_PARSE_ERROR) {
+	/* If we received an UPDATE with mandatory attributes, then
+	 * the unrecognized transitive optional attribute of that
+	 * path MUST be passed. Otherwise, it's an error, and from
+	 * security perspective it might be very harmful if we continue
+	 * here with the unrecognized attributes.
+	 */
+	if (ret == BGP_ATTR_PARSE_PROCEED) {
 		/* Finally intern unknown attribute. */
 		if (transit)
 			bgp_attr_set_transit(attr, transit_intern(transit));
