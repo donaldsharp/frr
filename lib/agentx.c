@@ -25,6 +25,7 @@
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/snmp_vars.h>
+#include <net-snmp/library/large_fd_set.h>
 
 #include "command.h"
 #include "smux.h"
@@ -58,7 +59,7 @@ static void agentx_timeout(struct thread *t)
 
 static void agentx_read(struct thread *t)
 {
-	fd_set fds;
+	netsnmp_large_fd_set lfds;
 	int flags, new_flags = 0;
 	int nonblock = false;
 	struct listnode *ln = THREAD_ARG(t);
@@ -83,9 +84,9 @@ static void agentx_read(struct thread *t)
 		flog_err(EC_LIB_SYSTEM_CALL, "Failed to set snmp fd non blocking: %s(%d)",
 			 strerror(errno), errno);
 
-	FD_ZERO(&fds);
-	FD_SET(THREAD_FD(t), &fds);
-	snmp_read(&fds);
+	netsnmp_large_fd_set_init(&lfds, FD_SETSIZE);
+	netsnmp_large_fd_setfd(t->u.fd, &lfds);
+	snmp_read2(&lfds);
 
 	/* Reset the flag */
 	if (!nonblock) {
@@ -100,6 +101,7 @@ static void agentx_read(struct thread *t)
 
 	netsnmp_check_outstanding_agent_requests();
 	agentx_events_update();
+	netsnmp_large_fd_set_cleanup(&lfds);
 }
 
 static void agentx_events_update(void)
@@ -107,15 +109,15 @@ static void agentx_events_update(void)
 	int maxfd = 0;
 	int block = 1;
 	struct timeval timeout = {.tv_sec = 0, .tv_usec = 0};
-	fd_set fds;
+	netsnmp_large_fd_set lfds;
 	struct listnode *ln;
 	struct thread **thr;
 	int fd, thr_fd;
 
 	thread_cancel(&timeout_thr);
 
-	FD_ZERO(&fds);
-	snmp_select_info(&maxfd, &fds, &timeout, &block);
+	netsnmp_large_fd_set_init(&lfds, FD_SETSIZE);
+	snmp_select_info2(&maxfd, &lfds, &timeout, &block);
 
 	if (!block) {
 		thread_add_timer_tv(agentx_tm, agentx_timeout, NULL, &timeout,
@@ -133,7 +135,7 @@ static void agentx_events_update(void)
 		/* caught up */
 		if (thr_fd == fd) {
 			struct listnode *nextln = listnextnode(ln);
-			if (!FD_ISSET(fd, &fds)) {
+			if (!netsnmp_large_fd_is_set(fd, &lfds)) {
 				thread_cancel(thr);
 				XFREE(MTYPE_TMP, thr);
 				list_delete_node(events, ln);
@@ -143,7 +145,7 @@ static void agentx_events_update(void)
 			thr_fd = thr ? THREAD_FD(*thr) : -1;
 		}
 		/* need listener, but haven't hit one where it would be */
-		else if (FD_ISSET(fd, &fds)) {
+		else if (netsnmp_large_fd_is_set(fd, &lfds)) {
 			struct listnode *newln;
 			thr = XCALLOC(MTYPE_TMP, sizeof(struct thread *));
 
@@ -162,6 +164,7 @@ static void agentx_events_update(void)
 		list_delete_node(events, ln);
 		ln = nextln;
 	}
+	netsnmp_large_fd_set_cleanup(&lfds);
 }
 
 /* AgentX node. */
