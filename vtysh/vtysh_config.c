@@ -629,7 +629,7 @@ static int vtysh_read_file(FILE *confp, bool dry_run)
 	vtysh_execute_no_pager("end");
 	vtysh_execute_no_pager("disable");
 
-	vty_close(vty);
+	vty_close(vty, false);
 
 	return (ret);
 }

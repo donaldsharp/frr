@@ -1745,7 +1745,7 @@ static int file_write_config(struct vty *vty)
 	vty_time_print(file_vty, 1);
 	vty_out(file_vty, "!\n");
 	vty_write_config(file_vty);
-	vty_close(file_vty);
+	vty_close(file_vty, false);
 
 	if (stat(config_file, &conf_stat) >= 0) {
 		if (unlink(config_file_sav) != 0)

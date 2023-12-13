@@ -964,7 +964,7 @@ static void test_finish(struct test *test)
 
 	/* Cleanup allocated memory. */
 	if (test->vty) {
-		vty_close(test->vty);
+		vty_close(test->vty, false);
 		test->vty = NULL;
 	}
 	if (test->log)
