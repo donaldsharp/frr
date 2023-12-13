@@ -370,7 +370,7 @@ extern bool vty_read_config(struct nb_config *config, const char *config_file,
 			    char *config_default_dir);
 extern void vty_time_print(struct vty *, int);
 extern void vty_serv_sock(const char *, unsigned short, const char *);
-extern void vty_close(struct vty *);
+extern void vty_close(struct vty *vty, bool shutdown);
 extern char *vty_get_cwd(void);
 extern void vty_update_xpath(const char *oldpath, const char *newpath);
 extern int vty_config_enter(struct vty *vty, bool private_config,

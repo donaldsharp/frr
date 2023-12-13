@@ -1514,7 +1514,7 @@ static void vty_read(struct thread *thread)
 
 	/* Check status. */
 	if (vty->status == VTY_CLOSE)
-		vty_close(vty);
+		vty_close(vty, false);
 	else {
 		vty_event(VTY_WRITE, vty);
 		vty_event(VTY_READ, vty);
@@ -1551,11 +1551,11 @@ static void vty_flush(struct thread *thread)
 			  vty->fd, vty->wfd);
 		buffer_reset(vty->lbuf);
 		buffer_reset(vty->obuf);
-		vty_close(vty);
+		vty_close(vty, false);
 		return;
 	case BUFFER_EMPTY:
 		if (vty->status == VTY_CLOSE)
-			vty_close(vty);
+			vty_close(vty, false);
 		else {
 			vty->status = VTY_NORMAL;
 			if (vty->lines == 0)
@@ -1648,7 +1648,7 @@ static struct vty *vty_create(int vty_sock, union sockunion *su)
 		if (host.password == NULL && host.password_encrypt == NULL) {
 			vty_out(vty, "Vty password is not set.\n");
 			vty->status = VTY_CLOSE;
-			vty_close(vty);
+			vty_close(vty, false);
 			return NULL;
 		}
 	}
@@ -1744,7 +1744,7 @@ void vty_stdio_close(void)
 {
 	if (!stdio_vty)
 		return;
-	vty_close(stdio_vty);
+	vty_close(stdio_vty, false);
 }
 
 struct vty *vty_stdio(void (*atclose)(int isexit))
@@ -2099,7 +2099,7 @@ static int vtysh_flush(struct vty *vty)
 			 __func__, vty->fd);
 		buffer_reset(vty->lbuf);
 		buffer_reset(vty->obuf);
-		vty_close(vty);
+		vty_close(vty, false);
 		return -1;
 	case BUFFER_EMPTY:
 		break;
@@ -2141,7 +2141,7 @@ static void vtysh_read(struct thread *thread)
 		}
 		buffer_reset(vty->lbuf);
 		buffer_reset(vty->obuf);
-		vty_close(vty);
+		vty_close(vty, false);
 #ifdef VTYSH_DEBUG
 		printf("close vtysh\n");
 #endif /* VTYSH_DEBUG */
@@ -2213,7 +2213,7 @@ static void vtysh_read(struct thread *thread)
 	}
 
 	if (vty->status == VTY_CLOSE)
-		vty_close(vty);
+		vty_close(vty, false);
 	else
 		vty_event(VTYSH_READ, vty);
 }
@@ -2250,13 +2250,14 @@ static void vty_error_delete(void *arg)
    will be careful not to access the vty afterwards (since it has
    now been freed).  This is safest from top-level functions (called
    directly by the thread dispatcher). */
-void vty_close(struct vty *vty)
+void vty_close(struct vty *vty, bool shutdown)
 {
 	int i;
 	bool was_stdio = false;
 
 	/* Drop out of configure / transaction if needed. */
-	vty_config_exit(vty);
+	if (!shutdown)
+		vty_config_exit(vty);
 
 	/* Cancel threads.*/
 	THREAD_OFF(vty->t_read);
@@ -2333,7 +2334,7 @@ static void vty_timeout(struct thread *thread)
 
 	/* Close connection. */
 	vty->status = VTY_CLOSE;
-	vty_close(vty);
+	vty_close(vty, false);
 }
 
 /* Read up configuration file from file_name. */
@@ -2427,7 +2428,7 @@ static void vty_read_file(struct nb_config *config, FILE *confp)
 				__func__, nb_err_name(ret), errmsg);
 	}
 
-	vty_close(vty);
+	vty_close(vty, false);
 }
 
 static FILE *vty_use_backup_config(const char *fullpath)
@@ -3111,7 +3112,7 @@ void vty_reset(void)
 		buffer_reset(vty->lbuf);
 		buffer_reset(vty->obuf);
 		vty->status = VTY_CLOSE;
-		vty_close(vty);
+		vty_close(vty, false);
 	}
 
 	vty_timeout_val = VTY_TIMEOUT_DEFAULT;
@@ -3226,7 +3227,7 @@ void vty_terminate(void)
 		buffer_reset(vty->lbuf);
 		buffer_reset(vty->obuf);
 		vty->status = VTY_CLOSE;
-		vty_close(vty);
+		vty_close(vty, true);
 	}
 
 	vtys_fini(vtysh_sessions);

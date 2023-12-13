@@ -407,7 +407,7 @@ int main(int argc, char **argv)
 	}
 	fprintf(stderr, "\nDone.\n");
 
-	vty_close(vty);
+	vty_close(vty, false);
 	prng_free(prng);
 	test_terminate();
 	return 0;

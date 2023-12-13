@@ -146,7 +146,7 @@ static void static_startup(void)
 static void static_shutdown(void)
 {
 	hook_call(frr_fini);
-	vty_close(vty);
+	vty_close(vty, true);
 	vrf_terminate();
 	vty_terminate();
 	cmd_terminate();
