@@ -179,3 +179,8 @@ int log_memstats(FILE *fp, const char *prefix)
 	qmem_walk(qmem_exit_walker, &eda);
 	return eda.error;
 }
+
+void memory_trim(void)
+{
+	malloc_trim(0);
+}

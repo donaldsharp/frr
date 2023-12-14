@@ -60,6 +60,8 @@ static int show_memory_mallinfo(struct vty *vty)
 		(unsigned long)minfo.smblks);
 	vty_out(vty, "  Holding blocks:        %ld\n",
 		(unsigned long)minfo.hblks);
+	vty_out(vty, "  Releasable Free Memory %ld\n",
+		(unsigned long)minfo.keepcost);
 	vty_out(vty, "(see system documentation for 'mallinfo' for meaning)\n");
 	return 1;
 }
@@ -166,6 +168,17 @@ DEFUN_NOSH (show_modules,
 	}
 
 	vty_out(vty, "pid: %u\n", (uint32_t)(getpid()));
+
+	return CMD_SUCCESS;
+}
+
+DEFUN (frr_triminator,
+       frr_triminator_cmd,
+       "clear memory",
+       "Clear stored data\n"
+       "Memory that has been freed but not released to the OS\n")
+{
+	memory_trim();
 
 	return CMD_SUCCESS;
 }
@@ -284,6 +297,8 @@ static const struct cmd_variable_handler default_var_handlers[] = {
 void lib_cmd_init(void)
 {
 	cmd_variable_handler_register(default_var_handlers);
+
+	install_element(ENABLE_NODE, &frr_triminator_cmd);
 
 	install_element(CONFIG_NODE, &frr_defaults_cmd);
 	install_element(CONFIG_NODE, &frr_version_cmd);

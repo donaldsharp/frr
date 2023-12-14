@@ -184,6 +184,8 @@ extern int log_memstats(FILE *fp, const char *);
 extern __attribute__((__noreturn__)) void memory_oom(size_t size,
 						     const char *name);
 
+extern void memory_trim(void);
+
 #ifdef __cplusplus
 }
 #endif
