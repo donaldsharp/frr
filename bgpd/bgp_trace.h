@@ -574,6 +574,80 @@ TRACEPOINT_EVENT(
 )
 TRACEPOINT_LOGLEVEL(frr_bgp, evpn_local_l3vni_del_zrecv, TRACE_INFO)
 
+TRACEPOINT_EVENT(
+	frr_bgp,
+	handle_fast_down_zrecv,
+	TP_ARGS(bool, upgrade),
+	TP_FIELDS(
+		ctf_integer(bool, upgrade, upgrade)
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, handle_fast_down_zrecv, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_bgp,
+	router_id_update_zrecv,
+	TP_ARGS(vrf_id_t, vrf_id, struct prefix *, router_id),
+	TP_FIELDS(
+		ctf_integer(int, vrf_id, vrf_id)
+        ctf_array(unsigned char, router_id, router_id, sizeof(struct prefix))
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, router_id_update_zrecv, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_bgp,
+	interface_address_oper_zrecv,
+	TP_ARGS(vrf_id_t, vrf_id, char *, name,
+                struct prefix *, address,
+                uint8_t, loc),
+	TP_FIELDS(
+		ctf_integer(int, vrf_id, vrf_id)
+        ctf_string(ifname, name)
+        ctf_array(unsigned char, address, address, sizeof(struct prefix))
+		ctf_integer(uint8_t, location, loc)
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, interface_address_oper_zrecv, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_bgp,
+	bgp_redistribute_add_zrecv,
+	TP_ARGS(char *, vrf, struct prefix *, pfx, ifindex_t, ifindex,
+                enum nexthop_types_t, nhtype, uint8_t, distance,
+                enum blackhole_type, bhtype, uint32_t, metric,
+                uint8_t, type,
+                unsigned short, instance,
+                route_tag_t, tag),
+	TP_FIELDS(
+		ctf_string(vrf, vrf)
+        ctf_array(unsigned char, prefix, pfx, sizeof(struct prefix))
+		ctf_integer(ifindex_t, ifindex, ifindex)
+		ctf_integer(enum nexthop_types_t, nhtype, nhtype)
+		ctf_integer(uint8_t, distance, distance)
+		ctf_integer(enum blackhole_type, bhtype, bhtype)
+		ctf_integer(uint32_t, metric, metric)
+		ctf_integer(uint8_t, type, type)
+		ctf_integer(unsigned short, instance, instance)
+		ctf_integer(route_tag_t, tag, tag)
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, bgp_redistribute_add_zrecv, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_bgp,
+	bgp_redistribute_delete_zrecv,
+	TP_ARGS(char *, vrf, struct prefix *, pfx, uint8_t, type,
+                unsigned short, instance),
+	TP_FIELDS(
+		ctf_string(vrf, vrf)
+        ctf_array(unsigned char, prefix, pfx, sizeof(struct prefix))
+		ctf_integer(uint8_t, type, type)
+		ctf_integer(unsigned short, instance, instance)
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, bgp_redistribute_delete_zrecv, TRACE_INFO)
+
 /*
  * Loc 1 - gr_tier1_deferral_timer_start,
  * Loc 2 - gr_tier2_deferral_timer_start,

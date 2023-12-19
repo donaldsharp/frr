@@ -34,6 +34,18 @@ import babeltrace
 import datetime
 
 ########################### common parsers - start ############################
+def location_if_oper_zrecv(field_val):
+    if field_val == 1:
+        return ("Rx Intf address Add")
+    elif field_val == 2:
+        return ("Rx Intf address Delete")
+    elif field_val == 3:
+        return ("Rx Intf Neighbor Add")
+    elif field_val == 4:
+        return ("Rx Intf Neighbor Delete")
+    elif field_val == 5:
+        return ("Rx Intf VRF Change")
+
 def location_if_add_del_upd(field_val):
     if field_val == 0:
         return ("Interface Delete")
@@ -264,6 +276,29 @@ def parse_event(event, field_parsers):
     dt_format = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3]
     print(dt_format, event.name, field_info)
 
+def parse_frr_bgp_router_id_update_zrecv(event):
+    """
+    bgp router-id update parser
+    """
+    field_parsers = {"router_id": print_prefix_addr}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_interface_addr_oper_zrecv(event):
+    """
+    bgp interface (or nbr) address add/del parser
+    """
+    field_parsers = {"location" : location_if_oper_zrecv,
+                     "address": print_prefix_addr}
+    parse_event(event, field_parsers)
+
+def parse_bgp_redistribute_zrecv(event):
+    """
+    bgp redistribute add/del parser
+    """
+    field_parsers = {"prefix": print_prefix_addr}
+
+    parse_event(event, field_parsers)
 
 ############################ common parsers - end #############################
 
@@ -786,6 +821,14 @@ def main():
                      parse_frr_bgp_gr_continue_deferred_path_selection,
                      "frr_bgp:gr_zebra_update":
                      parse_frr_bgp_gr_zebra_update,
+                     "frr_bgp:router_id_update_zrecv":
+                     parse_frr_bgp_router_id_update_zrecv,
+                     "frr_bgp:interface_address_oper_zrecv":
+                     parse_frr_interface_addr_oper_zrecv,
+                     "frr_bgp:bgp_redistribute_add_zrecv":
+                     parse_bgp_redistribute_zrecv,
+                     "frr_bgp:bgp_redistribute_delete_zrecv":
+                     parse_bgp_redistribute_zrecv,
 
 
 }

@@ -106,6 +106,7 @@ static int bgp_router_id_update(ZAPI_CALLBACK_ARGS)
 		zlog_debug("Rx Router Id update VRF %u Id %pFX", vrf_id,
 			   &router_id);
 
+	frrtrace(2, frr_bgp, router_id_update_zrecv, vrf_id, &router_id);
 	bgp_router_id_zebra_bump(vrf_id, &router_id);
 	return 0;
 }
@@ -324,6 +325,9 @@ static int bgp_interface_address_add(ZAPI_CALLBACK_ARGS)
 		zlog_debug("Rx Intf address add VRF %u IF %s addr %pFX", vrf_id,
 			   ifc->ifp->name, ifc->address);
 
+	frrtrace(4, frr_bgp, interface_address_oper_zrecv, vrf_id,
+		 ifc->ifp->name, ifc->address, 1);
+
 	if (!bgp)
 		return 0;
 
@@ -403,6 +407,9 @@ static int bgp_interface_address_delete(ZAPI_CALLBACK_ARGS)
 		zlog_debug("Rx Intf address del VRF %u IF %s addr %pFX", vrf_id,
 			   ifc->ifp->name, ifc->address);
 
+	frrtrace(4, frr_bgp, interface_address_oper_zrecv, vrf_id,
+		 ifc->ifp->name, ifc->address, 2);
+
 	if (bgp && if_is_operative(ifc->ifp)) {
 		bgp_connected_delete(bgp, ifc);
 	}
@@ -455,6 +462,9 @@ static int bgp_interface_nbr_address_add(ZAPI_CALLBACK_ARGS)
 		zlog_debug("Rx Intf neighbor add VRF %u IF %s addr %pFX",
 			   vrf_id, ifc->ifp->name, ifc->address);
 
+	frrtrace(4, frr_bgp, interface_address_oper_zrecv, vrf_id,
+		 ifc->ifp->name, ifc->address, 3);
+
 	if (if_is_operative(ifc->ifp)) {
 		bgp = bgp_lookup_by_vrf_id(vrf_id);
 		if (bgp)
@@ -477,6 +487,9 @@ static int bgp_interface_nbr_address_delete(ZAPI_CALLBACK_ARGS)
 	if (bgp_debug_zebra(ifc->address))
 		zlog_debug("Rx Intf neighbor del VRF %u IF %s addr %pFX",
 			   vrf_id, ifc->ifp->name, ifc->address);
+
+	frrtrace(4, frr_bgp, interface_address_oper_zrecv, vrf_id,
+		 ifc->ifp->name, ifc->address, 4);
 
 	if (if_is_operative(ifc->ifp)) {
 		bgp = bgp_lookup_by_vrf_id(vrf_id);
@@ -508,6 +521,9 @@ static int bgp_interface_vrf_update(ZAPI_CALLBACK_ARGS)
 	if (BGP_DEBUG(zebra, ZEBRA))
 		zlog_debug("Rx Intf VRF change VRF %u IF %s NewVRF %u", vrf_id,
 			   ifp->name, new_vrf_id);
+
+	frrtrace(4, frr_bgp, interface_address_oper_zrecv, vrf_id, ifp->name,
+		 new_vrf_id, 5);
 
 	bgp = bgp_lookup_by_vrf_id(vrf_id);
 
@@ -3247,6 +3263,7 @@ static int bgp_zebra_handle_fast_down(ZAPI_CALLBACK_ARGS)
 		zlog_debug("Rx Fast shutdown%s initiated",
 			   upgrade ? " (upgrade)" : "");
 
+	frrtrace(1, frr_bgp, handle_fast_down_zrecv, upgrade);
 	/* Process fast down */
 	bgp_process_fast_down(upgrade);
 

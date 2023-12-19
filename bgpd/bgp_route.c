@@ -8644,6 +8644,9 @@ void bgp_redistribute_add(struct bgp *bgp, struct prefix *p,
 	route_map_result_t ret;
 	struct bgp_redist *red;
 
+	frrtrace(10, frr_bgp, bgp_redistribute_add_zrecv, bgp->name_pretty, p,
+		 ifindex, nhtype, distance, bhtype, metric, type, instance,
+		 tag);
 	/* Make default attribute. */
 	bgp_attr_default_set(&attr, bgp, BGP_ORIGIN_INCOMPLETE);
 	/*
@@ -8819,6 +8822,8 @@ void bgp_redistribute_delete(struct bgp *bgp, struct prefix *p, uint8_t type,
 	struct bgp_redist *red;
 
 	afi = family2afi(p->family);
+	frrtrace(4, frr_bgp, bgp_redistribute_delete_zrecv, bgp->name_pretty, p,
+		 type, instance);
 
 	red = bgp_redist_lookup(bgp, afi, type, instance);
 	if (red) {
