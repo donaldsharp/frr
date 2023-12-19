@@ -1263,9 +1263,8 @@ failure:
  * Render a nexthop into a json object; the caller allocates and owns
  * the json object memory.
  */
-void show_nexthop_json_helper(json_object *json_nexthop,
-			      const struct nexthop *nexthop,
-			      const struct route_entry *re)
+void show_nexthop_json_helper(json_object *json_nexthop, const struct nexthop *nexthop,
+			      const struct route_entry *re, bool brief)
 {
 	json_object *json_labels = NULL;
 	json_object *json_backups = NULL;
@@ -1274,20 +1273,23 @@ void show_nexthop_json_helper(json_object *json_nexthop,
 	json_object *json_segs = NULL;
 	int i;
 
-	json_object_int_add(json_nexthop, "flags", nexthop->flags);
+	if (!brief) {
+		json_object_int_add(json_nexthop, "flags", nexthop->flags);
 
-	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_DUPLICATE))
-		json_object_boolean_true_add(json_nexthop, "duplicate");
+		if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_DUPLICATE))
+			json_object_boolean_true_add(json_nexthop, "duplicate");
 
-	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_FIB))
-		json_object_boolean_true_add(json_nexthop, "fib");
+		if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_FIB))
+			json_object_boolean_true_add(json_nexthop, "fib");
+	}
 
 	switch (nexthop->type) {
 	case NEXTHOP_TYPE_IPV4:
 	case NEXTHOP_TYPE_IPV4_IFINDEX:
 		json_object_string_addf(json_nexthop, "ip", "%pI4",
 					&nexthop->gate.ipv4);
-		json_object_string_add(json_nexthop, "afi", "ipv4");
+		if (!brief)
+			json_object_string_add(json_nexthop, "afi", "ipv4");
 
 		if (nexthop->ifindex) {
 			json_object_int_add(json_nexthop, "interfaceIndex",
@@ -1301,7 +1303,8 @@ void show_nexthop_json_helper(json_object *json_nexthop,
 	case NEXTHOP_TYPE_IPV6_IFINDEX:
 		json_object_string_addf(json_nexthop, "ip", "%pI6",
 					&nexthop->gate.ipv6);
-		json_object_string_add(json_nexthop, "afi", "ipv6");
+		if (!brief)
+			json_object_string_add(json_nexthop, "afi", "ipv6");
 
 		if (nexthop->ifindex) {
 			json_object_int_add(json_nexthop, "interfaceIndex",
@@ -1313,7 +1316,8 @@ void show_nexthop_json_helper(json_object *json_nexthop,
 		break;
 
 	case NEXTHOP_TYPE_IFINDEX:
-		json_object_boolean_true_add(json_nexthop, "directlyConnected");
+		if (!brief)
+			json_object_boolean_true_add(json_nexthop, "directlyConnected");
 		json_object_int_add(json_nexthop, "interfaceIndex",
 				    nexthop->ifindex);
 		json_object_string_add(
@@ -1321,23 +1325,30 @@ void show_nexthop_json_helper(json_object *json_nexthop,
 			ifindex2ifname(nexthop->ifindex, nexthop->vrf_id));
 		break;
 	case NEXTHOP_TYPE_BLACKHOLE:
-		json_object_boolean_true_add(json_nexthop, "unreachable");
-		switch (nexthop->bh_type) {
-		case BLACKHOLE_REJECT:
-			json_object_boolean_true_add(json_nexthop, "reject");
-			break;
-		case BLACKHOLE_ADMINPROHIB:
-			json_object_boolean_true_add(json_nexthop,
-						     "adminProhibited");
-			break;
-		case BLACKHOLE_NULL:
-			json_object_boolean_true_add(json_nexthop, "blackhole");
-			break;
-		case BLACKHOLE_UNSPEC:
-			break;
+		if (!brief) {
+			json_object_boolean_true_add(json_nexthop, "unreachable");
+			switch (nexthop->bh_type) {
+			case BLACKHOLE_REJECT:
+				json_object_boolean_true_add(json_nexthop, "reject");
+				break;
+			case BLACKHOLE_ADMINPROHIB:
+				json_object_boolean_true_add(json_nexthop, "adminProhibited");
+				break;
+			case BLACKHOLE_NULL:
+				json_object_boolean_true_add(json_nexthop, "blackhole");
+				break;
+			case BLACKHOLE_UNSPEC:
+				break;
+			}
 		}
 		break;
 	}
+
+	if ((re == NULL || (nexthop->vrf_id != re->vrf_id)))
+		json_object_string_add(json_nexthop, "vrf", vrf_id_to_name(nexthop->vrf_id));
+
+	if (brief)
+		return;
 
 	/* This nexthop is a resolver for the parent nexthop.
 	 * Set resolver flag for better clarity and delimiter
@@ -1345,10 +1356,6 @@ void show_nexthop_json_helper(json_object *json_nexthop,
 	 */
 	if (nexthop->rparent)
 		json_object_boolean_true_add(json_nexthop, "resolver");
-
-	if ((re == NULL || (nexthop->vrf_id != re->vrf_id)))
-		json_object_string_add(json_nexthop, "vrf",
-				       vrf_id_to_name(nexthop->vrf_id));
 
 	if (CHECK_FLAG(nexthop->flags, NEXTHOP_FLAG_DUPLICATE))
 		json_object_boolean_true_add(json_nexthop, "duplicate");
@@ -1642,8 +1649,7 @@ static void print_rnh(struct route_node *rn, struct vty *vty, json_object *json)
 				json_nexthop = json_object_new_object();
 				json_object_array_add(json_nexthop_array,
 						      json_nexthop);
-				show_nexthop_json_helper(json_nexthop, nexthop,
-							 NULL);
+				show_nexthop_json_helper(json_nexthop, nexthop, NULL, false);
 			} else {
 				show_route_nexthop_helper(vty, NULL, nexthop);
 				vty_out(vty, "\n");
