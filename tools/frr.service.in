@@ -20,5 +20,32 @@ ExecStart=@CFG_SBIN@/frrinit.sh start
 ExecStop=@CFG_SBIN@/frrinit.sh stop
 ExecReload=@CFG_SBIN@/frrinit.sh reload
 
+
+##security hardening
+PrivateTmp=yes
+RestrictNamespaces=~CLONE_NEWUTS
+NotifyAccess=
+PrivateDevices=true
+ProtectHostname=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectProc=invisible
+
+NoNewPrivileges=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ProtectKernelLogs=true
+ProtectKernelTunables=true
+
+ProtectSystem=full
+ProtectHome=yes
+ProtectClock=yes
+RestrictSUIDSGID=true
+UMask=0077
+CapabilityBoundingSet=~CAP_SYS_BOOT
+CapabilityBoundingSet=~CAP_SYS_CHROOT
+
+
 [Install]
 WantedBy=multi-user.target
