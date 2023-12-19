@@ -1359,17 +1359,6 @@ TRACEPOINT_EVENT(
 
 TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_free_nhe_refcount, TRACE_INFO)
 
-TRACEPOINT_EVENT(
-    frr_zebra,
-    rib_process_subq_dequeue,
-    TP_ARGS(
-        int, qindex),
-    TP_FIELDS(
-        ctf_integer(int, qindex, qindex)
-        )
-   )
-
-TRACEPOINT_LOGLEVEL(frr_zebra, rib_process_subq_dequeue, TRACE_INFO)
 
 /* clang-format on */
 #include <lttng/tracepoint-event.h>

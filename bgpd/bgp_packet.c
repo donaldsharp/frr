@@ -2953,7 +2953,6 @@ void bgp_process_packet(struct thread *thread)
 					__func__, peer->host);
 			break;
 		case BGP_MSG_KEEPALIVE:
-			frrtrace(2, frr_bgp, keepalive_process, peer, size);
 			peer->readtime = monotime(NULL);
 			atomic_fetch_add_explicit(&peer->keepalive_in, 1,
 						  memory_order_relaxed);

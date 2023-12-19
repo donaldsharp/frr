@@ -69,24 +69,10 @@ TRACEPOINT_EVENT_CLASS(
 	TRACEPOINT_LOGLEVEL(frr_bgp, name, TRACE_INFO)
 
 PKT_PROCESS_TRACEPOINT_INSTANCE(open_process)
-PKT_PROCESS_TRACEPOINT_INSTANCE(keepalive_process)
 PKT_PROCESS_TRACEPOINT_INSTANCE(update_process)
 PKT_PROCESS_TRACEPOINT_INSTANCE(notification_process)
 PKT_PROCESS_TRACEPOINT_INSTANCE(capability_process)
 PKT_PROCESS_TRACEPOINT_INSTANCE(refresh_process)
-
-TRACEPOINT_EVENT(
-	frr_bgp,
-	packet_read,
-	TP_ARGS(struct peer *, peer, struct stream *, pkt),
-	TP_FIELDS(
-		ctf_string(peer, PEER_HOSTNAME(peer))
-		ctf_sequence_hex(uint8_t, packet, pkt->data, size_t,
-				 STREAM_READABLE(pkt))
-	)
-)
-
-TRACEPOINT_LOGLEVEL(frr_bgp, packet_read, TRACE_INFO)
 
 TRACEPOINT_EVENT(
 	frr_bgp,
@@ -232,31 +218,6 @@ TRACEPOINT_EVENT(
 )
 
 TRACEPOINT_LOGLEVEL(frr_bgp, bmp_process, TRACE_DEBUG)
-
-/*
- * bgp_dest_lock/bgp_dest_unlock
- */
-TRACEPOINT_EVENT(
-	frr_bgp,
-	bgp_dest_lock,
-	TP_ARGS(struct bgp_dest *, dest),
-	TP_FIELDS(
-		ctf_string(prefix, bgp_dest_get_prefix_str(dest))
-		ctf_integer(unsigned int, count, bgp_dest_get_lock_count(dest))
-	)
-)
-TRACEPOINT_LOGLEVEL(frr_bgp, bgp_dest_lock, TRACE_INFO)
-
-TRACEPOINT_EVENT(
-	frr_bgp,
-	bgp_dest_unlock,
-	TP_ARGS(struct bgp_dest *, dest),
-	TP_FIELDS(
-		ctf_string(prefix, bgp_dest_get_prefix_str(dest))
-		ctf_integer(unsigned int, count, bgp_dest_get_lock_count(dest))
-	)
-)
-TRACEPOINT_LOGLEVEL(frr_bgp, bgp_dest_unlock, TRACE_INFO)
 
 TRACEPOINT_EVENT(
 	frr_bgp,

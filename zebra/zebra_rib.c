@@ -3371,7 +3371,6 @@ static unsigned int process_subq(struct list *subq,
 		process_subq_gr_run(lnode);
 		break;
 	}
-	frrtrace(1, frr_zebra, rib_process_subq_dequeue, qindex);
 	list_delete_node(subq, lnode);
 
 	return 1;
