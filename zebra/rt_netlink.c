@@ -2746,6 +2746,9 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 			zlog_debug(
 				"%s: nhg_id %u (%s): kernel nexthops not supported, ignoring",
 				__func__, id, zebra_route_string(type));
+
+		frrtrace(3, frr_zebra, netlink_nexthop_msg_encode_err, id, zebra_route_string(type),
+			 1);
 		return 0;
 	}
 
@@ -2754,6 +2757,9 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 			zlog_debug(
 				"%s: nhg_id %u (%s): proto-based nexthops only, ignoring",
 				__func__, id, zebra_route_string(type));
+
+		frrtrace(3, frr_zebra, netlink_nexthop_msg_encode_err, id, zebra_route_string(type),
+			 2);
 		return 0;
 	}
 
@@ -2763,6 +2769,9 @@ ssize_t netlink_nexthop_msg_encode(uint16_t cmd,
 			zlog_debug(
 				"%s: nhg_id %u (%s): labeled NHGs not supported, ignoring",
 				__func__, id, zebra_route_string(type));
+
+		frrtrace(3, frr_zebra, netlink_nexthop_msg_encode_err, id, zebra_route_string(type),
+			 3);
 		return 0;
 	}
 
@@ -3399,6 +3408,8 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 			zlog_debug("Ignore kernel update (%u) for fdb-nh 0x%x",
 					h->nlmsg_type, id);
 		}
+
+		frrtrace(2, frr_zebra, netlink_nexthop_change_err, h->nlmsg_type, id);
 		return 0;
 	}
 
