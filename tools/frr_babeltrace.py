@@ -92,6 +92,96 @@ def location_if_dplane_ifp_handling_new(field_val):
     elif field_val == 1:
         return ("RTM_NEWLINK UPD")
 
+
+def print_location_gr_deferral_timer_start(field_val):
+    if field_val == 1:
+        return ("Tier 1 deferral timer start")
+    elif field_val == 2:
+        return ("Tier 2 deferral timer start")
+
+
+def print_location_gr_eors(field_val):
+    if field_val == 1:
+        return "Check all EORs"
+    elif field_val == 2:
+        return "All dir conn EORs rcvd"
+    elif field_val == 3:
+        return "All multihop EORs NOT rcvd"
+    elif field_val == 4:
+        return "All EORs rcvd"
+    elif field_val == 5:
+        return "No multihop EORs pending"
+    elif field_val == 6:
+        return "EOR rcvd,check path select"
+    elif field_val == 7:
+        return "Do deferred path selection"
+
+
+def print_location_gr_eor_peer(field_val):
+    if field_val == 1:
+        return "EOR awaited from"
+    elif field_val == 2:
+        return "EOR ignore"
+    elif field_val == 3:
+        return "Multihop EOR awaited"
+    elif field_val == 4:
+        return "Ignore EOR rcvd after tier1 expiry"
+    elif field_val == 5:
+        return "Dir conn EOR awaited"
+
+
+def print_afi_string(field_val):
+    if field_val == 0:
+        return "UNSPEC"
+    elif field_val == 1:
+        return "IPV4"
+    elif field_val == 2:
+        return "IPV6"
+    elif field_val == 3:
+        return "L2VPN"
+    elif field_val == 4:
+        return "MAX"
+
+
+def print_safi_string(field_val):
+    if field_val == 0:
+        return "UNSPEC"
+    elif field_val == 1:
+        return "UNICAST"
+    elif field_val == 2:
+        return "MULTICAST"
+    elif field_val == 3:
+        return "MPLS_VPN"
+    elif field_val == 4:
+        return "ENCAP"
+    elif field_val == 5:
+        return "EVPN"
+    elif field_val == 6:
+        return "LABELED_UNICAST"
+    elif field_val == 7:
+        return "FLOWSPEC"
+    elif field_val == 8:
+        return "MAX"
+
+
+def location_prefix_filter_reason(field_val):
+    if field_val == 1:
+        return ("Originator-id same as remote router id")
+    elif field_val == 2:
+        return ("Filtered via ORF")
+    elif field_val == 3:
+        return ("Outbound policy")
+
+
+def location_attr_type_unsupported(field_val):
+    if field_val == 1:
+        return ("SRv6 sub sub TLV")
+    elif field_val == 2:
+        return ("SRv6 sub TLV")
+    elif field_val == 3:
+        return ("Prefix SID")
+
+
 def print_prefix_addr(field_val):
     """
     pretty print "struct prefix"
@@ -589,6 +679,78 @@ def parse_frr_zebra_if_dplane_ifp_handling_new(event):
     field_parsers = {"location" : location_if_dplane_ifp_handling_new}
     parse_event(event, field_parsers)
 
+
+def parse_frr_bgp_gr_deferral_timer_start(event):
+    field_parsers = {"location": print_location_gr_deferral_timer_start,
+                     "afi": print_afi_string,
+                     "safi": print_safi_string}
+
+    parse_event(event, field_parsers)
+
+
+def parse_frr_bgp_gr_deferral_timer_expiry(event):
+    field_parsers = {"afi": print_afi_string,
+                     "safi": print_safi_string}
+
+    parse_event(event, field_parsers)
+
+
+def parse_frr_bgp_gr_eors(event):
+    field_parsers = {"location": print_location_gr_eors,
+                     "afi": print_afi_string,
+                     "safi": print_safi_string}
+
+    parse_event(event, field_parsers)
+
+
+def parse_frr_bgp_gr_eor_peer(event):
+    field_parsers = {"location": print_location_gr_eor_peer,
+                     "afi": print_afi_string,
+                     "safi": print_safi_string}
+
+    parse_event(event, field_parsers)
+
+
+def parse_frr_bgp_gr_start_deferred_path_selection(event):
+    field_parsers = {"afi": print_afi_string,
+                     "safi": print_safi_string}
+
+    parse_event(event, field_parsers)
+
+
+def parse_frr_bgp_gr_send_fbit_capability(event):
+    field_parsers = {"afi": print_afi_string,
+                     "safi": print_safi_string}
+
+    parse_event(event, field_parsers)
+
+
+def parse_frr_bgp_gr_continue_deferred_path_selection(event):
+    field_parsers = {"afi": print_afi_string,
+                     "safi": print_safi_string}
+
+    parse_event(event, field_parsers)
+
+
+def parse_frr_bgp_gr_zebra_update(event):
+    field_parsers = {"afi": print_afi_string,
+                     "safi": print_safi_string}
+
+    parse_event(event, field_parsers)
+
+
+def parse_frr_update_prefix_filter(event):
+    field_parsers = {"location" : location_prefix_filter_reason}
+
+    parse_event(event, field_parsers)
+
+
+def parse_frr_bgp_attr_type_unsupported(event):
+    field_parsers = {"attr" : location_attr_type_unsupported}
+
+    parse_event(event, field_parsers)
+
+
 ############################ evpn parsers - end *#############################
 
 def main():
@@ -681,8 +843,10 @@ def main():
                      parse_bgp_redistribute_zrecv,
                      "frr_bgp:bgp_redistribute_delete_zrecv":
                      parse_bgp_redistribute_zrecv,
-
-
+                     "frr_bgp:upd_prefix_filtered_due_to":
+                     parse_frr_update_prefix_filter,
+                     "frr_bgp:upd_attr_type_unsupported":
+                     parse_frr_bgp_attr_type_unsupported,
 }
 
     # get the trace path from the first command line argument
