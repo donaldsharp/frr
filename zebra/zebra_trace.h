@@ -1360,6 +1360,95 @@ TRACEPOINT_EVENT(
 TRACEPOINT_LOGLEVEL(frr_zebra, zebra_nhg_free_nhe_refcount, TRACE_INFO)
 
 
+TRACEPOINT_EVENT(
+    frr_zebra,
+    rib_handle_nhg_replace,
+    TP_ARGS(
+        int, id,
+        int, old_entry_id),
+    TP_FIELDS(
+        ctf_integer(int, id, id)
+        ctf_integer(int, old_entry_id, old_entry_id)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, rib_handle_nhg_replace, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    rib_install_kernel_last_route,
+    TP_ARGS(
+	const char*, prefix),
+    TP_FIELDS(
+        ctf_string(prefix, prefix)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, rib_install_kernel_last_route, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    rib_install_kernel_route,
+    TP_ARGS(
+        const char*, prefix),
+    TP_FIELDS(
+        ctf_string(prefix, prefix)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, rib_install_kernel_route, TRACE_INFO)
+
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    rib_uninstall_kernel_route,
+    TP_ARGS(
+        const char*, prefix),
+    TP_FIELDS(
+        ctf_string(prefix, prefix)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, rib_uninstall_kernel_route, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_rib_evaluate_rn_nexthops,
+    TP_ARGS(
+        const char*, prefix,
+        int, count),
+    TP_FIELDS(
+        ctf_string(prefix, prefix)
+        ctf_integer(int, count, count)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_rib_evaluate_rn_nexthops, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_rib_evaluate_nht_tracking_bailout,
+    TP_ARGS(
+        const char*, prefix),
+    TP_FIELDS(
+        ctf_string(prefix, prefix)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_rib_evaluate_nht_tracking_bailout, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_rib_evaluate_rn_node_processed,
+    TP_ARGS(
+        int, seq),
+    TP_FIELDS(
+        ctf_integer(int, seq, seq)
+        )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_rib_evaluate_rn_node_processed, TRACE_INFO)
+
 /* clang-format on */
 #include <lttng/tracepoint-event.h>
 
