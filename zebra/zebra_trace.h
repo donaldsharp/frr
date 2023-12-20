@@ -78,6 +78,8 @@
 
 #include <linux/if_bridge.h>
 
+#define INTF_INVALID_INDEX 4294967295
+#define INTF_INVALID_NAME "not-found"
 /* clang-format off */
 TRACEPOINT_EVENT(
 	frr_zebra,
@@ -504,6 +506,36 @@ TRACEPOINT_LOGLEVEL(frr_zebra, netlink_neigh_update_msg_encode, TRACE_INFO)
 
 TRACEPOINT_EVENT(
 	frr_zebra,
+	netlink_nexthop_msg_encode_err,
+	TP_ARGS(
+		uint32_t, nhg_id,
+		const char *, zroute_type,
+		uint8_t, location),
+	TP_FIELDS(
+		ctf_integer(uint32_t, nhg_id, nhg_id)
+		ctf_string(zroute_type, zroute_type)
+		ctf_integer(uint8_t, location, location)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, netlink_nexthop_msg_encode_err, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	netlink_nexthop_change_err,
+	TP_ARGS(
+		uint16_t, nlmsg_type,
+		uint32_t, nhg_id),
+	TP_FIELDS(
+		ctf_integer(uint16_t, nlmsg_type, nlmsg_type)
+		ctf_integer(uint32_t, nhg_id, nhg_id)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, netlink_nexthop_change_err, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
 	netlink_route_multipath_msg_encode,
 	TP_ARGS(
 		const struct prefix *, p,
@@ -873,6 +905,82 @@ TRACEPOINT_EVENT(
 	)
 
 TRACEPOINT_LOGLEVEL(frr_zebra, netlink_vlan_change, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	netlink_vrf_change,
+	TP_ARGS(
+        const char *, name,
+        uint8_t, location),
+	TP_FIELDS(
+		ctf_string(name, name)
+		ctf_integer(uint8_t, location, location)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, netlink_vrf_change, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	get_iflink_speed,
+	TP_ARGS(
+        const char *, ifname,
+        int, error,
+        const char *, strerr,
+        uint8_t, location),
+	TP_FIELDS(
+		ctf_string(ifname, ifname)
+		ctf_integer(int, error, error)
+		ctf_string(strerr, strerr)
+		ctf_integer(uint8_t, location, location)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, get_iflink_speed, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	z_err_string,
+	TP_ARGS(
+        uint8_t, location),
+	TP_FIELDS(
+		ctf_integer(uint8_t, location, location)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, z_err_string, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	netlink_msg_err,
+	TP_ARGS(
+        const char *, msg_type,
+        uint32_t, data,
+        uint8_t, location),
+	TP_FIELDS(
+		ctf_string(msg_type, msg_type)
+		ctf_integer(uint32_t, data, data)
+		ctf_integer(uint8_t, location, location)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, netlink_msg_err, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
+	netlink_intf_err,
+	TP_ARGS(
+        const char *, ifname,
+        ifindex_t, ifindex,
+        uint8_t, location),
+	TP_FIELDS(
+		ctf_string(ifname, ifname)
+		ctf_integer(ifindex_t, ifindex, ifindex)
+		ctf_integer(uint8_t, location, location)
+		)
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, netlink_intf_err, TRACE_INFO)
 
 TRACEPOINT_EVENT(
 	frr_zebra,
