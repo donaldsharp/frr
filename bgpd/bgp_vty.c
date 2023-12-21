@@ -19912,6 +19912,16 @@ void bgp_vty_init(void)
 			&neighbor_maximum_prefix_threshold_restart_cmd);
 	install_element(BGP_VPNV6_NODE, &no_neighbor_maximum_prefix_cmd);
 
+	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_cmd);
+	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_threshold_cmd);
+	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_warning_cmd);
+	install_element(BGP_EVPN_NODE,
+			&neighbor_maximum_prefix_threshold_warning_cmd);
+	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_restart_cmd);
+	install_element(BGP_EVPN_NODE,
+			&neighbor_maximum_prefix_threshold_restart_cmd);
+	install_element(BGP_EVPN_NODE, &no_neighbor_maximum_prefix_cmd);
+
 	/* "neighbor allowas-in" */
 	install_element(BGP_NODE, &neighbor_allowas_in_hidden_cmd);
 	install_element(BGP_NODE, &no_neighbor_allowas_in_hidden_cmd);
