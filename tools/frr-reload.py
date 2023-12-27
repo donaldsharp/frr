@@ -1176,7 +1176,7 @@ def ignore_delete_re_add_lines(lines_to_add, lines_to_del):
         if del_line[1] is None and 'service password-obfuscation' in del_line[0]:
             validate_by_decrypt = True
 
-    index = 0
+    index = -1
     for (ctx_keys, line) in lines_to_del:
         deleted = False
 
