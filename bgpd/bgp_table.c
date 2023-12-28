@@ -66,7 +66,6 @@ void bgp_table_finish(struct bgp_table **rt)
  */
 void bgp_dest_unlock_node(struct bgp_dest *dest)
 {
-	frrtrace(1, frr_bgp, bgp_dest_unlock, dest);
 	bgp_delete_listnode(dest);
 	route_unlock_node(bgp_dest_to_rnode(dest));
 }
@@ -76,7 +75,6 @@ void bgp_dest_unlock_node(struct bgp_dest *dest)
  */
 struct bgp_dest *bgp_dest_lock_node(struct bgp_dest *dest)
 {
-	frrtrace(1, frr_bgp, bgp_dest_lock, dest);
 	struct route_node *rn = route_lock_node(bgp_dest_to_rnode(dest));
 
 	return bgp_dest_from_rnode(rn);
