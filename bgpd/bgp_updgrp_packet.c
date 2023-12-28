@@ -57,6 +57,7 @@
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_label.h"
 #include "bgpd/bgp_addpath.h"
+#include "bgpd/bgp_trace.h"
 
 /********************
  * PRIVATE FUNCTIONS
@@ -887,6 +888,7 @@ struct bpacket *subgroup_update_packet(struct update_subgroup *subgrp)
 				(stream_get_endp(packet)
 				 - stream_get_getp(packet)),
 				peer->max_packet_size, num_pfx);
+
 		pkt = bpacket_queue_add(SUBGRP_PKTQ(subgrp), packet, &vecarr);
 		stream_reset(s);
 		stream_reset(snlri);
@@ -1002,6 +1004,11 @@ struct bpacket *subgroup_withdraw_packet(struct update_subgroup *subgrp)
 						subgrp->id,
 						iana_afi2str(pkt_afi),
 						iana_safi2str(pkt_safi));
+
+				frrtrace(4, frr_bgp, upd_send_mp_unreach,
+					 subgrp->update_group->id, subgrp->id,
+					 iana_afi2str(pkt_afi),
+					 iana_safi2str(pkt_safi));
 			}
 
 			bgp_packet_mpunreach_prefix(s, dest_p, afi, safi, prd,
@@ -1048,6 +1055,11 @@ struct bpacket *subgroup_withdraw_packet(struct update_subgroup *subgrp)
 				   subgrp->update_group->id, subgrp->id,
 				   (stream_get_endp(s) - stream_get_getp(s)),
 				   num_pfx);
+
+		frrtrace(4, frr_bgp, upd_send_withdraw_details,
+			 subgrp->update_group->id, subgrp->id,
+			 (stream_get_endp(s) - stream_get_getp(s)), num_pfx);
+
 		pkt = bpacket_queue_add(SUBGRP_PKTQ(subgrp), stream_dup(s),
 					NULL);
 		stream_reset(s);
@@ -1095,30 +1107,31 @@ void subgroup_default_update_packet(struct update_subgroup *subgrp,
 	p.prefixlen = 0;
 
 	/* Logging the attribute. */
-	if (bgp_debug_update(NULL, &p, subgrp->update_group, 0)) {
-		char attrstr[BUFSIZ];
-		/* ' with addpath ID '          17
-		 * max strlen of uint32       + 10
-		 * +/- (just in case)         +  1
-		 * null terminator            +  1
-		 * ============================ 29 */
-		char tx_id_buf[30];
+	char attrstr[BUFSIZ];
+	/* ' with addpath ID '          17
+	 * max strlen of uint32       + 10
+	 * +/- (just in case)         +  1
+	 * null terminator            +  1
+	 * ============================ 29 */
+	char tx_id_buf[30];
 
-		attrstr[0] = '\0';
+	attrstr[0] = '\0';
 
-		bgp_dump_attr(attr, attrstr, sizeof(attrstr));
+	bgp_dump_attr(attr, attrstr, sizeof(attrstr));
 
-		if (addpath_capable)
-			snprintf(tx_id_buf, sizeof(tx_id_buf),
-				 " with addpath ID %u",
-				 BGP_ADDPATH_TX_ID_FOR_DEFAULT_ORIGINATE);
-		else
-			tx_id_buf[0] = '\0';
+	if (addpath_capable)
+		snprintf(tx_id_buf, sizeof(tx_id_buf), " with addpath ID %u",
+			 BGP_ADDPATH_TX_ID_FOR_DEFAULT_ORIGINATE);
+	else
+		tx_id_buf[0] = '\0';
 
+	if (bgp_debug_update(NULL, &p, subgrp->update_group, 0))
 		zlog_debug("u%" PRIu64 ":s%" PRIu64 " send UPDATE %pFX%s %s",
 			   (SUBGRP_UPDGRP(subgrp))->id, subgrp->id, &p,
 			   tx_id_buf, attrstr);
-	}
+
+	frrtrace(4, frr_bgp, upd_send_update_default_originate,
+		 (SUBGRP_UPDGRP(subgrp))->id, subgrp->id, tx_id_buf, attrstr);
 
 	s = stream_new(peer->max_packet_size);
 
@@ -1186,24 +1199,25 @@ void subgroup_default_withdraw_packet(struct update_subgroup *subgrp)
 	p.family = afi2family(afi);
 	p.prefixlen = 0;
 
-	if (bgp_debug_update(NULL, &p, subgrp->update_group, 0)) {
-		/* ' with addpath ID '          17
-		 * max strlen of uint32       + 10
-		 * +/- (just in case)         +  1
-		 * null terminator            +  1
-		 * ============================ 29 */
-		char tx_id_buf[30];
+	/* ' with addpath ID '          17
+	 * max strlen of uint32       + 10
+	 * +/- (just in case)         +  1
+	 * null terminator            +  1
+	 * ============================ 29 */
+	char tx_id_buf[30];
 
-		if (addpath_capable)
-			snprintf(tx_id_buf, sizeof(tx_id_buf),
-				 " with addpath ID %u",
-				 BGP_ADDPATH_TX_ID_FOR_DEFAULT_ORIGINATE);
+	if (addpath_capable)
+		snprintf(tx_id_buf, sizeof(tx_id_buf), " with addpath ID %u",
+			 BGP_ADDPATH_TX_ID_FOR_DEFAULT_ORIGINATE);
 
+	if (bgp_debug_update(NULL, &p, subgrp->update_group, 0))
 		zlog_debug("u%" PRIu64 ":s%" PRIu64
 			   " send UPDATE %pFX%s -- unreachable",
 			   (SUBGRP_UPDGRP(subgrp))->id, subgrp->id, &p,
 			   tx_id_buf);
-	}
+
+	frrtrace(3, frr_bgp, upd_send_withdraw_default_originate,
+		 (SUBGRP_UPDGRP(subgrp))->id, subgrp->id, tx_id_buf);
 
 	s = stream_new(peer->max_packet_size);
 

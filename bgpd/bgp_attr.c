@@ -55,6 +55,8 @@
 #include "bgp_evpn.h"
 #include "bgp_flowspec_private.h"
 #include "bgp_mac.h"
+#include "bgpd/bgp_trace.h"
+
 
 /* Attribute strings for logging. */
 static const struct message attr_str[] = {
@@ -1266,13 +1268,13 @@ bgp_attr_malformed(struct bgp_attr_parser_args *args, uint8_t subcode,
 	 */
 	uint8_t *notify_datap = (length > 0 ? args->startp : NULL);
 
-	if (bgp_debug_update(peer, NULL, NULL, 1)) {
-		char attr_str[BUFSIZ] = {0};
+	char attr_str[BUFSIZ] = {0};
 
-		bgp_dump_attr(attr, attr_str, sizeof(attr_str));
-
+	bgp_dump_attr(attr, attr_str, sizeof(attr_str));
+	if (bgp_debug_update(peer, NULL, NULL, 1))
 		zlog_debug("%s: attributes: %s", __func__, attr_str);
-	}
+
+	frrtrace(2, frr_bgp, upd_malformed_attr, peer->host, attr_str);
 
 	/* Only relax error handling for eBGP peers */
 	if (peer->sort != BGP_PEER_EBGP) {
@@ -2115,6 +2117,8 @@ int bgp_mp_reach_parse(struct bgp_attr_parser_args *args,
 				"%s sent unrecognizable AFI, %s or, SAFI, %s, of MP_REACH_NLRI",
 				peer->host, iana_afi2str(pkt_afi),
 				iana_safi2str(pkt_safi));
+		frrtrace(4, frr_bgp, upd_mp_unrecognized_afi_safi, peer->host,
+			 iana_afi2str(pkt_afi), iana_safi2str(pkt_safi), 1);
 		return BGP_ATTR_PARSE_ERROR;
 	}
 
@@ -2199,6 +2203,16 @@ int bgp_mp_reach_parse(struct bgp_attr_parser_args *args,
 					"%s sent next-hops %pI6 and %pI6. Ignoring non-LL value",
 					peer->host, &attr->mp_nexthop_global,
 					&attr->mp_nexthop_local);
+
+			char addrgbl[BUFSIZ];
+			char addrlocal[BUFSIZ];
+
+			frrtrace(3, frr_bgp, upd_ignoring_non_ll_nexthop,
+				 peer->host,
+				 inet_ntop(AF_INET6, &attr->mp_nexthop_global,
+					   addrgbl, BUFSIZ),
+				 inet_ntop(AF_INET6, &attr->mp_nexthop_local,
+					   addrlocal, BUFSIZ));
 
 			attr->mp_nexthop_len = IPV6_MAX_BYTELEN;
 		}
@@ -2294,6 +2308,10 @@ int bgp_mp_unreach_parse(struct bgp_attr_parser_args *args,
 				"%s: MP_UNREACH received AFI %s or SAFI %s is unrecognized",
 				peer->host, iana_afi2str(pkt_afi),
 				iana_safi2str(pkt_safi));
+
+		frrtrace(4, frr_bgp, upd_mp_unrecognized_afi_safi, peer->host,
+			 iana_afi2str(pkt_afi), iana_safi2str(pkt_safi), 2);
+
 		return BGP_ATTR_PARSE_ERROR;
 	}
 
@@ -2402,6 +2420,11 @@ bgp_attr_ext_communities(struct bgp_attr_parser_args *args)
 		    && bgp_mac_exist(&attr->rmac))
 			zlog_debug("%s: router mac %pEA is self mac", __func__,
 				   &attr->rmac);
+
+		char mac_buf[ETHER_ADDR_STRLEN];
+
+		frrtrace(1, frr_bgp, upd_rmac_is_self_mac,
+			 prefix_mac2str(&attr->rmac, mac_buf, sizeof(mac_buf)));
 	}
 
 	/* Get the tunnel type from encap extended community */
@@ -2639,6 +2662,8 @@ bgp_attr_srv6_service_data(struct bgp_attr_parser_args *args)
 			zlog_debug(
 				"%s attr SRv6 Service Data Sub-Sub-TLV sub-sub-type=%u is not supported, skipped",
 				peer->host, type);
+		frrtrace(2, frr_bgp, upd_attr_type_unsupported, 1, peer->host,
+			 type);
 
 		stream_forward_getp(peer->curr, length);
 	}
@@ -2733,6 +2758,9 @@ bgp_attr_srv6_service(struct bgp_attr_parser_args *args)
 			zlog_debug(
 				"%s attr SRv6 Service Sub-TLV sub-type=%u is not supported, skipped",
 				peer->host, type);
+
+		frrtrace(3, frr_bgp, upd_attr_type_unsupported, 2, peer->host,
+			 type);
 
 		stream_forward_getp(peer->curr, length);
 	}
@@ -2944,6 +2972,9 @@ bgp_attr_psid_sub(uint8_t type, uint16_t length,
 				"%s attr Prefix-SID sub-type=%u is not supported, skipped",
 				peer->host, type);
 
+		frrtrace(3, frr_bgp, upd_attr_type_unsupported, 3, peer->host,
+			 type);
+
 		stream_forward_getp(peer->curr, length);
 	}
 
@@ -3107,6 +3138,8 @@ bgp_attr_unknown(struct bgp_attr_parser_args *args)
 		zlog_debug(
 			"%s Unknown attribute is received (type %d, length %d)",
 			peer->host, type, length);
+
+	frrtrace(3, frr_bgp, upd_unknown_attr_rcvd, peer->host, type, length);
 
 	/* Forward read pointer of input stream. */
 	stream_forward_getp(peer->curr, length);

@@ -50,7 +50,7 @@
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_advertise.h"
 #include "bgpd/bgp_addpath.h"
-
+#include "bgpd/bgp_trace.h"
 
 /********************
  * PRIVATE FUNCTIONS
@@ -324,6 +324,10 @@ static void subgroup_coalesce_timer(struct thread *thread)
 		zlog_debug("u%" PRIu64 ":s%" PRIu64" announcing routes upon coalesce timer expiry(%u ms)",
 			   (SUBGRP_UPDGRP(subgrp))->id, subgrp->id,
 			   subgrp->v_coalesce);
+
+	frrtrace(3, frr_bgp, upd_announce_route_on_coalesce_timer_expiry,
+		 (SUBGRP_UPDGRP(subgrp))->id, subgrp->id, subgrp->v_coalesce);
+
 	subgrp->t_coalesce = NULL;
 	subgrp->v_coalesce = 0;
 	bgp = SUBGRP_INST(subgrp);
@@ -1024,6 +1028,10 @@ void subgroup_announce_all(struct update_subgroup *subgrp)
 		if (bgp_debug_update(NULL, NULL, subgrp->update_group, 0))
 			zlog_debug("u%" PRIu64 ":s%" PRIu64" announcing all routes",
 				   subgrp->update_group->id, subgrp->id);
+
+		frrtrace(2, frr_bgp, upd_announce_all_routes,
+			 subgrp->update_group->id, subgrp->id);
+
 		subgroup_announce_route(subgrp);
 		return;
 	}
