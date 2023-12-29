@@ -557,6 +557,20 @@ TRACEPOINT_LOGLEVEL(frr_bgp, interface_address_oper_zrecv, TRACE_INFO)
 
 TRACEPOINT_EVENT(
 	frr_bgp,
+	interface_address_vrf_upd,
+	TP_ARGS(vrf_id_t, vrf_id,
+            char *, name,
+            vrf_id_t, new_vrf_id),
+	TP_FIELDS(
+		ctf_integer(int, vrf_id, vrf_id)
+        ctf_string(ifname, name)
+		ctf_integer(int, new_vrf_id, new_vrf_id)
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, interface_address_vrf_upd, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_bgp,
 	bgp_redistribute_add_zrecv,
 	TP_ARGS(char *, vrf, struct prefix *, pfx, ifindex_t, ifindex,
                 enum nexthop_types_t, nhtype, uint8_t, distance,

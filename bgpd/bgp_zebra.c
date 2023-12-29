@@ -522,8 +522,8 @@ static int bgp_interface_vrf_update(ZAPI_CALLBACK_ARGS)
 		zlog_debug("Rx Intf VRF change VRF %u IF %s NewVRF %u", vrf_id,
 			   ifp->name, new_vrf_id);
 
-	frrtrace(4, frr_bgp, interface_address_oper_zrecv, vrf_id, ifp->name,
-		 new_vrf_id, 5);
+	frrtrace(3, frr_bgp, interface_address_vrf_upd, vrf_id, ifp->name,
+		 new_vrf_id);
 
 	bgp = bgp_lookup_by_vrf_id(vrf_id);
 
