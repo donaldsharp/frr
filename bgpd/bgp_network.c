@@ -424,10 +424,25 @@ static void bgp_accept(struct thread *thread)
 			/* Dynamic neighbor has been created, let it proceed */
 			peer1->fd = bgp_sock;
 
+			if (bgp_set_socket_ttl(peer1, peer1->fd) < 0) {
+				peer1->last_reset = PEER_DOWN_SOCKET_ERROR;
+				if (bgp_debug_neighbor_events(peer1))
+					zlog_debug(
+						"%s: Failure to set socket ttl for connection to %s, error received: %s(%d)",
+						__func__, peer1->host,
+						safe_strerror(errno), errno);
+				return;
+			}
+
 			/* Set the user configured MSS to TCP socket */
 			if (CHECK_FLAG(peer1->flags, PEER_FLAG_TCP_MSS))
 				sockopt_tcp_mss_set(bgp_sock, peer1->tcp_mss);
 
+			frr_with_privs (&bgpd_privs) {
+				vrf_bind(peer1->bgp->vrf_id, bgp_sock,
+					 bgp_get_bound_name(peer1));
+			}
+			bgp_peer_reg_with_nht(peer1);
 			bgp_fsm_change_status(peer1, Active);
 			THREAD_OFF(
 				peer1->t_start); /* created in peer_create() */
