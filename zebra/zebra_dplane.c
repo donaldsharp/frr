@@ -2541,59 +2541,58 @@ void dplane_ctx_set_intf_label(struct zebra_dplane_ctx *ctx, const char *label)
 }
 
 /* Accessors for MAC information */
-vlanid_t dplane_ctx_mac_get_vlan(const struct zebra_dplane_ctx *ctx)
+vlanid_t dplane_ctx_get_mac_vid(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return ctx->u.macinfo.vid;
 }
 
-bool dplane_ctx_mac_is_sticky(const struct zebra_dplane_ctx *ctx)
+bool dplane_ctx_get_mac_is_sticky(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return ctx->u.macinfo.is_sticky;
 }
 
-uint32_t dplane_ctx_mac_get_nhg_id(const struct zebra_dplane_ctx *ctx)
+uint32_t dplane_ctx_get_mac_nhg_id(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return ctx->u.macinfo.nhg_id;
 }
 
-uint32_t dplane_ctx_mac_get_update_flags(const struct zebra_dplane_ctx *ctx)
+uint32_t dplane_ctx_get_mac_update_flags(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return ctx->u.macinfo.update_flags;
 }
 
-const struct ethaddr *dplane_ctx_mac_get_addr(
-	const struct zebra_dplane_ctx *ctx)
+struct ethaddr *dplane_ctx_get_mac_addr(struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return &(ctx->u.macinfo.mac);
 }
 
-vni_t dplane_ctx_mac_get_vni(const struct zebra_dplane_ctx *ctx)
+vni_t dplane_ctx_get_mac_vni(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return ctx->u.macinfo.vni;
 }
 
-const struct in_addr *dplane_ctx_mac_get_vtep_ip(
-	const struct zebra_dplane_ctx *ctx)
+
+struct in_addr *dplane_ctx_get_mac_vtep_ip(struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return &(ctx->u.macinfo.vtep_ip);
 }
 
-ifindex_t dplane_ctx_mac_get_br_ifindex(const struct zebra_dplane_ctx *ctx)
+
+ifindex_t dplane_ctx_get_mac_br_ifindex(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return ctx->u.macinfo.br_ifindex;
 }
 
 /* Accessors for neighbor information */
-const struct ipaddr *dplane_ctx_neigh_get_ipaddr(
-	const struct zebra_dplane_ctx *ctx)
+struct ipaddr *dplane_ctx_get_neigh_ipaddr(struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return &(ctx->u.neigh.ip_addr);
@@ -2606,8 +2605,8 @@ dplane_ctx_neigh_get_link_ip(const struct zebra_dplane_ctx *ctx)
 	return &(ctx->u.neigh.link.ip_addr);
 }
 
-const struct ethaddr *dplane_ctx_neigh_get_mac(
-	const struct zebra_dplane_ctx *ctx)
+const struct ethaddr *
+dplane_ctx_neigh_get_link_mac(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);
 	return &(ctx->u.neigh.link.mac);
@@ -6267,8 +6266,7 @@ static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 
 	case DPLANE_OP_MAC_INSTALL:
 	case DPLANE_OP_MAC_DELETE:
-		prefix_mac2str(dplane_ctx_mac_get_addr(ctx), buf,
-			       sizeof(buf));
+		prefix_mac2str(dplane_ctx_get_mac_addr(ctx), buf, sizeof(buf));
 
 		zlog_debug("Dplane %s, mac %s, ifindex %u",
 			   dplane_op2str(dplane_ctx_get_op(ctx)),
@@ -6283,8 +6281,7 @@ static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_NEIGH_DISCOVER:
 	case DPLANE_OP_NEIGH_IP_INSTALL:
 	case DPLANE_OP_NEIGH_IP_DELETE:
-		ipaddr2str(dplane_ctx_neigh_get_ipaddr(ctx), buf,
-			   sizeof(buf));
+		ipaddr2str(dplane_ctx_get_neigh_ipaddr(ctx), buf, sizeof(buf));
 
 		zlog_debug("Dplane %s, ip %s, ifindex %u",
 			   dplane_op2str(dplane_ctx_get_op(ctx)),
