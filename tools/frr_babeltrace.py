@@ -43,8 +43,6 @@ def location_if_oper_zrecv(field_val):
         return ("Rx Intf Neighbor Add")
     elif field_val == 4:
         return ("Rx Intf Neighbor Delete")
-    elif field_val == 5:
-        return ("Rx Intf VRF Change")
 
 def location_if_add_del_upd(field_val):
     if field_val == 0:
