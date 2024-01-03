@@ -47,8 +47,8 @@
 DEFINE_MTYPE_STATIC(ZEBRA, MAC, "EVPN MAC");
 
 /* Is vni mcast group */
-bool is_mac_vni_mcast_group(struct ethaddr *mac, vni_t vni,
-			    struct in_addr grp_addr)
+static bool is_mac_vni_mcast_group(struct ethaddr *mac, vni_t vni,
+				   struct in_addr grp_addr)
 {
 	if (!vni)
 		return false;
@@ -2693,4 +2693,219 @@ void zebra_evpn_mac_svi_add(struct interface *ifp, struct zebra_evpn *zevpn)
 	new_bgp_ready = zebra_evpn_mac_is_ready_for_bgp(mac->flags);
 	zebra_evpn_mac_send_add_del_to_client(mac, old_bgp_ready,
 					      new_bgp_ready);
+}
+
+/*
+ * Runs in the Zebra Main thread context.
+ * Performs the handling of Mac events which was earlier handled in the
+ * netlink_macfdb_change by dequeuing the ctx and then processing.
+ */
+void zebra_macfdb_dplane_result(struct zebra_dplane_ctx *ctx)
+{
+	int error;
+	bool vni_mcast_grp = false;
+	struct zebra_ns *zns = NULL;
+	struct zebra_if *zif = NULL;
+	struct interface *ifp = NULL;
+	struct interface *br_if = NULL;
+	struct zebra_vxlan_vni *vnip = NULL;
+	struct zebra_l2_brvlan_mac *bmac = NULL;
+	vni_t vni = dplane_ctx_get_mac_vni(ctx);
+	ns_id_t ns_id = dplane_ctx_get_ns_id(ctx);
+	vlanid_t vid = dplane_ctx_get_mac_vid(ctx);
+	enum dplane_op_e op = dplane_ctx_get_op(ctx);
+	bool sticky = dplane_ctx_get_mac_is_sticky(ctx);
+	bool nud_perm = dplane_ctx_get_mac_nud_perm(ctx);
+	uint32_t nhg_id = dplane_ctx_get_mac_nhg_id(ctx);
+	struct ethaddr *mac = dplane_ctx_get_mac_addr(ctx);
+	bool dp_static = dplane_ctx_get_mac_dp_static(ctx);
+	bool ext_learned = dplane_ctx_get_mac_ext_learned(ctx);
+	ifindex_t ifindex = dplane_ctx_get_mac_br_ifindex(ctx);
+	bool dst_present = dplane_ctx_get_mac_dest_present(ctx);
+	struct in_addr *vtep_ip = dplane_ctx_get_mac_vtep_ip(ctx);
+	bool local_inactive = dplane_ctx_get_mac_local_inactive(ctx);
+
+	zns = zebra_ns_lookup(ns_id);
+	if (!zns) {
+		zlog_err("Where is our namespace?");
+		return;
+	}
+
+	/* The interface should exist. */
+	ifp = if_lookup_by_index_per_ns(zns, ifindex);
+	if (!ifp || !ifp->info) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("Interface for ifindex %u does not exist",
+				   ifindex);
+		return;
+	}
+
+	/* The interface should be something we're interested in. */
+	if (!IS_ZEBRA_IF_BRIDGE_SLAVE(ifp)) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("Interface(%u) is not member of a bridge",
+				   ifindex);
+		return;
+	}
+
+	zif = (struct zebra_if *)ifp->info;
+	if ((br_if = zif->brslave_info.br_if) == NULL) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug(
+				"%s AF_BRIDGE IF %s(%u) brIF %u - no bridge master",
+				dplane_op2str(op), ifp->name, ifindex,
+				zif->brslave_info.bridge_ifindex);
+		return;
+	}
+
+	if (IS_ZEBRA_DEBUG_KERNEL)
+		zlog_debug(
+			"Dequeing: Rx %s AF_BRIDGE IF %u MAC %p nhg %d vni %d",
+			dplane_op2str(op), ifindex, mac, nhg_id, vni);
+
+	/* For per vni device, vni comes from device itself */
+	if (IS_ZEBRA_IF_VXLAN(ifp) && IS_ZEBRA_VXLAN_IF_VNI(zif)) {
+		vnip = zebra_vxlan_if_vni_find(zif, 0);
+		vni = vnip->vni;
+	}
+
+	/*
+	 * Check if this is a mcast group update (svd case)
+	 */
+	vni_mcast_grp = is_mac_vni_mcast_group(mac, vni, *vtep_ip);
+
+	/* If add or update, do accordingly if learnt on a "local" interface;
+	 * if the notif is over VxLAN, this has to be related to multi-homing,
+	 * so perform an implicit delete of any local entry (if it exists).
+	 */
+	if (op == DPLANE_OP_MAC_INSTALL) {
+		/* Drop "permanent" entries. */
+		if (!vni_mcast_grp && nud_perm) {
+			if (IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug(
+					"Dropping entry because of NUD_PERMANENT");
+			return;
+		}
+
+		if (IS_ZEBRA_IF_VXLAN(ifp)) {
+			if (!dst_present) {
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"Dropping entry because Destination is not present");
+				return;
+			}
+
+			if (vni_mcast_grp) {
+				error = zebra_vxlan_if_vni_mcast_group_add_update(
+					ifp, vni, vtep_ip);
+				if (error < 0) {
+					if (IS_ZEBRA_DEBUG_KERNEL)
+						zlog_debug(
+							"%s: Error in func at location %d",
+							__func__, 1);
+				}
+
+				return;
+			}
+
+			error = zebra_vxlan_dp_network_mac_add(
+				ifp, br_if, mac, vid, vni, nhg_id, sticky,
+				ext_learned);
+			if (error < 0) {
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"%s: Error in func at location %d",
+						__func__, 2);
+			}
+
+			return;
+		}
+
+		bmac = zebra_l2_brvlan_mac_find(br_if, vid, mac);
+		if (bmac)
+			zebra_l2_brvlan_mac_update(br_if, bmac, ifp->ifindex);
+		else {
+			bmac = zebra_l2_brvlan_mac_add(
+				br_if, vid, mac, ifp->ifindex, sticky,
+				local_inactive, dp_static);
+			if (!bmac)
+				zlog_err(
+					"Failed to add local MAC cache bridge %s vid %u mac %pEA IF %u",
+					br_if->name, vid, mac, ifp->ifindex);
+		}
+
+
+		error = zebra_vxlan_local_mac_add_update(ifp, br_if, mac, vid,
+							 sticky, local_inactive,
+							 dp_static);
+		if (error < 0) {
+			if (IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug("%s: Error in func at location %d",
+					   __func__, 3);
+		}
+
+		return;
+	}
+
+	/* This is a delete notification.
+	 * Ignore the notification with IP dest as it may just signify that the
+	 * MAC has moved from remote to local. The exception is thecspecial
+	 * all-zeros MAC that represents the BUM flooding entry;
+	 * we may have to read it. Otherwise,
+	 *  1. For a MAC over VxLan, check if it needs to be refreshed(readded)
+	 *  2. For a MAC over "local" interface, delete the mac
+	 *
+	 * Note: We will get notifications from both bridge driver and VxLAN
+	 * driver.
+	 */
+	if (nhg_id) {
+		return;
+	}
+
+	if (dst_present) {
+		if (vni_mcast_grp) {
+			error = zebra_vxlan_if_vni_mcast_group_del(ifp, vni,
+								   vtep_ip);
+			if (error < 0) {
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"%s: Error in func at location %d",
+						__func__, 4);
+			}
+
+			return;
+		}
+
+		if (is_zero_mac(mac) && vni) {
+			error = zebra_vxlan_check_readd_vtep(ifp, vni,
+							     *vtep_ip);
+			if (error < 0) {
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"%s: Error in func at location %d",
+						__func__, 5);
+			}
+
+			return;
+		}
+
+		return;
+	}
+
+	if (IS_ZEBRA_IF_VXLAN(ifp))
+		return;
+
+	/* Delete MAC from local mac cache */
+	bmac = zebra_l2_brvlan_mac_find(br_if, vid, mac);
+	if (bmac)
+		zebra_l2_brvlan_mac_del(br_if, bmac);
+
+	error = zebra_vxlan_local_mac_del(ifp, br_if, mac, vid);
+	if (error < 0) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("%s: Error in func at location %d", __func__,
+				   6);
+	}
+
+	return;
 }
