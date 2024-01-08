@@ -133,11 +133,6 @@ extern enum netlink_msg_status netlink_batch_add_msg(
 	bool ignore_res);
 
 /*
- * Vty/cli apis
- */
-extern int netlink_config_write_helper(struct vty *vty);
-
-/*
  * Configure size of the batch buffer and sending threshold. If 'unset', reset
  * to default value.
  */

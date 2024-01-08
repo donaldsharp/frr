@@ -45,7 +45,7 @@
 #include "zebra/interface.h"
 #include "northbound_cli.h"
 #include "zebra/zebra_nb.h"
-#include "zebra/kernel_netlink.h"
+#include "zebra/kernel_netlink_public.h"
 #include "zebra/if_netlink.h"
 #include "zebra/table_manager.h"
 #include "zebra/zebra_script.h"

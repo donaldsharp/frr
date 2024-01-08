@@ -32,6 +32,7 @@
 #include "zebra/rt.h"
 #include "zebra/debug.h"
 #include "zebra/kernel_netlink.h"
+#include "zebra/kernel_netlink_public.h"
 #include "zebra/rt_netlink.h"
 #include "zebra/if_netlink.h"
 #include "zebra/rule_netlink.h"
