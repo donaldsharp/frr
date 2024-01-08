@@ -435,6 +435,9 @@ int rib_handle_nhg_replace(struct nhg_hash_entry *old_entry,
 		zlog_debug("%s: replacing routes nhe (%u) OLD %p NEW %p",
 			   __func__, new_entry->id, new_entry, old_entry);
 
+	frrtrace(2, frr_zebra, rib_handle_nhg_replace, new_entry->id,
+		 old_entry->id);
+
 	/* We have to do them ALL */
 	RB_FOREACH (zrt, zebra_router_table_head, &zrouter.tables) {
 		for (rn = route_top(zrt->table); rn;
@@ -697,6 +700,7 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 	struct zebra_vrf *zvrf = vrf_info_lookup(re->vrf_id);
 	const struct prefix *p, *src_p;
 	enum zebra_dplane_result ret;
+	char buf[SRCDEST2STR_BUFFER];
 
 	rib_dest_t *dest = rib_dest_from_rnode(rn);
 
@@ -713,6 +717,10 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 	 */
 	zebra_nhg_install_kernel(re->nhe);
 
+
+	if (IS_ZEBRA_DEBUG_RIB)
+		frrtrace(1, frr_zebra, rib_install_kernel_route,
+			 srcdest_rnode2str(rn, buf, sizeof(buf)));
 	/*
 	 * If this is a replace to a new RE let the originator of the RE
 	 * know that they've lost
@@ -735,7 +743,8 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 		zlog_debug(
 			"GR %s: reinstalling %pRN (%p) with RTM_F_LAST_ROUTE flag on re %p",
 			__func__, rn, rn, re);
-
+		frrtrace(1, frr_zebra, rib_install_kernel_last_route,
+			 srcdest_rnode2str(rn, buf, sizeof(buf)));
 		ret = dplane_route_update_last(rn, re);
 	} else {
 		if (old)
@@ -806,6 +815,7 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 void rib_uninstall_kernel(struct route_node *rn, struct route_entry *re)
 {
 	struct nexthop *nexthop;
+	char buf[SRCDEST2STR_BUFFER];
 	struct rib_table_info *info = srcdest_rnode_table_info(rn);
 	struct zebra_vrf *zvrf = vrf_info_lookup(re->vrf_id);
 
@@ -821,6 +831,8 @@ void rib_uninstall_kernel(struct route_node *rn, struct route_entry *re)
 	 * the dataplane.
 	 */
 	hook_call(rib_update, rn, "uninstalling from kernel");
+	frrtrace(1, frr_zebra, rib_uninstall_kernel_route,
+		 srcdest_rnode2str(rn, buf, sizeof(buf)));
 
 	switch (dplane_route_delete(rn, re)) {
 	case ZEBRA_DPLANE_REQUEST_QUEUED:
@@ -878,6 +890,7 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn, uint32_t seq,
 {
 	rib_dest_t *dest = rib_dest_from_rnode(rn);
 	struct rnh *rnh;
+	char buf[SRCDEST2STR_BUFFER];
 
 	/*
 	 * We are storing the rnh's associated withb
@@ -895,10 +908,16 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn, uint32_t seq,
 				__func__, rn,
 				dest ? rnh_list_count(&dest->nht) : 0);
 
+		frrtrace(2, frr_zebra, zebra_rib_evaluate_rn_nexthops,
+			 srcdest_rnode2str(rn, buf, sizeof(buf)),
+			 dest ? rnh_list_count(&dest->nht) : 0);
 		if (rt_delete && (!dest || !rnh_list_count(&dest->nht))) {
 			if (IS_ZEBRA_DEBUG_NHT_DETAILED)
 				zlog_debug("%pRN has no tracking NHTs. Bailing",
 					   rn);
+			frrtrace(1, frr_zebra,
+				 zebra_rib_evaluate_nht_tracking_bailout,
+				 srcdest_rnode2str(rn, buf, sizeof(buf)));
 			break;
 		}
 		if (!dest) {
@@ -940,6 +959,9 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn, uint32_t seq,
 				if (IS_ZEBRA_DEBUG_NHT_DETAILED)
 					zlog_debug(
 						"    Node processed and moved already");
+				frrtrace(1, frr_zebra,
+					 zebra_rib_evaluate_rn_node_processed,
+					 seq);
 				continue;
 			}
 
