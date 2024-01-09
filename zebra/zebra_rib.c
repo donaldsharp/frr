@@ -60,6 +60,7 @@
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_script.h"
 #include "zebra/zebra_trace.h"
+#include "zebra/zebra_neigh.h"
 
 DEFINE_MGROUP(ZEBRA, "zebra");
 
@@ -5130,7 +5131,19 @@ static void rib_process_dplane_results(struct thread *thread)
 
 			case DPLANE_OP_MAC_INSTALL:
 			case DPLANE_OP_MAC_DELETE:
-				zebra_vxlan_handle_result(ctx);
+				if (dplane_ctx_get_status(ctx) ==
+				    ZEBRA_DPLANE_REQUEST_QUEUED)
+					/*
+					 * This handles South to North case
+					 * (kernel-zebra)
+					 */
+					zebra_macfdb_dplane_result(ctx);
+				else
+					/*
+					 * This handles North to South
+					 * case(BGP-zebra-kernel)
+					 */
+					zebra_vxlan_handle_result(ctx);
 				break;
 
 			case DPLANE_OP_RULE_ADD:
@@ -5159,12 +5172,17 @@ static void rib_process_dplane_results(struct thread *thread)
 			case DPLANE_OP_TC_DELETE:
 				break;
 
-			/* Some op codes not handled here */
-			case DPLANE_OP_ADDR_INSTALL:
-			case DPLANE_OP_ADDR_UNINSTALL:
 			case DPLANE_OP_NEIGH_INSTALL:
 			case DPLANE_OP_NEIGH_UPDATE:
 			case DPLANE_OP_NEIGH_DELETE:
+			case DPLANE_OP_NEIGH_GET:
+				if (dplane_ctx_get_status(ctx) ==
+				    ZEBRA_DPLANE_REQUEST_QUEUED)
+					zebra_neigh_dplane_result(ctx);
+				break;
+			/* Some op codes not handled here */
+			case DPLANE_OP_ADDR_INSTALL:
+			case DPLANE_OP_ADDR_UNINSTALL:
 			case DPLANE_OP_NEIGH_IP_INSTALL:
 			case DPLANE_OP_NEIGH_IP_DELETE:
 			case DPLANE_OP_VTEP_ADD:

@@ -154,6 +154,7 @@ enum dplane_op_e {
 	DPLANE_OP_NEIGH_INSTALL,
 	DPLANE_OP_NEIGH_UPDATE,
 	DPLANE_OP_NEIGH_DELETE,
+	DPLANE_OP_NEIGH_GET,
 
 	/* EVPN VTEP updates */
 	DPLANE_OP_VTEP_ADD,
@@ -657,28 +658,72 @@ const char *dplane_ctx_get_intf_label(const struct zebra_dplane_ctx *ctx);
 void dplane_ctx_set_intf_label(struct zebra_dplane_ctx *ctx, const char *label);
 
 /* Accessors for MAC information */
-vlanid_t dplane_ctx_mac_get_vlan(const struct zebra_dplane_ctx *ctx);
-bool dplane_ctx_mac_is_sticky(const struct zebra_dplane_ctx *ctx);
-uint32_t dplane_ctx_mac_get_update_flags(const struct zebra_dplane_ctx *ctx);
-uint32_t dplane_ctx_mac_get_nhg_id(const struct zebra_dplane_ctx *ctx);
-const struct ethaddr *dplane_ctx_mac_get_addr(
-	const struct zebra_dplane_ctx *ctx);
-vni_t dplane_ctx_mac_get_vni(const struct zebra_dplane_ctx *ctx);
-const struct in_addr *dplane_ctx_mac_get_vtep_ip(
-	const struct zebra_dplane_ctx *ctx);
-ifindex_t dplane_ctx_mac_get_br_ifindex(const struct zebra_dplane_ctx *ctx);
+uint32_t dplane_ctx_get_mac_update_flags(const struct zebra_dplane_ctx *ctx);
+bool dplane_ctx_get_mac_local_inactive(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_local_inactive(struct zebra_dplane_ctx *ctx,
+				       bool local_inactive);
+bool dplane_ctx_get_mac_dp_static(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_dp_static(struct zebra_dplane_ctx *ctx, bool dp_static);
+bool dplane_ctx_get_mac_dest_present(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_dest_present(struct zebra_dplane_ctx *ctx,
+				     bool dest_present);
+vlanid_t dplane_ctx_get_mac_vid(const struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_vid(struct zebra_dplane_ctx *ctx, vlanid_t vid);
+bool dplane_ctx_get_mac_is_sticky(const struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_is_sticky(struct zebra_dplane_ctx *ctx, bool is_sticky);
+uint32_t dplane_ctx_get_mac_nhg_id(const struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_nh_id(struct zebra_dplane_ctx *ctx, uint32_t nhg_id);
+struct ethaddr *dplane_ctx_get_mac_addr(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_addr(struct zebra_dplane_ctx *ctx, struct ethaddr *mac);
+vni_t dplane_ctx_get_mac_vni(const struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_vni(struct zebra_dplane_ctx *ctx, vni_t vni);
+struct in_addr *dplane_ctx_get_mac_vtep_ip(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_vtep_ip(struct zebra_dplane_ctx *ctx,
+				struct in_addr *vtep, bool dst_present);
+bool dplane_ctx_get_mac_ext_learned(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_ext_learned(struct zebra_dplane_ctx *ctx,
+				    bool ext_learned);
+bool dplane_ctx_get_mac_nud_perm(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_nud_perm(struct zebra_dplane_ctx *ctx, bool nud_perm);
+ifindex_t dplane_ctx_get_mac_br_ifindex(const struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_mac_br_ifindex(struct zebra_dplane_ctx *ctx,
+				   ifindex_t ifindex);
 
 /* Accessors for neighbor information */
-const struct ipaddr *dplane_ctx_neigh_get_ipaddr(
-	const struct zebra_dplane_ctx *ctx);
-const struct ethaddr *dplane_ctx_neigh_get_mac(
-	const struct zebra_dplane_ctx *ctx);
+const struct ethaddr *
+dplane_ctx_neigh_get_link_mac(const struct zebra_dplane_ctx *ctx);
 vni_t dplane_ctx_neigh_get_vni(const struct zebra_dplane_ctx *ctx);
 const struct ipaddr *
 dplane_ctx_neigh_get_link_ip(const struct zebra_dplane_ctx *ctx);
 uint32_t dplane_ctx_neigh_get_flags(const struct zebra_dplane_ctx *ctx);
 uint16_t dplane_ctx_neigh_get_state(const struct zebra_dplane_ctx *ctx);
 uint32_t dplane_ctx_neigh_get_update_flags(const struct zebra_dplane_ctx *ctx);
+struct ethaddr *dplane_ctx_get_neigh_mac(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_neigh_mac(struct zebra_dplane_ctx *ctx, void *src_mac);
+int dplane_ctx_get_neigh_l2_len(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_neigh_l2_len(struct zebra_dplane_ctx *ctx, int l2_len);
+void *dplane_ctx_get_neigh_l2_addr(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_neigh_l2_addr(struct zebra_dplane_ctx *ctx, void *l2_addr,
+				  int l2_len);
+uint16_t dplane_ctx_get_neigh_ndm_state(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_neigh_ndm_state(struct zebra_dplane_ctx *ctx,
+				    uint16_t ndm_state);
+uint8_t dplane_ctx_get_neigh_ndm_flags(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_neigh_ndm_flags(struct zebra_dplane_ctx *ctx,
+				    uint8_t ndm_flags);
+ifindex_t dplane_ctx_get_neigh_ifindex(const struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_neigh_ifindex(struct zebra_dplane_ctx *ctx,
+				  ifindex_t ifindex);
+uint32_t dplane_ctx_get_neigh_ext_flags(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_neigh_ext_flags(struct zebra_dplane_ctx *ctx,
+				    uint32_t ext_flags);
+struct ipaddr *dplane_ctx_get_neigh_ipaddr(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_neigh_ipaddr(struct zebra_dplane_ctx *ctx,
+				 enum ipaddr_type_t ipaddr_type,
+				 struct ipaddr *ip, int len);
+bool dplane_ctx_get_neigh_lladdr_present(struct zebra_dplane_ctx *ctx);
+void dplane_ctx_set_neigh_lladdr_present(struct zebra_dplane_ctx *ctx,
+					 bool is_present);
 
 /* Accessors for policy based routing rule information */
 int dplane_ctx_rule_get_sock(const struct zebra_dplane_ctx *ctx);

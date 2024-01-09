@@ -399,6 +399,7 @@ static void zd_dpdk_rule_update(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_NEIGH_INSTALL:
 	case DPLANE_OP_NEIGH_UPDATE:
 	case DPLANE_OP_NEIGH_DELETE:
+	case DPLANE_OP_NEIGH_GET:
 	case DPLANE_OP_VTEP_ADD:
 	case DPLANE_OP_VTEP_DELETE:
 	case DPLANE_OP_NEIGH_DISCOVER:
@@ -459,6 +460,7 @@ static void zd_dpdk_process_update(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_NEIGH_INSTALL:
 	case DPLANE_OP_NEIGH_UPDATE:
 	case DPLANE_OP_NEIGH_DELETE:
+	case DPLANE_OP_NEIGH_GET:
 	case DPLANE_OP_VTEP_ADD:
 	case DPLANE_OP_VTEP_DELETE:
 	case DPLANE_OP_NEIGH_DISCOVER:
