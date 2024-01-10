@@ -1287,7 +1287,7 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 		if (json_nexthop_array) {
 			json_nexthops = json_object_new_object();
 			if (brief) {
-				if (zebra_nhg_dependents_is_empty(nhe))
+				if (zebra_nhg_depends_is_empty(nhe))
 					show_nexthop_json_helper(json_nexthops, nexthop, NULL,
 								 brief);
 			} else {
@@ -1344,7 +1344,7 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 
 	if (json) {
 		if (brief) {
-			if (zebra_nhg_dependents_is_empty(nhe))
+			if (zebra_nhg_depends_is_empty(nhe))
 				json_object_object_add(json, "nexthops", json_nexthop_array);
 			if (json_nhe_hdr)
 				json_object_object_addf(json_nhe_hdr, json, "%u", nhe->id);
