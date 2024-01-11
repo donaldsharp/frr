@@ -2360,9 +2360,10 @@ ssize_t netlink_route_multipath_msg_encode(int cmd, struct zebra_dplane_ctx *ctx
 	     (!proto_nexthops_only() || is_proto_nhg(dplane_ctx_get_nhe_id(ctx), 0)) &&
 	     /* CUMULUS ONLY */ !nexthop_group_has_label(dplane_ctx_get_ng(ctx))) ||
 	    (fpm && force_nhg)) {
-		uint32_t nhg_id;
+		uint32_t nhg_id = dplane_ctx_get_nhe_id(ctx);
+		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
+		const struct nexthop_group *ctxnhg = dplane_ctx_get_ng(ctx);
 
-		nhg_id = dplane_ctx_get_nhe_id(ctx);
 		/* Kernel supports nexthop objects */
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug("%s: %pFX nhg_id is %u", __func__, p, nhg_id);
@@ -2390,9 +2391,12 @@ ssize_t netlink_route_multipath_msg_encode(int cmd, struct zebra_dplane_ctx *ctx
 					return 0;
 			}
 		}
-
-		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p, cmd, nhg_id, "",
-			 datalen);
+		nexthop_group2str(ctxnhg, buf, sizeof(buf));
+		/* NOTE: if required to print all nhg depends then use
+		 * printfrr_nhghe()
+		 */
+		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p, cmd, 0,
+			 buf, datalen);
 
 		return NLMSG_ALIGN(req->n.nlmsg_len);
 	}
@@ -2544,14 +2548,11 @@ ssize_t netlink_route_multipath_msg_encode(int cmd, struct zebra_dplane_ctx *ctx
 
 	if (p && nexthop) {
 		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
-		char buf1[NEXTHOP_STRLEN + 2];
-		buf[0] = '\0';
-		struct nexthop *tnexthop;
-		for (tnexthop = nexthop; tnexthop; tnexthop = tnexthop->next) {
-			nexthop2str(tnexthop, buf1, sizeof(buf1));
-			strlcat(buf, buf1, sizeof(buf));
-		}
-		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p, cmd, 0, buf, datalen);
+		const struct nexthop_group *ctxnhg = dplane_ctx_get_ng(ctx);
+
+		nexthop_group2str(ctxnhg, buf, sizeof(buf));
+		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p, cmd, 0,
+			 buf, datalen);
 	}
 
 	return NLMSG_ALIGN(req->n.nlmsg_len);
@@ -3058,14 +3059,10 @@ nexthop_done:
 					   nh->vrf_id, label_buf);
 			if (nh) {
 				char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
-				char buf1[NEXTHOP_STRLEN + 2];
+				const struct nexthop_group *ctxnhg = dplane_ctx_get_ng(ctx);
+
 				buf[0] = '\0';
-				const struct nexthop *tnexthop;
-				for (tnexthop = nh; tnexthop; tnexthop = tnexthop->next) {
-					nexthop2str(tnexthop, buf1, sizeof(buf1));
-					strlcat(buf, buf1, sizeof(buf));
-					strlcat(buf, " ", sizeof(buf));
-				}
+				nexthop_group2str(ctxnhg, buf, sizeof(buf));
 				frrtrace(4, frr_zebra, netlink_nexthop_msg_encode, nh, id,
 					 label_buf, buf);
 			}
