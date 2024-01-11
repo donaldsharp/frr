@@ -506,7 +506,7 @@ TRACEPOINT_EVENT(
 		const struct prefix *, p,
 		int, cmd,
 		uint32_t, nhg_id,
-		char *, nexthop,
+		const char *, nexthop,
 		size_t , datalen),
 	TP_FIELDS(
 		ctf_string(family, (p->family == AF_INET) ? "AF_INET" : "AF_INET6")
@@ -528,7 +528,7 @@ TRACEPOINT_EVENT(
 		const struct nexthop *, nh,
 		uint32_t, nhg_id,
 		char *, label_buf,
-		char *, nexthop),
+		const char *, nexthop),
 	TP_FIELDS(
 		ctf_integer(uint32_t, nh_index, nh->ifindex)
 		ctf_integer(uint32_t, nh_vrfid, nh->vrf_id)
@@ -547,7 +547,7 @@ TRACEPOINT_EVENT(
 		uint32_t, cmd,
 		struct zserv *, client,
 		struct zapi_route, api,
-		char *, nexthop),
+		const char *, nexthop),
 	TP_FIELDS(
 		ctf_string(cmd, zserv_command_string(cmd))
 		ctf_string(client_proto, zebra_route_string(client->proto))
@@ -967,7 +967,7 @@ TRACEPOINT_EVENT(
 		struct zapi_route, api,
 		char *, pfx,
 		vrf_id_t , vrf_id,
-		char *, nexthop),
+		const char *, nexthop),
 	TP_FIELDS(
 		ctf_integer(int, api_flag, api.flags)
 		ctf_integer(int, api_msg, api.message)
@@ -1006,7 +1006,7 @@ TRACEPOINT_EVENT(
 		uint32_t, id,
 		uint16_t, proto,
 		struct nexthop_group *, nhg,
-		char *, nexthop),
+		const char *, nexthop),
 	TP_FIELDS(
 		ctf_integer(uint32_t, id, id)
 		ctf_integer(uint16_t, proto, proto)
