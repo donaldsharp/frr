@@ -867,7 +867,7 @@ static void vty_show_ip_route_detail_json(struct vty *vty,
 		else
 			next = 1;
 
-		vty_show_ip_route(vty, rn, re, json, use_fib, false, true);
+		vty_show_ip_route(vty, rn, re, json, use_fib, false, false);
 
 		if (next == 1)
 			vty_out(vty, ",");
