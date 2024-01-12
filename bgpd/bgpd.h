@@ -322,7 +322,17 @@ enum bgp_instance_type {
 	(!CHECK_FLAG(bgp->flags, BGP_FLAG_GR_DISABLE_EOR) &&                   \
 	 (!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART) ||                  \
 	  ((!bgp->gr_multihop_peer_exists && !bgp_in_graceful_restart()) ||    \
-	   BGP_GR_MULTIHOP_SELECT_DEFER_DONE(bgp, afi, safi))))
+	   BGP_GR_MULTIHOP_SELECT_DEFER_DONE(bgp, afi, safi) ||                \
+	   (!bgp->gr_info[afi][safi].af_enabled &&                             \
+	    !bgp_in_graceful_restart()))))
+
+/*
+ * Checks is tier1 or tier2 GR select deferral timer is
+ * running for given afi safi in given BGP instance
+ */
+#define BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(bgp, afi, safi)                \
+	(bgp->gr_info[afi][safi].t_select_deferral ||                          \
+	 bgp->gr_info[afi][safi].t_select_deferral_tier2)
 
 /* BGP GR Global ds */
 
@@ -2425,6 +2435,7 @@ extern void bgp_process_fast_down(bool upgrade);
 int bgp_global_gr_init(struct bgp *bgp);
 int bgp_peer_gr_init(struct peer *peer);
 
+static inline bool bgp_gr_supported_for_afi_safi(afi_t afi, safi_t safi);
 
 #define BGP_GR_ROUTER_DETECT_AND_SEND_CAPABILITY_TO_ZEBRA(_bgp, _peer_list)    \
 	do {                                                                   \
@@ -2665,6 +2676,7 @@ static inline bool bgp_is_graceful_restart_complete(void)
 		return true;
 	return false;
 }
+
 static inline void bgp_update_gr_completion(void)
 {
 	struct listnode *node, *nnode;
@@ -2705,11 +2717,12 @@ static inline bool bgp_gr_is_forwarding_preserved(struct bgp *bgp)
 static inline bool bgp_gr_supported_for_afi_safi(afi_t afi, safi_t safi)
 {
 	/*
-	 * GR restarter behavior is supported only for IPv4-unicast
-	 * and IPv6-unicast.
+	 * GR restarter behavior is supported only for IPv4-unicast,
+	 * IPv6-unicast and L2vpn EVPN
 	 */
 	if ((afi == AFI_IP && safi == SAFI_UNICAST) ||
-	    (afi == AFI_IP6 && safi == SAFI_UNICAST))
+	    (afi == AFI_IP6 && safi == SAFI_UNICAST) ||
+	    (afi == AFI_L2VPN && safi == SAFI_EVPN))
 		return true;
 	return false;
 }

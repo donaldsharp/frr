@@ -187,6 +187,9 @@ static struct stream *bgp_update_packet_eor(struct peer *peer, afi_t afi,
 		zlog_debug("send End-of-RIB for %s to %s",
 			   get_afi_safi_str(afi, safi, false), peer->host);
 
+	frrtrace(4, frr_bgp, eor_send, peer->bgp->name_pretty, afi, safi,
+		 peer->host);
+
 	s = stream_new(peer->max_packet_size);
 
 	/* Make BGP update packet. */
@@ -514,6 +517,16 @@ void bgp_generate_updgrp_packets(struct thread *thread)
 
 			afi = paf->afi;
 			safi = paf->safi;
+
+			/*
+			 * L2VPN EVPN routes must be advertised to peers only if
+			 * GR is done for all the VRFs. Waiting for overall GR
+			 * to be done will ensure that all the routes from
+			 * non-default VRFs will be exported to default VRF
+			 * before sending updates and EOR to peers.
+			 */
+			if (safi != SAFI_UNICAST && bgp_in_graceful_restart())
+				continue;
 
 			if (peer->bgp->gr_multihop_peer_exists &&
 			    bgp_in_graceful_restart() &&
@@ -1835,6 +1848,8 @@ static void bgp_update_receive_eor(struct bgp *bgp, struct peer *peer,
 	zlog_info("%s: rcvd End-of-RIB for %s from %s in vrf %s", __func__,
 		  get_afi_safi_str(afi, safi, false), peer->host,
 		  vrf ? vrf->name : VRF_DEFAULT_NAME);
+	frrtrace(4, frr_bgp, eor_received, bgp->name_pretty, afi, safi,
+		 peer->host);
 
 	/* End-of-RIB received */
 	if (!CHECK_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_EOR_RECEIVED)) {

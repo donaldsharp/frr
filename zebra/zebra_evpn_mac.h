@@ -145,6 +145,12 @@ struct zebra_mac {
 	uint32_t sync_neigh_cnt;
 
 	time_t uptime;
+
+	/*
+	 * Timestamp of when this entry was created/refreshed.
+	 * This field is used to do GR stale entry cleanup
+	 */
+	uint64_t gr_refresh_time;
 };
 
 /*
@@ -169,6 +175,8 @@ struct mac_walk_ctx {
 	uint32_t count;		  /* Used by VTY handlers */
 	struct json_object *json; /* Used for JSON Output */
 	bool print_dup;		  /* Used to print dup addr list */
+	bool gr_stale_cleanup; /* Used for cleaning up stale entries for GR */
+	uint64_t gr_cleanup_time;
 };
 
 struct rmac_walk_ctx {
@@ -239,7 +247,8 @@ void zebra_evpn_mac_send_add_del_to_client(struct zebra_mac *mac,
 					   bool new_bgp_ready);
 
 void zebra_evpn_mac_del_all(struct zebra_evpn *zevi, int uninstall,
-			    int upd_client, uint32_t flags);
+			    int upd_client, uint32_t flags,
+			    struct l2vni_walk_ctx *l2_wctx);
 int zebra_evpn_mac_send_add_to_client(vni_t vni, const struct ethaddr *macaddr,
 				      uint32_t mac_flags, uint32_t seq,
 				      struct zebra_evpn_es *es);
@@ -286,6 +295,9 @@ int zebra_evpn_mac_add_local_mac(struct interface *br_if, vlanid_t vid,
 				 bool dp_static, void *arg);
 void zebra_evpn_mac_ifp_del(struct interface *ifp);
 void zebra_evpn_mac_clear_fwd_info(struct zebra_mac *zmac);
+extern void zebra_vxlan_stale_remote_mac_add(struct ethaddr *macaddr,
+					     struct in_addr vtep_ip,
+					     bool sticky, vni_t vni);
 
 extern void zebra_macfdb_dplane_result(struct zebra_dplane_ctx *ctx);
 

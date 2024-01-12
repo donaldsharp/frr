@@ -1316,6 +1316,10 @@ zebra Terminal Mode Commands
    show various zebra state that is useful when debugging an operator's
    setup.
 
+.. clicmd:: show zebra csm
+
+   Display various statistics related to CSMgr and graceful restart.
+
 .. clicmd:: show zebra client [summary]
 
    Display statistics about clients that are connected to zebra.  This is

@@ -238,7 +238,8 @@ extern int zebra_vxlan_dp_network_mac_del(struct interface *ifp,
 
 extern void zebra_vxlan_set_accept_bgp_seq(bool set);
 extern bool zebra_vxlan_get_accept_bgp_seq(void);
-
+extern void zebra_vxlan_stale_hrep_add(struct in_addr vtep_ip, vni_t vni);
+extern void zebra_evpn_stale_entries_cleanup(uint64_t gr_cleanup_time);
 #ifdef __cplusplus
 }
 #endif

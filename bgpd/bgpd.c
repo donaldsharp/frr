@@ -3212,14 +3212,8 @@ peer_init:
 		bgp_maximum_paths_set(bgp, afi, safi, BGP_PEER_IBGP,
 				      multipath_num, 0);
 		/* Initialize graceful restart info */
-		bgp->gr_info[afi][safi].t_select_deferral = NULL;
-		bgp->gr_info[afi][safi].t_select_deferral_tier2 = NULL;
-		bgp->gr_info[afi][safi].t_route_select = NULL;
-		bgp->gr_info[afi][safi].gr_deferred = 0;
-		bgp->gr_info[afi][safi].select_defer_over = false;
-		bgp->gr_info[afi][safi].select_defer_over_tier2 = false;
-		bgp->gr_info[afi][safi].select_defer_tier2_required = false;
-		bgp->gr_info[afi][safi].route_sync_tier2 = false;
+		memset(&bgp->gr_info[afi][safi], 0,
+		       sizeof(struct graceful_restart_info));
 	}
 
 	bgp->v_update_delay = bm->v_update_delay;
@@ -8297,7 +8291,7 @@ static int peer_unshut_after_cfg(struct bgp *bgp)
 	struct listnode *node;
 	struct peer *peer;
 	bool all_peers_are_admin_down = true;
-	bool gr_router_detected = false;
+	bool gr_cfgd_at_nbr = false;
 
 	for (ALL_LIST_ELEMENTS_RO(bgp->peer, node, peer)) {
 		/* This peer is admin up */
@@ -8305,7 +8299,7 @@ static int peer_unshut_after_cfg(struct bgp *bgp)
 			all_peers_are_admin_down = false;
 
 		if (CHECK_FLAG(peer->flags, PEER_FLAG_GRACEFUL_RESTART))
-			gr_router_detected = true;
+			gr_cfgd_at_nbr = true;
 
 		if (!peer->shut_during_cfg)
 			continue;
@@ -8334,13 +8328,30 @@ static int peer_unshut_after_cfg(struct bgp *bgp)
 	all_peers_are_admin_down = (all_peers_are_admin_down ||
 				    CHECK_FLAG(bgp->flags, BGP_FLAG_SHUTDOWN));
 
+	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+		zlog_debug(
+			"GR %s: All peers in %s are ADMIN down %d. BGP in GR %d, GR mode %d, gr_rtr_detected %d",
+			__func__, bgp->name_pretty, all_peers_are_admin_down,
+			bgp_in_graceful_restart(), bgp_global_gr_mode_get(bgp),
+			gr_cfgd_at_nbr);
+
+	/*
+	 * If BGP is not in GR
+	 * OR
+	 * If this VRF doesn't have GR configured at global and neighbor level
+	 * then return
+	 */
+	if (!bgp_in_graceful_restart() ||
+	    (bgp_global_gr_mode_get(bgp) != GLOBAL_GR && !gr_cfgd_at_nbr))
+		return 0;
+
+
 	/*
 	 * If BGP is restarting gracefully, if the mode is GLOBAL_GR
 	 * and if there are no BGP peers configured/all peers are admin down,
 	 * then send the UPDATE_PENDING and UPDATE_COMPLETE to zebra.
 	 */
-	if (all_peers_are_admin_down && bgp_in_graceful_restart() &&
-	    (bgp_global_gr_mode_get(bgp) == GLOBAL_GR || gr_router_detected)) {
+	if (all_peers_are_admin_down) {
 		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 			zlog_debug(
 				"GR %s: All peers in %s are ADMIN down. Sending update_pending and complete to zebra",
@@ -8351,20 +8362,19 @@ static int peer_unshut_after_cfg(struct bgp *bgp)
 
 		afi_t afi;
 		safi_t safi;
-		for (afi = AFI_IP; afi < AFI_MAX; afi++) {
-			for (safi = SAFI_UNICAST; safi <= SAFI_MPLS_VPN;
-			     safi++) {
-				if (!bgp_gr_supported_for_afi_safi(afi, safi))
-					continue;
-				/* Inform zebra */
-				bgp_zebra_update(
-					bgp, afi, safi,
-					ZEBRA_CLIENT_ROUTE_UPDATE_PENDING);
-				bgp_zebra_update(
-					bgp, afi, safi,
-					ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE);
-			}
+
+		FOREACH_AFI_SAFI_NSF (afi, safi) {
+			if (!bgp_gr_supported_for_afi_safi(afi, safi))
+				continue;
+			/* Inform zebra */
+			bgp_zebra_update(bgp, afi, safi,
+					 ZEBRA_CLIENT_ROUTE_UPDATE_PENDING);
+			bgp_zebra_update(bgp, afi, safi,
+					 ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE);
 		}
+	} else {
+		/* start select-deferral-timer for all GR supported afi safi */
+		bgp_gr_start_all_deferral_timers(bgp);
 	}
 
 	return 0;

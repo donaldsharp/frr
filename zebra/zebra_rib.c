@@ -2007,15 +2007,23 @@ done:
 	return rn;
 }
 
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#if defined(HAVE_CSMGR)
 static void zebra_gr_reinstall_last_route(void)
 {
 	zrouter.gr_last_rt_installed = true;
 
 	zlog_debug(
-		"GR %s: All queued routes have been processed. Total queued %u, total processed %d",
-		__func__, z_gr_ctx.total_queued_rt,
-		z_gr_ctx.total_processed_rt);
+		"GR %s: Routes: Total queued %u, total processed %d. EVPN entries: Total queued %u, total processed %u",
+		__func__, z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt,
+		z_gr_ctx.total_evpn_entries_queued,
+		z_gr_ctx.total_evpn_entries_processed);
+
+	frrtrace(3, frr_zebra, gr_ready_to_reinstall_last_route, "Routes",
+		 z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
+	frrtrace(3, frr_zebra, gr_ready_to_reinstall_last_route, "EVPN entries",
+		 z_gr_ctx.total_evpn_entries_queued,
+		 z_gr_ctx.total_evpn_entries_processed);
+
 
 	/* Reinstall the last route */
 	if (z_gr_ctx.rn && z_gr_ctx.re &&
@@ -2027,6 +2035,13 @@ static void zebra_gr_reinstall_last_route(void)
 		route_lock_node(z_gr_ctx.rn);
 		rib_install_kernel(z_gr_ctx.rn, z_gr_ctx.re, NULL, true);
 		route_unlock_node(z_gr_ctx.rn);
+
+		char trace_pfx_buf[PREFIX_STRLEN];
+
+		prefix2str(&z_gr_ctx.rn->p, trace_pfx_buf,
+			   sizeof(trace_pfx_buf));
+		frrtrace(2, frr_zebra, gr_reinstalled_last_route,
+			 vrf_id_to_name(z_gr_ctx.re->vrf_id), trace_pfx_buf);
 	} else {
 		zlog_info("GR %s Last route not found. rn %p, re %p", __func__,
 			  z_gr_ctx.rn, z_gr_ctx.re);
@@ -2037,8 +2052,7 @@ static void zebra_gr_reinstall_last_route(void)
 		__func__, z_gr_ctx.af_installed_count[AFI_IP],
 		z_gr_ctx.af_installed_count[AFI_IP6]);
 
-	frr_csm_send_network_layer_info(z_gr_ctx.af_installed_count[AFI_IP],
-					z_gr_ctx.af_installed_count[AFI_IP6]);
+	frr_csm_send_network_layer_info();
 
 	/* Reset the global pointers */
 	z_gr_ctx.rn = NULL;
@@ -2051,7 +2065,7 @@ static void zebra_gr_reinstall_last_route(void)
  */
 void zebra_gr_last_rt_reinstall_check(void)
 {
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#if defined(HAVE_CSMGR)
 	/*
 	 * Check to see if we have to reinstall the last route.
 	 *
@@ -2069,10 +2083,14 @@ void zebra_gr_last_rt_reinstall_check(void)
 	 *
 	 * Last route needs to be installed only once.
 	 */
+	z_gr_ctx.total_evpn_entries_queued = zebra_gr_queued_cnt_get();
+
 	if (zrouter.graceful_restart && zrouter.all_instances_gr_done &&
 	    !zrouter.gr_last_rt_installed) {
 
-		if ((z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt)) {
+		if ((z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt) &&
+		    (z_gr_ctx.total_evpn_entries_processed >=
+		     z_gr_ctx.total_evpn_entries_queued)) {
 			zlog_debug(
 				"GR %s: Reinstalling last route and sending NL INFO to CSMgr",
 				__func__);
@@ -2090,9 +2108,8 @@ static void zebra_record_most_recent_route(struct zebra_dplane_ctx *ctx,
 					   struct route_node *rn,
 					   struct route_entry *re)
 {
-
-	if (!re || !zrouter.graceful_restart || !zvrf ||
-	    (zvrf && !zvrf->gr_enabled))
+#if defined(HAVE_CSMGR)
+	if (!re || !zrouter.graceful_restart || !zvrf || !zvrf->gr_enabled)
 		return;
 
 	/*
@@ -2124,6 +2141,7 @@ static void zebra_record_most_recent_route(struct zebra_dplane_ctx *ctx,
 			z_gr_ctx.re = re;
 		}
 	}
+#endif
 }
 
 /*
@@ -3839,8 +3857,8 @@ int zebra_rib_queue_evpn_rem_vtep_add(vrf_id_t vrf_id, vni_t vni,
 	w->flags = flood_control;
 
 	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
-		zlog_debug("%s: vrf %u, vtep %pI4 enqueued", __func__, vrf_id,
-			   &vtep_ip);
+		zlog_debug("%s: vrf %u, vtep %pI4 VNI %u enqueued", __func__,
+			   vrf_id, &vtep_ip, vni);
 
 	return mq_add_handler(w, rib_meta_queue_evpn_add);
 }
@@ -4412,6 +4430,7 @@ static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 			subqueue2str(META_QUEUE_EARLY_ROUTE), ere->afi,
 			ere->safi);
 
+#if defined(HAVE_CSMGR)
 	/*
 	 * Record the total unicast routes enqueued during GR
 	 */
@@ -4423,7 +4442,7 @@ static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 		if (!zrouter.gr_last_rt_installed && zvrf && zvrf->gr_enabled)
 			z_gr_ctx.total_queued_rt++;
 	}
-
+#endif
 	return 0;
 }
 
@@ -4853,7 +4872,7 @@ void rib_sweep_table(struct route_table *table)
 
 static void zebra_declare_gr_done(void)
 {
-#if defined(HAVE_CUMULUS) && defined(HAVE_CSMGR)
+#if defined(HAVE_CSMGR)
 	if ((zrouter.graceful_restart)) {
 		zlog_debug(
 			"GR %s: GR complete NOT recieved from BGP. Triggering INIT_COMPLETE",
@@ -4904,6 +4923,7 @@ void rib_sweep_route(struct thread *t)
 
 	zebra_router_sweep_route();
 	zebra_router_sweep_nhgs();
+	zebra_evpn_stale_entries_cleanup(zrouter.startup_time);
 
 	/*
 	 * If none of the BGP peers are configured or are UP,
@@ -5128,7 +5148,6 @@ static void rib_process_dplane_results(struct thread *thread)
 			case DPLANE_OP_SYS_ROUTE_ADD:
 			case DPLANE_OP_SYS_ROUTE_DELETE:
 				break;
-
 			case DPLANE_OP_MAC_INSTALL:
 			case DPLANE_OP_MAC_DELETE:
 				if (dplane_ctx_get_status(ctx) ==
@@ -5145,7 +5164,6 @@ static void rib_process_dplane_results(struct thread *thread)
 					 */
 					zebra_vxlan_handle_result(ctx);
 				break;
-
 			case DPLANE_OP_RULE_ADD:
 			case DPLANE_OP_RULE_DELETE:
 			case DPLANE_OP_RULE_UPDATE:
@@ -5157,7 +5175,6 @@ static void rib_process_dplane_results(struct thread *thread)
 			case DPLANE_OP_IPSET_ENTRY_DELETE:
 				zebra_pbr_dplane_result(ctx);
 				break;
-
 			case DPLANE_OP_INTF_ADDR_ADD:
 			case DPLANE_OP_INTF_ADDR_DEL:
 			case DPLANE_OP_INTF_INSTALL:
@@ -5166,12 +5183,10 @@ static void rib_process_dplane_results(struct thread *thread)
 			case DPLANE_OP_INTF_NETCONFIG:
 				zebra_if_dplane_result(ctx);
 				break;
-
 			case DPLANE_OP_TC_INSTALL:
 			case DPLANE_OP_TC_UPDATE:
 			case DPLANE_OP_TC_DELETE:
 				break;
-
 			case DPLANE_OP_NEIGH_INSTALL:
 			case DPLANE_OP_NEIGH_UPDATE:
 			case DPLANE_OP_NEIGH_DELETE:
@@ -5179,15 +5194,20 @@ static void rib_process_dplane_results(struct thread *thread)
 				if (dplane_ctx_get_status(ctx) ==
 				    ZEBRA_DPLANE_REQUEST_QUEUED)
 					zebra_neigh_dplane_result(ctx);
+                else
+                    zebra_vxlan_handle_result(ctx);
 				break;
 			/* Some op codes not handled here */
 			case DPLANE_OP_ADDR_INSTALL:
 			case DPLANE_OP_ADDR_UNINSTALL:
+                break;
 			case DPLANE_OP_NEIGH_IP_INSTALL:
 			case DPLANE_OP_NEIGH_IP_DELETE:
 			case DPLANE_OP_VTEP_ADD:
 			case DPLANE_OP_VTEP_DELETE:
 			case DPLANE_OP_NEIGH_DISCOVER:
+				zebra_vxlan_handle_result(ctx);
+				break;
 			case DPLANE_OP_BR_PORT_UPDATE:
 			case DPLANE_OP_NEIGH_TABLE_UPDATE:
 			case DPLANE_OP_GRE_SET:

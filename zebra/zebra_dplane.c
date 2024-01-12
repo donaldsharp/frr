@@ -674,6 +674,24 @@ neigh_update_internal(enum dplane_op_e op, const struct interface *ifp,
  * Public APIs
  */
 
+#if defined(HAVE_CSMGR)
+/*
+ * Return the total successfully enqueued MAC and
+ * neigh entries
+ */
+uint32_t zebra_gr_queued_cnt_get(void)
+{
+	return atomic_load_explicit(&zdplane_info.dg_neighs_in,
+				    memory_order_relaxed) +
+	       atomic_load_explicit(&zdplane_info.dg_macs_in,
+				    memory_order_relaxed) -
+	       atomic_load_explicit(&zdplane_info.dg_mac_errors,
+				    memory_order_relaxed) -
+	       atomic_load_explicit(&zdplane_info.dg_neigh_errors,
+				    memory_order_relaxed);
+}
+#endif
+
 /* Obtain thread_master for dataplane thread */
 struct thread_master *dplane_get_thread_master(void)
 {
@@ -4195,6 +4213,7 @@ static int dplane_update_enqueue(struct zebra_dplane_ctx *ctx)
 void zebra_gr_increment_processed_rt_count(struct route_node *rn,
 					   vrf_id_t vrf_id, bool check_safi)
 {
+#if defined(HAVE_CSMGR)
 	struct zebra_vrf *zvrf;
 
 	zvrf = vrf_info_lookup(vrf_id);
@@ -4211,6 +4230,7 @@ void zebra_gr_increment_processed_rt_count(struct route_node *rn,
 				z_gr_ctx.total_processed_rt++;
 		}
 	}
+#endif
 }
 
 /*

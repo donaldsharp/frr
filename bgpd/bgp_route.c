@@ -319,10 +319,11 @@ struct bgp_path_info *bgp_path_info_unlock(struct bgp_path_info *path)
 }
 
 /* This function sets flag BGP_NODE_SELECT_DEFER based on condition */
-static int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete)
+int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete)
 {
 	struct peer *peer;
 	struct bgp_path_info *old_pi, *nextpi;
+	bool pi_is_imported_from_evpn = false;
 	bool set_flag = false;
 	struct bgp *bgp = NULL;
 	struct bgp_table *table = NULL;
@@ -345,22 +346,25 @@ static int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete)
 	}
 
 	table = bgp_dest_table(dest);
-	if (table) {
-		bgp = table->bgp;
-		afi = table->afi;
-		safi = table->safi;
-	}
+	if (!table)
+		return -1;
+
+	bgp = table->bgp;
+	afi = table->afi;
+	safi = table->safi;
 
 	for (old_pi = bgp_dest_get_bgp_path_info(dest);
 	     (old_pi != NULL) && (nextpi = old_pi->next, 1); old_pi = nextpi) {
 		if (CHECK_FLAG(old_pi->flags, BGP_PATH_SELECTED))
 			continue;
 
+
 		/* Route selection is deferred if there is a stale path which
 		 * which indicates peer is in restart mode
 		 */
-		if (CHECK_FLAG(old_pi->flags, BGP_PATH_STALE)
-		    && (old_pi->sub_type == BGP_ROUTE_NORMAL)) {
+		if (CHECK_FLAG(old_pi->flags, BGP_PATH_STALE) &&
+		    (old_pi->sub_type == BGP_ROUTE_NORMAL ||
+		     IS_PATH_IMPORTED_FROM_EVPN_TABLE(old_pi))) {
 			set_flag = true;
 		} else {
 			/* If the peer is graceful restart capable and peer is
@@ -374,29 +378,48 @@ static int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete)
 			peer = old_pi->peer;
 			if (BGP_PEER_GRACEFUL_RESTART_CAPABLE(peer) &&
 			    BGP_PEER_RESTARTING_MODE(peer) &&
-			    (old_pi && old_pi->sub_type == BGP_ROUTE_NORMAL)) {
+			    (old_pi &&
+			     (old_pi->sub_type == BGP_ROUTE_NORMAL ||
+			      IS_PATH_IMPORTED_FROM_EVPN_TABLE(old_pi)))) {
 				set_flag = true;
 			}
 		}
-		if (set_flag)
+		if (set_flag) {
+			if (IS_PATH_IMPORTED_FROM_EVPN_TABLE(old_pi))
+				pi_is_imported_from_evpn = true;
 			break;
-	}
-
-	/* Set the flag BGP_NODE_SELECT_DEFER if route selection deferral timer
-	 * is active
-	 */
-	if (set_flag && table) {
-		if (bgp && (bgp->gr_info[afi][safi].t_select_deferral ||
-			    bgp->gr_info[afi][safi].t_select_deferral_tier2)) {
-			if (!CHECK_FLAG(dest->flags, BGP_NODE_SELECT_DEFER))
-				bgp->gr_info[afi][safi].gr_deferred++;
-			SET_FLAG(dest->flags, BGP_NODE_SELECT_DEFER);
-			if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-				zlog_debug("%s: Defer route %pRN, dest %p",
-					   bgp->name_pretty, dest, dest);
-			return 0;
 		}
 	}
+
+	if (!set_flag)
+		return -1;
+
+	struct bgp *bgp_evpn = bgp_get_evpn();
+
+	/* Set the flag BGP_NODE_SELECT_DEFER on prefix/dest if route selection
+	 * deferral timer is active. RFC4724 says that restarting BGP node must
+	 * defer bestpath selection for a prefix/dest until EORs are received
+	 * from all the GR helpers.
+	 *
+	 * If the dest is an imported route in destination VRF, check if the
+	 * GR timer for this afi-safi in destaination VRF is running. If the GR
+	 * timer for this afi-safi in destination VRF is not running, then check
+	 * if GR timer for L2VPN EVPN in global table is running. If yes, then
+	 * mark the route as deferred.
+	 */
+	if (BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(bgp, afi, safi) ||
+	    (pi_is_imported_from_evpn && bgp_evpn != NULL &&
+	     BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(bgp_evpn, AFI_L2VPN,
+						     SAFI_EVPN))) {
+		if (!CHECK_FLAG(dest->flags, BGP_NODE_SELECT_DEFER))
+			bgp->gr_info[afi][safi].gr_deferred++;
+		SET_FLAG(dest->flags, BGP_NODE_SELECT_DEFER);
+		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+			zlog_debug("%s: Defer route %pRN, dest %p",
+				   bgp->name_pretty, dest, dest);
+		return 0;
+	}
+
 	return -1;
 }
 
@@ -3069,8 +3092,8 @@ static bool bgp_lu_need_imp_null(const struct bgp_path_info *new_select)
  *     We have no eligible route that we can announce or the rn
  *     is being removed.
  */
-static void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest,
-				 afi_t afi, safi_t safi)
+void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
+			  safi_t safi)
 {
 	struct bgp_path_info *new_select;
 	struct bgp_path_info *old_select;
@@ -3364,12 +3387,17 @@ static void bgp_gr_start_tier2_timer_if_required(struct bgp *bgp, afi_t afi,
 			bgp->name_pretty, get_afi_safi_str(afi, safi, false));
 
 	/*
-	 * If there's no multihop peer in this VRF or if the
-	 * tier2 timer has been started for this afi-safi then
+	 * If there's no multihop peer in this VRF or
+	 * if the tier2 timer has been started for this afi-safi or
+	 * if select_defer_tier2 timer was not started since it was
+	 * not required (This happens when multihop peers comeup before
+	 * directly connected peers) and if select_defer_over_tier2 was
+	 * set to true in bgp_gr_check_path_select()
 	 * there's nothing to do.
 	 */
 	if (!bgp->gr_multihop_peer_exists ||
-	    bgp->gr_info[afi][safi].select_defer_tier2_required)
+	    bgp->gr_info[afi][safi].select_defer_tier2_required ||
+	    bgp->gr_info[afi][safi].select_defer_over_tier2)
 		return;
 
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
@@ -3402,12 +3430,93 @@ static void bgp_gr_start_tier2_timer_if_required(struct bgp *bgp, afi_t afi,
 	}
 }
 
+/*
+ * Starts GR route select timer to process remaining routes
+ */
+static inline void bgp_gr_start_route_select_timer(struct bgp *bgp, afi_t afi,
+						   safi_t safi)
+{
+	struct afi_safi_info *thread_info;
+
+	thread_info = XMALLOC(MTYPE_TMP, sizeof(struct afi_safi_info));
+
+	thread_info->afi = afi;
+	thread_info->safi = safi;
+	thread_info->bgp = bgp;
+
+	/* If there are more routes to be processed, start the
+	 * selection timer
+	 */
+	thread_add_timer(bm->master, bgp_route_select_timer_expire, thread_info,
+			 BGP_ROUTE_SELECT_DELAY,
+			 &bgp->gr_info[afi][safi].t_route_select);
+}
+
+/*
+ * Trigger deferred bestpath calculation for IPv4 and IPv6
+ * unicast tables in non-default VRFs by starting the route-select
+ * timer.
+ */
+static inline void bgp_evpn_handle_deferred_bestpath_for_vrfs(void)
+{
+	struct listnode *node;
+	struct bgp *bgp_vrf;
+	afi_t tmp_afi = AFI_UNSPEC;
+	safi_t tmp_safi = SAFI_UNICAST;
+
+	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp_vrf)) {
+		/* NO-OP for default/global VRF */
+		if (bgp_vrf == bgp_get_evpn())
+			continue;
+
+		for (tmp_afi = AFI_IP; tmp_afi <= AFI_IP6; tmp_afi++) {
+			if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+				zlog_debug(
+					"%s: Evaluating deferred path selection for %s",
+					bgp_vrf->name_pretty,
+					get_afi_safi_str(tmp_afi, tmp_safi,
+							 false));
+			/*
+			 * If the route-select timer or
+			 * select-deferral-timers are still running for
+			 * this VRF, or has no deferred routes, then
+			 * nothing to do. If not, start the route-select
+			 * timer for the VRF, AFI, SAFI so that this
+			 * deferred bestapath selection can be done for
+			 * this VRF, AFI, SAFI.
+			 */
+			if (bgp_vrf->gr_info[tmp_afi][tmp_safi]
+				    .t_route_select ||
+			    BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(
+				    bgp_vrf, tmp_afi, tmp_safi) ||
+			    !bgp_vrf->gr_info[tmp_afi][tmp_safi].gr_deferred)
+				continue;
+
+			if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+				zlog_debug(
+					"%s: Starting GR route select timer for %s",
+					bgp_vrf->name_pretty,
+					get_afi_safi_str(tmp_afi, tmp_safi,
+							 false));
+
+			/*
+			 * The reason why we are starting the timer and
+			 * not doing deferred BP calculation in place is
+			 * because, if this route table has more than
+			 * BGP_MAX_BEST_ROUTE_SELECT, then we need to
+			 * delay the deferred BP for a sec
+			 */
+			bgp_gr_start_route_select_timer(bgp_vrf, tmp_afi,
+							tmp_safi);
+		}
+	}
+}
+
 /* Process the routes with the flag BGP_NODE_SELECT_DEFER set */
 void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 {
-	struct bgp_dest *dest;
-	int cnt = 0;
 	struct afi_safi_info *thread_info;
+	uint16_t cnt = 0;
 
 	if (bgp->gr_info[afi][safi].t_route_select) {
 		struct thread *t = bgp->gr_info[afi][safi].t_route_select;
@@ -3424,25 +3533,103 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 
 	frrtrace(4, frr_bgp, gr_eors, bgp->name_pretty, afi, safi, 7);
 
-	/* Process the route list */
-	for (dest = bgp_table_top(bgp->rib[afi][safi]);
-	     dest && bgp->gr_info[afi][safi].gr_deferred != 0 &&
-	     cnt < BGP_MAX_BEST_ROUTE_SELECT;
-	     dest = bgp_route_next(dest)) {
-		if (!CHECK_FLAG(dest->flags, BGP_NODE_SELECT_DEFER))
-			continue;
+	if (afi == AFI_L2VPN && safi == SAFI_EVPN) {
+		struct bgp_dest *rd_dest = NULL;
+		struct bgp_table *table = NULL;
 
-		UNSET_FLAG(dest->flags, BGP_NODE_SELECT_DEFER);
-		bgp->gr_info[afi][safi].gr_deferred--;
-		bgp_process_main_one(bgp, dest, afi, safi);
-		cnt++;
-	}
-	/* If iteration stopped before the entire table was traversed then the
-	 * node needs to be unlocked.
-	 */
-	if (dest) {
-		bgp_dest_unlock_node(dest);
-		dest = NULL;
+		/*
+		 * Calculate bestpaths for all the RDs in global EVPN table
+		 */
+		for (rd_dest = bgp_table_top(bgp->rib[afi][safi]);
+		     rd_dest && bgp->gr_info[afi][safi].gr_deferred != 0 &&
+		     cnt < BGP_MAX_BEST_ROUTE_SELECT;
+		     rd_dest = bgp_route_next(rd_dest)) {
+			table = bgp_dest_get_bgp_table_info(rd_dest);
+			if (!table)
+				continue;
+
+			cnt = bgp_deferred_path_selection(bgp, afi, safi, table,
+							  cnt, NULL, false);
+		}
+
+		/*
+		 * If iteration stopped before all the RD tables were
+		 * traversed then the node needs to be unlocked.
+		 */
+		if (rd_dest) {
+			bgp_dest_unlock_node(rd_dest);
+			rd_dest = NULL;
+		}
+
+		/*
+		 * Calculate the bestpaths for ip-table and mac-table for all
+		 * the L2VNIs
+		 */
+		bgp_evpn_handle_deferred_bestpath_for_vnis(bgp, cnt);
+
+		/*
+		 * Trigger deferred bestpath calculation for IPv4 and IPv6
+		 * unicast tables in non-default VRFs by starting the
+		 * route-select timer.
+		 *
+		 * This handles the case where a non-default VRF
+		 * is not GR enabled. In which case, none of the GR timers will
+		 * be started/running. So for such VRFs, this trigger will do
+		 * the deferred bestpath selection.
+		 */
+		bgp_evpn_handle_deferred_bestpath_for_vrfs();
+	} else if (safi == SAFI_UNICAST && (afi == AFI_IP || afi == AFI_IP6)) {
+		struct bgp *bgp_evpn = bgp_get_evpn();
+
+		if (bgp->vrf_id == VRF_DEFAULT) {
+			/*
+			 * Process the route list for IPv4/IPv6 unicast table
+			 * in default VRF
+			 */
+			bgp_deferred_path_selection(bgp, afi, safi,
+						    bgp->rib[afi][safi], cnt,
+						    NULL, false);
+		} else if (!bgp_evpn ||
+			   !bgp_evpn->gr_info[AFI_L2VPN][SAFI_EVPN]
+				    .af_enabled ||
+			   bgp_evpn->gr_info[AFI_L2VPN][SAFI_EVPN]
+				   .route_sync_tier2) {
+			/*
+			 * Process the route list for IPv4/IPv6 unicast table
+			 * in non-default VRF.
+			 *
+			 * For non-default VRF, deferred bestpath selection will
+			 * take place if:
+			 *
+			 * 1. GR is NOT enabled for l2vpn evpn afi safi in EVPN
+			 * default VRF
+			 *
+			 * OR
+			 *
+			 * 2. GR is enabled for l2vpn evpn afi safi in EVPN
+			 * default VRF and GR is complete
+			 */
+			bgp_deferred_path_selection(bgp, afi, safi,
+						    bgp->rib[afi][safi], cnt,
+						    NULL, false);
+		} else {
+			if (bgp_evpn &&
+			    BGP_DEBUG(graceful_restart, GRACEFUL_RESTART)) {
+				zlog_debug(
+					"%s: Skipped BGP deferred path selection for %s. GR %s started for %s L2VPN EVPN. UPDATE_COMPLETE %s",
+					bgp->name_pretty,
+					get_afi_safi_str(afi, safi, false),
+					bgp_evpn->gr_info[AFI_L2VPN][SAFI_EVPN]
+							.af_enabled
+						? ""
+						: "NOT",
+					bgp_evpn->name_pretty,
+					bgp_evpn->gr_info[AFI_L2VPN][SAFI_EVPN]
+							.route_sync_tier2
+						? "done"
+						: "NOT done");
+			}
+		}
 	}
 
 	/*
@@ -3451,6 +3638,19 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 	 * not running or has expired.
 	 */
 	if (!bgp->gr_info[afi][safi].gr_deferred) {
+		bgp_send_delayed_eor(bgp);
+		/*
+		 * For non-default VRFs, route-select-timer
+		 * could be started even when GR is not enabled.
+		 * This is done so that bestpath can be calculated for
+		 * imported paths in VRF. In such cases, we will
+		 * end up here. But we need to skip rest of
+		 * the processing, because this processing must be done
+		 * only if GR is enabled for this VRF.
+		 */
+		if (!bgp->gr_route_sync_pending)
+			return;
+
 		bool route_sync_pending = false;
 
 		/*
@@ -3458,8 +3658,6 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 		 * afi-safi is enabled for multihop peer
 		 */
 		bgp_gr_start_tier2_timer_if_required(bgp, afi, safi);
-
-		bgp_send_delayed_eor(bgp);
 
 		/* Send route processing complete message to RIB */
 		if (!bgp->gr_info[afi][safi].route_sync_tier2 &&
@@ -3476,11 +3674,7 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 		 */
 		FOREACH_AFI_SAFI (afi, safi) {
 			if (bgp->gr_info[afi][safi].af_enabled &&
-			    ((!bgp->gr_multihop_peer_exists &&
-			      !bgp->gr_info[afi][safi].route_sync) ||
-			     (bgp->gr_multihop_peer_exists &&
-			      (!bgp->gr_info[afi][safi].route_sync ||
-			       !bgp->gr_info[afi][safi].route_sync_tier2)))) {
+			    !bgp->gr_info[afi][safi].route_sync_tier2) {
 				route_sync_pending = true;
 				break;
 			}
@@ -3494,20 +3688,9 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 		return;
 	} else {
 		/*
-		 * Check if there are routes to be processed
+		 * Check if there are more routes to be processed
 		 */
-		thread_info = XMALLOC(MTYPE_TMP, sizeof(struct afi_safi_info));
-
-		thread_info->afi = afi;
-		thread_info->safi = safi;
-		thread_info->bgp = bgp;
-
-		/* If there are more routes to be processed, start the
-		 * selection timer
-		 */
-		thread_add_timer(bm->master, bgp_route_select_timer_expire, thread_info,
-			BGP_ROUTE_SELECT_DELAY,
-			&bgp->gr_info[afi][safi].t_route_select);
+		bgp_gr_start_route_select_timer(bgp, afi, safi);
 	}
 }
 
@@ -5488,14 +5671,14 @@ static wq_item_status bgp_clear_route_node(struct work_queue *wq, void *data)
 			continue;
 
 		/* graceful restart STALE flag set. */
-		if (((CHECK_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT)
-		      && peer->nsf[afi][safi])
-		     || CHECK_FLAG(peer->af_sflags[afi][safi],
-				   PEER_STATUS_ENHANCED_REFRESH))
-		    && !CHECK_FLAG(pi->flags, BGP_PATH_STALE)
-		    && !CHECK_FLAG(pi->flags, BGP_PATH_UNUSEABLE))
+		if (((CHECK_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT) &&
+		      peer->nsf[afi][safi]) ||
+		     CHECK_FLAG(peer->af_sflags[afi][safi],
+				PEER_STATUS_ENHANCED_REFRESH)) &&
+		    !CHECK_FLAG(pi->flags, BGP_PATH_STALE) &&
+		    !CHECK_FLAG(pi->flags, BGP_PATH_UNUSEABLE)) {
 			bgp_path_info_set_flag(dest, pi, BGP_PATH_STALE);
-		else {
+		} else {
 			/* If this is an EVPN route, process for
 			 * un-import. */
 			if (safi == SAFI_EVPN)
@@ -5772,6 +5955,17 @@ void bgp_clear_stale_route(struct peer *peer, afi_t afi, safi_t safi)
 							BGP_PATH_STALE))
 						continue;
 
+					/*
+					 * If stale route which is being deleted
+					 * is a l2vpn evpn route, then unimport
+					 * it from all the VRFs and VNIs.
+					 */
+					if (safi == SAFI_EVPN &&
+					    pi->sub_type == BGP_ROUTE_NORMAL)
+						bgp_evpn_unimport_route(
+							peer->bgp, afi, safi,
+							bgp_dest_get_prefix(rm),
+							pi);
 					/*
 					 * If this is VRF leaked route
 					 * process for withdraw.

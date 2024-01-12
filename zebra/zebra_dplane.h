@@ -1211,7 +1211,9 @@ void zebra_dplane_startup_stage(struct zebra_ns *zns,
 
 enum zebra_dplane_startup_notifications
 dplane_ctx_get_startup_spot(struct zebra_dplane_ctx *ctx);
-
+#if defined(HAVE_CSMGR)
+uint32_t zebra_gr_queued_cnt_get(void);
+#endif
 #ifdef __cplusplus
 }
 #endif
