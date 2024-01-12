@@ -617,33 +617,15 @@ static inline bool bgp_check_advertise(struct bgp *bgp, struct bgp_dest *dest,
  * as good to go.
  */
 static inline bool bgp_check_withdrawal(struct bgp *bgp, struct bgp_dest *dest,
-					safi_t safi)
+					safi_t safi,
+					struct bgp_path_info *selected)
 {
-	struct bgp_path_info *pi, *selected = NULL;
-
 	if (!bgp_fibupd_safi(safi) || !BGP_SUPPRESS_FIB_ENABLED(bgp))
 		return false;
 
-	for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
-		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED)) {
-			selected = pi;
-			continue;
-		}
-
-		if (pi->sub_type != BGP_ROUTE_NORMAL)
-			return true;
-	}
-
 	/*
-	 * pi is selected and bgp is dealing with a static route
-	 * ( ie a network statement of some sort ).  FIB installed
-	 * is irrelevant
-	 *
-	 * I am not sure what the above for loop is wanted in this
-	 * manner at this point.  But I do know that if I have
-	 * a static route that is selected and it's the one
-	 * being checked for should I withdrawal we do not
-	 * want to withdraw the route on installation :)
+	 * If BGP is dealing with a static route i.e. a network statement of
+	 * some sort, FIB installed is irrelevant.
 	 */
 	if (selected && selected->sub_type == BGP_ROUTE_STATIC)
 		return false;
