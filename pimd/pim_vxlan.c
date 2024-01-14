@@ -49,9 +49,9 @@ static void pim_vxlan_set_peerlink_rif(struct pim_instance *pim,
 
 #define PIM_VXLAN_STARTUP_NULL_REGISTERS 10
 
-static void pim_vxlan_rp_send_null_register_startup(struct event *e)
+static void pim_vxlan_rp_send_null_register_startup(struct thread *e)
 {
-	struct pim_vxlan_sg *vxlan_sg = EVENT_ARG(e);
+	struct pim_vxlan_sg *vxlan_sg = THREAD_ARG(e);
 
 	vxlan_sg->null_register_sent++;
 
@@ -67,7 +67,7 @@ static void pim_vxlan_rp_send_null_register_startup(struct event *e)
 	if (PIM_DEBUG_VXLAN)
 		zlog_debug("Sent null register for %s", vxlan_sg->sg_str);
 
-	event_add_timer(router->master, pim_vxlan_rp_send_null_register_startup,
+	thread_add_timer(router->master, pim_vxlan_rp_send_null_register_startup,
 			vxlan_sg, PIM_VXLAN_WORK_TIME, &vxlan_sg->null_register);
 }
 
@@ -104,7 +104,7 @@ void pim_vxlan_rp_info_is_alive(struct pim_instance *pim,
 				zlog_debug("VXLAN RP info for %s alive sending",
 					   vxlan_sg->sg_str);
 			vxlan_sg->null_register_sent = 0;
-			event_add_event(router->master,
+			thread_add_event(router->master,
 					pim_vxlan_rp_send_null_register_startup,
 					vxlan_sg, 0, &vxlan_sg->null_register);
 		}
@@ -254,7 +254,7 @@ void pim_vxlan_update_sg_reg_state(struct pim_instance *pim,
 			zlog_debug("Received Register stop for %s",
 				   vxlan_sg->sg_str);
 
-		EVENT_OFF(vxlan_sg->null_register);
+		THREAD_OFF(vxlan_sg->null_register);
 		pim_vxlan_del_work(vxlan_sg);
 	}
 }
@@ -858,7 +858,7 @@ static void pim_vxlan_sg_del_item(struct pim_vxlan_sg *vxlan_sg)
 {
 	vxlan_sg->flags |= PIM_VXLAN_SGF_DEL_IN_PROG;
 
-	EVENT_OFF(vxlan_sg->null_register);
+	THREAD_OFF(vxlan_sg->null_register);
 	pim_vxlan_del_work(vxlan_sg);
 
 	if (pim_vxlan_is_orig_mroute(vxlan_sg))

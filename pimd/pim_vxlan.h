@@ -65,7 +65,7 @@ struct pim_vxlan_sg {
 	/* on a MLAG setup the peerlink is added as a static OIF */
 	struct interface *orig_oif;
 
-	struct event *null_register;
+	struct thread *null_register;
 	uint32_t null_register_sent;
 };
 
