@@ -17,6 +17,7 @@
 #define _LINUX_IF_H
 #define _LINUX_IP_H
 
+#include <if.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <netinet/if_ether.h>
@@ -28,7 +29,6 @@
 #include <linux/ethtool.h>
 
 #include "linklist.h"
-#include "if.h"
 #include "log.h"
 #include "prefix.h"
 #include "connected.h"

@@ -4,6 +4,7 @@
  * Copyright (C) 2018  Mladen Sablic
  */
 
+#include <if.h>
 #include <zebra.h>
 
 #ifdef __linux__

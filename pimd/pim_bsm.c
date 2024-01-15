@@ -6,11 +6,8 @@
  * Saravanan K
  */
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
+#include "zebra.h"
 
-#include "if.h"
 #include "pimd.h"
 #include "pim_iface.h"
 #include "pim_instance.h"

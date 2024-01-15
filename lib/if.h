@@ -6,6 +6,45 @@
 #ifndef _ZEBRA_IF_H
 #define _ZEBRA_IF_H
 
+#include <net/if.h>
+
+#ifdef GNU_LINUX
+#include <linux/libc-compat.h>
+#include <linux/if.h>
+#endif /* GNU_LINUX */
+
+#ifdef HAVE_NET_IF_VAR_H
+#include <net/if_var.h>
+#endif /* HAVE_NET_IF_VAR_H */
+
+#ifdef HAVE_NETINET6_IN6_VAR_H
+#include <netinet6/in6_var.h>
+#endif /* HAVE_NETINET6_IN6_VAR_H */
+
+#ifdef HAVE_NETINET_IN6_VAR_H
+#include <netinet/in6_var.h>
+#endif /* HAVE_NETINET_IN6_VAR_H */
+
+#ifdef HAVE_NETINET6_IN_H
+#include <netinet6/in.h>
+#endif /* HAVE_NETINET6_IN_H */
+
+#ifdef HAVE_NETINET6_IP6_H
+#include <netinet6/ip6.h>
+#endif /* HAVE_NETINET6_IP6_H */
+
+#ifdef HAVE_NETINET6_ND6_H
+#include <netinet6/nd6.h>
+#endif /* HAVE_NETINET6_ND6_H */
+
+#ifdef HAVE_INET_ND_H
+#include <inet/nd.h>
+#endif /* HAVE_INET_ND_H */
+
+#ifdef HAVE_NETINET_IN_VAR_H
+#include <netinet/in_var.h>
+#endif /* HAVE_NETINET_IN_VAR_H */
+
 #include "zebra.h"
 #include "linklist.h"
 #include "memory.h"

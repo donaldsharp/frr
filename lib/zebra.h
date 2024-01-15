@@ -73,15 +73,9 @@
 #include <net/netopt.h>
 #endif /* HAVE_NET_NETOPT_H */
 
-#include <net/if.h>
-
 #ifdef HAVE_NET_IF_DL_H
 #include <net/if_dl.h>
 #endif /* HAVE_NET_IF_DL_H */
-
-#ifdef HAVE_NET_IF_VAR_H
-#include <net/if_var.h>
-#endif /* HAVE_NET_IF_VAR_H */
 
 #ifndef HAVE_NETLINK
 #define RT_TABLE_MAIN		0
@@ -90,34 +84,6 @@
 
 #include <netdb.h>
 #include <arpa/inet.h>
-
-#ifdef HAVE_INET_ND_H
-#include <inet/nd.h>
-#endif /* HAVE_INET_ND_H */
-
-#ifdef HAVE_NETINET_IN_VAR_H
-#include <netinet/in_var.h>
-#endif /* HAVE_NETINET_IN_VAR_H */
-
-#ifdef HAVE_NETINET6_IN6_VAR_H
-#include <netinet6/in6_var.h>
-#endif /* HAVE_NETINET6_IN6_VAR_H */
-
-#ifdef HAVE_NETINET_IN6_VAR_H
-#include <netinet/in6_var.h>
-#endif /* HAVE_NETINET_IN6_VAR_H */
-
-#ifdef HAVE_NETINET6_IN_H
-#include <netinet6/in.h>
-#endif /* HAVE_NETINET6_IN_H */
-
-#ifdef HAVE_NETINET6_IP6_H
-#include <netinet6/ip6.h>
-#endif /* HAVE_NETINET6_IP6_H */
-
-#ifdef HAVE_NETINET6_ND6_H
-#include <netinet6/nd6.h>
-#endif /* HAVE_NETINET6_ND6_H */
 
 /* Local includes: */
 #if !defined(__GNUC__)
