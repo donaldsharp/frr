@@ -2968,6 +2968,49 @@ DEFUN (bgp_graceful_restart_stalepath_time,
 	return CMD_SUCCESS;
 }
 
+/*
+ * Reset the BGP session since there's a change
+ * in GR capability
+ */
+static void bgp_update_graceful_restart_capability(struct bgp *bgp)
+{
+	struct peer *peer = NULL;
+	struct listnode *node = NULL;
+	struct listnode *nnode = NULL;
+	enum peer_mode peer_gr_mode;
+	enum global_mode global_gr_mode = bgp_global_gr_mode_get(bgp);
+
+	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
+		peer_gr_mode = bgp_peer_gr_mode_get(peer);
+
+		/*
+		 * Skip if peer is not in graceful restart mode
+		 */
+		if (!((peer_gr_mode == PEER_GR) ||
+		      (peer_gr_mode == PEER_GLOBAL_INHERIT &&
+		       global_gr_mode == GLOBAL_GR)))
+			continue;
+
+		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+			zlog_debug(
+				"Resetting session for %s: Peer GR mode %u, Global GR mode %u",
+				peer->host,
+				print_peer_gr_mode(bgp_peer_gr_mode_get(peer)),
+				print_peer_gr_mode(
+					bgp_global_gr_mode_get(bgp)));
+
+		/*
+		 * Reset the session so that the updated capability can be
+		 * exchanged again
+		 */
+		if (BGP_IS_VALID_STATE_FOR_NOTIF(peer->status)) {
+			peer->last_reset = PEER_DOWN_CAPABILITY_CHANGE;
+			bgp_notify_send(peer, BGP_NOTIFY_CEASE,
+					BGP_NOTIFY_CEASE_CONFIG_CHANGE);
+		}
+	}
+}
+
 DEFUN (bgp_graceful_restart_restart_time,
 	bgp_graceful_restart_restart_time_cmd,
 	"bgp graceful-restart restart-time (0-4095)",
@@ -2985,11 +3028,14 @@ DEFUN (bgp_graceful_restart_restart_time,
 		struct bgp *bgp;
 
 		bm->restart_time = restart;
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
+		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
 			bgp->restart_time = restart;
+			bgp_update_graceful_restart_capability(bgp);
+		}
 	} else {
 		VTY_DECLVAR_CONTEXT(bgp, bgp);
 		bgp->restart_time = restart;
+		bgp_update_graceful_restart_capability(bgp);
 	}
 	return CMD_SUCCESS;
 }
@@ -3069,11 +3115,14 @@ DEFUN (no_bgp_graceful_restart_restart_time,
 		struct bgp *bgp;
 
 		bm->restart_time = BGP_DEFAULT_RESTART_TIME;
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
+		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
 			bgp->restart_time = BGP_DEFAULT_RESTART_TIME;
+			bgp_update_graceful_restart_capability(bgp);
+		}
 	} else {
 		VTY_DECLVAR_CONTEXT(bgp, bgp);
 		bgp->restart_time = BGP_DEFAULT_RESTART_TIME;
+		bgp_update_graceful_restart_capability(bgp);
 	}
 	return CMD_SUCCESS;
 }
