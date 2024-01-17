@@ -149,6 +149,11 @@ static inline char *time_to_string(time_t ts, char *buf)
 	return ctime_r(&tbuf, buf);
 }
 
+static inline time_t time_to_epoch(time_t ts)
+{
+	return (time(NULL) - (monotime(NULL) - ts));
+}
+
 /* Convert interval to human-friendly string, used in cli output e.g. */
 static inline const char *frrtime_to_interval(time_t t, char *buf,
 					      size_t buflen)
