@@ -3839,16 +3839,9 @@ static void show_ip_ospf_interface_sub(struct vty *vty, struct ospf *ospf,
 			json_object_string_add(json_interface_sub, "area",
 					       ospf_area_desc_string(oi->area));
 
-			json_object_string_add(json_oi, "area",
-					       ospf_area_desc_string(oi->area));
-
-			if (OSPF_IF_PARAM(oi, mtu_ignore)) {
-				json_object_boolean_true_add(
-					json_oi, "mtuMismatchDetect");
-				json_object_boolean_true_add(
-					json_interface_sub,
-					"mtuMismatchDetect");
-			}
+			if (OSPF_IF_PARAM(oi, mtu_ignore))
+				json_object_boolean_true_add(json_interface_sub,
+							     "mtuMismatchDetect");
 
 			json_object_string_addf(json_interface_sub, "routerId",
 						"%pI4", &ospf->router_id);
@@ -3863,20 +3856,7 @@ static void show_ip_ospf_interface_sub(struct vty *vty, struct ospf *ospf,
 			json_object_string_add(json_interface_sub, "state",
 					       lookup_msg(ospf_ism_state_msg,
 							  oi->state, NULL));
-			json_object_int_add(json_interface_sub, "priority",
-					    PRIORITY(oi));
-
-			json_object_string_addf(json_oi, "routerId", "%pI4",
-						&ospf->router_id);
-			json_object_string_add(json_oi, "networkType",
-					       ospf_network_type_str[oi->type]);
-			json_object_int_add(json_oi, "cost", oi->output_cost);
-			json_object_int_add(json_oi, "transmitDelaySecs",
-					    OSPF_IF_PARAM(oi, transmit_delay));
-			json_object_string_add(json_oi, "state",
-					       lookup_msg(ospf_ism_state_msg,
-							  oi->state, NULL));
-			json_object_int_add(json_oi, "priority", PRIORITY(oi));
+			json_object_int_add(json_interface_sub, "priority", PRIORITY(oi));
 			json_object_boolean_add(
 				json_interface_sub, "opaqueCapable",
 				OSPF_IF_PARAM(oi, opaque_capable));
