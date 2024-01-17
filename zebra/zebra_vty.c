@@ -4355,8 +4355,8 @@ DEFPY(show_zebra_csm,
 	char buf2[256];
 
 	if (uj) {
-		json_object_string_add(json, "registeredWithCsm",
-				       zrouter.frr_csm_regd ? "Yes" : "No");
+		json_object_boolean_add(json, "registeredWithCsm",
+					zrouter.frr_csm_regd);
 		json_object_string_add(json, "csmStartMode",
 				       mode_to_str(zrouter.csm_smode, buf1));
 		json_object_string_add(
@@ -4364,9 +4364,8 @@ DEFPY(show_zebra_csm,
 			frr_csm_smode2str(zrouter.frr_csm_smode));
 		json_object_string_add(json, "csmCurrentMode",
 				       mode_to_str(zrouter.csm_cmode, buf2));
-		json_object_string_add(
-			json, "csmLoadComplete",
-			zrouter.load_complete_failed ? "failed" : "succeeded");
+		json_object_boolean_add(json, "csmLoadComplete",
+					!zrouter.load_complete_failed);
 		json_object_string_add(json, "csmLoadCompleteRet",
 				       safe_strerror(zrouter.csm_errno));
 	} else {
@@ -4387,9 +4386,11 @@ DEFPY(show_zebra_csm,
 	time_to_string(UPTIMESECS(zrouter.startup_time), timebuf);
 
 	if (uj) {
-		json_object_string_add(json, "zebraStartedAt", timebuf);
-		json_object_string_add(json, "zebraStartedGracefully",
-				       zrouter.graceful_restart ? "Yes" : "No");
+		json_object_int_add(
+			json, "zebraUptime",
+			time_to_epoch(UPTIMESECS(zrouter.startup_time)));
+		json_object_boolean_add(json, "zebraStartedGracefully",
+					zrouter.graceful_restart);
 	} else {
 		vty_out(vty, "Zebra started%s at time %s",
 			zrouter.graceful_restart ? " gracefully" : "", timebuf);
@@ -4409,8 +4410,9 @@ DEFPY(show_zebra_csm,
 	} else {
 		time_to_string(zrouter.rib_sweep_time, timebuf);
 		if (uj)
-			json_object_string_add(json, "ribSweepHappenedAt",
-					       timebuf);
+			json_object_int_add(
+				json, "ribSweepTimerExpiry",
+				time_to_epoch(zrouter.rib_sweep_time));
 		else
 			vty_out(vty, "Zebra RIB sweep happened at %s", timebuf);
 	}
@@ -4418,7 +4420,7 @@ DEFPY(show_zebra_csm,
 	if (zrouter.t_gr_no_clients) {
 		if (uj)
 			json_object_string_addf(
-				json, "noGrClientsRemainingTime", "%lds",
+				json, "grClientRegRemainingTime", "%lds",
 				thread_timer_remain_second(
 					zrouter.t_gr_no_clients));
 		else
@@ -4429,8 +4431,9 @@ DEFPY(show_zebra_csm,
 	} else {
 		time_to_string(zrouter.rib_no_gr_client_time, timebuf);
 		if (uj)
-			json_object_string_add(
-				json, "noGrClientsTimerExpiredAt", timebuf);
+			json_object_int_add(
+				json, "grClientRegTimerExpiry",
+				time_to_epoch(zrouter.rib_no_gr_client_time));
 		else
 			vty_out(vty, "Zebra GR client timer timed out at %s",
 				timebuf);
@@ -4438,9 +4441,8 @@ DEFPY(show_zebra_csm,
 
 	if (zrouter.graceful_restart) {
 		if (uj)
-			json_object_string_add(
-				json, "allInstancesGrDone",
-				zrouter.all_instances_gr_done ? "Yes" : "No");
+			json_object_boolean_add(json, "grComplete",
+						zrouter.all_instances_gr_done);
 		else
 			vty_out(vty, "All instances GR %s\n",
 				zrouter.all_instances_gr_done ? "done"
@@ -4449,18 +4451,18 @@ DEFPY(show_zebra_csm,
 		if (zrouter.all_instances_gr_done) {
 			time_to_string(zrouter.gr_completion_time, timebuf);
 			if (uj)
-				json_object_string_add(json,
-						       "grCompletionHappenedAt",
-						       timebuf);
+				json_object_int_add(
+					json, "grCompletionTime",
+					time_to_epoch(
+						zrouter.gr_completion_time));
 			else
 				vty_out(vty, "GR completion happened at %s",
 					timebuf);
 		}
 #if defined(HAVE_CSMGR)
 		if (uj) {
-			json_object_string_add(
-				json, "lastRouteInstalled",
-				zrouter.gr_last_rt_installed ? "Yes" : "No");
+			json_object_boolean_add(json, "lastRouteInstalled",
+						zrouter.gr_last_rt_installed);
 			json_object_int_add(json, "routesQueued",
 					    z_gr_ctx.total_queued_rt);
 			json_object_int_add(json, "routesProcessed",
