@@ -657,19 +657,22 @@ const char *dplane_ctx_get_intf_label(const struct zebra_dplane_ctx *ctx);
 void dplane_ctx_set_intf_label(struct zebra_dplane_ctx *ctx, const char *label);
 
 /* Accessors for MAC information */
-vlanid_t dplane_ctx_get_mac_vid(const struct zebra_dplane_ctx *ctx);
-bool dplane_ctx_get_mac_is_sticky(const struct zebra_dplane_ctx *ctx);
-uint32_t dplane_ctx_get_mac_update_flags(const struct zebra_dplane_ctx *ctx);
-uint32_t dplane_ctx_get_mac_nhg_id(const struct zebra_dplane_ctx *ctx);
-struct ethaddr *dplane_ctx_get_mac_addr(struct zebra_dplane_ctx *ctx);
-vni_t dplane_ctx_get_mac_vni(const struct zebra_dplane_ctx *ctx);
-struct in_addr *dplane_ctx_get_mac_vtep_ip(struct zebra_dplane_ctx *ctx);
-ifindex_t dplane_ctx_get_mac_br_ifindex(const struct zebra_dplane_ctx *ctx);
+vlanid_t dplane_ctx_mac_get_vlan(const struct zebra_dplane_ctx *ctx);
+bool dplane_ctx_mac_is_sticky(const struct zebra_dplane_ctx *ctx);
+uint32_t dplane_ctx_mac_get_update_flags(const struct zebra_dplane_ctx *ctx);
+uint32_t dplane_ctx_mac_get_nhg_id(const struct zebra_dplane_ctx *ctx);
+const struct ethaddr *dplane_ctx_mac_get_addr(
+	const struct zebra_dplane_ctx *ctx);
+vni_t dplane_ctx_mac_get_vni(const struct zebra_dplane_ctx *ctx);
+const struct in_addr *dplane_ctx_mac_get_vtep_ip(
+	const struct zebra_dplane_ctx *ctx);
+ifindex_t dplane_ctx_mac_get_br_ifindex(const struct zebra_dplane_ctx *ctx);
 
 /* Accessors for neighbor information */
-struct ipaddr *dplane_ctx_get_neigh_ipaddr(struct zebra_dplane_ctx *ctx);
-const struct ethaddr *
-dplane_ctx_neigh_get_link_mac(const struct zebra_dplane_ctx *ctx);
+const struct ipaddr *dplane_ctx_neigh_get_ipaddr(
+	const struct zebra_dplane_ctx *ctx);
+const struct ethaddr *dplane_ctx_neigh_get_mac(
+	const struct zebra_dplane_ctx *ctx);
 vni_t dplane_ctx_neigh_get_vni(const struct zebra_dplane_ctx *ctx);
 const struct ipaddr *
 dplane_ctx_neigh_get_link_ip(const struct zebra_dplane_ctx *ctx);

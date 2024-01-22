@@ -6474,7 +6474,7 @@ extern void zebra_vxlan_handle_result(struct zebra_dplane_ctx *ctx)
 		z_gr_ctx.total_evpn_entries_processed++;
 
 		if (zvrf && zvrf->gr_enabled &&
-		    CHECK_FLAG(dplane_ctx_get_mac_update_flags(ctx),
+		    CHECK_FLAG(dplane_ctx_mac_get_update_flags(ctx),
 			       DPLANE_MAC_REMOTE) &&
 		    dplane_ctx_get_status(ctx) == ZEBRA_DPLANE_REQUEST_SUCCESS)
 			z_gr_ctx.rmac_cnt += 1;
