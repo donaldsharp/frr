@@ -718,7 +718,7 @@ void subgroup_announce_table(struct update_subgroup *subgrp,
 				/* Check if route can be advertised */
 				if (advertise) {
 					if (!bgp_check_withdrawal(bgp, dest,
-								  safi))
+								  safi, ri))
 						bgp_adj_out_set_subgroup(
 							dest, subgrp, &attr,
 							ri);

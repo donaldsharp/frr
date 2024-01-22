@@ -2894,6 +2894,9 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 	safi_t safi;
 	struct bgp *bgp;
 	bool advertise;
+	bool announce;
+	bool withdrawal;
+	bool debug = BGP_DEBUG(update, UPDATE_OUT);
 
 	p = bgp_dest_get_prefix(dest);
 	afi = SUBGRP_AFI(subgrp);
@@ -2902,13 +2905,15 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 	onlypeer = ((SUBGRP_PCOUNT(subgrp) == 1) ? (SUBGRP_PFIRST(subgrp))->peer
 						 : NULL);
 
-	if (BGP_DEBUG(update, UPDATE_OUT))
-		zlog_debug("%s: p=%pFX, selected=%p", __func__, p, selected);
-
 	/* First update is deferred until ORF or ROUTE-REFRESH is received */
 	if (onlypeer && CHECK_FLAG(onlypeer->af_sflags[afi][safi],
-				   PEER_STATUS_ORF_WAIT_REFRESH))
+				   PEER_STATUS_ORF_WAIT_REFRESH)) {
+		if (debug)
+			zlog_debug(
+				"%s: p=%pFX, First update is deferred until ORF or ROUTE_REFRESH is received",
+				__func__, p);
 		return;
+	}
 
 	memset(&attr, 0, sizeof(attr));
 	/* It's initialized in bgp_announce_check() */
@@ -2921,26 +2926,56 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 	advertise = bgp_check_advertise(bgp, dest, safi);
 
 	if (selected) {
-		if (subgroup_announce_check(dest, selected, subgrp, p, &attr,
-					    NULL)) {
+		/*
+		 * The function subgroup_process_announce_selected() is called
+		 * for all paths in the dest. However, subgroup_announce_check()
+		 * returns false if the path info in the current function call
+		 * is not the best path and add path is Not configured.
+		 */
+		announce = subgroup_announce_check(dest, selected, subgrp, p,
+						   &attr, NULL);
+		if (announce) {
 			/* Route is selected, if the route is already installed
 			 * in FIB, then it is advertised
 			 */
 			if (advertise) {
-				if (!bgp_check_withdrawal(bgp, dest, safi))
+				/* At this point, the path info 'selected' is
+				 * the best path
+				 */
+				withdrawal = bgp_check_withdrawal(
+					bgp, dest, safi, selected);
+				if (debug)
+					zlog_debug("%s: p=%pFX,  withdrawal %d",
+						   __func__, p, withdrawal);
+
+				if (!withdrawal)
 					bgp_adj_out_set_subgroup(
 						dest, subgrp, &attr, selected);
 				else
 					bgp_adj_out_unset_subgroup(
 						dest, subgrp, 1, addpath_tx_id);
+			} else {
+				if (debug)
+					zlog_debug(
+						"%s: p=%pFX, check_advertise returned FALSE",
+						__func__, p);
 			}
-		} else
+		} else {
+			if (debug)
+				zlog_debug(
+					"%s: p=%pFX, advertise %d , announce_check returned FALSE",
+					__func__, p, advertise);
+
 			bgp_adj_out_unset_subgroup(dest, subgrp, 1,
 						   addpath_tx_id);
+		}
 	}
 
 	/* If selected is NULL we must withdraw the path using addpath_tx_id */
 	else {
+		if (debug)
+			zlog_debug("%s: p=%pFX, selected is NULL", __func__, p);
+
 		bgp_adj_out_unset_subgroup(dest, subgrp, 1, addpath_tx_id);
 	}
 }
