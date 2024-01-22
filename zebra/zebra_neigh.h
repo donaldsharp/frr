@@ -49,10 +49,7 @@ struct zebra_neigh_info {
 	struct zebra_neigh_rb_head neigh_rb_tree;
 };
 
-#define NUD_VALID                                                              \
-	(NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE | NUD_PROBE | NUD_STALE |   \
-	 NUD_DELAY)
-#define NUD_LOCAL_ACTIVE (NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE)
+
 /****************************************************************************/
 extern void zebra_neigh_add(struct interface *ifp, struct ipaddr *ip,
 			    struct ethaddr *mac);
@@ -63,18 +60,5 @@ extern void zebra_neigh_terminate(void);
 extern void zebra_neigh_deref(struct zebra_pbr_rule *rule);
 extern void zebra_neigh_ref(int ifindex, struct ipaddr *ip,
 			    struct zebra_pbr_rule *rule);
-
-extern bool netlink_handle_5549(struct ndmsg *ndm, struct zebra_if *zif,
-				struct interface *ifp, struct ipaddr *ip,
-				bool handle_failed);
-extern bool send_nd_helper(const struct ipaddr *addr, struct zebra_ns *zns,
-			   struct interface *ifp);
-extern bool send_arp_helper(const struct ipaddr *addr, struct zebra_ns *zns,
-			    struct interface *ifp);
-extern void netlink_handle_neigh_throttle(int cmd, const struct ndmsg *ndm,
-					  const struct ipaddr *addr,
-					  struct zebra_ns *zns,
-					  struct interface *ifp);
-extern int netlink_nbr_entry_state_to_zclient(int nbr_state);
 
 #endif /* _ZEBRA_NEIGH_H */

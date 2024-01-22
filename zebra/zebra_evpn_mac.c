@@ -46,21 +46,6 @@
 
 DEFINE_MTYPE_STATIC(ZEBRA, MAC, "EVPN MAC");
 
-/* Is vni mcast group */
-bool is_mac_vni_mcast_group(struct ethaddr *mac, vni_t vni,
-			    struct in_addr grp_addr)
-{
-	if (!vni)
-		return false;
-
-	if (!is_zero_mac(mac))
-		return false;
-
-	if (!IN_MULTICAST(ntohl(grp_addr.s_addr)))
-		return false;
-
-	return true;
-}
 /*
  * Return number of valid MACs in an EVPN's MAC hash table - all
  * remote MACs and non-internal (auto) local MACs count.

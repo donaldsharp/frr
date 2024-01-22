@@ -299,9 +299,6 @@ extern void zebra_vxlan_stale_remote_mac_add(struct ethaddr *macaddr,
 					     struct in_addr vtep_ip,
 					     bool sticky, vni_t vni);
 
-extern bool is_mac_vni_mcast_group(struct ethaddr *mac, vni_t vni,
-				   struct in_addr grp_addr);
-
 #ifdef __cplusplus
 }
 #endif
