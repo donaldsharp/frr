@@ -297,15 +297,15 @@ void zebra_neigh_terminate(void)
  * 5549 support, re-install them.
  * Returns 'true' if it recognizes a 6-to-4 entry.
  */
-static bool netlink_handle_5549(uint16_t ndm_state, struct zebra_if *zif,
-				struct interface *ifp, struct ipaddr *ip,
-				bool handle_failed)
+bool netlink_handle_5549(struct ndmsg *ndm, struct zebra_if *zif,
+			 struct interface *ifp, struct ipaddr *ip,
+			 bool handle_failed)
 {
 	const char ipv4_ll_buf[16] = "169.254.0.1";
 	struct in_addr ipv4_ll;
 	inet_pton(AF_INET, ipv4_ll_buf, &ipv4_ll);
 
-	if (ip->ipa_type != IPADDR_V4)
+	if (ndm->ndm_family != AF_INET)
 		return false;
 
 	if (!zif->v6_2_v4_ll_neigh_entry)
@@ -314,7 +314,7 @@ static bool netlink_handle_5549(uint16_t ndm_state, struct zebra_if *zif,
 	if (ipv4_ll.s_addr != ip->ipaddr_v4.s_addr)
 		return false;
 
-	if (handle_failed && ndm_state & NUD_FAILED) {
+	if (handle_failed && ndm->ndm_state & NUD_FAILED) {
 		zlog_info(
 			"Neighbor Entry for %s has entered a failed state, not reinstalling",
 			ifp->name);
@@ -328,8 +328,8 @@ static bool netlink_handle_5549(uint16_t ndm_state, struct zebra_if *zif,
 /*
  * Helper to send ipv6 ND solicit message
  */
-static bool send_nd_helper(const struct ipaddr *addr, struct zebra_ns *zns,
-			   struct interface *ifp)
+bool send_nd_helper(const struct ipaddr *addr, struct zebra_ns *zns,
+		    struct interface *ifp)
 {
 	uint8_t buf[200] = {};
 	struct ether_header *eth = (struct ether_header *)buf;
@@ -450,8 +450,8 @@ static bool send_nd_helper(const struct ipaddr *addr, struct zebra_ns *zns,
 /*
  * Helper to send ipv4 ARP solicit
  */
-static bool send_arp_helper(const struct ipaddr *addr, struct zebra_ns *zns,
-			    struct interface *ifp)
+bool send_arp_helper(const struct ipaddr *addr, struct zebra_ns *zns,
+		     struct interface *ifp)
 {
 	uint8_t buf[100];
 	uint8_t *arp_ptr;
@@ -531,10 +531,9 @@ static bool send_arp_helper(const struct ipaddr *addr, struct zebra_ns *zns,
  * for each unresolved neighbor entry, and remove that temporary blackhole
  * if the neighbor resolves.
  */
-static void netlink_handle_neigh_throttle(int cmd, uint16_t ndm_state,
-					  const struct ipaddr *addr,
-					  struct zebra_ns *zns,
-					  struct interface *ifp)
+void netlink_handle_neigh_throttle(int cmd, const struct ndmsg *ndm,
+				   const struct ipaddr *addr,
+				   struct zebra_ns *zns, struct interface *ifp)
 {
 	/*
 	 * We may see three different netlink messages:
@@ -545,9 +544,9 @@ static void netlink_handle_neigh_throttle(int cmd, uint16_t ndm_state,
 	 *   the first APR or NS request ourselves.
 	 */
 	if (cmd == RTM_NEWNEIGH) {
-		if (ndm_state & NUD_REACHABLE)
+		if (ndm->ndm_state & NUD_REACHABLE)
 			zebra_neigh_throttle_delete(ifp->vrf->vrf_id, addr);
-		else if (ndm_state & NUD_FAILED)
+		else if (ndm->ndm_state & NUD_FAILED)
 			zebra_neigh_throttle_add(ifp, addr, false);
 
 	} else if (cmd == RTM_DELNEIGH) {
@@ -575,7 +574,7 @@ static void netlink_handle_neigh_throttle(int cmd, uint16_t ndm_state,
 	}
 }
 
-static int netlink_nbr_entry_state_to_zclient(int nbr_state)
+int netlink_nbr_entry_state_to_zclient(int nbr_state)
 {
 	/* an exact match is done between
 	 * - netlink neighbor state values: NDM_XXX (see in linux/neighbour.h)
@@ -583,216 +582,4 @@ static int netlink_nbr_entry_state_to_zclient(int nbr_state)
 	 *  (see in lib/zclient.h)
 	 */
 	return nbr_state;
-}
-
-/*
- * Runs in the Zebra Main thread context.
- * Performs the handling of neigh events which was earlier handled in the
- * netlink_ipneigh_change by dequeuing the ctx and then processing.
- */
-void zebra_neigh_dplane_result(struct zebra_dplane_ctx *ctx)
-{
-	int cmd;
-	bool is_ext;
-	bool is_router;
-	bool dp_static = false;
-	bool local_inactive = false;
-	struct zebra_if *zif = NULL;
-	struct zebra_ns *zns = NULL;
-	struct interface *ifp = NULL;
-	struct interface *link_if = NULL;
-	ns_id_t ns_id = dplane_ctx_get_ns_id(ctx);
-	enum dplane_op_e op = dplane_ctx_get_op(ctx);
-	uint8_t ndm_flags = dplane_ctx_get_neigh_ndm_flags(ctx);
-	uint16_t ndm_state = dplane_ctx_get_neigh_ndm_state(ctx);
-	uint32_t ext_flags = dplane_ctx_get_neigh_ext_flags(ctx);
-	ifindex_t ifindex = dplane_ctx_get_neigh_ifindex(ctx);
-	struct ipaddr *ip = dplane_ctx_get_neigh_ipaddr(ctx);
-	int l2_len = dplane_ctx_get_neigh_l2_len(ctx);
-	void *l2_addr = dplane_ctx_get_neigh_l2_addr(ctx);
-	struct ethaddr *mac = dplane_ctx_get_neigh_mac(ctx);
-	bool lladdr_present = dplane_ctx_get_neigh_lladdr_present(ctx);
-
-	zns = zebra_ns_lookup(ns_id);
-	if (!zns) {
-		zlog_err("Where is our namespace?");
-		return;
-	}
-
-	ifp = if_lookup_by_index_per_ns(zns, ifindex);
-	if (!ifp || !ifp->info) {
-		zlog_debug("%s ifp or ifp->info is NULL", __func__);
-		return;
-	}
-	zif = (struct zebra_if *)ifp->info;
-
-
-	if (IS_ZEBRA_DEBUG_KERNEL)
-		zlog_debug(
-			"Dequeuing: Rx %s IF %s(%u) vrf %s(%u) IP %pIA"
-			" Process based on Nbr state : %s",
-			dplane_op2str(op), ifp->name, ifindex, ifp->vrf->name,
-			ifp->vrf->vrf_id, ip,
-			(ndm_state & NUD_VALID) ? "Add or Update" : "Delete");
-
-	/* we send link layer information to NHRP client:
-	 *  - nlmsg_type = RTM_DELNEIGH|NEWNEIGH|GETNEIGH
-	 *  - struct ipaddr ( for DEL and GET)
-	 *  - struct ethaddr mac; (for NEW)
-	 */
-	if (op == DPLANE_OP_NEIGH_GET) {
-		cmd = ZEBRA_NHRP_NEIGH_GET;
-		/* Handle neighbor throttling */
-		netlink_handle_neigh_throttle(RTM_GETNEIGH, ndm_state, ip, zns,
-					      ifp);
-	} else if (op == DPLANE_OP_NEIGH_DELETE) {
-		cmd = ZEBRA_NHRP_NEIGH_REMOVED;
-		if (ndm_state & NUD_PERMANENT) {
-			/* If kernel deletes our rfc5549 Nbr entry, re-install
-			 * it */
-			if (netlink_handle_5549(ndm_state, zif, ifp, ip,
-						false)) {
-				if (IS_ZEBRA_DEBUG_KERNEL)
-					zlog_debug(
-						"Neighbor Entry Received is a 5549 entry, finished");
-				return;
-			}
-		}
-
-		/* Handle ip neighbor throttling */
-		netlink_handle_neigh_throttle(RTM_DELNEIGH, ndm_state, ip, zns,
-					      ifp);
-
-	} else if (op == DPLANE_OP_NEIGH_INSTALL) {
-		bool handled = false;
-		cmd = ZEBRA_NHRP_NEIGH_ADDED;
-
-		if (!(ndm_state & NUD_VALID)) {
-			/* If kernel marks our rfc5549 Nbr entry invalid,
-			 * re-install it */
-			handled = netlink_handle_5549(ndm_state, zif, ifp, ip,
-						      true);
-		}
-
-		/* Handle ip neighbor throttling */
-		if (!handled)
-			netlink_handle_neigh_throttle(RTM_NEWNEIGH, ndm_state,
-						      ip, zns, ifp);
-	} else {
-		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug("%s: unknown nlmsg type", __func__);
-		return;
-	}
-
-
-	if (l2_len == IPV4_MAX_BYTELEN || l2_len == 0) {
-		union sockunion link_layer_ipv4;
-
-		if (l2_len) {
-			sockunion_family(&link_layer_ipv4) = AF_INET;
-			memcpy((void *)sockunion_get_addr(&link_layer_ipv4),
-			       l2_addr, l2_len);
-		} else
-			sockunion_family(&link_layer_ipv4) = AF_UNSPEC;
-
-		zsend_nhrp_neighbor_notify(
-			cmd, ifp, ip,
-			netlink_nbr_entry_state_to_zclient(ndm_state),
-			&link_layer_ipv4);
-	}
-
-	if (op == DPLANE_OP_NEIGH_GET)
-		return;
-
-	/* The neighbor is present on an SVI. From this, we locate the
-	 * underlying bridge because we're only interested in Nbrs on a VxLAN
-	 * bridge.
-	 * The bridge is located based on the nature of the SVI:
-	 *   (a) In the case of a VLAN-aware bridge, the SVI is a L3 VLAN
-	 *       interface and is linked to the bridge
-	 *   (b) In the case of a VLAN-unaware bridge, the SVI is the bridge
-	 *       interface itself
-	 */
-	if (IS_ZEBRA_IF_VLAN(ifp)) {
-		link_if = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id),
-						    zif->link_ifindex);
-		if (!link_if) {
-			if (IS_ZEBRA_DEBUG_KERNEL)
-				zlog_debug(
-					"Neigh Entry %pIA is Vlan but Link Intf "
-					"(idx: %u) is NULL, ignoring",
-					ip, zif->link_ifindex);
-			return;
-		}
-	} else if (IS_ZEBRA_IF_BRIDGE(ifp))
-		link_if = ifp;
-	else {
-		link_if = NULL;
-		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug(
-				"Neighbor Entry %pIA received on IF %s(%u) is not on "
-				"a VLAN or a BRIDGE, ignoring",
-				ip, ifp->name, ifindex);
-	}
-
-	if (op == DPLANE_OP_NEIGH_INSTALL) {
-		if (lladdr_present) {
-			if (l2_len != ETH_ALEN) {
-				if (IS_ZEBRA_DEBUG_KERNEL)
-					zlog_debug(
-						"%s IF %s(%u) vrf %s(%u) - LLADDR is not MAC, len %lu",
-						dplane_op2str(op), ifp->name,
-						ifindex, ifp->vrf->name,
-						ifp->vrf->vrf_id,
-						(unsigned long)l2_len);
-				return;
-			}
-		}
-
-		is_ext = !!(ndm_flags & NTF_EXT_LEARNED);
-		is_router = !!(ndm_flags & NTF_ROUTER);
-
-		if (ext_flags & NTF_E_MH_PEER_SYNC)
-			dp_static = true;
-
-		/* If the neighbor state is valid for use, process as an add or
-		 * update Else process as a delete.
-		 *
-		 * Note that the delete handling may result in re-adding the Nbr
-		 * if it is a valid "remote" neighbor.
-		 */
-		if (ndm_state & NUD_VALID) {
-			if (zebra_evpn_mh_do_adv_reachable_neigh_only())
-				local_inactive =
-					!(ndm_state & NUD_LOCAL_ACTIVE);
-			else
-				/* If EVPN-MH is not enabled we treat STALE
-				 * neighbors as locally-active and advertise
-				 * them
-				 */
-				local_inactive = false;
-
-			/* Add local neighbors to the l3 interface database */
-			if (is_ext)
-				zebra_neigh_del(ifp, ip);
-			else
-				zebra_neigh_add(ifp, ip, mac);
-
-			if (link_if)
-				zebra_vxlan_handle_kernel_neigh_update(
-					ifp, link_if, ip, mac, ndm_state,
-					is_ext, is_router, local_inactive,
-					dp_static);
-
-			return;
-		}
-
-		/* Process the delete - it may result in re-adding the neighbor
-		 * if it is a valid "remote" neighbor.
-		 */
-		zebra_neigh_del(ifp, ip);
-		if (link_if)
-			zebra_vxlan_handle_kernel_neigh_del(ifp, link_if, ip);
-		return;
-	}
 }

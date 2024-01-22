@@ -60,7 +60,6 @@
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_script.h"
 #include "zebra/zebra_trace.h"
-#include "zebra/zebra_neigh.h"
 
 DEFINE_MGROUP(ZEBRA, "zebra");
 
@@ -5145,25 +5144,6 @@ static void rib_process_dplane_results(struct thread *thread)
 				handle_pw_result(ctx);
 				break;
 
-			case DPLANE_OP_SYS_ROUTE_ADD:
-			case DPLANE_OP_SYS_ROUTE_DELETE:
-				break;
-			case DPLANE_OP_MAC_INSTALL:
-			case DPLANE_OP_MAC_DELETE:
-				if (dplane_ctx_get_status(ctx) ==
-				    ZEBRA_DPLANE_REQUEST_QUEUED)
-					/*
-					 * This handles South to North case
-					 * (kernel-zebra)
-					 */
-					zebra_macfdb_dplane_result(ctx);
-				else
-					/*
-					 * This handles North to South
-					 * case(BGP-zebra-kernel)
-					 */
-					zebra_vxlan_handle_result(ctx);
-				break;
 			case DPLANE_OP_RULE_ADD:
 			case DPLANE_OP_RULE_DELETE:
 			case DPLANE_OP_RULE_UPDATE:
@@ -5183,24 +5163,12 @@ static void rib_process_dplane_results(struct thread *thread)
 			case DPLANE_OP_INTF_NETCONFIG:
 				zebra_if_dplane_result(ctx);
 				break;
-			case DPLANE_OP_TC_INSTALL:
-			case DPLANE_OP_TC_UPDATE:
-			case DPLANE_OP_TC_DELETE:
-				break;
+
+			case DPLANE_OP_MAC_INSTALL:
+			case DPLANE_OP_MAC_DELETE:
 			case DPLANE_OP_NEIGH_INSTALL:
 			case DPLANE_OP_NEIGH_UPDATE:
 			case DPLANE_OP_NEIGH_DELETE:
-			case DPLANE_OP_NEIGH_GET:
-				if (dplane_ctx_get_status(ctx) ==
-				    ZEBRA_DPLANE_REQUEST_QUEUED)
-					zebra_neigh_dplane_result(ctx);
-                else
-                    zebra_vxlan_handle_result(ctx);
-				break;
-			/* Some op codes not handled here */
-			case DPLANE_OP_ADDR_INSTALL:
-			case DPLANE_OP_ADDR_UNINSTALL:
-                break;
 			case DPLANE_OP_NEIGH_IP_INSTALL:
 			case DPLANE_OP_NEIGH_IP_DELETE:
 			case DPLANE_OP_VTEP_ADD:
@@ -5208,11 +5176,21 @@ static void rib_process_dplane_results(struct thread *thread)
 			case DPLANE_OP_NEIGH_DISCOVER:
 				zebra_vxlan_handle_result(ctx);
 				break;
+
+			/* Some op codes not handled here */
+			case DPLANE_OP_TC_INSTALL:
+			case DPLANE_OP_TC_UPDATE:
+			case DPLANE_OP_TC_DELETE:
+			case DPLANE_OP_SYS_ROUTE_ADD:
+			case DPLANE_OP_SYS_ROUTE_DELETE:
+			case DPLANE_OP_ADDR_INSTALL:
+			case DPLANE_OP_ADDR_UNINSTALL:
 			case DPLANE_OP_BR_PORT_UPDATE:
 			case DPLANE_OP_NEIGH_TABLE_UPDATE:
 			case DPLANE_OP_GRE_SET:
 			case DPLANE_OP_NONE:
 				break;
+
 			case DPLANE_OP_STARTUP_STAGE:
 				zebra_ns_startup_continue(ctx);
 				break;

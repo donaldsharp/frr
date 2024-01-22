@@ -859,7 +859,6 @@ static void dplane_ctx_free_internal(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_NEIGH_INSTALL:
 	case DPLANE_OP_NEIGH_UPDATE:
 	case DPLANE_OP_NEIGH_DELETE:
-	case DPLANE_OP_NEIGH_GET:
 	case DPLANE_OP_VTEP_ADD:
 	case DPLANE_OP_VTEP_DELETE:
 	case DPLANE_OP_RULE_ADD:
@@ -1142,9 +1141,6 @@ const char *dplane_op2str(enum dplane_op_e op)
 		break;
 	case DPLANE_OP_NEIGH_DELETE:
 		ret = "NEIGH_DELETE";
-		break;
-	case DPLANE_OP_NEIGH_GET:
-		ret = "NEIGH_GET";
 		break;
 	case DPLANE_OP_VTEP_ADD:
 		ret = "VTEP_ADD";
@@ -6478,6 +6474,8 @@ void dplane_provider_enqueue_to_zebra(struct zebra_dplane_ctx *ctx)
 
 static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 {
+	char buf[PREFIX_STRLEN];
+
 	switch (dplane_ctx_get_op(ctx)) {
 
 	case DPLANE_OP_ROUTE_INSTALL:
@@ -6521,26 +6519,25 @@ static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 
 	case DPLANE_OP_MAC_INSTALL:
 	case DPLANE_OP_MAC_DELETE:
+		prefix_mac2str(dplane_ctx_get_mac_addr(ctx), buf, sizeof(buf));
 
-		zlog_debug("Dplane %s, mac %pEA, ifindex %u",
-			   dplane_op2str(dplane_ctx_get_op(ctx)),
-			   dplane_ctx_get_mac_addr(ctx),
+		zlog_debug("Dplane %s, mac %s, ifindex %u",
+			   dplane_op2str(dplane_ctx_get_op(ctx)), buf,
 			   dplane_ctx_get_ifindex(ctx));
 		break;
 
 	case DPLANE_OP_NEIGH_INSTALL:
 	case DPLANE_OP_NEIGH_UPDATE:
 	case DPLANE_OP_NEIGH_DELETE:
-	case DPLANE_OP_NEIGH_GET:
 	case DPLANE_OP_VTEP_ADD:
 	case DPLANE_OP_VTEP_DELETE:
 	case DPLANE_OP_NEIGH_DISCOVER:
 	case DPLANE_OP_NEIGH_IP_INSTALL:
 	case DPLANE_OP_NEIGH_IP_DELETE:
+		ipaddr2str(dplane_ctx_get_neigh_ipaddr(ctx), buf, sizeof(buf));
 
-		zlog_debug("Dplane %s, ip %pIA, ifindex %u",
-			   dplane_op2str(dplane_ctx_get_op(ctx)),
-			   dplane_ctx_get_neigh_ipaddr(ctx),
+		zlog_debug("Dplane %s, ip %s, ifindex %u",
+			   dplane_op2str(dplane_ctx_get_op(ctx)), buf,
 			   dplane_ctx_get_ifindex(ctx));
 		break;
 
@@ -6717,7 +6714,6 @@ static void kernel_dplane_handle_result(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_NEIGH_INSTALL:
 	case DPLANE_OP_NEIGH_UPDATE:
 	case DPLANE_OP_NEIGH_DELETE:
-	case DPLANE_OP_NEIGH_GET:
 	case DPLANE_OP_VTEP_ADD:
 	case DPLANE_OP_VTEP_DELETE:
 	case DPLANE_OP_NEIGH_DISCOVER:

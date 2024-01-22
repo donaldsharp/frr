@@ -484,10 +484,6 @@ static int dplane_netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 	case RTM_DELLINK:
 		return netlink_link_change(h, ns_id, startup);
 
-	case RTM_NEWNEIGH:
-	case RTM_DELNEIGH:
-	case RTM_GETNEIGH:
-		return netlink_neigh_change(h, ns_id);
 	default:
 		break;
 	}
@@ -1626,7 +1622,6 @@ static enum netlink_msg_status nl_put_msg(struct nl_batch *bth,
 	case DPLANE_OP_NEIGH_INSTALL:
 	case DPLANE_OP_NEIGH_UPDATE:
 	case DPLANE_OP_NEIGH_DELETE:
-	case DPLANE_OP_NEIGH_GET:
 	case DPLANE_OP_VTEP_ADD:
 	case DPLANE_OP_VTEP_DELETE:
 	case DPLANE_OP_NEIGH_DISCOVER:
@@ -1796,15 +1791,15 @@ void kernel_init(struct zebra_ns *zns)
 	 * exist.
 	 */
 	groups = RTMGRP_IPV4_ROUTE | RTMGRP_IPV6_ROUTE | RTMGRP_IPV4_MROUTE |
-		 ((uint32_t)1 << (RTNLGRP_IPV4_RULE - 1)) |
+		 RTMGRP_NEIGH | ((uint32_t)1 << (RTNLGRP_IPV4_RULE - 1)) |
 		 ((uint32_t)1 << (RTNLGRP_IPV6_RULE - 1)) |
 		 ((uint32_t)1 << (RTNLGRP_NEXTHOP - 1));
 
-	dplane_groups = (RTMGRP_NEIGH | RTMGRP_LINK | RTMGRP_IPV4_IFADDR |
-			 RTMGRP_IPV6_IFADDR |
+	dplane_groups = (RTMGRP_LINK | RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR |
 			 ((uint32_t)1 << (RTNLGRP_IPV4_NETCONF - 1)) |
 			 ((uint32_t)1 << (RTNLGRP_IPV6_NETCONF - 1)) |
 			 ((uint32_t)1 << (RTNLGRP_MPLS_NETCONF - 1)));
+
 	/* Use setsockopt for > 31 group */
 	ext_groups = RTNLGRP_TUNNEL;
 

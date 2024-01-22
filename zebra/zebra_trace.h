@@ -399,12 +399,15 @@ TRACEPOINT_EVENT(
 	TP_ARGS(
 		struct nlmsghdr *, h,
 		struct ndmsg *, ndm,
+		struct interface *, ifp,
 		const struct ethaddr *, mac,
 		const struct ipaddr *, ip),
 	TP_FIELDS(
 		ctf_string(msg_type, nlmsg_type2str(h->nlmsg_type))
 		ctf_integer(uint32_t, ndm_family, ndm->ndm_family)
 		ctf_integer(int, ifindex, ndm->ndm_ifindex)
+		ctf_string(interface_name,  ifp->name)
+		ctf_integer(uint32_t, vrf_id, ifp->vrf->vrf_id)
 		ctf_array(unsigned char, mac, mac,
 			  sizeof(struct ethaddr))
 		ctf_array(unsigned char, ip, ip,
