@@ -46,8 +46,7 @@ extern "C" {
 #define EVPN_ENABLED(zvrf)  (zvrf)->advertise_all_vni
 static inline int is_evpn_enabled(void)
 {
-	struct zebra_vrf *zvrf = zebra_vrf_get_evpn();
-	return zvrf ? EVPN_ENABLED(zvrf) : false;
+	return EVPN_ENABLED(zebra_vrf_get_evpn());
 }
 
 static inline int
