@@ -2298,7 +2298,6 @@ int zebra_evpn_add_update_local_mac(struct zebra_vrf *zvrf,
 	bool inform_dataplane = false;
 	bool new_static = false;
 
-	assert(ifp);
 	/* Check if we need to create or update or it is a NO-OP. */
 	if (!mac)
 		mac = zebra_evpn_mac_lookup(zevpn, macaddr);
@@ -2607,12 +2606,17 @@ int zebra_evpn_mac_add_local_mac(struct interface *br_if, vlanid_t vid,
 	m_wctx = (struct mac_walk_ctx *)arg;
 	zevpn = m_wctx->zevpn;
 	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(NS_DEFAULT), ifidx);
-	assert(ifp);
 
 	if (IS_ZEBRA_DEBUG_VXLAN)
 		zlog_debug(
 			"VNI %u (bridge %s VID %u) adding local MAC %pEA ifidx %u",
 			zevpn->vni, br_if->name, vid, macaddr, ifidx);
+
+	if (!ifp) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug("Ifp not found for ifindex-%u", ifidx);
+		return 0;
+	}
 
 	return zebra_evpn_add_update_local_mac(m_wctx->zvrf, zevpn, ifp,
 					       macaddr, vid, false, false,
