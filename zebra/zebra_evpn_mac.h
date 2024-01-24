@@ -299,8 +299,6 @@ extern void zebra_vxlan_stale_remote_mac_add(struct ethaddr *macaddr,
 					     struct in_addr vtep_ip,
 					     bool sticky, vni_t vni);
 
-extern void zebra_macfdb_dplane_result(struct zebra_dplane_ctx *ctx);
-
 #ifdef __cplusplus
 }
 #endif

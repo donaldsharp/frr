@@ -49,10 +49,7 @@ struct zebra_neigh_info {
 	struct zebra_neigh_rb_head neigh_rb_tree;
 };
 
-#define NUD_VALID                                                              \
-	(NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE | NUD_PROBE | NUD_STALE |   \
-	 NUD_DELAY)
-#define NUD_LOCAL_ACTIVE (NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE)
+
 /****************************************************************************/
 extern void zebra_neigh_add(struct interface *ifp, struct ipaddr *ip,
 			    struct ethaddr *mac);
@@ -63,6 +60,5 @@ extern void zebra_neigh_terminate(void);
 extern void zebra_neigh_deref(struct zebra_pbr_rule *rule);
 extern void zebra_neigh_ref(int ifindex, struct ipaddr *ip,
 			    struct zebra_pbr_rule *rule);
-extern void zebra_neigh_dplane_result(struct zebra_dplane_ctx *ctx);
 
 #endif /* _ZEBRA_NEIGH_H */

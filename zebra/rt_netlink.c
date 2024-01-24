@@ -37,6 +37,9 @@
 #include <linux/neighbour.h>
 #include <linux/rtnetlink.h>
 #include <linux/nexthop.h>
+#include <linux/if_packet.h>
+#include <netinet/ip6.h>
+#include <netinet/icmp6.h>
 
 /* Hack for GNU libc version 2. */
 #ifndef MSG_TRUNC
@@ -56,6 +59,7 @@
 #include "mpls.h"
 #include "vxlan.h"
 #include "printfrr.h"
+#include "checksum.h"
 
 #include "zebra/zapi_msg.h"
 #include "zebra/zebra_ns.h"
@@ -74,6 +78,7 @@
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_trace.h"
 #include "zebra/zebra_neigh.h"
+#include "zebra/zebra_neigh_throttle.h"
 #include "zebra/zebra_trace.h"
 
 #ifndef AF_MPLS
@@ -100,7 +105,6 @@ struct gw_family_t {
 	union g_addr gate;
 };
 
-/*If any changes done here, change the same in zebra_neigh.c as well*/
 static const char ipv4_ll_buf[16] = "169.254.0.1";
 static struct in_addr ipv4_ll;
 
@@ -159,6 +163,22 @@ static bool is_proto_nhg(uint32_t id, int type)
 		return true;
 
 	return false;
+}
+
+/* Is vni mcast group */
+static bool is_mac_vni_mcast_group(struct ethaddr *mac, vni_t vni,
+				   struct in_addr grp_addr)
+{
+	if (!vni)
+		return false;
+
+	if (!is_zero_mac(mac))
+		return false;
+
+	if (!IN_MULTICAST(ntohl(grp_addr.s_addr)))
+		return false;
+
+	return true;
 }
 
 /*
@@ -3416,8 +3436,8 @@ static ssize_t netlink_neigh_update_msg_encode(
 			 nhg_id, flags, state, family, type);
 	}
 	if (op == DPLANE_OP_MAC_INSTALL || op == DPLANE_OP_MAC_DELETE) {
-		vlanid_t vid = dplane_ctx_get_mac_vid(ctx);
-		vni_t vni = dplane_ctx_get_mac_vni(ctx);
+		vlanid_t vid = dplane_ctx_mac_get_vlan(ctx);
+		vni_t vni = dplane_ctx_mac_get_vni(ctx);
 
 		if (vid > 0) {
 			if (!nl_attr_put16(&req->n, datalen, NDA_VLAN, vid))
@@ -3430,7 +3450,7 @@ static ssize_t netlink_neigh_update_msg_encode(
 		}
 
 		if (!nl_attr_put32(&req->n, datalen, NDA_MASTER,
-				   dplane_ctx_get_mac_br_ifindex(ctx)))
+				   dplane_ctx_mac_get_br_ifindex(ctx)))
 			return 0;
 	}
 
@@ -3450,8 +3470,9 @@ static ssize_t netlink_neigh_update_msg_encode(
  * Add remote VTEP to the flood list for this VxLAN interface (VNI). This
  * is done by adding an FDB entry with a MAC of 00:00:00:00:00:00.
  */
-static ssize_t netlink_vxlan_flood_update_ctx(struct zebra_dplane_ctx *ctx,
-					      int cmd, void *buf, size_t buflen)
+static ssize_t
+netlink_vxlan_flood_update_ctx(const struct zebra_dplane_ctx *ctx, int cmd,
+			       void *buf, size_t buflen)
 {
 	struct ethaddr dst_mac = {.octet = {0}};
 	int proto = RTPROT_ZEBRA;
@@ -3461,10 +3482,10 @@ static ssize_t netlink_vxlan_flood_update_ctx(struct zebra_dplane_ctx *ctx,
 
 	return netlink_neigh_update_msg_encode(
 		ctx, cmd, (const void *)&dst_mac, ETH_ALEN,
-		(const struct ipaddr *)dplane_ctx_get_neigh_ipaddr(ctx), false,
-		PF_BRIDGE, 0, NTF_SELF, (NUD_NOARP | NUD_PERMANENT), 0 /*nhg*/,
-		false /*nfy*/, 0 /*nfy_flags*/, false /*ext*/, 0 /*ext_flags*/,
-		buf, buflen, proto);
+		dplane_ctx_neigh_get_ipaddr(ctx), false, PF_BRIDGE, 0, NTF_SELF,
+		(NUD_NOARP | NUD_PERMANENT), 0 /*nhg*/, false /*nfy*/,
+		0 /*nfy_flags*/, false /*ext*/, 0 /*ext_flags*/, buf, buflen,
+		proto);
 }
 
 #ifndef NDA_RTA
@@ -3475,19 +3496,23 @@ static ssize_t netlink_vxlan_flood_update_ctx(struct zebra_dplane_ctx *ctx,
 static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 {
 	struct ndmsg *ndm;
+	struct interface *ifp;
+	struct zebra_if *zif;
 	struct rtattr *tb[NDA_MAX + 1];
+	struct interface *br_if;
 	struct ethaddr mac;
 	vlanid_t vid = 0;
-	struct in_addr vtep_ip = {0};
+	struct in_addr vtep_ip;
+	int vid_present = 0, dst_present = 0;
 	char vid_buf[20];
 	char dst_buf[30];
+	bool sticky;
 	bool local_inactive = false;
 	bool dp_static = false;
 	vni_t vni = 0;
 	uint32_t nhg_id = 0;
-	bool vid_present = false;
-	bool dst_present = false;
-	struct zebra_dplane_ctx *ctx = NULL;
+	bool vni_mcast_grp = false;
+	struct zebra_l2_brvlan_mac *bmac;
 
 	ndm = NLMSG_DATA(h);
 
@@ -3523,42 +3548,25 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 		return 0;
 	}
 
-	/* Allocate a context object, now that validation is done. */
-	ctx = dplane_ctx_alloc();
-	if (h->nlmsg_type == RTM_NEWNEIGH)
-		dplane_ctx_set_op(ctx, DPLANE_OP_MAC_INSTALL);
-	else
-		dplane_ctx_set_op(ctx, DPLANE_OP_MAC_DELETE);
-
-	dplane_ctx_set_status(ctx, ZEBRA_DPLANE_REQUEST_QUEUED);
-	dplane_ctx_set_ns_id(ctx, ns_id);
-	dplane_ctx_set_mac_addr(ctx,
-				(struct ethaddr *)RTA_DATA(tb[NDA_LLADDR]));
+	memcpy(&mac, RTA_DATA(tb[NDA_LLADDR]), ETH_ALEN);
 
 	if (tb[NDA_VLAN]) {
-		vid_present = true;
+		vid_present = 1;
 		vid = *(uint16_t *)RTA_DATA(tb[NDA_VLAN]);
 		snprintf(vid_buf, sizeof(vid_buf), " VLAN %u", vid);
-		dplane_ctx_set_mac_vid(ctx, vid);
 	}
 
 	if (tb[NDA_DST]) {
 		/* TODO: Only IPv4 supported now. */
-		dst_present = true;
-		dplane_ctx_set_mac_vtep_ip(
-			ctx, (struct in_addr *)RTA_DATA(tb[NDA_DST]),
-			dst_present);
+		dst_present = 1;
 		memcpy(&vtep_ip.s_addr, RTA_DATA(tb[NDA_DST]),
 		       IPV4_MAX_BYTELEN);
 		snprintfrr(dst_buf, sizeof(dst_buf), " dst %pI4", &vtep_ip);
-	} else {
-		dplane_ctx_set_mac_vtep_ip(ctx, NULL, 0);
-	}
+	} else
+		memset(&vtep_ip, 0, sizeof(vtep_ip));
 
-	if (tb[NDA_NH_ID]) {
+	if (tb[NDA_NH_ID])
 		nhg_id = *(uint32_t *)RTA_DATA(tb[NDA_NH_ID]);
-		dplane_ctx_set_mac_nh_id(ctx, nhg_id);
-	}
 
 	if (ndm->ndm_state & NUD_STALE)
 		local_inactive = true;
@@ -3581,30 +3589,11 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	}
 
 	if (tb[NDA_SRC_VNI])
-		dplane_ctx_set_mac_vni(ctx,
-				       *(vni_t *)RTA_DATA(tb[NDA_SRC_VNI]));
-
-	dplane_ctx_set_mac_dest_present(ctx, dst_present);
-	dplane_ctx_set_mac_is_sticky(ctx, !!(ndm->ndm_flags & NTF_STICKY));
-	dplane_ctx_set_mac_local_inactive(ctx, local_inactive);
-	dplane_ctx_set_mac_dp_static(ctx, dp_static);
-	dplane_ctx_set_mac_br_ifindex(ctx, ndm->ndm_ifindex);
-	dplane_ctx_set_mac_ext_learned(ctx,
-				       !!(ndm->ndm_flags & NTF_EXT_LEARNED));
-	dplane_ctx_set_mac_nud_perm(ctx, !!(ndm->ndm_state & NUD_PERMANENT));
-
-	if (filter_vlan && vid != filter_vlan) {
-		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug("Filtered due to filter vlan: %d",
-				   filter_vlan);
-		dplane_ctx_fini(&ctx);
-		return 0;
-	}
+		vni = *(vni_t *)RTA_DATA(tb[NDA_SRC_VNI]);
 
 	if (IS_ZEBRA_DEBUG_KERNEL)
 		zlog_debug(
-			"Rx %s AF_BRIDGE IF %u%s st 0x%x fl 0x%x MAC %pEA%s nhg %d vni %d."
-			" Enqueuing to Main",
+			"Rx %s AF_BRIDGE IF %u%s st 0x%x fl 0x%x MAC %pEA%s nhg %d vni %d",
 			nl_msg_type_to_str(h->nlmsg_type), ndm->ndm_ifindex,
 			vid_present ? vid_buf : "", ndm->ndm_state,
 			ndm->ndm_flags, &mac, dst_present ? dst_buf : "",
@@ -3613,15 +3602,143 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	if (h && ndm)
 		frrtrace(6, frr_zebra, netlink_macfdb_change, h, ndm, nhg_id,
 			 vni, &mac, vtep_ip);
+	/* The interface should exist. */
+	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id),
+					ndm->ndm_ifindex);
+	if (!ifp || !ifp->info)
+		return 0;
 
-	/* Moving all the code which requires ifp lookup to begin with to
-	 * zebra_macfdb_dplane_result
+	/* The interface should be something we're interested in. */
+	if (!IS_ZEBRA_IF_BRIDGE_SLAVE(ifp))
+		return 0;
+
+	zif = (struct zebra_if *)ifp->info;
+	if ((br_if = zif->brslave_info.br_if) == NULL) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug(
+				"%s AF_BRIDGE IF %s(%u) brIF %u - no bridge master",
+				nl_msg_type_to_str(h->nlmsg_type), ifp->name,
+				ndm->ndm_ifindex,
+				zif->brslave_info.bridge_ifindex);
+		return 0;
+	}
+
+	/* For per vni device, vni comes from device itself */
+	if (IS_ZEBRA_IF_VXLAN(ifp) && IS_ZEBRA_VXLAN_IF_VNI(zif)) {
+		struct zebra_vxlan_vni *vnip;
+
+		vnip = zebra_vxlan_if_vni_find(zif, 0);
+		vni = vnip->vni;
+	}
+
+	sticky = !!(ndm->ndm_flags & NTF_STICKY);
+
+	if (filter_vlan && vid != filter_vlan) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("        Filtered due to filter vlan: %d",
+				   filter_vlan);
+		return 0;
+	}
+
+	/*
+	 * Check if this is a mcast group update (svd case)
 	 */
-	dplane_provider_enqueue_to_zebra(ctx);
+	vni_mcast_grp = is_mac_vni_mcast_group(&mac, vni, vtep_ip);
 
-	return 0;
+	/* If add or update, do accordingly if learnt on a "local" interface; if
+	 * the notification is over VxLAN, this has to be related to
+	 * multi-homing,
+	 * so perform an implicit delete of any local entry (if it exists).
+	 */
+	if (h->nlmsg_type == RTM_NEWNEIGH) {
+		/* Drop "permanent" entries. */
+		if (!vni_mcast_grp && (ndm->ndm_state & NUD_PERMANENT)) {
+			/*
+			 * If zebra started gracefully and if this is a HREP
+			 * entry, then restore it.
+			 */
+			if (zrouter.graceful_restart && is_zero_mac(&mac))
+				zebra_vxlan_stale_hrep_add(vtep_ip, vni);
+
+			if (IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug(
+					"        Dropping entry because of NUD_PERMANENT");
+			return 0;
+		}
+
+		/*
+		 * If zebra started gracefully and if this is a remote MAC/RMAC
+		 * entry, then restore it.
+		 */
+		if (zrouter.graceful_restart &&
+		    CHECK_FLAG(ndm->ndm_flags, NTF_EXT_LEARNED))
+			zebra_vxlan_stale_remote_mac_add(&mac, vtep_ip, sticky,
+							 vni);
+
+		if (IS_ZEBRA_IF_VXLAN(ifp)) {
+			if (!dst_present)
+				return 0;
+
+			if (vni_mcast_grp)
+				return zebra_vxlan_if_vni_mcast_group_add_update(
+					ifp, vni, &vtep_ip);
+
+			return zebra_vxlan_dp_network_mac_add(
+				ifp, br_if, &mac, vid, vni, nhg_id, sticky,
+				!!(ndm->ndm_flags & NTF_EXT_LEARNED));
+		}
+
+		bmac = zebra_l2_brvlan_mac_find(br_if, vid, &mac);
+		if (bmac)
+			zebra_l2_brvlan_mac_update(br_if, bmac, ifp->ifindex);
+		else {
+			bmac = zebra_l2_brvlan_mac_add(
+				br_if, vid, &mac, ifp->ifindex, sticky,
+				local_inactive, dp_static);
+			if (!bmac)
+				zlog_err(
+					"Failed to add local MAC cache bridge %s vid %u mac %pEA IF %u",
+					br_if->name, vid, &mac, ifp->ifindex);
+		}
+
+		return zebra_vxlan_local_mac_add_update(ifp, br_if, &mac, vid,
+							sticky, local_inactive,
+							dp_static);
+	}
+
+	/* This is a delete notification.
+	 * Ignore the notification with IP dest as it may just signify that the
+	 * MAC has moved from remote to local. The exception is the special
+	 * all-zeros MAC that represents the BUM flooding entry; we may have
+	 * to readd it. Otherwise,
+	 *  1. For a MAC over VxLan, check if it needs to be refreshed(readded)
+	 *  2. For a MAC over "local" interface, delete the mac
+	 * Note: We will get notifications from both bridge driver and VxLAN
+	 * driver.
+	 */
+	if (nhg_id)
+		return 0;
+
+	if (dst_present) {
+		if (vni_mcast_grp)
+			return zebra_vxlan_if_vni_mcast_group_del(ifp, vni,
+								  &vtep_ip);
+
+		if (is_zero_mac(&mac) && vni)
+			return zebra_vxlan_check_readd_vtep(ifp, vni, vtep_ip);
+
+		return 0;
+	}
+
+	if (IS_ZEBRA_IF_VXLAN(ifp))
+		return 0;
+
+	bmac = zebra_l2_brvlan_mac_find(br_if, vid, &mac);
+	if (bmac)
+		zebra_l2_brvlan_mac_del(br_if, bmac);
+
+	return zebra_vxlan_local_mac_del(ifp, br_if, &mac, vid);
 }
-
 
 static int netlink_macfdb_table(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 {
@@ -3842,10 +3959,10 @@ ssize_t netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx, void *data,
 	flags = NTF_MASTER;
 	state = NUD_REACHABLE;
 
-	update_flags = dplane_ctx_get_mac_update_flags(ctx);
+	update_flags = dplane_ctx_mac_get_update_flags(ctx);
 	if (update_flags & DPLANE_MAC_REMOTE) {
 		flags |= NTF_SELF;
-		if (dplane_ctx_get_mac_is_sticky(ctx)) {
+		if (dplane_ctx_mac_is_sticky(ctx)) {
 			/* NUD_NOARP prevents the entry from expiring */
 			state |= NUD_NOARP;
 			/* sticky the entry from moving */
@@ -3871,15 +3988,15 @@ ssize_t netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx, void *data,
 		nfy = true;
 	}
 
-	nhg_id = dplane_ctx_get_mac_nhg_id(ctx);
-	vtep_ip.ipaddr_v4 = *(dplane_ctx_get_mac_vtep_ip(ctx));
+	nhg_id = dplane_ctx_mac_get_nhg_id(ctx);
+	vtep_ip.ipaddr_v4 = *(dplane_ctx_mac_get_vtep_ip(ctx));
 	SET_IPADDR_V4(&vtep_ip);
 
 	if (IS_ZEBRA_DEBUG_KERNEL) {
 		char vid_buf[20];
-		const struct ethaddr *mac = dplane_ctx_get_mac_addr(ctx);
+		const struct ethaddr *mac = dplane_ctx_mac_get_addr(ctx);
 
-		vid = dplane_ctx_get_mac_vid(ctx);
+		vid = dplane_ctx_mac_get_vlan(ctx);
 		if (vid > 0)
 			snprintf(vid_buf, sizeof(vid_buf), " VLAN %u", vid);
 		else
@@ -3889,9 +4006,8 @@ ssize_t netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx, void *data,
 			"Tx %s family %s IF %s(%u)%s %sMAC %pEA dst %pIA nhg %u%s%s%s%s%s",
 			nl_msg_type_to_str(cmd), nl_family_to_str(AF_BRIDGE),
 			dplane_ctx_get_ifname(ctx), dplane_ctx_get_ifindex(ctx),
-			vid_buf,
-			dplane_ctx_get_mac_is_sticky(ctx) ? "sticky " : "", mac,
-			&vtep_ip, nhg_id,
+			vid_buf, dplane_ctx_mac_is_sticky(ctx) ? "sticky " : "",
+			mac, &vtep_ip, nhg_id,
 			(update_flags & DPLANE_MAC_REMOTE) ? " rem" : "",
 			(update_flags & DPLANE_MAC_WAS_STATIC) ? " clr_sync"
 							       : "",
@@ -3902,7 +4018,7 @@ ssize_t netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx, void *data,
 	}
 
 	total = netlink_neigh_update_msg_encode(
-		ctx, cmd, (const void *)dplane_ctx_get_mac_addr(ctx), ETH_ALEN,
+		ctx, cmd, (const void *)dplane_ctx_mac_get_addr(ctx), ETH_ALEN,
 		&vtep_ip, true, AF_BRIDGE, 0, flags, state, nhg_id, nfy,
 		nfy_flags, false /*ext*/, 0 /*ext_flags*/, data, datalen,
 		proto);
@@ -4004,108 +4120,551 @@ netlink_put_br_port_update_msg(struct nl_batch *bth,
 				     false);
 }
 
+/*
+ * In the event the kernel deletes ipv4 link-local neighbor entries created for
+ * 5549 support, re-install them.
+ * Returns 'true' if it recognizes a 6-to-4 entry.
+ */
+static bool netlink_handle_5549(struct ndmsg *ndm, struct zebra_if *zif,
+				struct interface *ifp, struct ipaddr *ip,
+				bool handle_failed)
+{
+	if (ndm->ndm_family != AF_INET)
+		return false;
+
+	if (!zif->v6_2_v4_ll_neigh_entry)
+		return false;
+
+	if (ipv4_ll.s_addr != ip->ipaddr_v4.s_addr)
+		return false;
+
+	if (handle_failed && ndm->ndm_state & NUD_FAILED) {
+		zlog_info("Neighbor Entry for %s has entered a failed state, not reinstalling",
+			  ifp->name);
+		return true;
+	}
+
+	if_nbr_ipv6ll_to_ipv4ll_neigh_update(ifp, &zif->v6_2_v4_ll_addr6, true);
+	return true;
+}
+
+/*
+ * Helper to send ipv6 ND solicit message
+ */
+static bool send_nd_helper(const struct ipaddr *addr, struct zebra_ns *zns,
+			   struct interface *ifp)
+{
+	uint8_t buf[200] = {};
+	struct ether_header *eth = (struct ether_header *)buf;
+	struct ip6_hdr *ip6h = (struct ip6_hdr *)((char *)eth + ETHER_HDR_LEN);
+	struct nd_neighbor_advert *ndh =
+		(struct nd_neighbor_advert *)((char *)ip6h +
+					      sizeof(struct ip6_hdr));
+	struct icmp6_hdr *icmp6h = &ndh->nd_na_hdr;
+	struct nd_opt_hdr *nd_opt_h =
+		(struct nd_opt_hdr *)((char *)ndh +
+				      sizeof(struct nd_neighbor_advert));
+	char *nd_opt_lladdr = ((char *)nd_opt_h + sizeof(struct nd_opt_hdr));
+	char *lladdr = (char *)ifp->hw_addr;
+	struct ipv6_ph ph = {};
+	uint32_t hlen;
+	ssize_t len;
+	void *offset;
+	struct ipaddr iptemp;
+	struct sockaddr_ll sll;
+
+#define ZEBRA_ND_HOPLIMIT 255
+#define ZEBRA_ND_SIZE                                                          \
+	ETHER_HDR_LEN + sizeof(struct ip6_hdr) +                               \
+		sizeof(struct nd_neighbor_advert) +                            \
+		sizeof(struct nd_opt_hdr) + ETH_ALEN
+
+	/* Locate source IP address */
+	if (!zebra_if_get_source(ifp, addr, &iptemp))
+		return false;
+
+	if (IS_ZEBRA_DEBUG_KERNEL)
+		zlog_debug("%s: addr %pIA, ifp %s", __func__, addr, ifp->name);
+
+	/*
+	 * An IPv6 packet with a multicast destination address DST, consisting
+	 * of the sixteen octets DST[1] through DST[16], is transmitted to the
+	 * Ethernet multicast address whose first two octets are the value 3333
+	 * hexadecimal and whose last four octets are the last four octets of
+	 * DST.
+	 *    - RFC2464.7
+	 *
+	 * In this case we are sending to the solicited-node multicast address,
+	 * so the last four octets are from the corresponding v6 mcast address,
+	 * which in turn are from the target address.
+	 */
+	eth->ether_dhost[0] = 0x33;
+	eth->ether_dhost[1] = 0x33;
+	eth->ether_dhost[2] = 0xFF;
+	eth->ether_dhost[3] = addr->ipaddr_v6.s6_addr[13];
+	eth->ether_dhost[4] = addr->ipaddr_v6.s6_addr[14];
+	eth->ether_dhost[5] = addr->ipaddr_v6.s6_addr[15];
+
+	/* Set source Ethernet address to interface link layer address */
+	memcpy(eth->ether_shost, lladdr, ETH_ALEN);
+	eth->ether_type = htons(ETHERTYPE_IPV6);
+
+	/* IPv6 Header */
+	ip6h->ip6_vfc = 6 << 4;
+	ip6h->ip6_plen = htons(sizeof(struct nd_neighbor_advert) +
+			       sizeof(struct nd_opt_hdr) + ETH_ALEN);
+	ip6h->ip6_nxt = IPPROTO_ICMPV6;
+	ip6h->ip6_hlim = ZEBRA_ND_HOPLIMIT;
+
+	/* Source address, found above. */
+	memcpy(&ip6h->ip6_src, &iptemp.ipaddr_v6, sizeof(struct in6_addr));
+
+	/* Solicited-node multicast address for the target address */
+	ip6h->ip6_dst.s6_addr[0] = 0xFF;
+	ip6h->ip6_dst.s6_addr[1] = 0x02;
+	ip6h->ip6_dst.s6_addr[11] = 0x01;
+	ip6h->ip6_dst.s6_addr[12] = 0xFF;
+
+	ip6h->ip6_dst.s6_addr[13] = addr->ipaddr_v6.s6_addr[13];
+	ip6h->ip6_dst.s6_addr[14] = addr->ipaddr_v6.s6_addr[14];
+	ip6h->ip6_dst.s6_addr[15] = addr->ipaddr_v6.s6_addr[15];
+
+	/* ICMPv6 Header */
+	ndh->nd_na_type = ND_NEIGHBOR_SOLICIT;
+	memcpy(&ndh->nd_na_target, &addr->ipaddr_v6, sizeof(struct in6_addr));
+
+	/* NDISC Option header */
+	nd_opt_h->nd_opt_type = ND_OPT_SOURCE_LINKADDR;
+	nd_opt_h->nd_opt_len = 1;
+	memcpy(nd_opt_lladdr, lladdr, ETH_ALEN);
+
+	/* Compute checksum */
+	hlen = (sizeof(struct nd_neighbor_advert) + sizeof(struct nd_opt_hdr) +
+		ETH_ALEN);
+
+	ph.src = ip6h->ip6_src;
+	ph.dst = ip6h->ip6_dst;
+	ph.ulpl = htonl(hlen);
+	ph.next_hdr = IPPROTO_ICMPV6;
+
+	/* Suppress static analysis warnings about accessing icmp6 oob */
+	offset = icmp6h;
+	icmp6h->icmp6_cksum = in_cksum_with_ph6(&ph, offset, hlen);
+
+	/* Prep and send packet */
+	memset(&sll, 0, sizeof(sll));
+	sll.sll_family = AF_PACKET;
+	sll.sll_ifindex = (int)ifp->ifindex;
+	sll.sll_halen = ifp->hw_addr_len;
+	memcpy(sll.sll_addr, ifp->hw_addr, ETH_ALEN);
+
+	len = sendto(zns->nd_fd, buf, ZEBRA_ND_SIZE, 0, (struct sockaddr *)&sll,
+		     sizeof(sll));
+	if (len < 0) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("%s: error sending ND SOLICIT req for %pIA",
+				   __func__, addr);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * Helper to send ipv4 ARP solicit
+ */
+static bool send_arp_helper(const struct ipaddr *addr, struct zebra_ns *zns,
+			    struct interface *ifp)
+{
+	uint8_t buf[100];
+	uint8_t *arp_ptr;
+	struct ether_header *eth;
+	struct arphdr *arph;
+	ssize_t len, alen;
+	struct ipaddr iptemp;
+	struct sockaddr_ll sll;
+
+	/* Locate source IP address */
+	if (!zebra_if_get_source(ifp, addr, &iptemp))
+		return false;
+
+	if (IS_ZEBRA_DEBUG_KERNEL)
+		zlog_debug("%s: addr %pIA, ifp %s", __func__, addr, ifp->name);
+
+	memset(buf, 0, sizeof(buf));
+	memset(&sll, 0, sizeof(sll));
+
+	/* Build Ethernet header */
+	eth = (struct ether_header *)buf;
+
+	memset(eth->ether_dhost, 0xFF, ETH_ALEN);
+	memcpy(eth->ether_shost, ifp->hw_addr, ETH_ALEN);
+	eth->ether_type = htons(ETHERTYPE_ARP);
+
+	/* Build ARP payload */
+	arph = (struct arphdr *)(buf + ETHER_HDR_LEN);
+
+	arph->ar_hrd = htons(ARPHRD_ETHER);
+	arph->ar_pro = htons(ETHERTYPE_IP);
+	arph->ar_hln = ifp->hw_addr_len;
+	arph->ar_pln = sizeof(struct in_addr);
+	arph->ar_op = htons(ARPOP_REQUEST);
+
+	arp_ptr = (uint8_t *)(arph + 1);
+
+	/* Source MAC: us */
+	memcpy(arp_ptr, ifp->hw_addr, ifp->hw_addr_len);
+	arp_ptr += ifp->hw_addr_len;
+
+	/* Source IP: us */
+	memcpy(arp_ptr, &(iptemp.ipaddr_v4), sizeof(struct in_addr));
+	arp_ptr += sizeof(struct in_addr);
+
+	/* TODO -- VRRP uses bcast dest here, but the OS uses zero? */
+	/* Dest MAC: zero */
+	memset(arp_ptr, 0, ETH_ALEN);
+	arp_ptr += ifp->hw_addr_len;
+
+	/* Dest IP, target */
+	memcpy(arp_ptr, &addr->ipaddr_v4, sizeof(struct in_addr));
+	arp_ptr += sizeof(struct in_addr);
+
+	alen = arp_ptr - buf;
+
+	sll.sll_family = AF_PACKET;
+	sll.sll_protocol = ETH_P_ARP;
+	sll.sll_ifindex = (int)ifp->ifindex;
+	sll.sll_halen = ifp->hw_addr_len;
+	memset(sll.sll_addr, 0xFF, ETH_ALEN);
+
+	len = sendto(zns->arp_fd, buf, alen, 0, (struct sockaddr *)&sll,
+		     sizeof(sll));
+	if (len < 0) {
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug("%s: error sending ARP req for %pIA",
+				   __func__, addr);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * Handle optional glean throttling. If enabled, we install a blackhole route
+ * for each unresolved neighbor entry, and remove that temporary blackhole
+ * if the neighbor resolves.
+ */
+static void netlink_handle_neigh_throttle(int cmd, const struct ndmsg *ndm,
+					  const struct ipaddr *addr,
+					  struct zebra_ns *zns,
+					  struct interface *ifp)
+{
+	/*
+	 * We may see three different netlink messages:
+	 *   NEWNEIGH when an entry is added; maybe resolved or failed.
+	 *   DELNEIGH when an entry is removed by the OS
+	 *   GETNEIGH if application resolution has been configured (via
+	 *   sysctl on linux). in this case, we will attempt to send the
+	 *   the first APR or NS request ourselves.
+	 */
+	if (cmd == RTM_NEWNEIGH) {
+		if (ndm->ndm_state & NUD_REACHABLE)
+			zebra_neigh_throttle_delete(ifp->vrf->vrf_id, addr);
+		else if (ndm->ndm_state & NUD_FAILED)
+			zebra_neigh_throttle_add(ifp, addr, false);
+
+	} else if (cmd == RTM_DELNEIGH) {
+		zebra_neigh_throttle_delete(ifp->vrf->vrf_id, addr);
+
+	} else if (cmd == RTM_GETNEIGH) {
+
+		/* If throttling enabled, ARP/ND */
+		if (!zebra_neigh_throttle_is_enabled(ifp))
+			return;
+
+		/* TODO -- if configured to receive GETNEIGH, ARP/ND always? */
+
+		/* TODO -- only for ethernet interfaces? */
+
+		if (addr->ipa_type == IPADDR_V4)
+			send_arp_helper(addr, zns, ifp);
+		else
+			send_nd_helper(addr, zns, ifp);
+
+		/* Maybe add a delayed throttle entry, instead of waiting
+		 * the full OS timeout.
+		 */
+		zebra_neigh_throttle_add(ifp, addr, true);
+	}
+}
+
+#define NUD_VALID                                                              \
+	(NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE | NUD_PROBE | NUD_STALE     \
+	 | NUD_DELAY)
+#define NUD_LOCAL_ACTIVE                                                 \
+	(NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE)
+
+static int netlink_nbr_entry_state_to_zclient(int nbr_state)
+{
+	/* an exact match is done between
+	 * - netlink neighbor state values: NDM_XXX (see in linux/neighbour.h)
+	 * - zclient neighbor state values: ZEBRA_NEIGH_STATE_XXX
+	 *  (see in lib/zclient.h)
+	 */
+	return nbr_state;
+}
+
 static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 {
 	struct ndmsg *ndm;
+	struct interface *ifp;
+	struct zebra_if *zif;
+	struct zebra_ns *zns;
 	struct rtattr *tb[NDA_MAX + 1];
+	struct interface *link_if;
 	struct ethaddr mac;
-	struct ipaddr *ip;
-	int l2_len = 0;
-	bool lladdr_present = false;
-	bool mac_present = false;
+	struct ipaddr ip;
 	char buf[ETHER_ADDR_STRLEN];
-	struct zebra_dplane_ctx *ctx = NULL;
+	int mac_present = 0;
+	bool is_ext;
+	bool is_router;
+	bool local_inactive;
+	uint32_t ext_flags = 0;
+	bool dp_static = false;
+	int l2_len = 0;
+	int cmd;
 
 	/* N.B. the message type has already been checked by the caller */
+
 	ndm = NLMSG_DATA(h);
+
+	/* The interface should exist. */
+	zns = zebra_ns_lookup(ns_id);
+	ifp = if_lookup_by_index_per_ns(zns, ndm->ndm_ifindex);
+	if (!ifp || !ifp->info)
+		return 0;
+
+	zif = (struct zebra_if *)ifp->info;
 
 	/* Parse attributes and extract fields of interest. */
 	netlink_parse_rtattr(tb, NDA_MAX, NDA_RTA(ndm), len);
 
 	if (!tb[NDA_DST]) {
-		zlog_debug("%s family %s If index(%u) - no DST",
+		zlog_debug("%s family %s IF %s(%u) vrf %s(%u) - no DST",
 			   nl_msg_type_to_str(h->nlmsg_type),
-			   nl_family_to_str(ndm->ndm_family), ndm->ndm_ifindex);
+			   nl_family_to_str(ndm->ndm_family), ifp->name,
+			   ndm->ndm_ifindex, VRF_LOGNAME(ifp->vrf),
+			   ifp->vrf->vrf_id);
 		return 0;
 	}
 
-	ctx = dplane_ctx_alloc();
-	if (h->nlmsg_type == RTM_DELNEIGH)
-		dplane_ctx_set_op(ctx, DPLANE_OP_NEIGH_DELETE);
+	memset(&ip, 0, sizeof(ip));
+	ip.ipa_type = (ndm->ndm_family == AF_INET) ? IPADDR_V4 : IPADDR_V6;
+	memcpy(&ip.ip.addr, RTA_DATA(tb[NDA_DST]), RTA_PAYLOAD(tb[NDA_DST]));
+
+	if (h->nlmsg_type == RTM_GETNEIGH) {
+		/* Handle neighbor throttling */
+		netlink_handle_neigh_throttle(h->nlmsg_type, ndm, &ip, zns,
+					      ifp);
+	} else if (h->nlmsg_type == RTM_DELNEIGH) {
+		if (ndm->ndm_state & NUD_PERMANENT) {
+			/*
+			 * if kernel deletes our rfc5549 neighbor entry,
+			 * re-install it
+			 */
+			if (netlink_handle_5549(ndm, zif, ifp, &ip, false)) {
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"    Neighbor Entry Received is a 5549 entry, finished");
+				return 0;
+			}
+		}
+
+		/* Handle ip neighbor throttling */
+		netlink_handle_neigh_throttle(h->nlmsg_type, ndm, &ip, zns,
+					      ifp);
+
+	} else if (h->nlmsg_type == RTM_NEWNEIGH) {
+		bool handled = false;
+
+		if (!(ndm->ndm_state & NUD_VALID)) {
+			/*
+			 * If kernel marks our rfc5549 neighbor entry
+			 *  invalid, re-install it
+			 */
+			handled = netlink_handle_5549(ndm, zif, ifp, &ip, true);
+		}
+
+		/* Handle ip neighbor throttling */
+		if (!handled)
+			netlink_handle_neigh_throttle(h->nlmsg_type, ndm, &ip,
+						      zns, ifp);
+	}
+
+	/* we send link layer information to NHRP client:
+	 * - nlmsg_type = RTM_DELNEIGH|NEWNEIGH|GETNEIGH
+	 * - struct ipaddr ( for DEL and GET)
+	 * - struct ethaddr mac; (for NEW)
+	 */
+	if (h->nlmsg_type == RTM_NEWNEIGH)
+		cmd = ZEBRA_NHRP_NEIGH_ADDED;
 	else if (h->nlmsg_type == RTM_GETNEIGH)
-		dplane_ctx_set_op(ctx, DPLANE_OP_NEIGH_GET);
-	else if (h->nlmsg_type == RTM_NEWNEIGH)
-		dplane_ctx_set_op(ctx, DPLANE_OP_NEIGH_INSTALL);
+		cmd = ZEBRA_NHRP_NEIGH_GET;
+	else if (h->nlmsg_type == RTM_DELNEIGH)
+		cmd = ZEBRA_NHRP_NEIGH_REMOVED;
 	else {
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug("%s: unknown nlmsg type %u", __func__,
 				   h->nlmsg_type);
-		dplane_ctx_fini(&ctx);
 		return 0;
 	}
 
-	dplane_ctx_set_status(ctx, ZEBRA_DPLANE_REQUEST_QUEUED);
-	dplane_ctx_set_ns_id(ctx, ns_id);
-	dplane_ctx_set_neigh_ipaddr(
-		ctx, (ndm->ndm_family == AF_INET) ? IPADDR_V4 : IPADDR_V6,
-		(struct ipaddr *)RTA_DATA(tb[NDA_DST]),
-		(int)RTA_PAYLOAD(tb[NDA_DST]));
-	dplane_ctx_set_neigh_ndm_state(ctx, ndm->ndm_state);
-	dplane_ctx_set_neigh_ndm_flags(ctx, ndm->ndm_flags);
-	dplane_ctx_set_neigh_ifindex(ctx, ndm->ndm_ifindex);
-
-
 	if (tb[NDA_LLADDR]) {
-		lladdr_present = true;
 		/* copy LLADDR information */
 		l2_len = RTA_PAYLOAD(tb[NDA_LLADDR]);
-		dplane_ctx_set_neigh_l2_len(ctx, l2_len);
+	}
+	if (l2_len == IPV4_MAX_BYTELEN || l2_len == 0) {
+		union sockunion link_layer_ipv4;
+
+		if (l2_len) {
+			sockunion_family(&link_layer_ipv4) = AF_INET;
+			memcpy((void *)sockunion_get_addr(&link_layer_ipv4),
+			       RTA_DATA(tb[NDA_LLADDR]), l2_len);
+		} else
+			sockunion_family(&link_layer_ipv4) = AF_UNSPEC;
+		zsend_nhrp_neighbor_notify(
+			cmd, ifp, &ip,
+			netlink_nbr_entry_state_to_zclient(ndm->ndm_state),
+			&link_layer_ipv4);
 	}
 
-	if (l2_len == IPV4_MAX_BYTELEN) {
-		dplane_ctx_set_neigh_l2_addr(ctx, RTA_DATA(tb[NDA_LLADDR]),
-					     l2_len);
+	if (h->nlmsg_type == RTM_GETNEIGH)
+		return 0;
+
+	/* The neighbor is present on an SVI. From this, we locate the
+	 * underlying
+	 * bridge because we're only interested in neighbors on a VxLAN bridge.
+	 * The bridge is located based on the nature of the SVI:
+	 * (a) In the case of a VLAN-aware bridge, the SVI is a L3 VLAN
+	 * interface
+	 * and is linked to the bridge
+	 * (b) In the case of a VLAN-unaware bridge, the SVI is the bridge
+	 * interface
+	 * itself
+	 */
+	if (IS_ZEBRA_IF_VLAN(ifp)) {
+		link_if = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id),
+						    zif->link_ifindex);
+		if (!link_if)
+			return 0;
+	} else if (IS_ZEBRA_IF_BRIDGE(ifp))
+		link_if = ifp;
+	else {
+		link_if = NULL;
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug(
+				"    Neighbor Entry received is not on a VLAN or a BRIDGE, ignoring");
 	}
 
-	dplane_ctx_set_neigh_lladdr_present(ctx, lladdr_present);
 	memset(&mac, 0, sizeof(mac));
 	if (h->nlmsg_type == RTM_NEWNEIGH) {
 		if (tb[NDA_LLADDR]) {
-			if (RTA_PAYLOAD(tb[NDA_LLADDR]) == ETH_ALEN) {
-				mac_present = true;
-				memcpy(&mac, RTA_DATA(tb[NDA_LLADDR]),
-				       ETH_ALEN);
-				dplane_ctx_set_neigh_mac(
-					ctx, RTA_DATA(tb[NDA_LLADDR]));
+			if (RTA_PAYLOAD(tb[NDA_LLADDR]) != ETH_ALEN) {
+				if (IS_ZEBRA_DEBUG_KERNEL)
+					zlog_debug(
+						"%s family %s IF %s(%u) vrf %s(%u) - LLADDR is not MAC, len %lu",
+						nl_msg_type_to_str(
+							h->nlmsg_type),
+						nl_family_to_str(
+							ndm->ndm_family),
+						ifp->name, ndm->ndm_ifindex,
+						ifp->vrf->name,
+						ifp->vrf->vrf_id,
+						(unsigned long)RTA_PAYLOAD(
+							tb[NDA_LLADDR]));
+				return 0;
 			}
+
+			mac_present = 1;
+			memcpy(&mac, RTA_DATA(tb[NDA_LLADDR]), ETH_ALEN);
 		}
+
+		is_ext = !!(ndm->ndm_flags & NTF_EXT_LEARNED);
+		is_router = !!(ndm->ndm_flags & NTF_ROUTER);
 
 		if (tb[NDA_EXT_FLAGS]) {
-			dplane_ctx_set_neigh_ext_flags(
-				ctx, *(uint32_t *)RTA_DATA(tb[NDA_EXT_FLAGS]));
+			ext_flags = *(uint32_t *)RTA_DATA(tb[NDA_EXT_FLAGS]);
+			if (ext_flags & NTF_E_MH_PEER_SYNC)
+				dp_static = true;
 		}
+
+		if (IS_ZEBRA_DEBUG_KERNEL)
+			zlog_debug(
+				"Rx %s family %s IF %s(%u) vrf %s(%u) IP %pIA MAC %s state 0x%x flags 0x%x ext_flags 0x%x",
+				nl_msg_type_to_str(h->nlmsg_type),
+				nl_family_to_str(ndm->ndm_family), ifp->name,
+				ndm->ndm_ifindex, ifp->vrf->name,
+				ifp->vrf->vrf_id, &ip,
+				mac_present
+					? prefix_mac2str(&mac, buf, sizeof(buf))
+					: "",
+				ndm->ndm_state, ndm->ndm_flags, ext_flags);
+
+		/* If the neighbor state is valid for use, process as an add or
+		 * update
+		 * else process as a delete. Note that the delete handling may
+		 * result
+		 * in re-adding the neighbor if it is a valid "remote" neighbor.
+		 */
+		if (ndm->ndm_state & NUD_VALID) {
+			if (zebra_evpn_mh_do_adv_reachable_neigh_only())
+				local_inactive =
+					!(ndm->ndm_state & NUD_LOCAL_ACTIVE);
+			else
+				/* If EVPN-MH is not enabled we treat STALE
+				 * neighbors as locally-active and advertise
+				 * them
+				 */
+				local_inactive = false;
+
+			/* Add local neighbors to the l3 interface database */
+			if (is_ext)
+				zebra_neigh_del(ifp, &ip);
+			else
+				zebra_neigh_add(ifp, &ip, &mac);
+
+			if (link_if)
+				zebra_vxlan_handle_kernel_neigh_update(
+					ifp, link_if, &ip, &mac, ndm->ndm_state,
+					is_ext, is_router, local_inactive,
+					dp_static);
+			return 0;
+		}
+
+
+		zebra_neigh_del(ifp, &ip);
+		if (link_if)
+			zebra_vxlan_handle_kernel_neigh_del(ifp, link_if, &ip);
+		return 0;
 	}
 
-	ip = dplane_ctx_get_neigh_ipaddr(ctx);
 	if (IS_ZEBRA_DEBUG_KERNEL)
-		zlog_debug(
-			"Rx %s family %s If index(%u) IP %pIA MAC %s state 0x%x flags "
-			"0x%x ext_flags 0x%x. Enqueuing to Main",
-			nl_msg_type_to_str(h->nlmsg_type),
-			nl_family_to_str(ndm->ndm_family), ndm->ndm_ifindex, ip,
-			mac_present ? prefix_mac2str(&mac, buf, sizeof(buf))
-				    : "",
-			ndm->ndm_state, ndm->ndm_flags,
-			dplane_ctx_get_neigh_ext_flags(ctx));
+		zlog_debug("Rx %s family %s IF %s(%u) vrf %s(%u) IP %pIA",
+			   nl_msg_type_to_str(h->nlmsg_type),
+			   nl_family_to_str(ndm->ndm_family), ifp->name,
+			   ndm->ndm_ifindex, ifp->vrf->name, ifp->vrf->vrf_id,
+			   &ip);
 
-	if (h && ndm)
-		frrtrace(4, frr_zebra, netlink_ipneigh_change, h, ndm, &mac,
-			 ip);
-
-	/* Moving all the code which requires ifp lookup to begin with to
-	 * zebra_neigh_dplane_result
+	if (h && ndm && ifp)
+		frrtrace(5, frr_zebra, netlink_ipneigh_change, h, ndm, ifp,
+			 &mac, &ip);
+	/* Process the delete - it may result in re-adding the neighbor if it is
+	 * a valid "remote" neighbor.
 	 */
-	dplane_provider_enqueue_to_zebra(ctx);
+	zebra_neigh_del(ifp, &ip);
+	if (link_if)
+		zebra_vxlan_handle_kernel_neigh_del(ifp, link_if, &ip);
+
 	return 0;
 }
 
@@ -4309,8 +4868,8 @@ int netlink_neigh_change(struct nlmsghdr *h, ns_id_t ns_id)
 /*
  * Utility neighbor-update function, using info from dplane context.
  */
-static ssize_t netlink_neigh_update_ctx(struct zebra_dplane_ctx *ctx, int cmd,
-					void *buf, size_t buflen)
+static ssize_t netlink_neigh_update_ctx(const struct zebra_dplane_ctx *ctx,
+					int cmd, void *buf, size_t buflen)
 {
 	const struct ipaddr *ip;
 	const struct ethaddr *mac = NULL;
@@ -4330,7 +4889,7 @@ static ssize_t netlink_neigh_update_ctx(struct zebra_dplane_ctx *ctx, int cmd,
 	if (dplane_ctx_get_type(ctx) != 0)
 		proto = zebra2proto(dplane_ctx_get_type(ctx));
 
-	ip = dplane_ctx_get_neigh_ipaddr(ctx);
+	ip = dplane_ctx_neigh_get_ipaddr(ctx);
 
 	if (dplane_ctx_get_op(ctx) == DPLANE_OP_NEIGH_IP_INSTALL
 	    || dplane_ctx_get_op(ctx) == DPLANE_OP_NEIGH_IP_DELETE) {
@@ -4339,7 +4898,7 @@ static ssize_t netlink_neigh_update_ctx(struct zebra_dplane_ctx *ctx, int cmd,
 		link_ptr = (const void *)&(link_ip->ip.addr);
 		ipaddr2str(link_ip, buf2, sizeof(buf2));
 	} else {
-		mac = dplane_ctx_neigh_get_link_mac(ctx);
+		mac = dplane_ctx_neigh_get_mac(ctx);
 		llalen = ETH_ALEN;
 		link_ptr = (const void *)mac;
 		if (is_zero_mac(mac))
@@ -4447,7 +5006,6 @@ static ssize_t netlink_neigh_msg_encoder(struct zebra_dplane_ctx *ctx,
 	switch (dplane_ctx_get_op(ctx)) {
 	case DPLANE_OP_NEIGH_INSTALL:
 	case DPLANE_OP_NEIGH_UPDATE:
-	case DPLANE_OP_NEIGH_GET:
 	case DPLANE_OP_NEIGH_DISCOVER:
 	case DPLANE_OP_NEIGH_IP_INSTALL:
 		ret = netlink_neigh_update_ctx(ctx, RTM_NEWNEIGH, buf, buflen);

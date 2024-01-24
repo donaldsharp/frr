@@ -186,20 +186,20 @@ void lua_pushzebra_dplane_ctx(lua_State *L, const struct zebra_dplane_ctx *ctx)
 		/* macinfo */
 		lua_newtable(L);
 		{
-			lua_pushinteger(L, dplane_ctx_get_mac_vid(ctx));
+			lua_pushinteger(L, dplane_ctx_mac_get_vlan(ctx));
 			lua_setfield(L, -2, "vid");
-			lua_pushinteger(L, dplane_ctx_get_mac_br_ifindex(ctx));
+			lua_pushinteger(L, dplane_ctx_mac_get_br_ifindex(ctx));
 			lua_setfield(L, -2, "br_ifindex");
-			lua_pushethaddr(L, dplane_ctx_get_mac_addr(ctx));
+			lua_pushethaddr(L, dplane_ctx_mac_get_addr(ctx));
 			lua_setfield(L, -2, "mac");
-			lua_pushinaddr(L, dplane_ctx_get_mac_vtep_ip(ctx));
+			lua_pushinaddr(L, dplane_ctx_mac_get_vtep_ip(ctx));
 			lua_setfield(L, -2, "vtep_ip");
-			lua_pushinteger(L, dplane_ctx_get_mac_is_sticky(ctx));
+			lua_pushinteger(L, dplane_ctx_mac_is_sticky(ctx));
 			lua_setfield(L, -2, "is_sticky");
-			lua_pushinteger(L, dplane_ctx_get_mac_nhg_id(ctx));
+			lua_pushinteger(L, dplane_ctx_mac_get_nhg_id(ctx));
 			lua_setfield(L, -2, "nhg_id");
 			lua_pushinteger(L,
-					dplane_ctx_get_mac_update_flags(ctx));
+					dplane_ctx_mac_get_update_flags(ctx));
 			lua_setfield(L, -2, "update_flags");
 		}
 		lua_setfield(L, -2, "macinfo");
@@ -332,20 +332,19 @@ void lua_pushzebra_dplane_ctx(lua_State *L, const struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_NEIGH_INSTALL:
 	case DPLANE_OP_NEIGH_UPDATE:
 	case DPLANE_OP_NEIGH_DELETE:
-	case DPLANE_OP_NEIGH_GET:
 	case DPLANE_OP_NEIGH_DISCOVER:
 	case DPLANE_OP_NEIGH_IP_INSTALL:
 	case DPLANE_OP_NEIGH_IP_DELETE:
 		/* neigh */
 		lua_newtable(L);
 		{
-			lua_pushipaddr(L, dplane_ctx_get_neigh_ipaddr(ctx));
+			lua_pushipaddr(L, dplane_ctx_neigh_get_ipaddr(ctx));
 			lua_setfield(L, -2, "ip_addr");
 			/* link */
 			lua_newtable(L);
 			{
-				lua_pushethaddr(
-					L, dplane_ctx_neigh_get_link_mac(ctx));
+				lua_pushethaddr(L,
+						dplane_ctx_neigh_get_mac(ctx));
 				lua_setfield(L, -2, "mac");
 				lua_pushipaddr(
 					L, dplane_ctx_neigh_get_link_ip(ctx));
