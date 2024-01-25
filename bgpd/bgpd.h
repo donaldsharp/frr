@@ -18,6 +18,8 @@
 #include "iana_afi.h"
 #include "asn.h"
 
+PREDECL_LIST(zebra_announce);
+
 /* For union sockunion.  */
 #include "queue.h"
 #include "sockunion.h"
@@ -174,6 +176,8 @@ struct bgp_master {
 	struct event *t_bgp_start_label_manager;
 
 	bool v6_with_v4_nexthops;
+
+	struct zebra_announce_head zebra_announce_head;
 
 	QOBJ_FIELDS;
 };

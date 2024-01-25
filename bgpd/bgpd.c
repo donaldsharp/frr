@@ -8274,6 +8274,8 @@ void bgp_master_init(struct event_loop *master, const int buffer_size,
 	memset(&bgp_master, 0, sizeof(bgp_master));
 
 	bm = &bgp_master;
+
+	zebra_announce_init(&bm->zebra_announce_head);
 	bm->bgp = list_new();
 	bm->listen_sockets = list_new();
 	bm->port = BGP_PORT_DEFAULT;
@@ -8506,6 +8508,7 @@ void bgp_terminate(void)
 	struct peer *peer;
 	struct listnode *node, *nnode;
 	struct listnode *mnode, *mnnode;
+	struct bgp_dest *dest;
 
 	QOBJ_UNREG(bm);
 
@@ -8515,8 +8518,15 @@ void bgp_terminate(void)
 	 * of a large number of peers this will ensure that no peer is left with
 	 * a dangling connection
 	 */
-
 	bgp_close();
+
+	while (zebra_announce_count(&bm->zebra_announce_head)) {
+		dest = zebra_announce_pop(&bm->zebra_announce_head);
+		//bgp_path_info_unlock(pi);
+		bgp_dest_unlock_node(dest);
+	}
+
+	zebra_announce_fini(&bm->zebra_announce_head);
 	/* reverse bgp_master_init */
 	for (ALL_LIST_ELEMENTS(bm->bgp, mnode, mnnode, bgp)) {
 		bgp_close_vrf_socket(bgp);
