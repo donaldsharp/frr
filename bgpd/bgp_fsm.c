@@ -1864,15 +1864,6 @@ static bool gr_path_select_deferral_applicable(struct bgp *bgp)
 		if (!bgp_gr_supported_for_afi_safi(afi, safi))
 			continue;
 
-		/*
-		 * If GR is not enabled for this VRF,
-		 * select-deferral-timer will not be started for any of
-		 * the GR supported AFI-SAFIs. In that case, continue
-		 */
-		if (!bgp->gr_info[afi][safi].af_enabled)
-			continue;
-
-
 		if (!BGP_GR_SELECT_DEFER_DONE(bgp, afi, safi))
 			return true;
 	}
