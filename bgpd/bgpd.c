@@ -7947,6 +7947,8 @@ void bgp_master_init(struct thread_master *master, const int buffer_size,
 	memset(&bgp_master, 0, sizeof(bgp_master));
 
 	bm = &bgp_master;
+
+	zebra_announce_init(&bm->zebra_announce_head);
 	bm->bgp = list_new();
 	bm->listen_sockets = list_new();
 	bm->port = BGP_PORT_DEFAULT;

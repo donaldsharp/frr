@@ -101,6 +101,8 @@ struct bgp_node {
 
 	STAILQ_ENTRY(bgp_dest) pq;
 
+	struct zebra_announce_item zai;
+
 	uint64_t version;
 
 	mpls_label_t local_label;
@@ -120,6 +122,8 @@ struct bgp_node {
 
 	enum bgp_path_selection_reason reason;
 };
+
+DECLARE_LIST(zebra_announce, struct bgp_dest, zai);
 
 extern void bgp_delete_listnode(struct bgp_dest *dest);
 /*
