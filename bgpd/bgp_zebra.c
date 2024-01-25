@@ -1734,7 +1734,7 @@ void bgp_zebra_withdraw(struct bgp_dest *dest, struct bgp_path_info *info,
 	 * If we are withdrawing the route, we don't need to have this
 	 * flag set.  So unset it.
 	 */
-	UNSET_FLAG(info->net->flags, BGP_NODE_FIB_INSTALL_PENDING);
+	UNSET_FLAG(dest->flags, BGP_NODE_FIB_INSTALL_PENDING);
 
 	/* Don't try to install if we're not connected to Zebra or Zebra doesn't
 	 * know of this instance.
