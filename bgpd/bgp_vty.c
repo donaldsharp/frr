@@ -2993,11 +2993,9 @@ static void bgp_update_graceful_restart_capability(struct bgp *bgp)
 
 		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 			zlog_debug(
-				"Resetting session for %s: Peer GR mode %u, Global GR mode %u",
-				peer->host,
-				print_peer_gr_mode(bgp_peer_gr_mode_get(peer)),
-				print_peer_gr_mode(
-					bgp_global_gr_mode_get(bgp)));
+				"Resetting session for %s: Peer GR mode %s, Global GR mode %s",
+				peer->host, print_peer_gr_mode(peer_gr_mode),
+				print_global_gr_mode(global_gr_mode));
 
 		/*
 		 * Reset the session so that the updated capability can be

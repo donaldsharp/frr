@@ -3674,17 +3674,6 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 	 */
 	if (!bgp->gr_info[afi][safi].gr_deferred) {
 		bgp_send_delayed_eor(bgp);
-		/*
-		 * For non-default VRFs, route-select-timer
-		 * could be started even when GR is not enabled.
-		 * This is done so that bestpath can be calculated for
-		 * imported paths in VRF. In such cases, we will
-		 * end up here. But we need to skip rest of
-		 * the processing, because this processing must be done
-		 * only if GR is enabled for this VRF.
-		 */
-		if (!bgp->gr_route_sync_pending)
-			return;
 
 		bool route_sync_pending = false;
 

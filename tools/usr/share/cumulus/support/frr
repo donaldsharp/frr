@@ -62,6 +62,7 @@ func_frr()
     exec_cmd zebra.vrf vtysh -c "show vrf"
     exec_cmd zebra.detail vtysh -c "show zebra"
     exec_cmd zebra.csm vtysh -c "show zebra csm"
+    exec_cmd zebra.dplane vtysh -c "show zebra dplane"
     exec_cmd zebra.vrf.vni vtysh -c "show vrf vni"
     exec_cmd zebra.intf vtysh -c "show interface vrf all"
     exec_cmd zebra.nht vtysh -c "show ip nht vrf all"
@@ -121,6 +122,7 @@ func_frr()
     exec_cmd bgp.evpn.update_group vtysh -c "show bgp l2vpn evpn update-groups"
     exec_cmd bgp.mac_hash vtysh -c "show bgp mac hash"
     exec_cmd $jexec bgp.evpn.nexthops vtysh -c "show bgp l2vpn evpn next-hops $json"
+    exec_cmd bgp.router vtysh -c "show bgp router"
 
     exec_cmd $jexec pbr.map vtysh -c "show pbr map $json"
     exec_cmd $jexec pbr.intf vtysh -c "show pbr interface $json"
