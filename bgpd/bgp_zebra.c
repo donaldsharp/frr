@@ -1292,9 +1292,8 @@ static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, struct attr *attr,
 	return true;
 }
 
-void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
-			struct bgp_path_info *info, struct bgp *bgp, afi_t afi,
-			safi_t safi)
+void bgp_zebra_announce(struct bgp_dest *dest, struct bgp_path_info *info,
+			struct bgp *bgp)
 {
 	struct zapi_route api = { 0 };
 	struct zapi_nexthop *api_nh;
@@ -1321,6 +1320,8 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	uint32_t ttl = 0;
 	uint32_t bos = 0;
 	uint32_t exp = 0;
+	struct bgp_table *table = bgp_dest_table(dest);
+	const struct prefix *p = bgp_dest_get_prefix(dest);
 
 	/* Don't try to install if we're not connected to Zebra or Zebra doesn't
 	 * know of this instance.
@@ -1331,9 +1332,9 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	if (bgp->main_zebra_update_hold)
 		return;
 
-	if (safi == SAFI_FLOWSPEC) {
-		bgp_pbr_update_entry(bgp, bgp_dest_get_prefix(dest), info, afi,
-				     safi, true);
+	if (table->safi == SAFI_FLOWSPEC) {
+		bgp_pbr_update_entry(bgp, p, info, table->afi, table->safi,
+				     true);
 		return;
 	}
 
@@ -1346,7 +1347,7 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	/* Make Zebra API structure. */
 	api.vrf_id = bgp->vrf_id;
 	api.type = ZEBRA_ROUTE_BGP;
-	api.safi = safi;
+	api.safi = table->safi;
 	api.prefix = *p;
 	SET_FLAG(api.message, ZAPI_MESSAGE_NEXTHOP);
 
@@ -1450,12 +1451,13 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 			}
 		}
 
-		if (bgp->table_map[afi][safi].name) {
+		if (bgp->table_map[table->afi][table->safi].name) {
 			/* Copy info and attributes, so the route-map
 			   apply doesn't modify the BGP route info. */
 			local_attr = *mpinfo->attr;
 			mpinfo_cp->attr = &local_attr;
-			if (!bgp_table_map_apply(bgp->table_map[afi][safi].map,
+			if (!bgp_table_map_apply(bgp->table_map[table->afi]
+						 [table->safi].map,
 						 p, mpinfo_cp))
 				continue;
 
@@ -1611,7 +1613,7 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 		api.tag = tag;
 	}
 
-	distance = bgp_distance_apply(p, info, afi, safi, bgp);
+	distance = bgp_distance_apply(p, info, table->afi, table->safi, bgp);
 	if (distance) {
 		SET_FLAG(api.message, ZAPI_MESSAGE_DISTANCE);
 		api.distance = distance;
@@ -1723,9 +1725,7 @@ void bgp_zebra_announce_table(struct bgp *bgp, afi_t afi, safi_t safi)
 			     && (pi->sub_type == BGP_ROUTE_NORMAL
 				 || pi->sub_type == BGP_ROUTE_IMPORTED)))
 
-				bgp_zebra_announce(dest,
-						   bgp_dest_get_prefix(dest),
-						   pi, bgp, afi, safi);
+				bgp_zebra_announce(dest, pi, bgp);
 }
 
 /* Announce routes of any bgp subtype of a table to zebra */
@@ -1747,16 +1747,16 @@ void bgp_zebra_announce_table_all_subtypes(struct bgp *bgp, afi_t afi,
 		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next)
 			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
 			    pi->type == ZEBRA_ROUTE_BGP)
-				bgp_zebra_announce(dest,
-						   bgp_dest_get_prefix(dest),
-						   pi, bgp, afi, safi);
+				bgp_zebra_announce(dest, pi, bgp);
 }
 
-void bgp_zebra_withdraw(const struct prefix *p, struct bgp_path_info *info,
-			struct bgp *bgp, afi_t afi, safi_t safi)
+void bgp_zebra_withdraw(struct bgp_dest *dest, struct bgp_path_info *info,
+			struct bgp *bgp)
 {
 	struct zapi_route api;
 	struct peer *peer;
+	struct bgp_table *table = bgp_dest_table(dest);
+	const struct prefix *p = bgp_dest_get_prefix(dest);
 
 	/* Don't try to install if we're not connected to Zebra or Zebra doesn't
 	 * know of this instance.
@@ -1764,16 +1764,17 @@ void bgp_zebra_withdraw(const struct prefix *p, struct bgp_path_info *info,
 	if (!bgp_install_info_to_zebra(bgp))
 		return;
 
-	if (safi == SAFI_FLOWSPEC) {
+	if (table->safi == SAFI_FLOWSPEC) {
 		peer = info->peer;
-		bgp_pbr_update_entry(peer->bgp, p, info, afi, safi, false);
+		bgp_pbr_update_entry(peer->bgp, p, info, table->afi,
+				     table->safi, false);
 		return;
 	}
 
 	memset(&api, 0, sizeof(api));
 	api.vrf_id = bgp->vrf_id;
 	api.type = ZEBRA_ROUTE_BGP;
-	api.safi = safi;
+	api.safi = table->safi;
 	api.prefix = *p;
 
 	if (info->attr->rmap_table_id) {
@@ -1806,8 +1807,7 @@ void bgp_zebra_withdraw_table_all_subtypes(struct bgp *bgp, afi_t afi, safi_t sa
 		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
 			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED)
 			    && (pi->type == ZEBRA_ROUTE_BGP))
-				bgp_zebra_withdraw(bgp_dest_get_prefix(dest),
-						   pi, bgp, afi, safi);
+				bgp_zebra_withdraw(dest, pi, bgp);
 		}
 	}
 }
