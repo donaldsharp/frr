@@ -32,6 +32,8 @@
 #include "srv6.h"
 #include "iana_afi.h"
 
+PREDECL_LIST(zebra_announce);
+
 /* For union sockunion.  */
 #include "queue.h"
 #include "sockunion.h"
@@ -198,6 +200,9 @@ struct bgp_master {
 #define BM_DEFAULT_Q_LIMIT 10000
 	uint32_t inq_limit;
 	uint32_t outq_limit;
+
+	/* To preserve ordering of installations into zebra across all Vrfs */
+	struct zebra_announce_head zebra_announce_head;
 
 	QOBJ_FIELDS;
 };
