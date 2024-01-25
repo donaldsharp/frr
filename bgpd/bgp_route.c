@@ -8146,6 +8146,9 @@ void bgp_aggregate_route(struct bgp *bgp, const struct prefix *p, afi_t afi,
 			lcommunity = lcommunity_dup(aggregate->lcommunity);
 	}
 
+	/* Unimport suppressed routes from EVPN */
+	bgp_aggr_supp_withdraw_from_evpn(bgp, afi, safi);
+
 	bgp_aggregate_install(bgp, afi, safi, p, origin, aspath, community,
 			      ecommunity, lcommunity, atomic_aggregate,
 			      aggregate);
