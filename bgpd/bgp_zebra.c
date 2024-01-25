@@ -1507,8 +1507,8 @@ static void bgp_debug_zebra_nh(struct zapi_route *api)
 	}
 }
 
-void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
-			struct bgp_path_info *info, struct bgp *bgp)
+void bgp_zebra_announce(struct bgp_dest *dest, struct bgp_path_info *info,
+			struct bgp *bgp)
 {
 	struct zapi_route api = { 0 };
 	unsigned int valid_nh_count = 0;
@@ -1520,6 +1520,7 @@ void bgp_zebra_announce(struct bgp_dest *dest, const struct prefix *p,
 	bool is_add;
 	uint32_t nhg_id = 0;
 	uint32_t recursion_flag = 0;
+	const struct prefix *p = bgp_dest_get_prefix(dest);
 	struct bgp_table *bti;
 
 	bti = bgp_dest_table(dest);
@@ -1696,9 +1697,7 @@ void bgp_zebra_announce_table(struct bgp *bgp, afi_t afi, safi_t safi)
 			     && (pi->sub_type == BGP_ROUTE_NORMAL
 				 || pi->sub_type == BGP_ROUTE_IMPORTED)))
 
-				bgp_zebra_announce(dest,
-						   bgp_dest_get_prefix(dest),
-						   pi, bgp);
+				bgp_zebra_announce(dest, pi, bgp);
 }
 
 /* Announce routes of any bgp subtype of a table to zebra */
@@ -1720,17 +1719,16 @@ void bgp_zebra_announce_table_all_subtypes(struct bgp *bgp, afi_t afi,
 		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next)
 			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
 			    pi->type == ZEBRA_ROUTE_BGP)
-				bgp_zebra_announce(dest,
-						   bgp_dest_get_prefix(dest),
-						   pi, bgp);
+				bgp_zebra_announce(dest, pi, bgp);
 }
 
-void bgp_zebra_withdraw(struct bgp_dest *dest, const struct prefix *p,
-			struct bgp_path_info *info, struct bgp *bgp)
+void bgp_zebra_withdraw(struct bgp_dest *dest, struct bgp_path_info *info,
+			struct bgp *bgp)
 {
 	struct zapi_route api;
 	struct peer *peer;
 	struct bgp_table *bti = bgp_dest_table(dest);
+	const struct prefix *p = bgp_dest_get_prefix(dest);
 
 	/*
 	 * If we are withdrawing the route, we don't need to have this
@@ -1787,9 +1785,7 @@ void bgp_zebra_withdraw_table_all_subtypes(struct bgp *bgp, afi_t afi, safi_t sa
 		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
 			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED)
 			    && (pi->type == ZEBRA_ROUTE_BGP))
-				bgp_zebra_withdraw(dest,
-						   bgp_dest_get_prefix(dest),
-						   pi, bgp);
+				bgp_zebra_withdraw(dest, pi, bgp);
 		}
 	}
 }
