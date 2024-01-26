@@ -182,6 +182,8 @@ struct bgp_master {
 	uint32_t inq_limit;
 	uint32_t outq_limit;
 
+	struct thread *t_bgp_zebra_route;
+
 	/* To preserve ordering of installations into zebra across all Vrfs */
 	struct zebra_announce_head zebra_announce_head;
 
