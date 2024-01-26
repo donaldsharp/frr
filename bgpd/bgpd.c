@@ -8508,7 +8508,6 @@ void bgp_terminate(void)
 	struct peer *peer;
 	struct listnode *node, *nnode;
 	struct listnode *mnode, *mnnode;
-	struct bgp_dest *dest;
 
 	QOBJ_UNREG(bm);
 
@@ -8520,13 +8519,6 @@ void bgp_terminate(void)
 	 */
 	bgp_close();
 
-	while (zebra_announce_count(&bm->zebra_announce_head)) {
-		dest = zebra_announce_pop(&bm->zebra_announce_head);
-		//bgp_path_info_unlock(pi);
-		bgp_dest_unlock_node(dest);
-	}
-
-	zebra_announce_fini(&bm->zebra_announce_head);
 	/* reverse bgp_master_init */
 	for (ALL_LIST_ELEMENTS(bm->bgp, mnode, mnnode, bgp)) {
 		bgp_close_vrf_socket(bgp);
