@@ -43,11 +43,10 @@ extern void bgp_zebra_destroy(void);
 extern int bgp_zebra_get_table_range(uint32_t chunk_size,
 				     uint32_t *start, uint32_t *end);
 extern int bgp_if_update_all(void);
-extern void bgp_zebra_announce(struct bgp_dest *dest,
-			       struct bgp_path_info *path, struct bgp *bgp);
+extern void bgp_zebra_route_install(struct bgp_dest *dest,
+				    struct bgp_path_info *path, struct bgp *bgp,
+				    bool install);
 extern void bgp_zebra_announce_table(struct bgp *bgp, afi_t afi, safi_t safi);
-extern void bgp_zebra_withdraw(struct bgp_dest *dest,
-			       struct bgp_path_info *path, struct bgp *bgp);
 
 /* Announce routes of any bgp subtype of a table to zebra */
 extern void bgp_zebra_announce_table_all_subtypes(struct bgp *bgp, afi_t afi,
@@ -131,4 +130,7 @@ extern int bgp_zebra_update(afi_t afi, safi_t safi, vrf_id_t vrf_id, int type);
 extern int bgp_zebra_stale_timer_update(struct bgp *bgp);
 extern int bgp_zebra_srv6_manager_get_locator_chunk(const char *name);
 extern int bgp_zebra_srv6_manager_release_locator_chunk(const char *name);
+extern enum zclient_send_status
+bgp_zebra_withdraw_actual(struct bgp_dest *dest, struct bgp_path_info *info,
+			  struct bgp *bgp);
 #endif /* _QUAGGA_BGP_ZEBRA_H */
