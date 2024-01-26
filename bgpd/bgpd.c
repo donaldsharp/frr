@@ -3948,9 +3948,19 @@ int bgp_delete(struct bgp *bgp)
 	afi_t afi;
 	safi_t safi;
 	int i;
+	struct bgp_dest *dest = NULL;
 	struct graceful_restart_info *gr_info;
 
 	assert(bgp);
+
+	while (zebra_announce_count(&bm->zebra_announce_head)) {
+		dest = zebra_announce_pop(&bm->zebra_announce_head);
+		if (dest->za_bgp_pi->peer->bgp == bgp) {
+			bgp_path_info_unlock(dest->za_bgp_pi);
+			bgp_dest_unlock_node(dest);
+		} else
+			zebra_announce_add_tail(&bm->zebra_announce_head, dest);
+	}
 
 	bgp_soft_reconfig_table_task_cancel(bgp, NULL, NULL);
 
@@ -8457,6 +8467,7 @@ void bgp_master_init(struct event_loop *master, const int buffer_size,
 	bm->stalepath_time = BGP_DEFAULT_STALEPATH_TIME;
 	bm->select_defer_time = BGP_DEFAULT_SELECT_DEFERRAL_TIME;
 	bm->rib_stale_time = BGP_DEFAULT_RIB_STALE_TIME;
+	bm->t_bgp_zebra_route = NULL;
 
 	bgp_mac_init();
 	/* init the rd id space.
@@ -8709,6 +8720,7 @@ void bgp_terminate(void)
 	EVENT_OFF(bm->t_rmap_update);
 	EVENT_OFF(bm->t_bgp_sync_label_manager);
 	EVENT_OFF(bm->t_bgp_start_label_manager);
+	EVENT_OFF(bm->t_bgp_zebra_route);
 
 	bgp_mac_finish();
 }
