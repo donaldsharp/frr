@@ -224,6 +224,7 @@ struct zebra_router {
 	bool graceful_restart;
 	bool gr_last_rt_installed;
 	bool all_instances_gr_done;
+	bool gr_stale_cleaup_time_recorded;
 	time_t gr_completion_time;
 	int gr_cleanup_time;
 

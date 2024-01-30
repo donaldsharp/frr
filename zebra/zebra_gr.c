@@ -433,7 +433,11 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 		/* Update other parameters */
 		if (!info->gr_enable) {
 			client->gr_instance_count++;
-			client->restart_time = monotime_nano();
+
+			if (!zrouter.gr_stale_cleaup_time_recorded)
+				client->restart_time = monotime_nano();
+
+			zrouter.gr_stale_cleaup_time_recorded = true;
 
 			LOG_GR("GR %s: Cient %s vrf %s(%u) GR enabled count %d",
 			       __func__, zebra_route_string(client->proto),
@@ -510,13 +514,6 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 
 			info->af_enabled[api.afi] = true;
 			info->route_sync_done = false;
-
-			/*
-			 * Record the time at which GR started.
-			 * This timestamp will be later used to
-			 * cleanup stale routes and EVPN entries.
-			 */
-			client->restart_time = monotime_nano();
 
 			zeb_vrf = zebra_vrf_lookup_by_id(api.vrf_id);
 			if (zeb_vrf) {
@@ -716,8 +713,10 @@ static bool zebra_gr_process_route_entry(struct route_node *rn,
 
 	/* If the route is not refreshed after restart, delete the entry */
 	if (re->uptime < compare_time) {
-		LOG_GR("GR %s: Client %s stale route %pFX is deleted", __func__,
-		       zebra_route_string(proto), &rn->p);
+		LOG_GR("GR %s: Client %s stale route %pFX.re %p uptime %" PRIu64
+		       ", GR stale time %" PRIu64 " is deleted",
+		       __func__, zebra_route_string(proto), &rn->p, re,
+		       re->uptime, compare_time);
 		SET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
 		for (ALL_NEXTHOPS(re->nhe->nhg, nexthop))
 			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_FIB);
