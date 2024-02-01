@@ -3368,14 +3368,15 @@ struct meta_q_gr_run {
 	uint8_t proto;
 	uint8_t instance;
 	time_t restart_time;
+	time_t update_pending_time;
 };
 
 static void process_subq_gr_run(struct listnode *lnode)
 {
 	struct meta_q_gr_run *gr_run = listgetdata(lnode);
 
-	zebra_gr_process_client(gr_run->afi, gr_run->vrf_id, gr_run->proto,
-				gr_run->instance, gr_run->restart_time);
+	zebra_gr_process_client(gr_run->afi, gr_run->vrf_id, gr_run->proto, gr_run->instance,
+				gr_run->restart_time, gr_run->update_pending_time);
 
 	XFREE(MTYPE_WQ_WRAPPER, gr_run);
 }
@@ -4485,8 +4486,8 @@ static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 	return 0;
 }
 
-int rib_add_gr_run(afi_t afi, vrf_id_t vrf_id, uint8_t proto, uint8_t instance,
-		   time_t restart_time)
+int rib_add_gr_run(afi_t afi, vrf_id_t vrf_id, uint8_t proto, uint8_t instance, time_t restart_time,
+		   time_t update_pending_time)
 {
 	struct meta_q_gr_run *gr_run;
 
@@ -4497,6 +4498,7 @@ int rib_add_gr_run(afi_t afi, vrf_id_t vrf_id, uint8_t proto, uint8_t instance,
 	gr_run->vrf_id = vrf_id;
 	gr_run->instance = instance;
 	gr_run->restart_time = restart_time;
+	gr_run->update_pending_time = update_pending_time;
 
 	return mq_add_handler(gr_run, rib_meta_queue_gr_run_add);
 }

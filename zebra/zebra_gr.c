@@ -47,8 +47,8 @@ struct zebra_gr_afi_clean {
 	uint8_t proto;
 	uint8_t instance;
 	uint64_t restart_time;
-
 	struct event *t_gac;
+	uint64_t update_pending_time;
 };
 
 /*
@@ -465,8 +465,8 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 		/*
 		 * Schedule for after anything already in the meta Q
 		 */
-		rib_add_gr_run(api.afi, api.vrf_id, client->proto,
-			       client->instance, client->restart_time);
+		rib_add_gr_run(api.afi, api.vrf_id, client->proto, client->instance,
+			       client->restart_time, client->update_pending_time);
 		zebra_gr_process_client_stale_routes(client, info);
 		break;
 	case ZEBRA_CLIENT_ROUTE_UPDATE_PENDING:
@@ -487,6 +487,12 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 			zeb_vrf = zebra_vrf_lookup_by_id(api.vrf_id);
 			if (zeb_vrf) {
 				zeb_vrf->gr_enabled = true;
+
+				if (!zrouter.gr_update_pending_time_recorded) {
+					client->update_pending_time = monotime_nano();
+					zrouter.gr_update_pending_time_recorded = true;
+				}
+
 				LOG_GR("GR %s: Cient %s vrf %s(%u) GR enabled. Count %d, zeb_vrf %p",
 				       __func__, zebra_route_string(client->proto), VRF_LOGNAME(vrf),
 				       api.vrf_id, client->gr_instance_count, zeb_vrf);
@@ -580,7 +586,7 @@ static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
 			/*
 			 * Clean up evpn entries
 			 */
-			zebra_evpn_stale_entries_cleanup(gac->restart_time);
+			zebra_evpn_stale_entries_cleanup(gac->update_pending_time);
 		}
 
 		if (!zrouter.all_instances_gr_done) {
@@ -812,7 +818,7 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 		 * Schedule for immediately after anything in the
 		 * meta-Q
 		 */
-		rib_add_gr_run(afi, info->vrf_id, proto, instance, restart_time);
+		rib_add_gr_run(afi, info->vrf_id, proto, instance, restart_time, restart_time);
 	}
 	return 0;
 }
@@ -883,8 +889,8 @@ static void zebra_gr_process_client_stale_routes(struct zserv *client,
 	}
 }
 
-void zebra_gr_process_client(afi_t afi, vrf_id_t vrf_id, uint8_t proto,
-			     uint8_t instance, time_t restart_time)
+void zebra_gr_process_client(afi_t afi, vrf_id_t vrf_id, uint8_t proto, uint8_t instance,
+			     time_t restart_time, time_t update_pending_time)
 {
 	struct zserv *client = zserv_find_client(proto, instance);
 	struct client_gr_info *info = NULL;
@@ -907,6 +913,7 @@ void zebra_gr_process_client(afi_t afi, vrf_id_t vrf_id, uint8_t proto,
 	gac->proto = proto;
 	gac->instance = instance;
 	gac->restart_time = restart_time;
+	gac->update_pending_time = update_pending_time;
 
 	event_add_event(zrouter.master, zebra_gr_delete_stale_route_table_afi,
 			gac, 0, &gac->t_gac);
