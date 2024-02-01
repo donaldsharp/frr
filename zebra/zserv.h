@@ -236,7 +236,7 @@ struct zserv {
 	 */
 	uint32_t gr_instance_count;
 	uint64_t restart_time;
-
+	uint64_t update_pending_time;
 	/*
 	 * Graceful restart information for
 	 * each instance

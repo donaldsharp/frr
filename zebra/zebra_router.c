@@ -353,4 +353,5 @@ void zebra_gr_ctx_init(void)
 	zrouter.gr_last_rt_installed = false;
 	zrouter.all_instances_gr_done = false;
 	zrouter.gr_stale_cleaup_time_recorded = false;
+	zrouter.gr_update_pending_time_recorded = false;
 }
