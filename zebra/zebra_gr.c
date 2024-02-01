@@ -434,10 +434,10 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 		if (!info->gr_enable) {
 			client->gr_instance_count++;
 
-			if (!zrouter.gr_stale_cleaup_time_recorded)
+			if (!zrouter.gr_stale_cleanup_time_recorded) {
 				client->restart_time = monotime_nano();
-
-			zrouter.gr_stale_cleaup_time_recorded = true;
+				zrouter.gr_stale_cleanup_time_recorded = true;
+			}
 
 			LOG_GR("GR %s: Cient %s vrf %s(%u) GR enabled count %d",
 			       __func__, zebra_route_string(client->proto),
