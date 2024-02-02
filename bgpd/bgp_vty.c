@@ -3347,7 +3347,7 @@ DEFUN (bgp_neighbor_graceful_restart_set,
 {
 	int idx_peer = 1;
 	struct peer *peer;
-	int ret = BGP_GR_FAILURE;
+	int result = BGP_GR_FAILURE, ret = BGP_GR_SUCCESS;
 
 	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
 
@@ -3360,12 +3360,16 @@ DEFUN (bgp_neighbor_graceful_restart_set,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
-	ret = bgp_neighbor_graceful_restart(peer, PEER_GR_CMD);
+	result = bgp_neighbor_graceful_restart(peer, PEER_GR_CMD);
 
 	VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
 	VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
 
-	return bgp_vty_return(vty, ret);
+	if (ret != BGP_GR_SUCCESS)
+		vty_out(vty,
+			"As part of configuring graceful-restart, capability send to zebra failed\n");
+
+	return bgp_vty_return(vty, result);
 }
 
 DEFUN (no_bgp_neighbor_graceful_restart,
@@ -3378,7 +3382,7 @@ DEFUN (no_bgp_neighbor_graceful_restart,
       )
 {
 	int idx_peer = 2;
-	int ret = BGP_GR_FAILURE;
+	int result = BGP_GR_FAILURE, ret = BGP_GR_SUCCESS;
 	struct peer *peer;
 
 	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
@@ -3392,12 +3396,16 @@ DEFUN (no_bgp_neighbor_graceful_restart,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
-	ret = bgp_neighbor_graceful_restart(peer, NO_PEER_GR_CMD);
+	result = bgp_neighbor_graceful_restart(peer, NO_PEER_GR_CMD);
 
 	VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
 	VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
 
-	return bgp_vty_return(vty, ret);
+	if (ret != BGP_GR_SUCCESS)
+		vty_out(vty,
+			"As part of unconfiguring graceful-restart, capability send to zebra failed\n");
+
+	return bgp_vty_return(vty, result);
 }
 
 DEFUN (bgp_neighbor_graceful_restart_helper_set,
