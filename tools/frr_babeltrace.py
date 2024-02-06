@@ -359,6 +359,12 @@ def print_safi_string(field_val):
     elif field_val == 8:
         return ("MAX")
 
+def location_last_route_re(field_val):
+    if field_val == 1:
+        return ("RE updated")
+    elif field_val == 2:
+        return ("RE not installed")
+
 def print_prefix_addr(field_val):
     """
     pretty print "struct prefix"
@@ -1125,6 +1131,10 @@ def parse_frr_zebra_remote_nh_add_rmac_change(event):
                      "vtep_ip": print_ip_addr}
     parse_event(event, field_parsers)
 
+def parse_frr_zebra_gr_last_route_re(event):
+    field_parsers = {"location" : location_last_route_re}
+
+    parse_event(event, field_parsers)
 
 ############################ evpn parsers - end *#############################
 

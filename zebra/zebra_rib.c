@@ -2043,6 +2043,7 @@ static void zebra_gr_reinstall_last_route(void)
 				route_unlock_node(z_gr_ctx.rn);
 				z_gr_ctx.re = NULL;
 			}
+			frrtrace(2, frr_zebra, gr_last_route_re, trace_pfx_buf, 1);
 		}
 
 		if (z_gr_ctx.re) {
@@ -2051,6 +2052,8 @@ static void zebra_gr_reinstall_last_route(void)
 
 			frrtrace(2, frr_zebra, gr_reinstalled_last_route,
 				 vrf_id_to_name(z_gr_ctx.re->vrf_id), trace_pfx_buf);
+		} else {
+			frrtrace(2, frr_zebra, gr_last_route_re, trace_pfx_buf, 2);
 		}
 	} else {
 		zlog_info("GR %s Last route not found. rn %p, re %p", __func__, z_gr_ctx.rn,
