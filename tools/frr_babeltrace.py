@@ -188,6 +188,12 @@ def location_attr_type_unsupported(field_val):
     elif field_val == 3:
         return ("Prefix SID")
 
+def location_last_route_re(field_val):
+    if field_val == 1:
+        return ("RE updated")
+    elif field_val == 2:
+        return ("RE not installed")
+
 def print_prefix_addr(field_val):
     """
     pretty print "struct prefix"
@@ -744,6 +750,10 @@ def parse_frr_bgp_attr_type_unsupported(event):
     
     parse_event(event, field_parsers)
 
+def parse_frr_zebra_gr_last_route_re(event):
+    field_parsers = {"location" : location_last_route_re}
+
+    parse_event(event, field_parsers)
 
 ############################ evpn parsers - end *#############################
 
@@ -857,6 +867,8 @@ def main():
                      parse_frr_update_prefix_filter,
                      "frr_bgp:upd_attr_type_unsupported":
                      parse_frr_bgp_attr_type_unsupported,
+                     "frr_zebra:gr_last_route_re":
+                     parse_frr_zebra_gr_last_route_re,
 }
 
     # get the trace path from the first command line argument

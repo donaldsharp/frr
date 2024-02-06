@@ -1734,6 +1734,21 @@ TRACEPOINT_EVENT(
    )
 TRACEPOINT_LOGLEVEL(frr_zebra, gr_delete_stale_route, TRACE_INFO)
 
+/* 
+ * LOC1: RE updated
+ * LOC2: RE NOT install
+ */
+TRACEPOINT_EVENT(
+    frr_zebra,
+    gr_last_route_re,
+    TP_ARGS(char *, pfx, uint8_t, loc),
+    TP_FIELDS(
+    	ctf_string(last_route, pfx)
+        ctf_integer(uint8_t, location, loc)
+    	)
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, gr_last_route_re, TRACE_INFO)
+
 /* clang-format on */
 #include <lttng/tracepoint-event.h>
 
