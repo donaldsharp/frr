@@ -740,9 +740,10 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 
 	/* Send add or update or last route*/
 	if (last_route) {
-		zlog_debug(
-			"GR %s: reinstalling %pRN (%p) with RTM_F_LAST_ROUTE flag on re %p",
-			__func__, rn, rn, re);
+		if (IS_ZEBRA_DEBUG_EVENT)
+			zlog_debug(
+				"GR %s: reinstalling %pRN (%p) with RTM_F_LAST_ROUTE flag on re %p",
+				__func__, rn, rn, re);
 		frrtrace(1, frr_zebra, rib_install_kernel_last_route,
 			 srcdest_rnode2str(rn, buf, sizeof(buf)));
 		ret = dplane_route_update_last(rn, re);
@@ -2011,11 +2012,13 @@ static void zebra_gr_reinstall_last_route(void)
 {
 	zrouter.gr_last_rt_installed = true;
 
-	zlog_debug(
-		"GR %s: Routes: Total queued %u, total processed %d. EVPN entries: Total queued %u, total processed %u",
-		__func__, z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt,
-		z_gr_ctx.total_evpn_entries_queued,
-		z_gr_ctx.total_evpn_entries_processed);
+	if (IS_ZEBRA_DEBUG_EVENT)
+		zlog_debug(
+			"GR %s: Routes: Total queued %u, total processed %d. EVPN entries: Total queued %u, total processed %u",
+			__func__, z_gr_ctx.total_queued_rt,
+			z_gr_ctx.total_processed_rt,
+			z_gr_ctx.total_evpn_entries_queued,
+			z_gr_ctx.total_evpn_entries_processed);
 
 	frrtrace(3, frr_zebra, gr_ready_to_reinstall_last_route, "Routes",
 		 z_gr_ctx.total_queued_rt, z_gr_ctx.total_processed_rt);
@@ -2027,29 +2030,88 @@ static void zebra_gr_reinstall_last_route(void)
 	/* Reinstall the last route */
 	if (z_gr_ctx.rn && z_gr_ctx.re &&
 	    !CHECK_FLAG(z_gr_ctx.re->status, ROUTE_ENTRY_REMOVED)) {
-		zlog_debug("GR %s: Reinstalling last route %pRN %u:%u",
-			   __func__, z_gr_ctx.rn, z_gr_ctx.re->vrf_id,
-			   z_gr_ctx.re->table);
+		if (IS_ZEBRA_DEBUG_EVENT)
+			zlog_debug("GR %s: Reinstalling last route %pRN %u:%u",
+				   __func__, z_gr_ctx.rn, z_gr_ctx.re->vrf_id,
+				   z_gr_ctx.re->table);
 
 		route_lock_node(z_gr_ctx.rn);
-		rib_install_kernel(z_gr_ctx.rn, z_gr_ctx.re, NULL, true);
-		route_unlock_node(z_gr_ctx.rn);
 
 		char trace_pfx_buf[PREFIX_STRLEN];
 
 		prefix2str(&z_gr_ctx.rn->p, trace_pfx_buf,
 			   sizeof(trace_pfx_buf));
-		frrtrace(2, frr_zebra, gr_reinstalled_last_route,
-			 vrf_id_to_name(z_gr_ctx.re->vrf_id), trace_pfx_buf);
+
+		/*
+		 * In case of WFI, z_gr_ctx.re is getting deleted.
+		 * In such cases, where the z_gr_ctx.re is deleted,
+		 * install the z_gr_ctx.rn's selected_fib route.
+		 * Skip last route installtion if z_gr_ctx.rn's
+		 * selected_fib is not available.
+		 */
+		if (!CHECK_FLAG(z_gr_ctx.re->status, ROUTE_ENTRY_INSTALLED)) {
+			rib_dest_t *dest;
+
+			dest = rib_dest_from_rnode(z_gr_ctx.rn);
+
+			if (dest && dest->selected_fib &&
+			    dest->selected_fib != z_gr_ctx.re &&
+			    !CHECK_FLAG(dest->selected_fib->status,
+					ROUTE_ENTRY_REMOVED) &&
+			    CHECK_FLAG(dest->selected_fib->status,
+				       ROUTE_ENTRY_INSTALLED)) {
+				if (IS_ZEBRA_DEBUG_EVENT)
+					zlog_debug(
+						"GR %s: last route re %p is not the best",
+						__func__, z_gr_ctx.re);
+
+				if (dest->selected_fib->type ==
+				    ZEBRA_ROUTE_BGP) {
+					z_gr_ctx.re = dest->selected_fib;
+
+					if (IS_ZEBRA_DEBUG_EVENT)
+						zlog_debug(
+							"GR %s: last route updated to re %p",
+							__func__, z_gr_ctx.re);
+				} else {
+					route_unlock_node(z_gr_ctx.rn);
+					z_gr_ctx.re = NULL;
+
+					if (IS_ZEBRA_DEBUG_EVENT)
+						zlog_debug(
+							"GR %s: last installed BGP route not found",
+							__func__);
+				}
+			} else {
+				route_unlock_node(z_gr_ctx.rn);
+				z_gr_ctx.re = NULL;
+			}
+			frrtrace(2, frr_zebra, gr_last_route_re, trace_pfx_buf,
+				 1);
+		}
+
+		if (z_gr_ctx.re) {
+			rib_install_kernel(z_gr_ctx.rn, z_gr_ctx.re, NULL,
+					   true);
+			route_unlock_node(z_gr_ctx.rn);
+
+			frrtrace(2, frr_zebra, gr_reinstalled_last_route,
+				 vrf_id_to_name(z_gr_ctx.re->vrf_id),
+				 trace_pfx_buf);
+		} else {
+			frrtrace(2, frr_zebra, gr_last_route_re, trace_pfx_buf,
+				 2);
+		}
 	} else {
 		zlog_info("GR %s Last route not found. rn %p, re %p", __func__,
 			  z_gr_ctx.rn, z_gr_ctx.re);
 	}
 
-	zlog_debug(
-		"GR %s: IPv4 total route count: %u IPv6 total route count: %u",
-		__func__, z_gr_ctx.af_installed_count[AFI_IP],
-		z_gr_ctx.af_installed_count[AFI_IP6]);
+	if (IS_ZEBRA_DEBUG_EVENT)
+		zlog_debug(
+			"GR %s: IPv4 total route count: %u IPv6 total route count: %u",
+			__func__, z_gr_ctx.af_installed_count[AFI_IP],
+			z_gr_ctx.af_installed_count[AFI_IP6]);
 
 	frr_csm_send_network_layer_info();
 
@@ -2082,17 +2144,17 @@ void zebra_gr_last_rt_reinstall_check(void)
 	 *
 	 * Last route needs to be installed only once.
 	 */
-	z_gr_ctx.total_evpn_entries_queued = zebra_gr_queued_cnt_get();
-
 	if (zrouter.graceful_restart && zrouter.all_instances_gr_done &&
 	    !zrouter.gr_last_rt_installed) {
+		z_gr_ctx.total_evpn_entries_queued = zebra_gr_queued_cnt_get();
 
 		if ((z_gr_ctx.total_processed_rt >= z_gr_ctx.total_queued_rt) &&
 		    (z_gr_ctx.total_evpn_entries_processed >=
 		     z_gr_ctx.total_evpn_entries_queued)) {
-			zlog_debug(
-				"GR %s: Reinstalling last route and sending NL INFO to CSMgr",
-				__func__);
+			if (IS_ZEBRA_DEBUG_EVENT)
+				zlog_debug(
+					"GR %s: Reinstalling last route and sending NL INFO to CSMgr",
+					__func__);
 			zebra_gr_reinstall_last_route();
 		}
 	}
@@ -2254,14 +2316,6 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 			UNSET_FLAG(old_re->status, ROUTE_ENTRY_QUEUED);
 	}
 
-	/* Record most recent route that was successfully installed */
-	zebra_record_most_recent_route(ctx, zvrf, rn, re);
-
-	/*
-	 * Check to if last route needs to be reinstalled
-	 */
-	zebra_gr_last_rt_reinstall_check();
-
 	switch (op) {
 	case DPLANE_OP_ROUTE_LAST:
 		if (z_gr_ctx.rn == rn && z_gr_ctx.re == re) {
@@ -2276,9 +2330,10 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 				SET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
 				UNSET_FLAG(re->status, ROUTE_ENTRY_QUEUED);
 
-				zlog_debug(
-					"GR %s: Successfully reinstalled %pRN with RTM_F_LAST_ROUTE flag on re %p",
-					__func__, rn, re);
+				if (IS_ZEBRA_DEBUG_EVENT)
+					zlog_debug(
+						"GR %s: Successfully reinstalled %pRN with RTM_F_LAST_ROUTE flag on re %p",
+						__func__, rn, re);
 			}
 		} else {
 			zlog_warn(
@@ -2293,6 +2348,12 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 			if (re) {
 				UNSET_FLAG(re->status, ROUTE_ENTRY_FAILED);
 				SET_FLAG(re->status, ROUTE_ENTRY_INSTALLED);
+
+				/* Record most recent route that was
+				 * successfully installed */
+				zebra_record_most_recent_route(ctx, zvrf, rn,
+							       re);
+
 				if (re->nhe && re->nhe->rejected_rn) {
 					if (IS_ZEBRA_DEBUG_RIB_DETAILED)
 						zlog_debug(
@@ -2450,6 +2511,11 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 	default:
 		break;
 	}
+
+	/*
+	 * Check to if last route needs to be reinstalled
+	 */
+	zebra_gr_last_rt_reinstall_check();
 
 	zebra_rib_evaluate_rn_nexthops(rn, seq, rt_delete);
 	zebra_rib_evaluate_mpls(rn);
@@ -4876,14 +4942,16 @@ static void zebra_declare_gr_done(void)
 {
 #if defined(HAVE_CSMGR)
 	if ((zrouter.graceful_restart)) {
-		zlog_debug(
-			"GR %s: GR complete NOT recieved from BGP. Triggering INIT_COMPLETE",
-			__func__);
+		if (IS_ZEBRA_DEBUG_EVENT)
+			zlog_debug(
+				"GR %s: GR complete NOT recieved from BGP. Triggering INIT_COMPLETE",
+				__func__);
 		frr_csm_send_init_complete();
 
-		zlog_debug(
-			"GR %s: Reinstall last route and send NL INFO to CSMgr",
-			__func__);
+		if (IS_ZEBRA_DEBUG_EVENT)
+			zlog_debug(
+				"GR %s: Reinstall last route and send NL INFO to CSMgr",
+				__func__);
 		zebra_gr_reinstall_last_route();
 	}
 #endif
