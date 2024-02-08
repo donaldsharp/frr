@@ -152,6 +152,14 @@ struct nhg_hash_entry {
 #define NEXTHOP_GROUP_FPM (1 << 6)
 
 /*
+ * When an interface comes up install the
+ * singleton's and schedule the NHG's that
+ * are using this nhg to be reinstalled
+ * when installation is successful.
+ */
+#define NEXTHOP_GROUP_REINSTALL (1 << 8)
+
+/*
  * Recursion requested/allowed
  */
 #define NEXTHOP_GROUP_RECURSION_REQ (1 << 10)
