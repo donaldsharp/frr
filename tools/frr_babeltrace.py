@@ -267,6 +267,11 @@ def location_bgp_err_str(field_val):
         return ("failed in bgp_accept")
     elif field_val == 2:
         return ("failed in bgp_connect")
+def location_vni_transition(field_val):
+    if field_val == 1:
+        return ("Del L2-VNI - transition to L3-VNI")
+    elif field_val == 2:
+        return ("Adding L2-VNI - transition from L3-VNI");
 
 def print_prefix_addr(field_val):
     """
@@ -857,6 +862,11 @@ def parse_frr_bgp_err_str(event):
     parse_event(event, field_parsers)
 
 
+def parse_frr_zebra_zebra_vxlan_handle_vni_transition(event):
+    field_parsers = {"location" : location_vni_transition}
+
+    parse_event(event, field_parsers)
+
 ############################ evpn parsers - end *#############################
 
 def main():
@@ -985,6 +995,8 @@ def main():
                      parse_frr_zebra_netlink_intf_err,
                      "frr_bgp:bgp_err_str":
                      parse_frr_bgp_err_str,
+                    "frr_zebra:zebra_vxlan_handle_vni_transition":
+                     parse_frr_zebra_zebra_vxlan_handle_vni_transition,
 }
 
     # get the trace path from the first command line argument
