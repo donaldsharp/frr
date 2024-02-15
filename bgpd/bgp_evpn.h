@@ -176,6 +176,14 @@ bgp_evpn_handle_resolve_overlay_index_set(struct hash_bucket *bucket,
 extern void
 bgp_evpn_handle_resolve_overlay_index_unset(struct hash_bucket *bucket,
 					    void *arg);
+extern enum zclient_send_status evpn_zebra_install(struct bgp *bgp,
+					   struct bgpevpn *vpn,
+					   const struct prefix_evpn *p,
+					   struct bgp_path_info *pi);
+extern enum zclient_send_status
+evpn_zebra_uninstall(struct bgp *bgp, struct bgpevpn *vpn,
+		     const struct prefix_evpn *p, struct bgp_path_info *pi,
+		     bool is_sync);
 extern mpls_label_t *bgp_evpn_path_info_labels_get_l3vni(mpls_label_t *labels,
 							 uint32_t num_labels);
 extern vni_t bgp_evpn_path_info_get_l3vni(const struct bgp_path_info *pi);

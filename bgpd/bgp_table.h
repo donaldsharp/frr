@@ -75,10 +75,10 @@ struct bgp_dest {
 	struct bgp_dest *pdest;
 
 	STAILQ_ENTRY(bgp_dest) pq;
-	struct bgp_path_info *za_bgp_pi;
-
 	struct zebra_announce_item zai;
-
+	struct bgp_path_info *za_bgp_pi;
+	struct bgpevpn *za_vpn;
+	bool za_is_sync;
 	uint64_t version;
 
 	mpls_label_t local_label;
