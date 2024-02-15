@@ -512,6 +512,7 @@ struct bgp {
 #define BGP_FLAG_HARD_ADMIN_RESET (1ULL << 31)
 /* Evaluate the AIGP attribute during the best path selection process */
 #define BGP_FLAG_COMPARE_AIGP (1ULL << 32)
+#define BGP_FLAG_VNI_DOWN (1ULL << 38)
 
 	/* BGP default address-families.
 	 * New peers inherit enabled afi/safis from bgp instance.
