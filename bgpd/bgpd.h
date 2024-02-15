@@ -577,6 +577,7 @@ struct bgp {
 /* Send Hard Reset CEASE Notification for 'Administrative Reset' */
 #define BGP_FLAG_HARD_ADMIN_RESET (1ULL << 30)
 #define BGP_FLAG_INSTANCE_HIDDEN (1ULL << 31)
+#define BGP_FLAG_VNI_DOWN (1ULL << 32)
 
 	/* BGP default address-families.
 	 * New peers inherit enabled afi/safis from bgp instance.
