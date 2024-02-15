@@ -47,6 +47,7 @@
 #include "bgpd/bgp_network.h"
 #include "bgpd/bgp_zebra.h"
 #include "bgpd/bgp_nht.h"
+#include "bgpd/bgp_trace.h"
 
 extern struct zebra_privs_t bgpd_privs;
 
@@ -431,6 +432,8 @@ static void bgp_accept(struct thread *thread)
 						"%s: Failure to set socket ttl for connection to %s, error received: %s(%d)",
 						__func__, peer1->host,
 						safe_strerror(errno), errno);
+				frrtrace(3, frr_bgp, bgp_err_str, peer1->host,
+					 peer1->flags, 1);
 				return;
 			}
 
@@ -719,6 +722,8 @@ int bgp_connect(struct peer *peer)
 			zlog_debug("%s: Failure to create socket for connection to %s, error received: %s(%d)",
 				   __func__, peer->host, safe_strerror(errno),
 				   errno);
+		frrtrace(3, frr_bgp, bgp_err_str, peer->host,
+		        peer->flags,2);
 		return -1;
 	}
 

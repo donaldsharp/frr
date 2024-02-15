@@ -70,11 +70,11 @@ def location_zebra_err_string(field_val):
     elif field_val == 2:
         return ("IFLA_GRE_LOCAL missing from GRE IF message")
     elif field_val == 3:
-        return ("IFLA_GRE_REMOTE missing from GRE IF message") 
+        return ("IFLA_GRE_REMOTE missing from GRE IF message")
     elif field_val == 4:
-        return ("IFLA_GRE_LINK missing from GRE IF message") 
+        return ("IFLA_GRE_LINK missing from GRE IF message")
     elif field_val == 5:
-        return ("IFLA_VXLAN_ID missing from VXLAN IF message") 
+        return ("IFLA_VXLAN_ID missing from VXLAN IF message")
     elif field_val == 6:
         return ("IFLA_VXLAN_LOCAL missing from VXLAN IF message")
     elif field_val == 7:
@@ -261,6 +261,12 @@ def location_last_route_re(field_val):
         return ("RE updated")
     elif field_val == 2:
         return ("RE not installed")
+
+def location_bgp_err_str(field_val):
+    if field_val == 1:
+        return ("failed in bgp_accept")
+    elif field_val == 2:
+        return ("failed in bgp_connect")
 
 def print_prefix_addr(field_val):
     """
@@ -756,20 +762,20 @@ def parse_frr_zebra_if_dplane_ifp_handling(event):
 def parse_frr_zebra_if_dplane_ifp_handling_new(event):
     field_parsers = {"location" : location_if_dplane_ifp_handling_new}
     parse_event(event, field_parsers)
-    
+
 def parse_frr_bgp_gr_deferral_timer_start(event):
     field_parsers = {"location": print_location_gr_deferral_timer_start,
                      "afi": print_afi_string,
                      "safi": print_safi_string}
 
     parse_event(event, field_parsers)
-    
+
 def parse_frr_bgp_gr_deferral_timer_expiry(event):
     field_parsers = {"afi": print_afi_string,
                      "safi": print_safi_string}
 
     parse_event(event, field_parsers)
-                    
+
 def parse_frr_bgp_gr_eors(event):
     field_parsers = {"location": print_location_gr_eors,
                      "afi": print_afi_string,
@@ -815,7 +821,7 @@ def parse_frr_update_prefix_filter(event):
 
 def parse_frr_bgp_attr_type_unsupported(event):
     field_parsers = {"attr" : location_attr_type_unsupported}
-    
+
     parse_event(event, field_parsers)
 
 def parse_frr_zebra_gr_last_route_re(event):
@@ -845,6 +851,12 @@ def parse_frr_zebra_netlink_msg_err(event):
 def parse_frr_zebra_netlink_intf_err(event):
     field_parsers = {"location" : location_netlink_intf_err}
     parse_event(event, field_parsers)
+
+def parse_frr_bgp_err_str(event):
+    field_parsers = {"location" : location_bgp_err_str}
+    parse_event(event, field_parsers)
+
+
 ############################ evpn parsers - end *#############################
 
 def main():
@@ -971,6 +983,8 @@ def main():
                      parse_frr_zebra_netlink_msg_err,
                      "frr_zebra:netlink_intf_err":
                      parse_frr_zebra_netlink_intf_err,
+                     "frr_bgp:bgp_err_str":
+                     parse_frr_bgp_err_str,
 }
 
     # get the trace path from the first command line argument
