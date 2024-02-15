@@ -532,6 +532,7 @@ struct bgp {
 #define BGP_FLAG_ENFORCE_FIRST_AS (1ULL << 36)
 /* Prohibit BGP from enabling IPv6 RA on interfaces */
 #define BGP_FLAG_IPV6_NO_AUTO_RA (1ULL << 40)
+#define BGP_FLAG_VNI_DOWN		 (1ULL << 38)
 
 	/* BGP default address-families.
 	 * New peers inherit enabled afi/safis from bgp instance.
