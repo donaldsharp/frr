@@ -167,6 +167,17 @@ def location_if_dplane_ifp_handling_new(field_val):
         return ("RTM_NEWLINK UPD")
 
 
+def location_if_ip_addr_add_del(field_val):
+    if field_val == 0:
+        return "RTM_NEWADDR IPv4"
+    elif field_val == 1:
+        return "RTM_DELADDR IPv4"
+    elif field_val == 2:
+        return "RTM_NEWADDR IPv6"
+    elif field_val == 3:
+        return "RTM_DELADDR IPv6"
+
+
 def print_location_gr_deferral_timer_start(field_val):
     if field_val == 1:
         return ("Tier 1 deferral timer start")
@@ -768,6 +779,12 @@ def parse_frr_zebra_if_dplane_ifp_handling_new(event):
     parse_event(event, field_parsers)
 
 
+def parse_frr_zebra_if_ip_addr_add_del(event):
+    field_parsers = {"location": location_if_ip_addr_add_del,
+                     "address": print_prefix_addr}
+    parse_event(event, field_parsers)
+
+
 def parse_frr_bgp_gr_deferral_timer_start(event):
     field_parsers = {"location": print_location_gr_deferral_timer_start,
                      "afi": print_afi_string,
@@ -969,6 +986,24 @@ def main():
                      parse_frr_zebra_if_dplane_ifp_handling,
                      "frr_zebra:if_dplane_ifp_handling_new":
                      parse_frr_zebra_if_dplane_ifp_handling_new,
+                     "frr_zebra:if_ip_addr_add_del":
+                     parse_frr_zebra_if_ip_addr_add_del,
+                     "frr_bgp:gr_deferral_timer_start":
+                     parse_frr_bgp_gr_deferral_timer_start,
+                     "frr_bgp:gr_deferral_timer_expiry":
+                     parse_frr_bgp_gr_deferral_timer_expiry,
+                     "frr_bgp:gr_eors":
+                     parse_frr_bgp_gr_eors,
+                     "frr_bgp:gr_eor_peer":
+                     parse_frr_bgp_gr_eor_peer,
+                     "frr_bgp:gr_start_deferred_path_selection":
+                     parse_frr_bgp_gr_start_deferred_path_selection,
+                     "frr_bgp:gr_send_fbit_capability":
+                     parse_frr_bgp_gr_send_fbit_capability,
+                     "frr_bgp:gr_continue_deferred_path_selection":
+                     parse_frr_bgp_gr_continue_deferred_path_selection,
+                     "frr_bgp:gr_zebra_update":
+                     parse_frr_bgp_gr_zebra_update,
                      "frr_bgp:router_id_update_zrecv":
                      parse_frr_bgp_router_id_update_zrecv,
                      "frr_bgp:interface_address_oper_zrecv":
