@@ -3706,36 +3706,37 @@ void zebra_interface_nhg_reinstall(struct interface *ifp)
 					__func__, rb_node_dep->nhe, ifp->name);
 		}
 
-		/* Check for singleton NHG associated to interface */
-		if (!nexthop_is_blackhole(nh) &&
-		    zebra_nhg_depends_is_empty(rb_node_dep->nhe)) {
-			struct nhg_connected *rb_node_dependent;
+		if (nexthop_is_blackhole(nh) ||
+		    !zebra_nhg_depends_is_empty(rb_node_dep->nhe))
+			continue;
 
+		/*
+		 * The rb_node_dep->nhe is a singleton and related
+		 * to an interface
+		 */
+		struct nhg_connected *rb_node_dependent;
+
+		if (IS_ZEBRA_DEBUG_NHG)
+			zlog_debug("%s install nhe %pNG nh type %u flags 0x%x",
+				   __func__, rb_node_dep->nhe, nh->type,
+				   rb_node_dep->nhe->flags);
+		zebra_nhg_install_kernel(rb_node_dep->nhe);
+
+		/* Don't need to modify dependents if installed */
+		if (CHECK_FLAG(rb_node_dep->nhe->flags, NEXTHOP_GROUP_INSTALLED))
+			continue;
+
+		/* mark dependent uninstalled; when interface associated
+		 * singleton is installed, install dependent
+		 */
+		frr_each_safe (nhg_connected_tree,
+			       &rb_node_dep->nhe->nhg_dependents,
+			       rb_node_dependent) {
 			if (IS_ZEBRA_DEBUG_NHG)
-				zlog_debug(
-					"%s install nhe %pNG nh type %u flags 0x%x",
-					__func__, rb_node_dep->nhe, nh->type,
-					rb_node_dep->nhe->flags);
-			zebra_nhg_install_kernel(rb_node_dep->nhe);
-
-			/* Don't need to modify dependents if installed */
-			if (CHECK_FLAG(rb_node_dep->nhe->flags,
-				       NEXTHOP_GROUP_INSTALLED))
-				continue;
-
-			/* mark dependent uninstalled; when interface associated
-			 * singleton is installed, install dependent
-			 */
-			frr_each_safe (nhg_connected_tree,
-				       &rb_node_dep->nhe->nhg_dependents,
-				       rb_node_dependent) {
-				if (IS_ZEBRA_DEBUG_NHG)
-					zlog_debug("%s dependent nhe %pNG Setting Reinstall flag",
-						   __func__,
-						   rb_node_dependent->nhe);
-				SET_FLAG(rb_node_dependent->nhe->flags,
-					 NEXTHOP_GROUP_REINSTALL);
-			}
+				zlog_debug("%s dependent nhe %pNG Setting Reinstall flag",
+					   __func__, rb_node_dependent->nhe);
+			SET_FLAG(rb_node_dependent->nhe->flags,
+				 NEXTHOP_GROUP_REINSTALL);
 		}
 	}
 }
