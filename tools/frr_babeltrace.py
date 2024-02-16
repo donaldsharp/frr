@@ -44,6 +44,74 @@ def location_if_oper_zrecv(field_val):
     elif field_val == 4:
         return ("Rx Intf Neighbor Delete")
 
+def location_netlink_nexthop_msg_encode_err(field_val):
+    if field_val == 1:
+        return ("kernel nexthops not supported, ignoring")
+    elif field_val == 2:
+        return ("proto-based nexthops only, ignoring")
+    elif field_val == 3:
+        return ("labeled NHGs not supported, ignoring")
+
+def location_netlink_vrf_change(field_val):
+    if field_val == 1:
+        return ("IFLA_INFO_DATA missing from VRF message")
+    elif field_val == 2:
+        return ("IFLA_VRF_TABLE missing from VRF message")
+
+def location_get_iflink_speed(field_val):
+    if field_val == 1:
+        return ("Failure to read interface")
+    elif field_val == 2:
+        return ("IOCTL failure to read interface")
+
+def location_zebra_err_string(field_val):
+    if field_val == 1:
+        return ("IFLA_VLAN_ID missing from VLAN IF message")
+    elif field_val == 2:
+        return ("IFLA_GRE_LOCAL missing from GRE IF message")
+    elif field_val == 3:
+        return ("IFLA_GRE_REMOTE missing from GRE IF message") 
+    elif field_val == 4:
+        return ("IFLA_GRE_LINK missing from GRE IF message") 
+    elif field_val == 5:
+        return ("IFLA_VXLAN_ID missing from VXLAN IF message") 
+    elif field_val == 6:
+        return ("IFLA_VXLAN_LOCAL missing from VXLAN IF message")
+    elif field_val == 7:
+        return ("IFLA_VXLAN_LINK missing from VXLAN IF message")
+    elif field_val == 8:
+        return ("ignoring IFLA_WIRELESS message")
+    elif field_val == 9:
+        return ("invalid Intf Name")
+
+def location_netlink_msg_err(field_val):
+    if field_val == 1:
+        return ("Invalid address family")
+    elif field_val == 2:
+        return ("netlink msg bad size")
+    elif field_val == 3:
+        return ("Invalid prefix length-V4")
+    elif field_val == 4:
+        return ("Invalid prefix length-V6")
+    elif field_val == 5:
+        return ("Invalid/tentative addr")
+    elif field_val == 6:
+        return ("No local interface address")
+    elif field_val == 7:
+        return ("wrong kernel message")
+
+def location_netlink_intf_err(field_val):
+    if field_val == 1:
+        return ("Local Interface Address is NULL")
+    elif field_val == 2:
+        return ("RTM_NEWLINK for interface without MTU set")
+    elif field_val == 3:
+        return ("Cannot find VNI for VID and IF for vlan state update")
+    elif field_val == 4:
+        return ("Cannot find bridge-vlan IF for vlan update")
+    elif field_val == 5:
+        return ("Ignoring non-vxlan IF for vlan update")
+
 def location_if_add_del_upd(field_val):
     if field_val == 0:
         return ("Interface Delete")
@@ -752,9 +820,31 @@ def parse_frr_bgp_attr_type_unsupported(event):
 
 def parse_frr_zebra_gr_last_route_re(event):
     field_parsers = {"location" : location_last_route_re}
-
     parse_event(event, field_parsers)
 
+def parse_frr_zebra_netlink_vrf_change(event):
+    field_parsers = {"location" : location_netlink_vrf_change}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_netlink_nexthop_msg_encode_err(event):
+    field_parsers = {"location" : location_netlink_nexthop_msg_encode_err}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_get_iflink_speed(event):
+    field_parsers = {"location" : location_get_iflink_speed}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_zebra_err_string(event):
+    field_parsers = {"location" : location_zebra_err_string}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_netlink_msg_err(event):
+    field_parsers = {"location" : location_netlink_msg_err}
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_netlink_intf_err(event):
+    field_parsers = {"location" : location_netlink_intf_err}
+    parse_event(event, field_parsers)
 ############################ evpn parsers - end *#############################
 
 def main():
@@ -869,6 +959,18 @@ def main():
                      parse_frr_bgp_attr_type_unsupported,
                      "frr_zebra:gr_last_route_re":
                      parse_frr_zebra_gr_last_route_re,
+                     "frr_zebra:netlink_vrf_change":
+                     parse_frr_zebra_netlink_vrf_change,
+                     "frr_zebra:netlink_nexthop_msg_encode_err":
+                     parse_frr_zebra_netlink_nexthop_msg_encode_err,
+                     "frr_zebra:get_iflink_speed":
+                     parse_frr_zebra_get_iflink_speed,
+                     "frr_zebra:z_err_string":
+                     parse_frr_zebra_zebra_err_string,
+                     "frr_zebra:netlink_msg_err":
+                     parse_frr_zebra_netlink_msg_err,
+                     "frr_zebra:netlink_intf_err":
+                     parse_frr_zebra_netlink_intf_err,
 }
 
     # get the trace path from the first command line argument
