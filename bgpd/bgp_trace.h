@@ -1197,6 +1197,20 @@ TRACEPOINT_EVENT(
 )
 TRACEPOINT_LOGLEVEL(frr_bgp, gr_bgp_state, TRACE_INFO)
 
+TRACEPOINT_EVENT(
+	frr_bgp,
+	bgp_err_str,
+	TP_ARGS(char *, peer_host,
+	  uint64_t, peer_flags,
+	  uint8_t, location),
+	TP_FIELDS(
+		ctf_string(peer, peer_host)
+		ctf_integer(uint64_t, peer_flags, peer_flags)
+		ctf_integer(uint8_t, location, location)
+	)
+)
+TRACEPOINT_LOGLEVEL(frr_bgp, bgp_err_str, TRACE_INFO)
+
 /* clang-format on */
 
 #include <lttng/tracepoint-event.h>
