@@ -433,6 +433,7 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 		/* Update other parameters */
 		if (!info->gr_enable) {
 			client->gr_instance_count++;
+			client->restart_time = monotime_nano();
 
 			if (!zrouter.gr_stale_cleanup_time_recorded) {
 				client->restart_time = monotime_nano();
@@ -515,6 +516,13 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 
 			info->af_enabled[api.afi] = true;
 			info->route_sync_done = false;
+
+			/*
+			 * Record the time at which GR started.
+			 * This timestamp will be later used to
+			 * cleanup stale routes and EVPN entries.
+			 */
+			client->restart_time = monotime_nano();
 
 			zeb_vrf = zebra_vrf_lookup_by_id(api.vrf_id);
 			if (zeb_vrf) {
@@ -627,6 +635,7 @@ static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
 			 */
 			zebra_evpn_stale_entries_cleanup(
 				gac->update_pending_time);
+			zebra_evpn_stale_entries_cleanup(gac->restart_time);
 		}
 
 		if (!zrouter.all_instances_gr_done) {
