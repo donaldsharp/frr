@@ -1322,6 +1322,21 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_remote_vtep_add, TRACE_INFO)
 
 TRACEPOINT_EVENT(
     frr_zebra,
+    zebra_vxlan_remote_vtep_del,
+    TP_ARGS(
+        struct in_addr, vtep_ip,
+        vni_t, vni,
+        const char *, proto),
+    TP_FIELDS(
+        ctf_string(vtep_ip, inet_ntoa(vtep_ip))
+        ctf_integer(vni_t, vni, vni)
+        ctf_string(proto, proto)
+        )
+    )
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_remote_vtep_del, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
     zebra_nhg_install_kernel,
     TP_ARGS(
         int, nhe),
@@ -1856,6 +1871,38 @@ TRACEPOINT_EVENT(
     	)
    )
 TRACEPOINT_LOGLEVEL(frr_zebra, gr_last_route_re, TRACE_INFO)
+
+ /*
+  * 0: EVPN gateway macip advertise enabled
+  * 1: EVPN gateway macip advertise disabled
+  */
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_vxlan_advertise_gw_macip,
+    TP_ARGS(
+        int, advertise,
+        vni_t, vni,
+        int, curr_advertise_gw_macip),
+    TP_FIELDS(
+        ctf_integer(int, advertise, advertise)
+        ctf_integer(vni_t, vni, vni)
+        ctf_integer(int, curr_advertise_gw_macip, curr_advertise_gw_macip)
+        )
+    )
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_advertise_gw_macip, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_vxlan_handle_vni_transition,
+    TP_ARGS(
+       vni_t, vni,
+       uint8_t, loc),
+    TP_FIELDS(
+       ctf_integer(vni_t, vni, vni)
+       ctf_integer(uint8_t, location, loc)
+       )
+    )
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_handle_vni_transition, TRACE_INFO)
 
 /* clang-format on */
 #include <lttng/tracepoint-event.h>

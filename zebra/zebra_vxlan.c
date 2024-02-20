@@ -2461,6 +2461,8 @@ static int zebra_vxlan_handle_vni_transition(struct zebra_vrf *zvrf, vni_t vni,
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug("Del L2-VNI %u - transition to L3-VNI", vni);
 
+		frrtrace(2, frr_zebra, zebra_vxlan_handle_vni_transition, vni,
+			 1);
 		/* Delete EVPN from BGP. */
 		zebra_evpn_send_del_to_client(zevpn);
 
@@ -2494,6 +2496,9 @@ static int zebra_vxlan_handle_vni_transition(struct zebra_vrf *zvrf, vni_t vni,
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug("Adding L2-VNI %u - transition from L3-VNI",
 				   vni);
+
+		frrtrace(2, frr_zebra, zebra_vxlan_handle_vni_transition, vni,
+			 2);
 
 		/* Find VxLAN interface for this VNI. */
 		zns = zebra_ns_lookup(NS_DEFAULT);
@@ -4763,11 +4768,14 @@ void zebra_vxlan_remote_vtep_del_zapi(ZAPI_HANDLER_ARGS)
 		STREAM_GETL(s, flood_control);
 		l += 4;
 
+		const char *client_proto_str =
+			zebra_route_string(client->proto);
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug("Recv VTEP DEL %pI4 VNI %u from %s",
-				   &vtep_ip, vni,
-				   zebra_route_string(client->proto));
+				   &vtep_ip, vni, client_proto_str);
 
+		frrtrace(3, frr_zebra, zebra_vxlan_remote_vtep_del, vtep_ip,
+			 vni, client_proto_str);
 		/* Enqueue for processing */
 		zebra_rib_queue_evpn_rem_vtep_del(zvrf_id(zvrf), vni, vtep_ip);
 	}
@@ -5751,12 +5759,15 @@ void zebra_vxlan_advertise_gw_macip(ZAPI_HANDLER_ARGS)
 		if (!zevpn)
 			return;
 
+		int curr_advertise_gw_macip = advertise_gw_macip_enabled(zevpn);
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug(
 				"EVPN gateway macip Adv %s on VNI %d , currently %s",
 				advertise ? "enabled" : "disabled", vni,
-				advertise_gw_macip_enabled(zevpn) ? "enabled"
-								 : "disabled");
+				curr_advertise_gw_macip ? "enabled"
+							: "disabled");
+		frrtrace(3, frr_zebra, zebra_vxlan_advertise_gw_macip,
+			 advertise, vni, curr_advertise_gw_macip);
 
 		if (zevpn->advertise_gw_macip == advertise)
 			return;
