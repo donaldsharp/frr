@@ -853,8 +853,7 @@ static void igmp_source_json_helper(struct gm_source *src,
 	if (!json_source)
 		return;
 
-	epoch_tbuf =
-		time(NULL) - (monotime(NULL) - (UPTIMESECS(source_creation)));
+	epoch_tbuf = time_to_epoch(UPTIMESECS(source_creation));
 	json_object_string_add(json_source, "source", source_str);
 	json_object_string_add(json_source, "timer", mmss);
 	json_object_boolean_add(json_source, "forwarded",
@@ -880,8 +879,7 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 		       sizeof(group_str));
 	pim_time_timer_to_hhmmss(hhmmss, sizeof(hhmmss), grp->t_group_timer);
 	pim_time_uptime(uptime, sizeof(uptime), now - grp->group_creation);
-	epoch_tbuf = time(NULL) -
-		     (monotime(NULL) - (UPTIMESECS(grp->group_creation)));
+	epoch_tbuf = time_to_epoch(UPTIMESECS(grp->group_creation));
 
 	if (uj) {
 		json_object_object_get_ex(json, ifp->name, &json_iface);

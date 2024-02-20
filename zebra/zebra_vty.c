@@ -634,7 +634,7 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 	char epoch_str_buf[MONOTIME_STRLEN];
 
 	uptime2str(re->uptime, up_str, sizeof(up_str));
-	epoch_tbuf = time(NULL) - (monotime(NULL) - (UPTIMESECS(re->uptime)));
+	epoch_tbuf = time_to_epoch(UPTIMESECS(re->uptime));
 
 	/* If showing fib information, use the fib view of the
 	 * nexthops.
@@ -1236,7 +1236,7 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 	time_t epoch_tbuf;
 
 	uptime2str(nhe->uptime, up_str, sizeof(up_str));
-	epoch_tbuf = time(NULL) - (monotime(NULL) - (UPTIMESECS(nhe->uptime)));
+	epoch_tbuf = time_to_epoch(UPTIMESECS(nhe->uptime));
 
 	if (json_nhe_hdr)
 		json = json_object_new_object();

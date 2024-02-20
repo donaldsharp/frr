@@ -784,7 +784,7 @@ void bfd_sess_show(struct vty *vty, struct json_object *json,
 	}
 
 	bfd_last_update(bsp->bss.last_event, time_buf, sizeof(time_buf));
-	epoch_tbuf = time(NULL) - (monotime(NULL) - bsp->bss.last_event);
+	epoch_tbuf = time_to_epoch(bsp->bss.last_event);
 	if (json) {
 		json_object_string_add(json_bfd, "status",
 				       bfd_get_status_str(bsp->bss.state));

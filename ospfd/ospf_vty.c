@@ -4384,8 +4384,7 @@ static void show_ip_ospf_neighbour_brief(struct vty *vty,
 			monotime_since(&nbr->ts_last_progress, &res) / 1000LL;
 
 	if (nbr->ts_last_progress.tv_sec)
-		epoch_tbuf = time(NULL) -
-			     (monotime(NULL) - (nbr->ts_last_progress.tv_sec));
+		epoch_tbuf = time_to_epoch(nbr->ts_last_progress.tv_sec);
 
 	if (use_json) {
 		char neigh_str[INET_ADDRSTRLEN];
