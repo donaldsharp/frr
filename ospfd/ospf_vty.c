@@ -4376,10 +4376,15 @@ static void show_ip_ospf_neighbour_brief(struct vty *vty,
 	struct timeval res = {.tv_sec = 0, .tv_usec = 0};
 	long time_val = 0;
 	char uptime[OSPF_TIME_DUMP_SIZE];
+	time_t epoch_tbuf = 0;
+	char epoch_str_buf[MONOTIME_STRLEN];
 
 	if (nbr->ts_last_progress.tv_sec || nbr->ts_last_progress.tv_usec)
 		time_val =
 			monotime_since(&nbr->ts_last_progress, &res) / 1000LL;
+
+	if (nbr->ts_last_progress.tv_sec)
+		epoch_tbuf = time_to_epoch(nbr->ts_last_progress.tv_sec);
 
 	if (use_json) {
 		char neigh_str[INET_ADDRSTRLEN];
@@ -4438,6 +4443,8 @@ static void show_ip_ospf_neighbour_brief(struct vty *vty,
 				json_neighbor, "deadTime",
 				ospf_timer_dump(nbr->t_inactivity, timebuf,
 						sizeof(timebuf)));
+			json_object_int_add(json_neighbor,
+					    "ospfNeighUptimeEpoch", epoch_tbuf);
 		} else {
 			json_object_string_add(json_neighbor, "deadTimeMsecs",
 					       "inactive");
@@ -4470,8 +4477,9 @@ static void show_ip_ospf_neighbour_brief(struct vty *vty,
 			vty_out(vty, "%-15pI4 %3d %-15s ", &nbr->router_id,
 				nbr->priority, msgbuf);
 
-		vty_out(vty, "%-15s ",
-			ospf_timeval_dump(&res, uptime, sizeof(uptime)));
+		vty_out(vty, "%-15s %-25s ",
+			ospf_timeval_dump(&res, uptime, sizeof(uptime)),
+			ctime_r(&epoch_tbuf, epoch_str_buf));
 
 		vty_out(vty, "%9s ",
 			ospf_timer_dump(nbr->t_inactivity, timebuf,

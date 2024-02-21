@@ -843,19 +843,23 @@ static void igmp_show_statistics(struct pim_instance *pim, struct vty *vty,
 
 static void igmp_source_json_helper(struct gm_source *src,
 				    json_object *json_sources, char *source_str,
-				    char *mmss, char *uptime)
+				    char *mmss, char *uptime,
+				    time_t source_creation)
 {
 	json_object *json_source = NULL;
+	time_t epoch_tbuf;
 
 	json_source = json_object_new_object();
 	if (!json_source)
 		return;
 
+	epoch_tbuf = time_to_epoch(UPTIMESECS(source_creation));
 	json_object_string_add(json_source, "source", source_str);
 	json_object_string_add(json_source, "timer", mmss);
 	json_object_boolean_add(json_source, "forwarded",
 				IGMP_SOURCE_TEST_FORWARDING(src->source_flags));
 	json_object_string_add(json_source, "uptime", uptime);
+	json_object_int_add(json_source, "grpUptimeEpoch", epoch_tbuf);
 	json_object_array_add(json_sources, json_source);
 }
 
@@ -869,11 +873,13 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 	char group_str[INET_ADDRSTRLEN];
 	char hhmmss[PIM_TIME_STRLEN];
 	char uptime[PIM_TIME_STRLEN];
+	time_t epoch_tbuf;
 
 	pim_inet4_dump("<group?>", grp->group_addr, group_str,
 		       sizeof(group_str));
 	pim_time_timer_to_hhmmss(hhmmss, sizeof(hhmmss), grp->t_group_timer);
 	pim_time_uptime(uptime, sizeof(uptime), now - grp->group_creation);
+	epoch_tbuf = time_to_epoch(UPTIMESECS(grp->group_creation));
 
 	if (uj) {
 		json_object_object_get_ex(json, ifp->name, &json_iface);
@@ -913,6 +919,8 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 			json_object_int_add(json_group, "version",
 					    grp->igmp_version);
 			json_object_string_add(json_group, "uptime", uptime);
+			json_object_int_add(json_group, "igmpGrpUptimeEpoch",
+					    epoch_tbuf);
 			json_object_array_add(json_groups, json_group);
 
 			if (detail) {
@@ -946,11 +954,13 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 
 					igmp_source_json_helper(
 						src, json_sources, source_str,
-						mmss, src_uptime);
+						mmss, src_uptime,
+						src->source_creation);
 				}
 			}
 		}
 	} else {
+		char epoch_str_buf[MONOTIME_STRLEN];
 		if (detail) {
 			struct listnode *srcnode;
 			struct gm_source *src;
@@ -963,7 +973,7 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 					       source_str, sizeof(source_str));
 
 				vty_out(vty,
-					"%-16s %-15s %4s %8s %-15s %d %8s\n",
+					"%-16s %-15s %4s %8s %-15s %d %8s %-25s\n",
 					ifp->name, group_str,
 					grp->igmp_version == 3
 						? (grp->group_filtermode_isexcl
@@ -971,13 +981,14 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 							   : "INCL")
 						: "----",
 					hhmmss, source_str, grp->igmp_version,
-					uptime);
+					uptime,
+					ctime_r(&epoch_tbuf, epoch_str_buf));
 			}
 			return;
 		}
 
-		vty_out(vty, "%-16s %-15s %4s %8s %4d %d %8s\n", ifp->name,
-			group_str,
+		vty_out(vty, "%-16s %-15s %4s %8s %4d %d %8s %-25s\n",
+			ifp->name, group_str,
 			grp->igmp_version == 3
 				? (grp->group_filtermode_isexcl ? "EXCL"
 								: "INCL")
@@ -986,7 +997,8 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 			grp->group_source_list
 				? listcount(grp->group_source_list)
 				: 0,
-			grp->igmp_version, uptime);
+			grp->igmp_version, uptime,
+			ctime_r(&epoch_tbuf, epoch_str_buf));
 	}
 }
 
@@ -1236,7 +1248,8 @@ static void igmp_sources_print(struct interface *ifp, char *group_str,
 		json_object_object_get_ex(json_group, "sources", &json_sources);
 		if (json_sources)
 			igmp_source_json_helper(src, json_sources, source_str,
-						mmss, uptime);
+						mmss, uptime,
+						src->source_creation);
 	} else {
 		vty_out(vty, "%-16s %-15s %-15s %5s %3s %8s\n", ifp->name,
 			group_str, source_str, mmss,

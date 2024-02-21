@@ -630,8 +630,11 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 	char up_str[MONOTIME_STRLEN];
 	bool first_p = true;
 	bool nhg_from_backup = false;
+	time_t epoch_tbuf;
+	char epoch_str_buf[MONOTIME_STRLEN];
 
 	uptime2str(re->uptime, up_str, sizeof(up_str));
+	epoch_tbuf = time_to_epoch(UPTIMESECS(re->uptime));
 
 	/* If showing fib information, use the fib view of the
 	 * nexthops.
@@ -667,6 +670,8 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
                     json_object_boolean_true_add(json_route, "failed");
                 json_object_int_add(json_route, "nexthopGroupId", re->nhe_id);
                 json_object_string_add(json_route, "uptime", up_str);
+		json_object_int_add(json_route, "routeUptimeEstablishedEpoch",
+				    epoch_tbuf);
                 if (brief) {
                     vty_json_no_pretty(vty, json_route);
                     json_object_free(json_route);
@@ -801,7 +806,8 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 		}
 
 		show_route_nexthop_helper(vty, re, nexthop);
-		vty_out(vty, ", %s\n", up_str);
+		vty_out(vty, ", %s, %s\n", up_str,
+			ctime_r(&epoch_tbuf, epoch_str_buf));
 	}
 
 	/* If we only had backup nexthops, we're done */
@@ -1227,9 +1233,10 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 	json_object *json = NULL;
 	json_object *json_backup_nexthop_array = NULL;
 	json_object *json_backup_nexthops = NULL;
-
+	time_t epoch_tbuf;
 
 	uptime2str(nhe->uptime, up_str, sizeof(up_str));
+	epoch_tbuf = time_to_epoch(UPTIMESECS(nhe->uptime));
 
 	if (json_nhe_hdr)
 		json = json_object_new_object();
@@ -1246,14 +1253,19 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 					: 0);
 		}
 		json_object_string_add(json, "uptime", up_str);
+		json_object_int_add(json, "nhGrpUptimeEstablishedEpoch",
+				    epoch_tbuf);
 		json_object_string_add(json, "vrf",
 				       vrf_id_to_name(nhe->vrf_id));
 	} else {
+		char epoch_str_buf[MONOTIME_STRLEN];
+
 		vty_out(vty, "ID: %u (%s)\n", nhe->id,
 			zebra_route_string(nhe->type));
 		vty_out(vty, "     RefCnt: %u\n", nhe->refcnt);
 
-		vty_out(vty, "     Uptime: %s\n", up_str);
+		vty_out(vty, "     Uptime: %s, %s\n", up_str,
+			ctime_r(&epoch_tbuf, epoch_str_buf));
 		vty_out(vty, "     VRF: %s\n", vrf_id_to_name(nhe->vrf_id));
 		vty_out(vty, "     RejectRtCnt: %d\n",
 			nhe->rejected_rn ? (int)listcount(nhe->rejected_rn)
