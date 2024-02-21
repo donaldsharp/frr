@@ -421,6 +421,21 @@ TRACEPOINT_LOGLEVEL(frr_zebra, netlink_ipneigh_change, TRACE_INFO)
 
 TRACEPOINT_EVENT(
 	frr_zebra,
+	if_ip_addr_add_del,
+	TP_ARGS(char *, name,
+            struct prefix *, address,
+            uint8_t, loc),
+	TP_FIELDS(
+        ctf_string(ifname, name)
+        ctf_array(unsigned char, address, address, sizeof(struct prefix))
+		ctf_integer(uint8_t, location, loc)
+        )
+	)
+
+TRACEPOINT_LOGLEVEL(frr_zebra, if_ip_addr_add_del, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	frr_zebra,
 	netlink_parse_info,
 	TP_ARGS(
 		struct nlmsghdr *, h,

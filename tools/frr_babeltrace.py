@@ -174,6 +174,16 @@ def location_if_dplane_ifp_handling_new(field_val):
     elif field_val == 1:
         return ("RTM_NEWLINK UPD")
 
+def location_if_ip_addr_add_del(field_val):
+    if field_val == 0:
+        return ("RTM_NEWADDR IPv4")
+    elif field_val == 1:
+        return ("RTM_DELADDR IPv4")
+    elif field_val == 2:
+        return ("RTM_NEWADDR IPv6")
+    elif field_val == 3:
+        return ("RTM_DELADDR IPv6")
+
 def print_location_gr_deferral_timer_start(field_val):
     if field_val == 1:
         return ("Tier 1 deferral timer start")
@@ -767,6 +777,11 @@ def parse_frr_zebra_if_dplane_ifp_handling(event):
 def parse_frr_zebra_if_dplane_ifp_handling_new(event):
     field_parsers = {"location" : location_if_dplane_ifp_handling_new}
     parse_event(event, field_parsers)
+    
+def parse_frr_zebra_if_ip_addr_add_del(event):
+    field_parsers = {"location" : location_if_ip_addr_add_del,
+                     "address": print_prefix_addr}
+    parse_event(event, field_parsers)
 
 def parse_frr_bgp_gr_deferral_timer_start(event):
     field_parsers = {"location": print_location_gr_deferral_timer_start,
@@ -951,6 +966,8 @@ def main():
                      parse_frr_zebra_if_dplane_ifp_handling,
                      "frr_zebra:if_dplane_ifp_handling_new":
                      parse_frr_zebra_if_dplane_ifp_handling_new,
+                     "frr_zebra:if_ip_addr_add_del":
+                     parse_frr_zebra_if_ip_addr_add_del,
                      "frr_bgp:gr_deferral_timer_start":
                      parse_frr_bgp_gr_deferral_timer_start,
                      "frr_bgp:gr_deferral_timer_expiry":
