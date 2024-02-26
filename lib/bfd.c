@@ -791,9 +791,8 @@ void bfd_sess_show(struct vty *vty, struct json_object *json,
 		json_object_string_add(json_bfd, "lastUpdate", time_buf);
 		json_object_int_add(json_bfd, "bfdLastUpdateEpoch", epoch_tbuf);
 	} else
-		vty_out(vty, "  Status: %s, Last update: %s, %s\n",
-			bfd_get_status_str(bsp->bss.state), time_buf,
-			ctime_r(&epoch_tbuf, epoch_str_buf));
+		vty_out(vty, "  Status: %s, Last update: %s\n",
+			bfd_get_status_str(bsp->bss.state), time_buf);
 
 	if (json)
 		json_object_object_add(json, "peerBfdInfo", json_bfd);
