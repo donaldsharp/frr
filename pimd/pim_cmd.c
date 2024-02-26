@@ -973,7 +973,7 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 					       source_str, sizeof(source_str));
 
 				vty_out(vty,
-					"%-16s %-15s %4s %8s %-15s %d %8s %-25s\n",
+					"%-16s %-15s %4s %8s %-15s %d %8s\n",
 					ifp->name, group_str,
 					grp->igmp_version == 3
 						? (grp->group_filtermode_isexcl
@@ -981,13 +981,12 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 							   : "INCL")
 						: "----",
 					hhmmss, source_str, grp->igmp_version,
-					uptime,
-					ctime_r(&epoch_tbuf, epoch_str_buf));
+					uptime);
 			}
 			return;
 		}
 
-		vty_out(vty, "%-16s %-15s %4s %8s %4d %d %8s %-25s\n",
+		vty_out(vty, "%-16s %-15s %4s %8s %4d %d %8s\n",
 			ifp->name, group_str,
 			grp->igmp_version == 3
 				? (grp->group_filtermode_isexcl ? "EXCL"
@@ -997,8 +996,7 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 			grp->group_source_list
 				? listcount(grp->group_source_list)
 				: 0,
-			grp->igmp_version, uptime,
-			ctime_r(&epoch_tbuf, epoch_str_buf));
+			grp->igmp_version, uptime);
 	}
 }
 

@@ -4477,9 +4477,8 @@ static void show_ip_ospf_neighbour_brief(struct vty *vty,
 			vty_out(vty, "%-15pI4 %3d %-15s ", &nbr->router_id,
 				nbr->priority, msgbuf);
 
-		vty_out(vty, "%-15s %-25s ",
-			ospf_timeval_dump(&res, uptime, sizeof(uptime)),
-			ctime_r(&epoch_tbuf, epoch_str_buf));
+		vty_out(vty, "%-15s ",
+			ospf_timeval_dump(&res, uptime, sizeof(uptime)));
 
 		vty_out(vty, "%9s ",
 			ospf_timer_dump(nbr->t_inactivity, timebuf,
