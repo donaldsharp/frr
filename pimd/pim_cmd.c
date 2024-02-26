@@ -836,7 +836,6 @@ static void igmp_source_json_helper(struct gm_source *src,
 	if (!json_source)
 		return;
 
-	epoch_tbuf = time_to_epoch(UPTIMESECS(source_creation));
 	json_object_string_add(json_source, "source", source_str);
 	json_object_string_add(json_source, "timer", mmss);
 	json_object_boolean_add(json_source, "forwarded",
@@ -855,13 +854,11 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 	char group_str[INET_ADDRSTRLEN];
 	char hhmmss[PIM_TIME_STRLEN];
 	char uptime[PIM_TIME_STRLEN];
-	time_t epoch_tbuf;
 
 	pim_inet4_dump("<group?>", grp->group_addr, group_str,
 		       sizeof(group_str));
 	pim_time_timer_to_hhmmss(hhmmss, sizeof(hhmmss), grp->t_group_timer);
 	pim_time_uptime(uptime, sizeof(uptime), now - grp->group_creation);
-	epoch_tbuf = time_to_epoch(UPTIMESECS(grp->group_creation));
 
 	if (uj) {
 		json_object_object_get_ex(json, ifp->name, &json_iface);
@@ -939,7 +936,6 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 			}
 		}
 	} else {
-		char epoch_str_buf[MONOTIME_STRLEN];
 		if (detail) {
 			struct listnode *srcnode;
 			struct gm_source *src;
@@ -951,22 +947,21 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 				pim_inet4_dump("<source?>", src->source_addr,
 					       source_str, sizeof(source_str));
 
-				vty_out(vty, "%-16s %-15s %4s %8s %-15s %d %8s %-25s\n", ifp->name,
+				vty_out(vty, "%-16s %-15s %4s %8s %-15s %d %8s\n", ifp->name,
 					group_str,
 					grp->igmp_version == 3
 						? (grp->group_filtermode_isexcl ? "EXCL" : "INCL")
 						: "----",
-					hhmmss, source_str, grp->igmp_version, uptime,
-					ctime_r(&epoch_tbuf, epoch_str_buf));
+					hhmmss, source_str, grp->igmp_version, uptime);
 			}
 			return;
 		}
 
-		vty_out(vty, "%-16s %-15s %4s %8s %4d %d %8s %-25s\n", ifp->name, group_str,
+		vty_out(vty, "%-16s %-15s %4s %8s %4d %d %8s\n", ifp->name, group_str,
 			grp->igmp_version == 3 ? (grp->group_filtermode_isexcl ? "EXCL" : "INCL")
 					       : "----",
 			hhmmss, grp->group_source_list ? listcount(grp->group_source_list) : 0,
-			grp->igmp_version, uptime, ctime_r(&epoch_tbuf, epoch_str_buf));
+			grp->igmp_version, uptime);
 	}
 }
 
