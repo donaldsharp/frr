@@ -3306,9 +3306,8 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 				vty_json_no_pretty(vty, json_rd);
 			} else {
 				vty_out(vty, "{}");
+				json_object_free(json_rd);
 			}
-
-			json_object_free(json_rd);
 		}
 	}
 
@@ -5563,7 +5562,6 @@ DEFUN(show_bgp_l2vpn_evpn_route_vni_all,
 
 	if (uj) {
 		vty_json(vty, json);
-		json_object_free(json);
 	}
 
 	return CMD_SUCCESS;

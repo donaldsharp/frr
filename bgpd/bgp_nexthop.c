@@ -1094,7 +1094,6 @@ static void bgp_show_nexthop(struct vty *vty, struct bgp *bgp,
 	if (uj) {
 		vty_out(vty, "\"%s\":", buf);
 		vty_json_no_pretty(vty, json_nexthop);
-		json_object_free(json_nexthop);
 	}
 }
 

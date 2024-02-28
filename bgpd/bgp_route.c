@@ -14708,10 +14708,10 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 {
 	struct bgp *bgp;
 	struct bgp_table *table;
-	json_object *json = NULL;
-	json_object *json_scode = NULL;
-	json_object *json_ocode = NULL;
-	json_object *json_ar = NULL;
+	json_object *json = NULL;	/* Route filtered and Best path */
+	json_object *json_scode = NULL; /* Status Code */
+	json_object *json_ocode = NULL; /* Origin Code */
+	json_object *json_ar = NULL; /* Route Advertised and Route Received */
 	bool use_json = CHECK_FLAG(show_flags, BGP_SHOW_OPT_JSON);
 	bool first = true;
 
@@ -14871,7 +14871,6 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 						}
 						vty_json_no_pretty(vty,
 								   json_routes);
-						json_object_free(json_routes);
 					} else {
 						json_object_object_add(
 							json_ar, rd_str,
@@ -14893,7 +14892,6 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 			if (type == bgp_show_adj_route_advertised ||
 			    type == bgp_show_adj_route_received) {
 				vty_json_no_pretty(vty, json_ar);
-				json_object_free(json_ar);
 			}
 		}
 	}
@@ -14920,8 +14918,14 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 		 * These fields only give up ownership to `json` when `header1`
 		 * is used (set to zero). See code in `show_adj_route` and
 		 * `show_adj_route_header`.
+		 *
+		 * For Route advertised and received, we do a vty_json_no_pretty
+		 * which internally frees the json object.
+		 * For best path and Route filtered, we are explicitly freeing
+		 * it
 		 */
-		if (header1 == 1) {
+		if ((header1 == 1) && ((type != bgp_show_adj_route_advertised ||
+					type != bgp_show_adj_route_received))) {
 			json_object_free(json_scode);
 			json_object_free(json_ocode);
 		}
