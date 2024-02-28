@@ -673,7 +673,6 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn, struct rou
 		json_object_int_add(json_route, "routeUptimeEstablishedEpoch", epoch_tbuf);
 		if (brief) {
 			vty_json_no_pretty(vty, json_route);
-			json_object_free(json_route);
 			return;
 		}
 		json_object_string_add(json_route, "prefix",
@@ -746,7 +745,6 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn, struct rou
 		}
 		zebra_show_ip_route_opaque(NULL, re, json_route);
 		vty_json_no_pretty(vty, json_route);
-		json_object_free(json_route);
 
 		return;
 	}
