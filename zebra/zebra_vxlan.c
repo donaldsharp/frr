@@ -592,9 +592,10 @@ static void zevpn_print_mac_hash_all_evpn_detail(struct hash_bucket *bucket,
 		if (num_macs) {
 			vty_out(vty, ",\"macs\":");
 			vty_json_no_pretty(vty, json_mac);
-		}
+		} else
+			json_object_free(json_mac);
+
 		vty_out(vty, "}\n");
-		json_object_free(json_mac);
 	}
 }
 
@@ -3353,7 +3354,6 @@ void zebra_vxlan_print_macs_vni(struct vty *vty, struct zebra_vrf *zvrf,
 		vty_out(vty, "\"macs\":");
 		vty_json_no_pretty(vty, json_mac);
 		vty_out(vty, "}\n");
-		json_object_free(json_mac);
 	}
 }
 
