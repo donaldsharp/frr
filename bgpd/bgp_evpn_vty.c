@@ -5605,7 +5605,6 @@ DEFUN(show_bgp_l2vpn_evpn_route_vni_all,
 
 	if (uj) {
 		vty_json(vty, json);
-		json_object_free(json);
 	}
 
 	return CMD_SUCCESS;
