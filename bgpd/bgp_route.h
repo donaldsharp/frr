@@ -308,26 +308,26 @@ struct bgp_path_info {
 
 	/* BGP information status.  */
 	uint32_t flags;
-#define BGP_PATH_IGP_CHANGED (1 << 0)
-#define BGP_PATH_DAMPED (1 << 1)
-#define BGP_PATH_HISTORY (1 << 2)
-#define BGP_PATH_SELECTED (1 << 3)
-#define BGP_PATH_VALID (1 << 4)
-#define BGP_PATH_ATTR_CHANGED (1 << 5)
-#define BGP_PATH_DMED_CHECK (1 << 6)
-#define BGP_PATH_DMED_SELECTED (1 << 7)
-#define BGP_PATH_STALE (1 << 8)
-#define BGP_PATH_REMOVED (1 << 9)
-#define BGP_PATH_COUNTED (1 << 10)
-#define BGP_PATH_MULTIPATH (1 << 11)
-#define BGP_PATH_MULTIPATH_CHG (1 << 12)
-#define BGP_PATH_RIB_ATTR_CHG (1 << 13)
-#define BGP_PATH_ANNC_NH_SELF (1 << 14)
-#define BGP_PATH_LINK_BW_CHG (1 << 15)
-#define BGP_PATH_ACCEPT_OWN (1 << 16)
-#define BGP_PATH_MPLSVPN_LABEL_NH (1 << 17)
-#define BGP_PATH_MPLSVPN_NH_LABEL_BIND (1 << 18)
-#define BGP_PATH_UNSORTED (1 << 19)
+#define BGP_PATH_IGP_CHANGED	       (1 << 0)	 // 1
+#define BGP_PATH_DAMPED		       (1 << 1)	 // 2
+#define BGP_PATH_HISTORY	       (1 << 2)	 // 4
+#define BGP_PATH_SELECTED	       (1 << 3)	 // 8
+#define BGP_PATH_VALID		       (1 << 4)	 // 16
+#define BGP_PATH_ATTR_CHANGED	       (1 << 5)	 // 32
+#define BGP_PATH_DMED_CHECK	       (1 << 6)	 // 64
+#define BGP_PATH_DMED_SELECTED	       (1 << 7)	 // 128
+#define BGP_PATH_STALE		       (1 << 8)	 // 256
+#define BGP_PATH_REMOVED	       (1 << 9)	 // 512
+#define BGP_PATH_COUNTED	       (1 << 10) // 1024
+#define BGP_PATH_MULTIPATH	       (1 << 11) // 2048
+#define BGP_PATH_MULTIPATH_CHG	       (1 << 12) // 4096
+#define BGP_PATH_RIB_ATTR_CHG	       (1 << 13) // 8192
+#define BGP_PATH_ANNC_NH_SELF	       (1 << 14) // 16384
+#define BGP_PATH_LINK_BW_CHG	       (1 << 15) // 32768
+#define BGP_PATH_ACCEPT_OWN	       (1 << 16) // 65536
+#define BGP_PATH_MPLSVPN_LABEL_NH      (1 << 17) // 131072
+#define BGP_PATH_MPLSVPN_NH_LABEL_BIND (1 << 18) // 262144
+#define BGP_PATH_UNSORTED	       (1 << 19) // 524288
 
 	/* BGP route type.  This can be static, RIP, OSPF, BGP etc.  */
 	uint8_t type;
@@ -345,6 +345,8 @@ struct bgp_path_info {
 #define BGP_ROUTE_IMPORTED     5        /* from another bgp instance/safi */
 
 	unsigned short instance;
+
+	enum bgp_path_selection_reason reason;
 
 	/* Addpath identifiers */
 	uint32_t addpath_rx_id;
