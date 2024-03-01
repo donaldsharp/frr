@@ -140,7 +140,7 @@ static inline char *bgp_route_dump_path_info_flags(struct bgp_path_info *pi,
 	}
 
 	snprintfrr(
-		buf, len, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
+		buf, len, "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
 		CHECK_FLAG(flags, BGP_PATH_IGP_CHANGED) ? "IGP Changed " : "",
 		CHECK_FLAG(flags, BGP_PATH_DAMPED) ? "Damped" : "",
 		CHECK_FLAG(flags, BGP_PATH_HISTORY) ? "History " : "",
@@ -157,7 +157,8 @@ static inline char *bgp_route_dump_path_info_flags(struct bgp_path_info *pi,
 		CHECK_FLAG(flags, BGP_PATH_MULTIPATH_CHG) ? "Mpath Chg " : "",
 		CHECK_FLAG(flags, BGP_PATH_RIB_ATTR_CHG) ? "Rib Chg " : "",
 		CHECK_FLAG(flags, BGP_PATH_ANNC_NH_SELF) ? "NH Self " : "",
-		CHECK_FLAG(flags, BGP_PATH_LINK_BW_CHG) ? "LinkBW Chg " : "");
+		CHECK_FLAG(flags, BGP_PATH_LINK_BW_CHG) ? "LinkBW Chg " : "",
+		CHECK_FLAG(flags, BGP_PATH_UNSORTED) ? "Unsorted " : "");
 
 	return buf;
 }
@@ -9352,6 +9353,9 @@ static void route_vty_short_status_out(struct vty *vty,
 		if (path->extra && bgp_path_suppressed(path))
 			json_object_boolean_true_add(json_path, "suppressed");
 
+		if (CHECK_FLAG(path->flags, BGP_PATH_UNSORTED))
+			json_object_boolean_true_add(json_path, "unsorted");
+
 		if (CHECK_FLAG(path->flags, BGP_PATH_VALID)
 		    && !CHECK_FLAG(path->flags, BGP_PATH_HISTORY))
 			json_object_boolean_true_add(json_path, "valid");
@@ -9412,6 +9416,8 @@ static void route_vty_short_status_out(struct vty *vty,
 	/* Selected */
 	if (CHECK_FLAG(path->flags, BGP_PATH_HISTORY))
 		vty_out(vty, "h");
+	else if (CHECK_FLAG(path->flags, BGP_PATH_UNSORTED))
+		vty_out(vty, "u");
 	else if (CHECK_FLAG(path->flags, BGP_PATH_DAMPED))
 		vty_out(vty, "d");
 	else if (CHECK_FLAG(path->flags, BGP_PATH_SELECTED))
@@ -14071,21 +14077,23 @@ enum bgp_pcounts {
 	PCOUNT_COUNTED,
 	PCOUNT_BPATH_SELECTED,
 	PCOUNT_PFCNT, /* the figure we display to users */
+	PCOUNT_UNSORTED,
 	PCOUNT_MAX,
 };
 
 static const char *const pcount_strs[] = {
-		[PCOUNT_ADJ_IN] = "Adj-in",
-		[PCOUNT_DAMPED] = "Damped",
-		[PCOUNT_REMOVED] = "Removed",
-		[PCOUNT_HISTORY] = "History",
-		[PCOUNT_STALE] = "Stale",
-		[PCOUNT_VALID] = "Valid",
-		[PCOUNT_ALL] = "All RIB",
-		[PCOUNT_COUNTED] = "PfxCt counted",
-		[PCOUNT_BPATH_SELECTED] = "PfxCt Best Selected",
-		[PCOUNT_PFCNT] = "Useable",
-		[PCOUNT_MAX] = NULL,
+	[PCOUNT_ADJ_IN] = "Adj-in",
+	[PCOUNT_DAMPED] = "Damped",
+	[PCOUNT_REMOVED] = "Removed",
+	[PCOUNT_HISTORY] = "History",
+	[PCOUNT_STALE] = "Stale",
+	[PCOUNT_VALID] = "Valid",
+	[PCOUNT_ALL] = "All RIB",
+	[PCOUNT_COUNTED] = "PfxCt counted",
+	[PCOUNT_BPATH_SELECTED] = "PfxCt Best Selected",
+	[PCOUNT_PFCNT] = "Useable",
+	[PCOUNT_UNSORTED] = "Unsorted",
+	[PCOUNT_MAX] = NULL,
 };
 
 struct peer_pcounts {
@@ -14126,6 +14134,8 @@ static void bgp_peer_count_proc(struct bgp_dest *rn, struct peer_pcounts *pc)
 			pc->count[PCOUNT_PFCNT]++;
 		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
 			pc->count[PCOUNT_BPATH_SELECTED]++;
+		if (CHECK_FLAG(pi->flags, BGP_PATH_UNSORTED))
+			pc->count[PCOUNT_UNSORTED]++;
 
 		if (CHECK_FLAG(pi->flags, BGP_PATH_COUNTED)) {
 			pc->count[PCOUNT_COUNTED]++;
