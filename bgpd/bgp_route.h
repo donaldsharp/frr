@@ -73,7 +73,7 @@ enum bgp_show_adj_route_type {
 
 #define BGP_SHOW_SCODE_HEADER                                                  \
 	"Status codes:  s suppressed, d damped, "                              \
-	"h history, * valid, > best, = multipath,\n"                           \
+	"h history, u unsorted, * valid, > best, = multipath,\n"               \
 	"               i internal, r RIB-failure, S Stale, R Removed\n"
 #define BGP_SHOW_OCODE_HEADER                                                  \
 	"Origin codes:  i - IGP, e - EGP, ? - incomplete\n"
@@ -312,6 +312,7 @@ struct bgp_path_info {
 #define BGP_PATH_ANNC_NH_SELF (1 << 14)
 #define BGP_PATH_LINK_BW_CHG (1 << 15)
 #define BGP_PATH_ACCEPT_OWN (1 << 16)
+#define BGP_PATH_UNSORTED (1 << 19)
 
 	/* BGP route type.  This can be static, RIP, OSPF, BGP etc.  */
 	uint8_t type;
