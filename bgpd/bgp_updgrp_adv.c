@@ -670,7 +670,7 @@ void subgroup_announce_table(struct update_subgroup *subgrp,
 {
 	struct bgp_dest *dest;
 	struct bgp_path_info *ri;
-	struct attr attr;
+	struct attr attr = {0}, *pattr = &attr;
 	struct peer *peer;
 	afi_t afi;
 	safi_t safi;
@@ -714,24 +714,25 @@ void subgroup_announce_table(struct update_subgroup *subgrp,
 				continue;
 
 			if (subgroup_announce_check(dest, ri, subgrp, dest_p,
-						    &attr, NULL)) {
+						    pattr, NULL)) {
 				/* Check if route can be advertised */
 				if (advertise) {
 					if (!bgp_check_withdrawal(bgp, dest)) {
-						struct attr *adv_attr =
-							bgp_attr_intern(&attr);
-
-						bgp_adj_out_set_subgroup(
-							dest, subgrp, adv_attr,
-							ri);
-					} else
+						if (!bgp_adj_out_set_subgroup(
+							    dest, subgrp, pattr,
+							    ri))
+							bgp_attr_flush(pattr);
+					} else {
 						bgp_adj_out_unset_subgroup(
 							dest, subgrp, 1,
 							bgp_addpath_id_for_peer(
 								peer, afi,
 								safi_rib,
 								&ri->tx_addpath));
-				}
+						bgp_attr_flush(pattr);
+					}
+				} else
+					bgp_attr_flush(pattr);
 			} else {
 				/* If default originate is enabled for
 				 * the peer, do not send explicit
@@ -750,6 +751,7 @@ void subgroup_announce_table(struct update_subgroup *subgrp,
 					bgp_addpath_id_for_peer(
 						peer, afi, safi_rib,
 						&ri->tx_addpath));
+				bgp_attr_flush(pattr);
 			}
 		}
 	}

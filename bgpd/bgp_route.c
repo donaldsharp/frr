@@ -2898,7 +2898,7 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 				   PEER_STATUS_ORF_WAIT_REFRESH))
 		return;
 
-	memset(&attr, 0, sizeof(attr));
+	memset(pattr, 0, sizeof(*pattr));
 	/* It's initialized in bgp_announce_check() */
 
 	/* Announcement to the subgroup. If the route is filtered withdraw it.
@@ -2936,9 +2936,8 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 	}
 
 	/* If selected is NULL we must withdraw the path using addpath_tx_id */
-	else {
+	else
 		bgp_adj_out_unset_subgroup(dest, subgrp, 1, addpath_tx_id);
-	}
 }
 
 /*
