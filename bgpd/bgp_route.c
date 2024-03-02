@@ -2919,16 +2919,23 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 					struct attr *adv_attr =
 						bgp_attr_intern(&attr);
 
-					bgp_adj_out_set_subgroup(dest, subgrp,
-								 adv_attr,
-								 selected);
-				} else
+					if (!bgp_adj_out_set_subgroup(dest,
+								      subgrp,
+								      adv_attr,
+								      selected))
+						bgp_attr_flush(&attr);
+				} else {
 					bgp_adj_out_unset_subgroup(
 						dest, subgrp, 1, addpath_tx_id);
-			}
-		} else
+					bgp_attr_flush(&attr);
+				}
+			} else
+				bgp_attr_flush(&attr);
+		} else {
 			bgp_adj_out_unset_subgroup(dest, subgrp, 1,
 						   addpath_tx_id);
+			bgp_attr_flush(&attr);
+		}
 	}
 
 	/* If selected is NULL we must withdraw the path using addpath_tx_id */
