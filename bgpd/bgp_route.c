@@ -3255,13 +3255,11 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 {
 	const struct prefix *p;
 	struct peer *onlypeer;
-	struct attr attr;
 	afi_t afi;
 	safi_t safi;
+	struct attr attr = {0}, *pattr = &attr;
 	struct bgp *bgp;
 	bool advertise;
-	bool announce;
-	bool withdrawal;
 	bool debug = BGP_DEBUG(update, UPDATE_OUT);
 
 	p = bgp_dest_get_prefix(dest);
@@ -3292,48 +3290,29 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 	advertise = bgp_check_advertise(bgp, dest, safi);
 
 	if (selected) {
-		/*
-		 * The function subgroup_process_announce_selected() is called
-		 * for all paths in the dest. However, subgroup_announce_check()
-		 * returns false if the path info in the current function call
-		 * is not the best path and add path is Not configured.
-		 */
-		announce = subgroup_announce_check(dest, selected, subgrp, p,
-						   &attr, NULL);
-		if (announce) {
+		if (subgroup_announce_check(dest, selected, subgrp, p, pattr,
+					    NULL)) {
 			/* Route is selected, if the route is already installed
 			 * in FIB, then it is advertised
 			 */
 			if (advertise) {
-				/* At this point, the path info 'selected' is
-				 * the best path
-				 */
-				withdrawal = bgp_check_withdrawal(
-					bgp, dest, safi, selected);
-				if (debug)
-					zlog_debug("%s: p=%pFX,  withdrawal %d",
-						   __func__, p, withdrawal);
-
-				if (!withdrawal)
-					bgp_adj_out_set_subgroup(
-						dest, subgrp, &attr, selected);
-				else
+				if (!bgp_check_withdrawal(bgp, dest, safi,
+							  selected)) {
+					if (!bgp_adj_out_set_subgroup(
+						    dest, subgrp, pattr,
+						    selected))
+						bgp_attr_flush(pattr);
+				} else {
 					bgp_adj_out_unset_subgroup(
 						dest, subgrp, 1, addpath_tx_id);
-			} else {
-				if (debug)
-					zlog_debug(
-						"%s: p=%pFX, check_advertise returned FALSE",
-						__func__, p);
-			}
+					bgp_attr_flush(pattr);
+				}
+			} else
+				bgp_attr_flush(pattr);
 		} else {
-			if (debug)
-				zlog_debug(
-					"%s: p=%pFX, advertise %d , announce_check returned FALSE",
-					__func__, p, advertise);
-
 			bgp_adj_out_unset_subgroup(dest, subgrp, 1,
 						   addpath_tx_id);
+			bgp_attr_flush(pattr);
 		}
 	}
 
