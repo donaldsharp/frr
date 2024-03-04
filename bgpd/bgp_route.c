@@ -2931,6 +2931,7 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 	     (pi != NULL) && (nextpi = pi->next, 1); pi = nextpi) {
 		enum bgp_path_selection_reason reason;
 
+		UNSET_FLAG(pi->flags, BGP_PATH_UNSORTED);
 		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
 			old_select = pi;
 
@@ -3818,12 +3819,21 @@ static struct bgp_process_queue *bgp_processq_alloc(struct bgp *bgp)
 	return pqnode;
 }
 
-void bgp_process(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, safi_t safi)
+void bgp_process(struct bgp *bgp, struct bgp_dest *dest,
+		 struct bgp_path_info *pi, afi_t afi, safi_t safi)
 {
 #define ARBITRARY_PROCESS_QLEN		10000
 	struct work_queue *wq = bgp->process_queue;
 	struct bgp_process_queue *pqnode;
 	int pqnode_reuse = 0;
+
+	/*
+	 * Indicate that *this* pi is in an unsorted
+	 * situation, even if the node is already
+	 * scheduled.
+	 */
+	if (pi)
+		SET_FLAG(pi->flags, BGP_PATH_UNSORTED);
 
 	/* already scheduled for processing? */
 	if (CHECK_FLAG(dest->flags, BGP_NODE_PROCESS_SCHEDULED))
@@ -4069,7 +4079,7 @@ void bgp_rib_remove(struct bgp_dest *dest, struct bgp_path_info *pi,
 	}
 
 	hook_call(bgp_process, peer->bgp, afi, safi, dest, peer, true);
-	bgp_process(peer->bgp, dest, afi, safi);
+	bgp_process(peer->bgp, dest, pi, afi, safi);
 }
 
 static void bgp_rib_withdraw(struct bgp_dest *dest, struct bgp_path_info *pi,
@@ -4668,7 +4678,7 @@ void bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 				    != BGP_DAMP_SUPPRESSED) {
 					bgp_aggregate_increment(bgp, p, pi, afi,
 								safi);
-					bgp_process(bgp, dest, afi, safi);
+					bgp_process(bgp, dest, pi, afi, safi);
 				}
 			} else /* Duplicate - odd */
 			{
@@ -4696,7 +4706,7 @@ void bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 					bgp_path_info_unset_flag(
 						dest, pi, BGP_PATH_STALE);
 					bgp_dest_set_defer_flag(dest, false);
-					bgp_process(bgp, dest, afi, safi);
+					bgp_process(bgp, dest, pi, afi, safi);
 				}
 			}
 
@@ -4991,7 +5001,7 @@ void bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		/* Process change. */
 		bgp_aggregate_increment(bgp, p, pi, afi, safi);
 
-		bgp_process(bgp, dest, afi, safi);
+		bgp_process(bgp, dest, pi, afi, safi);
 		bgp_dest_unlock_node(dest);
 
 		if (SAFI_UNICAST == safi
@@ -5136,7 +5146,7 @@ void bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	hook_call(bgp_process, bgp, afi, safi, dest, peer, false);
 
 	/* Process change. */
-	bgp_process(bgp, dest, afi, safi);
+	bgp_process(bgp, dest, new, afi, safi);
 
 	if (SAFI_UNICAST == safi
 	    && (bgp->inst_type == BGP_INSTANCE_TYPE_VRF
@@ -6642,7 +6652,7 @@ void bgp_static_update(struct bgp *bgp, const struct prefix *p,
 
 			/* Process change. */
 			bgp_aggregate_increment(bgp, p, pi, afi, safi);
-			bgp_process(bgp, dest, afi, safi);
+			bgp_process(bgp, dest, pi, afi, safi);
 
 			if (SAFI_MPLS_VPN == safi &&
 			    bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT) {
@@ -6700,7 +6710,7 @@ void bgp_static_update(struct bgp *bgp, const struct prefix *p,
 	bgp_dest_unlock_node(dest);
 
 	/* Process change. */
-	bgp_process(bgp, dest, afi, safi);
+	bgp_process(bgp, dest, new, afi, safi);
 
 	if (SAFI_UNICAST == safi &&
 	    (bgp->inst_type == BGP_INSTANCE_TYPE_VRF ||
@@ -6757,7 +6767,7 @@ void bgp_static_withdraw(struct bgp *bgp, const struct prefix *p, afi_t afi,
 		bgp_aggregate_decrement(bgp, p, pi, afi, safi);
 		bgp_unlink_nexthop(pi);
 		bgp_path_info_delete(dest, pi);
-		bgp_process(bgp, dest, afi, safi);
+		bgp_process(bgp, dest, pi, afi, safi);
 	}
 
 	/* Unlock bgp_node_lookup. */
@@ -7162,7 +7172,7 @@ static void bgp_purge_af_static_redist_routes(struct bgp *bgp, afi_t afi,
 					safi);
 				bgp_unlink_nexthop(pi);
 				bgp_path_info_delete(dest, pi);
-				bgp_process(bgp, dest, afi, safi);
+				bgp_process(bgp, dest, pi, afi, safi);
 			}
 		}
 	}
@@ -7552,7 +7562,7 @@ static void bgp_aggregate_install(
 		SET_FLAG(new->flags, BGP_PATH_VALID);
 
 		bgp_path_info_add(dest, new);
-		bgp_process(bgp, dest, afi, safi);
+		bgp_process(bgp, dest, new, afi, safi);
 	} else {
 	uninstall_aggregate_route:
 		for (pi = orig; pi; pi = pi->next)
@@ -7564,7 +7574,7 @@ static void bgp_aggregate_install(
 		/* Withdraw static BGP route from routing table. */
 		if (pi) {
 			bgp_path_info_delete(dest, pi);
-			bgp_process(bgp, dest, afi, safi);
+			bgp_process(bgp, dest, pi, afi, safi);
 		}
 	}
 
@@ -7650,7 +7660,6 @@ void bgp_aggregate_toggle_suppressed(struct bgp_aggregate *aggregate,
 	const struct prefix *dest_p;
 	struct bgp_dest *dest, *top;
 	struct bgp_path_info *pi;
-	bool toggle_suppression;
 
 	/* We've found a different MED we must revert any suppressed routes. */
 	top = bgp_node_get(table, p);
@@ -7660,7 +7669,6 @@ void bgp_aggregate_toggle_suppressed(struct bgp_aggregate *aggregate,
 		if (dest_p->prefixlen <= p->prefixlen)
 			continue;
 
-		toggle_suppression = false;
 		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
 			if (BGP_PATH_HOLDDOWN(pi))
 				continue;
@@ -7671,17 +7679,14 @@ void bgp_aggregate_toggle_suppressed(struct bgp_aggregate *aggregate,
 			if (suppress) {
 				/* Suppress route if not suppressed already. */
 				if (aggr_suppress_path(aggregate, pi))
-					toggle_suppression = true;
+					bgp_process(bgp, dest, pi, afi, safi);
 				continue;
 			}
 
 			/* Install route if there is no more suppression. */
 			if (aggr_unsuppress_path(aggregate, pi))
-				toggle_suppression = true;
+				bgp_process(bgp, dest, pi, afi, safi);
 		}
-
-		if (toggle_suppression)
-			bgp_process(bgp, dest, afi, safi);
 	}
 	bgp_dest_unlock_node(top);
 }
@@ -7740,7 +7745,6 @@ bool bgp_aggregate_route(struct bgp *bgp, const struct prefix *p, afi_t afi,
 	struct ecommunity *ecommunity = NULL;
 	struct lcommunity *lcommunity = NULL;
 	struct bgp_path_info *pi;
-	unsigned long match = 0;
 	uint8_t atomic_aggregate = 0;
 
 	/* If the bgp instance is being deleted or self peer is deleted
@@ -7790,8 +7794,6 @@ bool bgp_aggregate_route(struct bgp *bgp, const struct prefix *p, afi_t afi,
 		if (!bgp_check_advertise(bgp, dest, safi))
 			continue;
 
-		match = 0;
-
 		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
 			if (BGP_PATH_HOLDDOWN(pi))
 				continue;
@@ -7815,7 +7817,7 @@ bool bgp_aggregate_route(struct bgp *bgp, const struct prefix *p, afi_t afi,
 			if (aggregate->summary_only
 			    && AGGREGATE_MED_VALID(aggregate)) {
 				if (aggr_suppress_path(aggregate, pi))
-					match++;
+					bgp_process(bgp, dest, pi, afi, safi);
 			}
 
 			/*
@@ -7831,7 +7833,7 @@ bool bgp_aggregate_route(struct bgp *bgp, const struct prefix *p, afi_t afi,
 			    && AGGREGATE_MED_VALID(aggregate)
 			    && aggr_suppress_map_test(bgp, aggregate, pi)) {
 				if (aggr_suppress_path(aggregate, pi))
-					match++;
+					bgp_process(bgp, dest, pi, afi, safi);
 			}
 
 			aggregate->count++;
@@ -7892,8 +7894,6 @@ bool bgp_aggregate_route(struct bgp *bgp, const struct prefix *p, afi_t afi,
 					aggregate,
 					bgp_attr_get_lcommunity(pi->attr));
 		}
-		if (match)
-			bgp_process(bgp, dest, afi, safi);
 	}
 	if (aggregate->as_set) {
 		bgp_compute_aggregate_aspath_val(aggregate);
@@ -7953,7 +7953,6 @@ void bgp_aggregate_delete(struct bgp *bgp, const struct prefix *p, afi_t afi,
 	struct bgp_dest *top;
 	struct bgp_dest *dest;
 	struct bgp_path_info *pi;
-	unsigned long match;
 
 	table = bgp->rib[afi][safi];
 
@@ -7965,7 +7964,6 @@ void bgp_aggregate_delete(struct bgp *bgp, const struct prefix *p, afi_t afi,
 
 		if (dest_p->prefixlen <= p->prefixlen)
 			continue;
-		match = 0;
 
 		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
 			if (BGP_PATH_HOLDDOWN(pi))
@@ -7983,7 +7981,7 @@ void bgp_aggregate_delete(struct bgp *bgp, const struct prefix *p, afi_t afi,
 			if (pi->extra && pi->extra->aggr_suppressors &&
 			    listcount(pi->extra->aggr_suppressors)) {
 				if (aggr_unsuppress_path(aggregate, pi))
-					match++;
+					bgp_process(bgp, dest, pi, afi, safi);
 			}
 
 			aggregate->count--;
@@ -8025,10 +8023,6 @@ void bgp_aggregate_delete(struct bgp *bgp, const struct prefix *p, afi_t afi,
 							pi->attr));
 			}
 		}
-
-		/* If this node was suppressed, process the change. */
-		if (match)
-			bgp_process(bgp, dest, afi, safi);
 	}
 	if (aggregate->as_set) {
 		aspath_free(aggregate->aspath);
@@ -8177,7 +8171,6 @@ static void bgp_remove_route_from_aggregate(struct bgp *bgp, afi_t afi,
 	struct community *community = NULL;
 	struct ecommunity *ecommunity = NULL;
 	struct lcommunity *lcommunity = NULL;
-	unsigned long match = 0;
 
 	/* If the bgp instance is being deleted or self peer is deleted
 	 * then do not create aggregate route
@@ -8194,12 +8187,12 @@ static void bgp_remove_route_from_aggregate(struct bgp *bgp, afi_t afi,
 
 	if (aggregate->summary_only && AGGREGATE_MED_VALID(aggregate))
 		if (aggr_unsuppress_path(aggregate, pi))
-			match++;
+			bgp_process(bgp, pi->net, pi, afi, safi);
 
 	if (aggregate->suppress_map_name && AGGREGATE_MED_VALID(aggregate)
 	    && aggr_suppress_map_test(bgp, aggregate, pi))
 		if (aggr_unsuppress_path(aggregate, pi))
-			match++;
+			bgp_process(bgp, pi->net, pi, afi, safi);
 
 	/*
 	 * This must be called after `summary`, `suppress-map` check to avoid
@@ -8240,10 +8233,6 @@ static void bgp_remove_route_from_aggregate(struct bgp *bgp, afi_t afi,
 			bgp_remove_lcommunity_from_aggregate(
 				aggregate, bgp_attr_get_lcommunity(pi->attr));
 	}
-
-	/* If this node was suppressed, process the change. */
-	if (match)
-		bgp_process(bgp, pi->net, afi, safi);
 
 	origin = BGP_ORIGIN_IGP;
 	if (aggregate->incomplete_origin_count > 0)
@@ -8846,7 +8835,7 @@ void bgp_redistribute_add(struct bgp *bgp, struct prefix *p,
 				/* Process change. */
 				bgp_aggregate_increment(bgp, p, bpi, afi,
 							SAFI_UNICAST);
-				bgp_process(bgp, bn, afi, SAFI_UNICAST);
+				bgp_process(bgp, bn, bpi, afi, SAFI_UNICAST);
 				bgp_dest_unlock_node(bn);
 				aspath_unintern(&attr.aspath);
 
@@ -8869,7 +8858,7 @@ void bgp_redistribute_add(struct bgp *bgp, struct prefix *p,
 		bgp_path_info_add(bn, new);
 		bgp_dest_unlock_node(bn);
 		SET_FLAG(bn->flags, BGP_NODE_FIB_INSTALLED);
-		bgp_process(bgp, bn, afi, SAFI_UNICAST);
+		bgp_process(bgp, bn, new, afi, SAFI_UNICAST);
 
 		if ((bgp->inst_type == BGP_INSTANCE_TYPE_VRF)
 		    || (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)) {
@@ -8911,7 +8900,7 @@ void bgp_redistribute_delete(struct bgp *bgp, struct prefix *p, uint8_t type,
 			}
 			bgp_aggregate_decrement(bgp, p, pi, afi, SAFI_UNICAST);
 			bgp_path_info_delete(dest, pi);
-			bgp_process(bgp, dest, afi, SAFI_UNICAST);
+			bgp_process(bgp, dest, pi, afi, SAFI_UNICAST);
 		}
 		bgp_dest_unlock_node(dest);
 	}
@@ -8945,7 +8934,7 @@ void bgp_redistribute_withdraw(struct bgp *bgp, afi_t afi, int type,
 			bgp_path_info_delete(dest, pi);
 			if (!CHECK_FLAG(bgp->flags,
 					BGP_FLAG_DELETE_IN_PROGRESS))
-				bgp_process(bgp, dest, afi, SAFI_UNICAST);
+				bgp_process(bgp, dest, pi, afi, SAFI_UNICAST);
 			else {
 				dest = bgp_path_info_reap(dest, pi);
 				assert(dest);
