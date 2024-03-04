@@ -953,22 +953,22 @@ void subgroup_default_originate(struct update_subgroup *subgrp, int withdraw)
 		if (dest) {
 			for (pi = bgp_dest_get_bgp_path_info(dest); pi;
 			     pi = pi->next) {
-				if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED)) {
-					if (subgroup_announce_check(
-						    dest, pi, subgrp,
-						    bgp_dest_get_prefix(dest),
-						    &attr, NULL)) {
-						struct attr *default_attr =
-							bgp_attr_intern(&attr);
+				if (!CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
+					continue;
 
-						if (!bgp_adj_out_set_subgroup(
-							    dest, subgrp,
-							    default_attr, pi))
-							bgp_attr_flush(
-								default_attr);
-					} else
-						bgp_attr_flush(&attr);
-				}
+				if (subgroup_announce_check(
+					    dest, pi, subgrp,
+					    bgp_dest_get_prefix(dest), &attr,
+					    NULL)) {
+					struct attr *default_attr =
+						bgp_attr_intern(&attr);
+
+					if (!bgp_adj_out_set_subgroup(
+						    dest, subgrp, default_attr,
+						    pi))
+						bgp_attr_flush(default_attr);
+				} else
+					bgp_attr_flush(&attr);
 			}
 			bgp_dest_unlock_node(dest);
 		}
