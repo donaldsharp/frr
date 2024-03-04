@@ -150,7 +150,7 @@ static void bgp_reuse_timer(struct event *t)
 				bgp_aggregate_increment(
 					bgp, bgp_dest_get_prefix(bdi->dest),
 					bdi->path, bdi->afi, bdi->safi);
-				bgp_process(bgp, bdi->dest, bdi->afi,
+				bgp_process(bgp, bdi->dest, bdi->path, bdi->afi,
 					    bdi->safi);
 			}
 
