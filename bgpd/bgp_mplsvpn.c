@@ -1261,7 +1261,7 @@ leak_update(struct bgp *to_bgp, struct bgp_dest *bn,
 
 		/* Process change. */
 		bgp_aggregate_increment(to_bgp, p, bpi, afi, safi);
-		bgp_process(to_bgp, bn, afi, safi);
+		bgp_process(to_bgp, bn, bpi, afi, safi);
 		bgp_dest_unlock_node(bn);
 
 		if (debug)
@@ -1342,7 +1342,7 @@ leak_update(struct bgp *to_bgp, struct bgp_dest *bn,
 	bgp_path_info_add(bn, new);
 
 	bgp_dest_unlock_node(bn);
-	bgp_process(to_bgp, bn, afi, safi);
+	bgp_process(to_bgp, bn, new, afi, safi);
 
 	if (debug)
 		zlog_debug("%s: ->%s: %pBD: Added new route", __func__,
@@ -1726,7 +1726,7 @@ void vpn_leak_from_vrf_withdraw(struct bgp *to_bgp,		/* to */
 
 		bgp_aggregate_decrement(to_bgp, p, bpi, afi, safi);
 		bgp_path_info_delete(bn, bpi);
-		bgp_process(to_bgp, bn, afi, safi);
+		bgp_process(to_bgp, bn, bpi, afi, safi);
 	}
 	bgp_dest_unlock_node(bn);
 }
@@ -1782,7 +1782,7 @@ void vpn_leak_from_vrf_withdraw_all(struct bgp *to_bgp, struct bgp *from_bgp,
 						to_bgp, bgp_dest_get_prefix(bn),
 						bpi, afi, safi);
 					bgp_path_info_delete(bn, bpi);
-					bgp_process(to_bgp, bn, afi, safi);
+					bgp_process(to_bgp, bn, bpi, afi, safi);
 				}
 			}
 		}
@@ -2197,7 +2197,7 @@ void vpn_leak_to_vrf_withdraw(struct bgp_path_info *path_vpn)
 					   bpi);
 			bgp_aggregate_decrement(bgp, p, bpi, afi, safi);
 			bgp_path_info_delete(bn, bpi);
-			bgp_process(bgp, bn, afi, safi);
+			bgp_process(bgp, bn, bpi, afi, safi);
 		}
 		bgp_dest_unlock_node(bn);
 	}
@@ -2229,7 +2229,7 @@ void vpn_leak_to_vrf_withdraw_all(struct bgp *to_bgp, afi_t afi)
 							bgp_dest_get_prefix(bn),
 							bpi, afi, safi);
 				bgp_path_info_delete(bn, bpi);
-				bgp_process(to_bgp, bn, afi, safi);
+				bgp_process(to_bgp, bn, bpi, afi, safi);
 			}
 		}
 	}
