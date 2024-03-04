@@ -1429,7 +1429,7 @@ static void evpn_delete_old_local_route(struct bgp *bgp, struct bgpevpn *vpn,
 		 * this table.
 		 */
 		if (pi)
-			bgp_process(bgp, global_dest, afi, safi);
+			bgp_process(bgp, global_dest, pi, afi, safi);
 		bgp_dest_unlock_node(global_dest);
 	}
 
@@ -1749,7 +1749,7 @@ static int update_evpn_type5_route(struct bgp *bgp_vrf, struct prefix_evpn *evp,
 
 	/* schedule for processing and unlock node */
 	if (route_changed) {
-		bgp_process(bgp_evpn, dest, afi, safi);
+		bgp_process(bgp_evpn, dest, pi, afi, safi);
 		bgp_dest_unlock_node(dest);
 	}
 
@@ -2315,7 +2315,7 @@ static int update_evpn_route(struct bgp *bgp, struct bgpevpn *vpn,
 			false /* setup_sync */, NULL /* old_is_sync */);
 
 		/* Schedule for processing and unlock node. */
-		bgp_process(bgp, dest, afi, safi);
+		bgp_process(bgp, dest, global_pi, afi, safi);
 		bgp_dest_unlock_node(dest);
 	}
 
@@ -2375,7 +2375,7 @@ static int delete_evpn_type5_route(struct bgp *bgp_vrf, struct prefix_evpn *evp)
 
 	delete_evpn_route_entry(bgp_evpn, afi, safi, dest, &pi);
 	if (pi)
-		bgp_process(bgp_evpn, dest, afi, safi);
+		bgp_process(bgp_evpn, dest, pi, afi, safi);
 	bgp_dest_unlock_node(dest);
 	return 0;
 }
@@ -2415,7 +2415,7 @@ static int delete_evpn_route(struct bgp *bgp, struct bgpevpn *vpn,
 		 * this table.
 		 */
 		if (pi)
-			bgp_process(bgp, global_dest, afi, safi);
+			bgp_process(bgp, global_dest, pi, afi, safi);
 		bgp_dest_unlock_node(global_dest);
 	}
 
@@ -2587,7 +2587,7 @@ void bgp_evpn_update_type2_route_entry(struct bgp *bgp, struct bgpevpn *vpn,
 			NULL /* old_is_sync */);
 
 		/* Schedule for processing and unlock node. */
-		bgp_process(bgp, global_dest, afi, safi);
+		bgp_process(bgp, global_dest, global_pi, afi, safi);
 		bgp_dest_unlock_node(global_dest);
 	}
 
@@ -2672,7 +2672,7 @@ static void delete_global_type2_routes(struct bgp *bgp, struct bgpevpn *vpn)
 
 			delete_evpn_route_entry(bgp, afi, safi, dest, &pi);
 			if (pi)
-				bgp_process(bgp, dest, afi, safi);
+				bgp_process(bgp, dest, pi, afi, safi);
 		}
 
 		/* Unlock RD node. */
@@ -3141,7 +3141,7 @@ static int install_evpn_route_entry_in_vrf(struct bgp *bgp_vrf,
 				safi);
 
 	/* Perform route selection and update zebra, if required. */
-	bgp_process(bgp_vrf, dest, afi, safi);
+	bgp_process(bgp_vrf, dest, pi, afi, safi);
 
 	/* Process for route leaking. */
 	vpn_leak_from_vrf_update(bgp_get_default(), bgp_vrf, pi);
@@ -3503,7 +3503,7 @@ static int uninstall_evpn_route_entry_in_vrf(struct bgp *bgp_vrf,
 	bgp_evpn_path_nh_del(bgp_vrf, pi);
 
 	/* Perform route selection and update zebra, if required. */
-	bgp_process(bgp_vrf, dest, afi, safi);
+	bgp_process(bgp_vrf, dest, pi, afi, safi);
 
 	/* Unlock route node. */
 	bgp_dest_unlock_node(dest);
@@ -4500,7 +4500,7 @@ static void update_advertise_vni_route(struct bgp *bgp, struct bgpevpn *vpn,
 	}
 
 	/* Schedule for processing and unlock node. */
-	bgp_process(bgp, global_dest, afi, safi);
+	bgp_process(bgp, global_dest, global_pi, afi, safi);
 	bgp_dest_unlock_node(global_dest);
 }
 
@@ -4550,7 +4550,7 @@ static void update_advertise_vni_routes(struct bgp *bgp, struct bgpevpn *vpn)
 			false /* setup_sync */, NULL /* old_is_sync */);
 
 		/* Schedule for processing and unlock node. */
-		bgp_process(bgp, global_dest, afi, safi);
+		bgp_process(bgp, global_dest, pi, afi, safi);
 		bgp_dest_unlock_node(global_dest);
 	}
 
@@ -4595,7 +4595,7 @@ static int delete_withdraw_vni_routes(struct bgp *bgp, struct bgpevpn *vpn)
 		 * this table.
 		 */
 		if (pi)
-			bgp_process(bgp, global_dest, afi, safi);
+			bgp_process(bgp, global_dest, pi, afi, safi);
 		bgp_dest_unlock_node(global_dest);
 	}
 
