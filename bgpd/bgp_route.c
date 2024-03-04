@@ -2903,9 +2903,9 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 	zlog_debug("%pBD(%s) looking for unsorted", dest, bgp->name_pretty);
 	while (pi && CHECK_FLAG(pi->flags, BGP_PATH_UNSORTED)) {
 		struct bgp_path_info *next = pi->next;
+		char buf1[256];
 
-		zlog_debug("%pBD(%s) have my first unsorted %p %u", dest,
-			   bgp->name_pretty, pi, pi->flags);
+		zlog_debug("%pBD(%s) have my first unsorted %p %s", dest, bgp->name_pretty, pi, bgp_route_dump_path_info_flags(pi, buf1, sizeof(buf1)));
 		//if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) && !CHECK_FLAG(pi->flags, BGP_PATH_REMOVED))
 		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
 			old_select = pi;
@@ -4042,8 +4042,9 @@ void bgp_process(struct bgp *bgp, struct bgp_dest *dest,
 	SET_FLAG(dest->flags, BGP_NODE_PROCESS_SCHEDULED);
 	bgp_dest_lock_node(dest);
 
-	zlog_debug("%pBD HAS BEEN ENQUEUED", dest);
-	//	struct bgp_path_info *pi = dest->info;
+	zlog_debug("%pBD(%s) HAS BEEN ENQUEUED", dest, bgp->name_pretty);
+//	zlog_backtrace(LOG_INFO);
+//	struct bgp_path_info *pi = dest->info;
 
 	//	if (pi && !CHECK_FLAG(pi->flags, BGP_PATH_UNSORTED)) {
 	//		zlog_debug("%pBD has been enqueued but the first entry is not sorted", dest);
@@ -11140,10 +11141,12 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 		}
 	}
 
-	if (json_paths)
+	if (json_paths) {
+		json_object_int_add(json_path, "PIPIPI", (uint64_t)path);
 		json_object_string_add(json_path, "PIselectionReason",
 				       bgp_path_selection_reason2str(
 					       path->reason));
+	}
 
 	if (rpki_curr_state != RPKI_NOT_BEING_USED) {
 		if (json_paths)
