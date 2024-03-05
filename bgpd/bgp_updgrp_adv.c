@@ -965,7 +965,7 @@ void subgroup_default_originate(struct update_subgroup *subgrp, int withdraw)
 							    dest, subgrp,
 							    default_attr, pi))
 							bgp_attr_flush(
-								&default_attr);
+								default_attr);
 					} else
 						bgp_attr_flush(&attr);
 				}
