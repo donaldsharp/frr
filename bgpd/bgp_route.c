@@ -2949,7 +2949,6 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 		    !CHECK_FLAG(old_select->flags, BGP_PATH_SELECTED))
 			old_select = NULL;
 	}
-
 	if (!unsorted_list)
 		unsorted_items = true;
 	else
@@ -2982,12 +2981,12 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 					   __func__, dest, bgp->name_pretty,
 					   first->peer->host);
 
-
 			if (old_select != first &&
 			    CHECK_FLAG(first->flags, BGP_PATH_REMOVED)) {
 				dest = bgp_path_info_reap_unsorted(dest, first);
 				assert(dest);
 			} else {
+				UNSET_FLAG(first->flags, BGP_PATH_UNSORTED);
 				/*
 				 * We are in hold down, so we cannot sort this
 				 * item yet.  Let's wait, so hold the unsorted
@@ -3140,26 +3139,18 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 			   bgp->name_pretty,
 			   bgp_path_selection_reason2str(dest->reason));
 		UNSET_FLAG(first->flags, BGP_PATH_UNSORTED);
-
-#if 0
-		walk = bgp_dest_get_bgp_path_info(dest);
-		zlog_debug("%pBD(%s) POST addition of unsorted of current walk through, starting at  %p", dest, bgp->name_pretty, walk);
-		count = 0;
-		while (walk) {
-			count++;
-			zlog_debug("%pBD(%s) WALK: %p Prev: %p Next: %p", dest, bgp->name_pretty, walk, walk->prev, walk->next);
-			walk = walk->next;
-			if (count > 100)
-				assert(NULL);
-		}
-#endif
 	}
 
-	zlog_debug("%pBD(%s) after sorting", dest, bgp->name_pretty);
+	zlog_debug("%pBD(%s) after sorting %p", dest, bgp->name_pretty, dest->info);
 	if (!unsorted_items) {
 		new_select = bgp_dest_get_bgp_path_info(dest);
+		while (new_select && BGP_PATH_HOLDDOWN(new_select))
+			new_select = new_select->next;
+
 		if (new_select)
 			dest->reason = new_select->reason;
+		else
+			dest->reason = bgp_path_selection_none;
 	} else
 		new_select = old_select;
 
