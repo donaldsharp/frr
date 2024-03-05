@@ -585,12 +585,11 @@ void bgp_generate_updgrp_packets(struct event *thread)
 
 				if (CHECK_FLAG(peer->cap,
 					       PEER_CAP_RESTART_RCV)) {
-					if (!(PAF_SUBGRP(paf))->t_coalesce
-					    && peer->afc_nego[afi][safi]
-					    && peer->synctime
-					    && !CHECK_FLAG(
-						    peer->af_sflags[afi][safi],
-						    PEER_STATUS_EOR_SEND)) {
+					if (!(PAF_SUBGRP(paf))->t_coalesce &&
+					    peer->afc_nego[afi][safi] && peer->synctime &&
+					    !CHECK_FLAG(peer->af_sflags[afi][safi],
+							PEER_STATUS_EOR_SEND) &&
+					    advertise_list_is_empty(PAF_SUBGRP(paf))) {
 						/* If EOR is disabled,
 						 * the message is  not sent
 						 */
