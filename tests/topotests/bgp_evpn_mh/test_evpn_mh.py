@@ -23,6 +23,8 @@ import pytest
 import json
 import platform
 from functools import partial
+from lib.topolog import logger
+from lib.common_config import generate_support_bundle
 
 pytestmark = [pytest.mark.bgpd, pytest.mark.pimd]
 
@@ -466,6 +468,8 @@ def check_remote_es(esi, vtep_ips, dut_name, down_vteps):
     remote_set = remote_set - down_vtep_set
 
     vtep_set = set(vtep_ips)
+    logger.info("REMOTE_SET: {}".format(remote_set))
+    logger.info("VTEP_SET: {}".format(vtep_set))
     diff = remote_set.symmetric_difference(vtep_set)
 
     return (esi, diff) if diff else None
@@ -514,6 +518,7 @@ def check_one_es(dut, esi, down_vteps):
     bgp_es = dut.vtysh_cmd("show bgp l2vp evpn es %s json" % esi)
     es = json.loads(bgp_es)
 
+    logger.info("CHECK_ONE_ES")
     if not es:
         return "esi %s not found" % esi
 
@@ -523,6 +528,9 @@ def check_one_es(dut, esi, down_vteps):
     for vtep in es.get("vteps", []):
         vtep_ips.append(vtep["vtep_ip"])
 
+    logger.info("ESI {} types: {} vtep_ips {}".format(esi, types, vtep_ips))
+    logger.info("DUT: {} down_vteps {}".format(dut.name, down_vteps))
+                
     if "local" in types:
         result = check_local_es(esi, vtep_ips, dut.name, down_vteps)
     else:
@@ -584,12 +592,14 @@ def test_evpn_ead_update():
     # down a remote host link and check if the EAD withdraw is rxed
     # Note: LACP is not working as expected so I am temporarily shutting
     # down the link on the remote TOR instead of the remote host
+    logger.info("REMOTE TOR NAME: {}".format(remote_tor_name))
     remote_tor.run("ip link set dev %s-%s down" % (remote_tor_name, "eth2"))
     down_vteps.append(tor_ips.get(remote_tor_name))
     _, result = topotest.run_and_expect(test_fn, None, count=20, wait=3)
     assertmsg = '"{}" ES incorrect after remote link down'.format(dut_name)
     assert result is None, assertmsg
 
+    generate_support_bundle()
     # bring up remote host link and check if the EAD update is rxed
     down_vteps.remove(tor_ips.get(remote_tor_name))
     remote_tor.run("ip link set dev %s-%s up" % (remote_tor_name, "eth2"))

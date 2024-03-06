@@ -3991,6 +3991,20 @@ void bgp_process(struct bgp *bgp, struct bgp_dest *dest,
 	if (pi)
 		SET_FLAG(pi->flags, BGP_PATH_UNSORTED);
 
+	if (pi != dest->info) {
+		struct bgp_path_info *first = dest->info;
+
+		if (pi->next)
+			pi->next->prev = pi->prev;
+		if (pi->prev)
+			pi->prev->next = pi->next;
+
+		first->prev = pi;
+		pi->next = first;
+		pi->prev = NULL;
+		bgp_dest_set_bgp_path_info(dest, pi);
+	}
+
 	/* already scheduled for processing? */
 	if (CHECK_FLAG(dest->flags, BGP_NODE_PROCESS_SCHEDULED)) {
 		zlog_debug("%pBD is already scheduled for processing doing nothing %pi",
@@ -4042,7 +4056,22 @@ void bgp_process(struct bgp *bgp, struct bgp_dest *dest,
 	//	zlog_backtrace(LOG_INFO);
 	//	struct bgp_path_info *pi = dest->info;
 
-	if (pi && !CHECK_FLAG(pi->flags, BGP_PATH_UNSORTED)) {
+	if (pi != dest->info) {
+		struct bgp_path_info *first = dest->info;
+
+		if (pi->next)
+			pi->next->prev = pi->prev;
+		if (pi->prev)
+			pi->prev->next = pi->next;
+
+		first->prev = pi;
+		pi->next = first;
+		pi->prev = NULL;
+		bgp_dest_set_bgp_path_info(dest, pi);
+	}
+
+	struct bgp_path_info *first = dest->info;
+	if (first && !CHECK_FLAG(first->flags, BGP_PATH_UNSORTED)) {
 		zlog_debug("%pBD has been enqueued but the first entry is not sorted",
 			   dest);
 		zlog_backtrace(LOG_INFO);
@@ -6799,6 +6828,7 @@ void bgp_static_update(struct bgp *bgp, const struct prefix *p,
 		bgp->peer_self->rmap_type = 0;
 
 		if (ret == RMAP_DENYMATCH) {
+			zlog_debug("%pFX rmap deny", p);
 			/* Free uninterned attribute. */
 			bgp_attr_flush(&attr_tmp);
 

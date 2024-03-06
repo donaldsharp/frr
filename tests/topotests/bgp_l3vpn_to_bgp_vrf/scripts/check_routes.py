@@ -357,7 +357,7 @@ luCommand(
     'vtysh -c "show bgp vrf r1-cust1 ipv4 uni 6.0.1.0/24"',
     "4 available, best",
     "wait",
-    "Ensure 6.0.1.0 shows up on r1",
+    "Ensure 6.0.1.0A shows up on r1",
     10,
 )
 luCommand(
