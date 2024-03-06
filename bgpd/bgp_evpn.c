@@ -1436,6 +1436,7 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	safi_t safi = SAFI_EVPN;
 	int ret = 0;
 
+	zlog_debug("EVPN_ROUTE_SELECT_INSTALL: %pBD", dest);
 	/* Compute the best path. */
 	bgp_best_selection(bgp, dest, &bgp->maxpaths[afi][safi], &old_and_new,
 			   afi, safi);
@@ -1526,7 +1527,7 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 
 	/* Reap old select bgp_path_info, if it has been removed */
 	if (old_select && CHECK_FLAG(old_select->flags, BGP_PATH_REMOVED))
-		bgp_path_info_reap(dest, old_select);
+		bgp_path_info_reap(__func__, dest, old_select);
 
 	return ret;
 }
@@ -2086,7 +2087,7 @@ evpn_cleanup_local_non_best_route(struct bgp *bgp, struct bgpevpn *vpn,
 	/* tell zebra to re-add the best remote path */
 	evpn_zebra_reinstall_best_route(bgp, vpn, dest);
 
-	return bgp_path_info_reap(dest, local_pi);
+	return bgp_path_info_reap(__func__, dest, local_pi);
 }
 
 static inline bool bgp_evpn_route_add_l3_ecomm_ok(struct bgpevpn *vpn,
@@ -2368,7 +2369,7 @@ static int delete_evpn_route(struct bgp *bgp, struct bgpevpn *vpn,
 	 */
 	delete_evpn_route_entry(bgp, afi, safi, dest, &pi);
 	if (pi) {
-		dest = bgp_path_info_reap(dest, pi);
+		dest = bgp_path_info_reap(__func__, dest, pi);
 		assert(dest);
 		evpn_route_select_install(bgp, vpn, dest);
 	}
@@ -2633,7 +2634,7 @@ static struct bgp_dest *delete_vni_type2_route(struct bgp *bgp,
 
 	/* Route entry in local table gets deleted immediately. */
 	if (pi)
-		dest = bgp_path_info_reap(dest, pi);
+		dest = bgp_path_info_reap(__func__, dest, pi);
 
 	return dest;
 }
@@ -2687,7 +2688,7 @@ static void delete_all_vni_routes(struct bgp *bgp, struct bgpevpn *vpn)
 		     (pi != NULL) && (nextpi = pi->next, 1); pi = nextpi) {
 			bgp_evpn_remote_ip_hash_del(vpn, pi);
 			bgp_path_info_delete(dest, pi);
-			dest = bgp_path_info_reap(dest, pi);
+			dest = bgp_path_info_reap(__func__, dest, pi);
 
 			assert(dest);
 		}
@@ -2698,7 +2699,7 @@ static void delete_all_vni_routes(struct bgp *bgp, struct bgpevpn *vpn)
 		for (pi = bgp_dest_get_bgp_path_info(dest);
 		     (pi != NULL) && (nextpi = pi->next, 1); pi = nextpi) {
 			bgp_path_info_delete(dest, pi);
-			dest = bgp_path_info_reap(dest, pi);
+			dest = bgp_path_info_reap(__func__, dest, pi);
 
 			assert(dest);
 		}
@@ -6415,9 +6416,10 @@ void bgp_filter_evpn_routes_upon_martian_change(
 
 		for (dest = bgp_table_top(table); dest;
 		     dest = bgp_route_next(dest)) {
+			struct bgp_path_info *next;
 
-			for (pi = bgp_dest_get_bgp_path_info(dest); pi;
-			     pi = pi->next) {
+			for (pi = bgp_dest_get_bgp_path_info(dest);
+			     (pi != NULL) && (next = pi->next, 1); pi = next) {
 				bool affected = false;
 				const struct prefix *p;
 

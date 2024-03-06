@@ -163,7 +163,7 @@ static int bgp_evpn_es_route_select_install(struct bgp *bgp,
 
 	/* Reap old select bgp_path_info, if it has been removed */
 	if (old_select && CHECK_FLAG(old_select->flags, BGP_PATH_REMOVED))
-		bgp_path_info_reap(dest, old_select);
+		bgp_path_info_reap(__func__, dest, old_select);
 
 	return ret;
 }
@@ -323,7 +323,7 @@ static void bgp_evpn_es_route_del_all(struct bgp *bgp, struct bgp_evpn_es *es)
 		for (pi = bgp_dest_get_bgp_path_info(dest);
 		     (pi != NULL) && (nextpi = pi->next, 1); pi = nextpi) {
 			bgp_path_info_delete(dest, pi);
-			dest = bgp_path_info_reap(dest, pi);
+			dest = bgp_path_info_reap(__func__, dest, pi);
 
 			assert(dest);
 		}
@@ -521,7 +521,7 @@ static int bgp_evpn_mh_route_delete(struct bgp *bgp, struct bgp_evpn_es *es,
 	 */
 	delete_evpn_route_entry(bgp, afi, safi, dest, &pi);
 	if (pi)
-		dest = bgp_path_info_reap(dest, pi);
+		dest = bgp_path_info_reap(__func__, dest, pi);
 
 	assert(dest);
 	bgp_dest_unlock_node(dest);

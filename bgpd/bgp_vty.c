@@ -2963,6 +2963,7 @@ DEFUN (bgp_deterministic_med,
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 
 	if (!CHECK_FLAG(bgp->flags, BGP_FLAG_DETERMINISTIC_MED)) {
+		zlog_debug("SETTING DMED in cli");
 		SET_FLAG(bgp->flags, BGP_FLAG_DETERMINISTIC_MED);
 		bgp_recalculate_all_bestpaths(bgp);
 	}

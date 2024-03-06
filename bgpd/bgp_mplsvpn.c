@@ -2560,8 +2560,11 @@ void vpn_leak_no_retain(struct bgp *to_bgp, struct bgp *vpn_from, afi_t afi)
 			continue;
 
 		for (bn = bgp_table_top(table); bn; bn = bgp_route_next(bn)) {
-			for (bpi = bgp_dest_get_bgp_path_info(bn); bpi;
-			     bpi = bpi->next) {
+			struct bgp_path_info *next;
+
+			for (bpi = bgp_dest_get_bgp_path_info(bn);
+			     (bpi != NULL) && (next = bpi->next, 1);
+			     bpi = next) {
 				if (bpi->extra && bpi->extra->vrfleak &&
 				    bpi->extra->vrfleak->bgp_orig == to_bgp)
 					continue;
