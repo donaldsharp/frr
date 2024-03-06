@@ -171,7 +171,7 @@ daemon_start() {
 	eval args="\$${daemon}_options"
 
 	if [ "$daemon" = "bgpd" -o "$daemon" = "zebra" ]; then
-		lttng_preload="LD_PRELOAD=liblttng-ust-fork.so.0"
+		lttng_preload="LD_PRELOAD=liblttng-ust-fork.so.1"
 	fi
 
 	cmd="$lttng_preload $all_wrap $wrap $bin $nsopt -d $frr_global_options $instopt $args"
