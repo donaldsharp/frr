@@ -227,6 +227,7 @@ static inline struct bgp_dest *bgp_route_next_until(struct bgp_dest *dest,
 	return bgp_dest_from_rnode(rnode);
 }
 
+extern void bgp_dest_walk_dumper(struct bgp_dest *dest);
 /*
  * bgp_node_get
  */
@@ -243,6 +244,7 @@ static inline struct bgp_dest *bgp_node_get(struct bgp_table *const table,
 		rn->info = dest;
 		dest->rn = rn;
 	}
+
 	return rn->info;
 }
 
@@ -380,6 +382,9 @@ static inline void bgp_dest_set_bgp_path_info(struct bgp_dest *dest,
 					      struct bgp_path_info *bi)
 {
 	dest->info = bi;
+
+	zlog_debug("%pBD post set path info for %p", dest, bi);
+	bgp_dest_walk_dumper(dest);
 }
 
 static inline struct bgp_table *

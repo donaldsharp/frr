@@ -2369,8 +2369,10 @@ static int delete_evpn_route(struct bgp *bgp, struct bgpevpn *vpn,
 	 */
 	delete_evpn_route_entry(bgp, afi, safi, dest, &pi);
 	if (pi) {
+		zlog_debug("%pBD PRE REAP pi: %p", dest, pi);
 		dest = bgp_path_info_reap(__func__, dest, pi);
 		assert(dest);
+		zlog_debug("%pBD post reap info: %p", dest, dest->info);
 		evpn_route_select_install(bgp, vpn, dest);
 	}
 

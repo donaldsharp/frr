@@ -1923,7 +1923,7 @@ class Router(Node):
 
                 cmdenv = "ASAN_OPTIONS="
                 if asan_abort:
-                    cmdenv += "abort_on_error=1:"
+                    cmdenv += "halt_on_error=1:"
                 cmdenv += "log_path={0}/{1}.asan.{2} ".format(
                     self.logdir, self.name, daemon
                 )

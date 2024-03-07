@@ -114,6 +114,28 @@ static const struct message bgp_pmsi_tnltype_str[] = {
 #define VRFID_NONE_STR "-"
 #define SOFT_RECONFIG_TASK_MAX_PREFIX 25000
 
+extern void bgp_dest_walk_dumper(struct bgp_dest *dest);
+void bgp_dest_walk_dumper(struct bgp_dest *dest)
+{
+	uint32_t count = 0;
+	struct bgp_path_info *walk = dest->info;
+	struct bgp_path_info *prev = NULL;
+
+	if (!walk)
+		zlog_debug("%pBD has no info pointers", dest);
+
+	while (walk) {
+		count++;
+		zlog_debug("%pBD WALK: %p Prev: %p Next: %p", dest, walk,
+			   walk->prev, walk->next);
+		assert(walk->prev == prev);
+		prev = walk;
+		walk = walk->next;
+		if (count > 100)
+			assert(NULL);
+	}
+}
+
 static inline char *bgp_route_dump_path_info_flags(struct bgp_path_info *pi,
 						   char *buf, size_t len)
 {
@@ -193,6 +215,8 @@ struct bgp_dest *bgp_afi_node_get(struct bgp_table *table, afi_t afi,
 
 	dest = bgp_node_get(table, p);
 
+	zlog_debug("%pBD for %pFX", dest, p);
+	bgp_dest_walk_dumper(dest);
 	if ((safi == SAFI_MPLS_VPN) || (safi == SAFI_ENCAP)
 	    || (safi == SAFI_EVPN))
 		dest->pdest = pdest;
@@ -476,11 +500,16 @@ void bgp_path_info_add_with_caller(const char *name, struct bgp_dest *dest,
 
 	top = bgp_dest_get_bgp_path_info(dest);
 
+	zlog_debug("info_add: %pBD info %p pi %p", dest, dest->info, pi);
+	bgp_dest_walk_dumper(dest);
 	pi->next = top;
 	pi->prev = NULL;
 	if (top)
 		top->prev = pi;
 	bgp_dest_set_bgp_path_info(dest, pi);
+
+	zlog_debug("info_add post: %pBD", dest);
+	bgp_dest_walk_dumper(dest);
 
 	SET_FLAG(pi->flags, BGP_PATH_UNSORTED);
 	bgp_path_info_lock(pi);
@@ -496,6 +525,7 @@ struct bgp_dest *bgp_path_info_reap(const char *caller, struct bgp_dest *dest,
 				    struct bgp_path_info *pi)
 {
 	zlog_debug("%s: %pBD reap sorted %pi", caller, dest, pi);
+	bgp_dest_walk_dumper(dest);
 	if (pi->next)
 		pi->next->prev = pi->prev;
 	if (pi->prev)
@@ -503,7 +533,12 @@ struct bgp_dest *bgp_path_info_reap(const char *caller, struct bgp_dest *dest,
 	else
 		bgp_dest_set_bgp_path_info(dest, pi->next);
 
+	zlog_debug("%s: post %pBD reap sorted", caller, dest);
+	bgp_dest_walk_dumper(dest);
 	bgp_path_info_mpath_dequeue(pi);
+
+	pi->next = NULL;
+	pi->prev = NULL;
 	bgp_path_info_unlock(pi);
 	hook_call(bgp_snmp_update_stats, dest, pi, false);
 
@@ -517,6 +552,8 @@ static struct bgp_dest *bgp_path_info_reap_unsorted(struct bgp_dest *dest,
 	bgp_path_info_mpath_dequeue(pi);
 	bgp_path_info_unlock(pi);
 
+	pi->next = NULL;
+	pi->prev = NULL;
 	hook_call(bgp_snmp_update_stats, dest, pi, false);
 
 	return bgp_dest_unlock_node(dest);
@@ -2906,6 +2943,7 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 		char buf1[256];
 
 		zlog_debug("%pBD(%s) have my first unsorted %p %s", dest, bgp->name_pretty, pi, bgp_route_dump_path_info_flags(pi, buf1, sizeof(buf1)));
+		bgp_dest_walk_dumper(dest);
 		//if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) && !CHECK_FLAG(pi->flags, BGP_PATH_REMOVED))
 		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
 			old_select = pi;
@@ -2937,6 +2975,10 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 
 		unsorted_list_spot = pi;
 		pi = next;
+
+		zlog_debug("%pBD(%s) placed on unsorted list", dest,
+			   bgp->name_pretty);
+		bgp_dest_walk_dumper(dest);
 	}
 
 	if (!old_select) {
@@ -2963,6 +3005,7 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 
 		zlog_debug("%pBD(%s) Looking at first %p item on unsorted_list(%p)",
 			   dest, bgp->name_pretty, first, unsorted_list);
+		bgp_dest_walk_dumper(dest);
 		first->next = NULL;
 		first->prev = NULL;
 
@@ -3143,10 +3186,11 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 		zlog_debug("%pBD(%s) setting reason to %s", dest,
 			   bgp->name_pretty,
 			   bgp_path_selection_reason2str(dest->reason));
+		bgp_dest_walk_dumper(dest);
 		UNSET_FLAG(first->flags, BGP_PATH_UNSORTED);
 	}
 
-	zlog_debug("%pBD(%s) after sorting %p", dest, bgp->name_pretty, dest->info);
+
 	if (!unsorted_items) {
 		new_select = bgp_dest_get_bgp_path_info(dest);
 		while (new_select && BGP_PATH_HOLDDOWN(new_select))
@@ -3159,9 +3203,13 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 	} else
 		new_select = old_select;
 
+
 	/*
 	 * Reinsert all the unsorted_holddown items for future processing
 	 */
+	zlog_debug("%pBD(%s) after sorting %p", dest, bgp->name_pretty,
+		   dest->info);
+	bgp_dest_walk_dumper(dest);
 	while (unsorted_holddown) {
 		zlog_debug("%pBD(%s) we have unsorted hold down %p, readding",
 			   dest, bgp->name_pretty, unsorted_holddown);
@@ -3178,6 +3226,9 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 
 		bgp_dest_set_bgp_path_info(dest, first);
 	}
+	zlog_debug("%pBD(%s) after putting unsorted back", dest,
+		   bgp->name_pretty);
+	bgp_dest_walk_dumper(dest);
 	/* Now that we know which path is the bestpath see if any of the other
 	 * paths
 	 * qualify as multipaths
@@ -3249,6 +3300,7 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 
 	zlog_debug("%pBD(%s) OLD SELECT: %p and NEW: %p", dest,
 		   bgp->name_pretty, old_select, new_select);
+	bgp_dest_walk_dumper(dest);
 	result->old = old_select;
 	result->new = new_select;
 
@@ -3988,21 +4040,35 @@ void bgp_process(struct bgp *bgp, struct bgp_dest *dest,
 	 * situation, even if the node is already
 	 * scheduled.
 	 */
-	if (pi)
+	if (pi) {
+		struct bgp_path_info *first = bgp_dest_get_bgp_path_info(dest);
+
 		SET_FLAG(pi->flags, BGP_PATH_UNSORTED);
 
-	if (pi != dest->info) {
-		struct bgp_path_info *first = dest->info;
+		if (pi != first)
+			zlog_debug("%pBD PI %p is not the first on the list",
+				   dest, pi);
+		//assert(0);
 
-		if (pi->next)
-			pi->next->prev = pi->prev;
-		if (pi->prev)
-			pi->prev->next = pi->next;
+		zlog_debug("%pBD bgp_process walk: %p pi %p", dest, dest->info,
+			   pi);
+		bgp_dest_walk_dumper(dest);
+#if 1
+		if (pi != first) {
+			if (pi->next)
+				pi->next->prev = pi->prev;
+			if (pi->prev)
+				pi->prev->next = pi->next;
 
-		first->prev = pi;
-		pi->next = first;
-		pi->prev = NULL;
-		bgp_dest_set_bgp_path_info(dest, pi);
+			first->prev = pi;
+			pi->next = first;
+			pi->prev = NULL;
+			bgp_dest_set_bgp_path_info(dest, pi);
+		}
+#endif
+		zlog_debug("%pBD bgp_process POST move start: %p", dest,
+			   dest->info);
+		bgp_dest_walk_dumper(dest);
 	}
 
 	/* already scheduled for processing? */
@@ -4056,25 +4122,11 @@ void bgp_process(struct bgp *bgp, struct bgp_dest *dest,
 	//	zlog_backtrace(LOG_INFO);
 	//	struct bgp_path_info *pi = dest->info;
 
-	if (pi != dest->info) {
-		struct bgp_path_info *first = dest->info;
-
-		if (pi->next)
-			pi->next->prev = pi->prev;
-		if (pi->prev)
-			pi->prev->next = pi->next;
-
-		first->prev = pi;
-		pi->next = first;
-		pi->prev = NULL;
-		bgp_dest_set_bgp_path_info(dest, pi);
-	}
-
 	struct bgp_path_info *first = dest->info;
 	if (first && !CHECK_FLAG(first->flags, BGP_PATH_UNSORTED)) {
 		zlog_debug("%pBD has been enqueued but the first entry is not sorted",
 			   dest);
-		zlog_backtrace(LOG_INFO);
+		//zlog_backtrace(LOG_INFO);
 	}
 	/* can't be enqueued twice */
 	assert(STAILQ_NEXT(dest, pq) == NULL);
@@ -4305,7 +4357,7 @@ void bgp_rib_remove(struct bgp_dest *dest, struct bgp_path_info *pi,
 		pi->next = NULL;
 		pi->prev = NULL;
 #endif
-#if 1
+#if 0
 
 	if (dest->info != pi) {
 		zlog_debug("dest->info %p is not pi %p", dest->info, pi);
@@ -4325,7 +4377,8 @@ void bgp_rib_remove(struct bgp_dest *dest, struct bgp_path_info *pi,
 	count = 0;
 
 	walk = bgp_dest_get_bgp_path_info(dest);
-	zlog_debug("%pBD rib remove post %p", dest, walk);
+	zlog_debug("%pBD rib remove post %p", dest, dest->info);
+	bgp_dest_walk_dumper(dest);
 	while (walk) {
 		count++;
 		zlog_debug("%pBD WALK: %p Prev: %p Next: %p", dest, walk,

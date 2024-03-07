@@ -45,7 +45,7 @@ void bgp_table_finish(struct bgp_table **rt)
 		*rt = NULL;
 	}
 }
-
+extern void bgp_dest_walk_dumper(struct bgp_dest *dest);
 /*
  * bgp_dest_lock_node
  */
@@ -53,6 +53,7 @@ struct bgp_dest *bgp_dest_lock_node(struct bgp_dest *dest)
 {
 	frrtrace(1, frr_bgp, bgp_dest_lock, dest);
 	struct route_node *rn = route_lock_node(bgp_dest_to_rnode(dest));
+
 
 	return bgp_dest_from_rnode(rn);
 }
@@ -240,6 +241,5 @@ static ssize_t printfrr_bd(struct fbuf *buf, struct printfrr_eargs *ea,
 		return bputs(buf, "(null)");
 
 	/* need to get the real length even if buffer too small */
-	prefix2str(p, cbuf, sizeof(cbuf));
-	return bputs(buf, cbuf);
+	return bprintfrr(buf, "%s(%p)", prefix2str(p, cbuf, sizeof(cbuf)), dest);
 }
