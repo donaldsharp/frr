@@ -2917,16 +2917,23 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 			 * in FIB, then it is advertised
 			 */
 			if (advertise) {
-				if (!bgp_check_withdrawal(bgp, dest))
-					bgp_adj_out_set_subgroup(
-						dest, subgrp, &attr, selected);
-				else
+				if (!bgp_check_withdrawal(bgp, dest)) {
+					if (!bgp_adj_out_set_subgroup(
+						    dest, subgrp, &attr,
+						    selected))
+						bgp_attr_flush(&attr);
+				} else {
 					bgp_adj_out_unset_subgroup(
 						dest, subgrp, 1, addpath_tx_id);
-			}
-		} else
+					bgp_attr_flush(&attr);
+				}
+			} else
+				bgp_attr_flush(&attr);
+		} else {
 			bgp_adj_out_unset_subgroup(dest, subgrp, 1,
 						   addpath_tx_id);
+			bgp_attr_flush(&attr);
+		}
 	}
 
 	/* If selected is NULL we must withdraw the path using addpath_tx_id */
