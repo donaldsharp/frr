@@ -1598,7 +1598,8 @@ static struct bgp_path_info *bgp_evpn_route_get_local_path(
 static int update_evpn_type5_route_entry(struct bgp *bgp_evpn,
 					 struct bgp *bgp_vrf, afi_t afi,
 					 safi_t safi, struct bgp_dest *dest,
-					 struct attr *attr, int *route_changed)
+					 struct attr *attr, int *route_changed,
+					 struct bgp_path_info **entry)
 {
 	struct attr *attr_new = NULL;
 	struct bgp_path_info *pi = NULL;
@@ -1657,8 +1658,8 @@ static int update_evpn_type5_route_entry(struct bgp *bgp_evpn,
 
 		/* add the route entry to route node*/
 		bgp_path_info_add(dest, pi);
+		*entry = pi;
 	} else {
-
 		tmp_pi = local_pi;
 		if (!attrhash_cmp(tmp_pi->attr, attr)) {
 
@@ -1690,6 +1691,7 @@ static int update_evpn_type5_route_entry(struct bgp *bgp_evpn,
 			tmp_pi->attr = attr_new;
 			tmp_pi->uptime = monotime(NULL);
 		}
+		*entry = local_pi;
 	}
 	return 0;
 }
@@ -1705,6 +1707,7 @@ static int update_evpn_type5_route(struct bgp *bgp_vrf, struct prefix_evpn *evp,
 	struct bgp_dest *dest = NULL;
 	struct bgp *bgp_evpn = NULL;
 	int route_changed = 0;
+	struct bgp_path_info *pi = NULL;
 
 	bgp_evpn = bgp_get_evpn();
 	if (!bgp_evpn)
@@ -1786,7 +1789,7 @@ static int update_evpn_type5_route(struct bgp *bgp_vrf, struct prefix_evpn *evp,
 
 	/* create or update the route entry within the route node */
 	update_evpn_type5_route_entry(bgp_evpn, bgp_vrf, afi, safi, dest, &attr,
-				      &route_changed);
+				      &route_changed, &pi);
 
 	/* schedule for processing and unlock node */
 	if (route_changed) {
