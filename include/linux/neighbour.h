@@ -50,9 +50,10 @@ enum {
 #define NTF_STICKY	0x40
 #define NTF_ROUTER	0x80
 
-/* Neighbor Cache Entry extended flags, part of NDA_EXT_FLAGS attribute */
-#define NTF_E_WEAK_OVERRIDE_STATE 0x01
-#define NTF_E_MH_PEER_SYNC 0x02
+/* Extended flags under NDA_FLAGS_EXT: */
+#define NTF_EXT_MANAGED (1 << 0)
+#define NTF_E_WEAK_OVERRIDE_STATE (1 << 1)
+#define NTF_E_MH_PEER_SYNC (1 << 2)
 
 /*
  *	Neighbor Cache Entry States.
