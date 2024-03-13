@@ -1047,13 +1047,7 @@ int pim_if_del_vif(struct interface *ifp)
 			  __func__, pim_ifp->mroute_vif_index, ifp->name,
 			  ifp->ifindex);
 		return -1;
-	} else {
-		if (PIM_DEBUG_ZEBRA)
-			zlog_debug(
-				"%s: vif_index=%d  on interface %s ifindex=%d",
-				__func__, pim_ifp->mroute_vif_index, ifp->name,
-				ifp->ifindex);
-    }
+	}
 
 	/* if the device was a pim_vxlan iif/oif update vxlan mroute entries */
 	pim_vxlan_del_vif(ifp);
