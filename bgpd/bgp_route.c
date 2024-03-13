@@ -3012,7 +3012,7 @@ void subgroup_process_announce_selected(struct update_subgroup *subgrp,
 				   PEER_STATUS_ORF_WAIT_REFRESH))
 		return;
 
-	memset(&attr, 0, sizeof(attr));
+	memset(pattr, 0, sizeof(*pattr));
 	/* It's initialized in bgp_announce_check() */
 
 	/* Announcement to the subgroup. If the route is filtered withdraw it.
