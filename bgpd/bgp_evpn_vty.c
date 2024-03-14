@@ -3156,12 +3156,13 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 	int rd_header;
 	afi_t afi;
 	safi_t safi;
-	uint32_t prefix_cnt, path_cnt;
+	uint32_t prefix_cnt, path_cnt, rd_prefix_cnt;
 	int first = 1;
+	int prefix_path_count, best_path_selected;
 
 	afi = AFI_L2VPN;
 	safi = SAFI_EVPN;
-	prefix_cnt = path_cnt = 0;
+	prefix_cnt = path_cnt = rd_prefix_cnt = 0;
 
 	/* EVPN routing table is a 2-level table with the first level being
 	 * the RD.
@@ -3193,6 +3194,7 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 		}
 
 		rd_header = 1;
+		rd_prefix_cnt = 0;
 
 		/* Display all prefixes for an RD */
 		for (dest = bgp_table_top(table); dest;
@@ -3201,6 +3203,8 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 				NULL; /* contains prefix under a RD */
 			json_object *json_paths =
 				NULL; /* array of paths under a prefix*/
+			json_object *json_flags =
+				NULL; /* contains flags under a prefix*/
 			const struct prefix_evpn *evp =
 				(const struct prefix_evpn *)bgp_dest_get_prefix(
 					dest);
@@ -3236,8 +3240,11 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 				}
 
 				prefix_cnt++;
+				rd_prefix_cnt++;
 			}
 
+			prefix_path_count = 0;
+			best_path_selected = 0;
 			if (json) {
 				json_prefix = json_object_new_object();
 				json_paths = json_object_new_array();
@@ -3282,21 +3289,103 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 				if (json)
 					json_object_array_add(json_paths,
 							      json_path);
+
+				prefix_path_count++;
+				if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
+					best_path_selected = 1;
 			}
 
 			if (json) {
+				json_object_int_add(json_prefix, "pathCount",
+						    prefix_path_count);
+				json_object_int_add(json_prefix,
+						    "multiPathCount",
+						    bgp_multipath_count(dest));
+
 				if (add_prefix_to_json) {
 					json_object_object_add(json_prefix,
 							       "paths",
 							       json_paths);
+
+					json_flags = json_object_new_object();
+					if ((CHECK_FLAG(
+						    dest->flags,
+						    BGP_NODE_FIB_INSTALLED)) &&
+					    (!CHECK_FLAG(
+						    dest->flags,
+						    BGP_NODE_FIB_INSTALL_PENDING)))
+						json_object_boolean_true_add(
+							json_flags,
+							"fibInstalled");
+					else
+						json_object_boolean_false_add(
+							json_flags,
+							"fibInstalled");
+
+					if ((CHECK_FLAG(
+						    dest->flags,
+						    BGP_NODE_FIB_INSTALL_PENDING)) &&
+					    (!CHECK_FLAG(
+						    dest->flags,
+						    BGP_NODE_FIB_INSTALLED)))
+						json_object_boolean_true_add(
+							json_flags,
+							"fibWaitForInstall");
+					else
+						json_object_boolean_false_add(
+							json_flags,
+							"fibWaitForInstall");
+
+					if (!(CHECK_FLAG(
+						    dest->flags,
+						    BGP_NODE_FIB_INSTALLED)) &&
+					    (!CHECK_FLAG(
+						    dest->flags,
+						    BGP_NODE_FIB_INSTALL_PENDING)))
+						json_object_boolean_true_add(
+							json_flags,
+							"fibInstallFailed");
+					else
+						json_object_boolean_false_add(
+							json_flags,
+							"fibInstallFailed");
+
+					if (!(CHECK_FLAG(
+						    dest->flags,
+						    BGP_FLAG_SUPPRESS_FIB_PENDING)))
+						json_object_boolean_true_add(
+							json_flags,
+							"fibSuppress");
+					else
+						json_object_boolean_false_add(
+							json_flags,
+							"fibSuppress");
+
+					if (best_path_selected)
+						json_object_boolean_true_add(
+							json_flags,
+							"bestPathExists");
+					else
+						json_object_boolean_false_add(
+							json_flags,
+							"bestPathExists");
+					json_object_object_add(json_prefix,
+							       "flags",
+							       json_flags);
+					json_object_int_add(json_rd,
+							    "numRoutes",
+							    rd_prefix_cnt);
+
 					json_object_object_addf(json_rd,
 								json_prefix,
 								"%pFX", p);
 				} else {
 					json_object_free(json_prefix);
 					json_object_free(json_paths);
+					json_object_free(json_flags);
 					json_prefix = NULL;
 					json_paths = NULL;
+					json_flags = NULL;
 				}
 			}
 		}
