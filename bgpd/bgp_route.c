@@ -11464,27 +11464,6 @@ static int bgp_show_community(struct vty *vty, struct bgp *bgp,
 			      const char *comstr, int exact, afi_t afi,
 			      safi_t safi, uint16_t show_flags);
 
-/*
- * bgp_multipath_count
- *
- * Given the bgp dest info, return the number of multipath count
- */
-int bgp_multipath_count(struct bgp_dest *dest)
-{
-	struct bgp_path_info *pi;
-	int multi_path_count = 0;
-
-	pi = bgp_dest_get_bgp_path_info(dest);
-	if (pi != NULL) {
-		for (; pi; pi = pi->next) {
-			if (CHECK_FLAG(pi->flags, BGP_PATH_MULTIPATH))
-				multi_path_count++;
-		}
-	}
-
-	return multi_path_count;
-}
-
 static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			  struct bgp_table *table, enum bgp_show_type type,
 			  void *output_arg, const char *rd, int is_last,
@@ -11507,7 +11486,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 	bool all = CHECK_FLAG(show_flags, BGP_SHOW_OPT_AFI_ALL);
 	bool detail_json = CHECK_FLAG(show_flags, BGP_SHOW_OPT_JSON_DETAIL);
 	bool detail_routes = CHECK_FLAG(show_flags, BGP_SHOW_OPT_ROUTES_DETAIL);
-	int prefix_path_count, best_path_selected;
+	int prefix_path_count, best_path_selected, multi_path_count;
 
 	if (output_cum && *output_cum != 0)
 		header = false;
@@ -11560,6 +11539,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 		display = 0;
 		prefix_path_count = 0;
 		best_path_selected = 0;
+		multi_path_count = 0;
 		if (use_json)
 			json_paths = json_object_new_array();
 		else
@@ -11873,6 +11853,8 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			}
 			display++;
 			prefix_path_count++;
+			if (CHECK_FLAG(pi->flags, BGP_PATH_MULTIPATH))
+				multi_path_count++;
 			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
 				best_path_selected = 1;
 		}
@@ -11957,7 +11939,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 
 			vty_out(vty, ",\"pathCount\":%d\n", prefix_path_count);
 			vty_out(vty, ",\"multiPathCount\":%d\n",
-				bgp_multipath_count(dest));
+				multi_path_count);
 			vty_out(vty, ",\"flags\": { \n");
 			if ((CHECK_FLAG(dest->flags, BGP_NODE_FIB_INSTALLED)) &&
 			    (!CHECK_FLAG(dest->flags,
@@ -12023,7 +12005,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			unsigned long i;
 			for (i = 0; i < *json_header_depth; ++i) {
 				if (i == 1)
-					vty_out(vty, ",\"numRoutes\":%d\n",
+					vty_out(vty, ",\"numPrefixes\":%d\n",
 						output_count);
 				vty_out(vty, " } ");
 			}
