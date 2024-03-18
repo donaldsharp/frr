@@ -11937,47 +11937,61 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			 */
 			vty_json_no_pretty(vty, json_paths);
 
-			vty_out(vty, ",\"pathCount\":%d\n", prefix_path_count);
-			vty_out(vty, ",\"multiPathCount\":%d\n",
-				multi_path_count);
-			vty_out(vty, ",\"flags\": { \n");
-			if ((CHECK_FLAG(dest->flags, BGP_NODE_FIB_INSTALLED)) &&
-			    (!CHECK_FLAG(dest->flags,
-					 BGP_NODE_FIB_INSTALL_PENDING)))
-				vty_out(vty, "\"fibInstalled\": \"true\" ");
-			else
-				vty_out(vty, "\"fibInstalled\": \"false\" ");
+			if (json_detail_header) {
+				vty_out(vty, ",\"pathCount\":%d\n",
+					prefix_path_count);
+				vty_out(vty, ",\"multiPathCount\":%d\n",
+					multi_path_count);
+				vty_out(vty, ",\"flags\": { \n");
+				if ((CHECK_FLAG(dest->flags,
+						BGP_NODE_FIB_INSTALLED)) &&
+				    (!CHECK_FLAG(dest->flags,
+						 BGP_NODE_FIB_INSTALL_PENDING)))
+					vty_out(vty,
+						"\"fibInstalled\": \"true\" ");
+				else
+					vty_out(vty,
+						"\"fibInstalled\": \"false\" ");
 
-			if ((CHECK_FLAG(dest->flags,
-					BGP_NODE_FIB_INSTALL_PENDING)) &&
-			    (!CHECK_FLAG(dest->flags, BGP_NODE_FIB_INSTALLED)))
-				vty_out(vty,
-					",\"fibWaitForInstall\": \"true\" ");
-			else
-				vty_out(vty,
-					",\"fibWaitForInstall\": \"false\" ");
+				if ((CHECK_FLAG(
+					    dest->flags,
+					    BGP_NODE_FIB_INSTALL_PENDING)) &&
+				    (!CHECK_FLAG(dest->flags,
+						 BGP_NODE_FIB_INSTALLED)))
+					vty_out(vty,
+						",\"fibWaitForInstall\": \"true\" ");
+				else
+					vty_out(vty,
+						",\"fibWaitForInstall\": \"false\" ");
 
-			if (!(CHECK_FLAG(dest->flags,
-					 BGP_NODE_FIB_INSTALLED)) &&
-			    (!CHECK_FLAG(dest->flags,
-					 BGP_NODE_FIB_INSTALL_PENDING)))
-				vty_out(vty,
-					",\"fibInstallFailed\": \"true\" ");
-			else
-				vty_out(vty,
-					",\"fibInstallFailed\": \"false\" ");
+				if (CHECK_FLAG(bgp->flags,
+					       BGP_FLAG_SUPPRESS_FIB_PENDING)) {
+					vty_out(vty,
+						",\"fibSuppress\": \"true\" ");
+					if (!(CHECK_FLAG(
+						    dest->flags,
+						    BGP_NODE_FIB_INSTALLED)) &&
+					    (!CHECK_FLAG(
+						    dest->flags,
+						    BGP_NODE_FIB_INSTALL_PENDING)))
+						vty_out(vty,
+							",\"fibInstallFailed\": \"true\" ");
+					else
+						vty_out(vty,
+							",\"fibInstallFailed\": \"false\" ");
+				} else {
+					vty_out(vty,
+						",\"fibSuppress\": \"false\" ");
+				}
 
-			if (!(CHECK_FLAG(dest->flags,
-					 BGP_FLAG_SUPPRESS_FIB_PENDING)))
-				vty_out(vty, ",\"fibSuppress\": \"true\" ");
-			else
-				vty_out(vty, ",\"fibSuppress\": \"false\" ");
-
-			if (best_path_selected)
-				vty_out(vty, ",\"bestPathExists\": \"true\" ");
-			else
-				vty_out(vty, ",\"bestPathExists\": \"false\" ");
-			vty_out(vty, "}");
+				if (best_path_selected)
+					vty_out(vty,
+						",\"bestPathExists\": \"true\" ");
+				else
+					vty_out(vty,
+						",\"bestPathExists\": \"false\" ");
+				vty_out(vty, "}");
+			}
 
 			/* End per-prefix dictionary */
 			if (json_detail_header_used)
