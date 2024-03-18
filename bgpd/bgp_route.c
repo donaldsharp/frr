@@ -14231,18 +14231,7 @@ static void show_adj_route(struct vty *vty, struct peer *peer, struct bgp_table 
 
 	if (type == bgp_show_adj_route_advertised && subgrp
 	    && CHECK_FLAG(subgrp->sflags, SUBGRP_STATUS_DEFAULT_ORIGINATE)) {
-		if (use_json) {
-			json_object_int_add(json, "bgpTableVersion",
-					    table->version);
-			json_object_string_addf(json, "bgpLocalRouterId",
-						"%pI4", &bgp->router_id);
-			json_object_int_add(json, "defaultLocPrf",
-						bgp->default_local_pref);
-			json_object_int_add(json, "localAS",
-					    peer->change_local_as
-						    ? peer->change_local_as
-						    : peer->local_as);
-		} else {
+		if (!use_json) {
 			vty_out(vty,
 				"BGP table version is %" PRIu64
 				", local router ID is %pI4, vrf id ",
@@ -14334,6 +14323,9 @@ static void show_adj_route(struct vty *vty, struct peer *peer, struct bgp_table 
 
 					if (route_filtered ||
 					    ret == RMAP_DENY) {
+						memset(&bpi, 0,
+						       sizeof(struct
+							      bgp_path_info));
 						bpi.attr = &attr;
 						bpi.peer = peer;
 						buildit.info = &bpi;
@@ -14689,8 +14681,6 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi, safi_t
 				vty_out(vty, ",\"defaultLocPrf\":%u",
 					bgp->default_local_pref);
 				vty_out(vty, ",\"localAS\":%u", bgp->as);
-				vty_out(vty, ",\"bgpStatusCodes\": ");
-				vty_out(vty, ",\"bgpOriginCodes\": ");
 				if (type == bgp_show_adj_route_advertised &&
 				    subgrp &&
 				    CHECK_FLAG(subgrp->sflags,
@@ -14798,15 +14788,8 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi, safi_t
 					    output_count);
 			json_object_int_add(json, "filteredPrefixCounter",
 					    filtered_count);
-		}
-
-		/*
-		 * This is an extremely expensive operation at scale
-		 * and non-pretty reduces memory footprint significantly.
-		 */
-		if ((type != bgp_show_adj_route_advertised) &&
-		    (type != bgp_show_adj_route_received))
 			vty_json_no_pretty(vty, json);
+		}
 	} else if (output_count > 0) {
 		if (!match && filtered_count > 0)
 			vty_out(vty,
