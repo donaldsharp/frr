@@ -3177,7 +3177,7 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 	safi_t safi;
 	uint32_t prefix_cnt, path_cnt, rd_prefix_cnt;
 	int first = 1;
-	int prefix_path_count, best_path_selected;
+	int prefix_path_count, best_path_selected, multi_path_count;
 
 	afi = AFI_L2VPN;
 	safi = SAFI_EVPN;
@@ -3264,6 +3264,7 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 
 			prefix_path_count = 0;
 			best_path_selected = 0;
+			multi_path_count = 0;
 			if (json) {
 				json_prefix = json_object_new_object();
 				json_paths = json_object_new_array();
@@ -3313,6 +3314,8 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 							      json_path);
 
 				prefix_path_count++;
+				if (CHECK_FLAG(pi->flags, BGP_PATH_MULTIPATH))
+					multi_path_count++;
 				if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
 					best_path_selected = 1;
 			}
@@ -3322,7 +3325,7 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 						    prefix_path_count);
 				json_object_int_add(json_prefix,
 						    "multiPathCount",
-						    bgp_multipath_count(dest));
+						    multi_path_count);
 
 				if (add_prefix_to_json) {
 					json_object_object_add(json_prefix,
@@ -3395,7 +3398,7 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 							       "flags",
 							       json_flags);
 					json_object_int_add(json_rd,
-							    "numRoutes",
+							    "numPrefixes",
 							    rd_prefix_cnt);
 
 					json_object_object_addf(json_rd,
