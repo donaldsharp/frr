@@ -14461,20 +14461,6 @@ show_adj_route(struct vty *vty, struct peer *peer, struct bgp_table *table,
 	if (type == bgp_show_adj_route_advertised && subgrp
 	    && CHECK_FLAG(subgrp->sflags, SUBGRP_STATUS_DEFAULT_ORIGINATE)) {
 		if (use_json) {
-			json_object_int_add(json, "bgpTableVersion",
-					    table->version);
-			json_object_string_addf(json, "bgpLocalRouterId",
-						"%pI4", &bgp->router_id);
-			json_object_int_add(json, "defaultLocPrf",
-						bgp->default_local_pref);
-			json_object_int_add(json, "localAS",
-					    peer->change_local_as
-						    ? peer->change_local_as
-						    : peer->local_as);
-			json_object_object_add(json, "bgpStatusCodes",
-					       json_scode);
-			json_object_object_add(json, "bgpOriginCodes",
-					       json_ocode);
 			json_object_string_add(
 				json, "bgpOriginatingDefaultNetwork",
 				(afi == AFI_IP) ? "0.0.0.0/0" : "::/0");
@@ -14569,6 +14555,9 @@ show_adj_route(struct vty *vty, struct peer *peer, struct bgp_table *table,
 
 					if (route_filtered ||
 					    ret == RMAP_DENY) {
+						memset(&bpi, 0,
+						       sizeof(struct
+							      bgp_path_info));
 						bpi.attr = &attr;
 						bpi.peer = peer;
 						buildit.info = &bpi;
@@ -14818,6 +14807,12 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 				vty_json_no_pretty(vty, json_scode);
 				vty_out(vty, ",\"bgpOriginCodes\": ");
 				vty_json_no_pretty(vty, json_ocode);
+				/*
+				 * Set header1 to 0 so that we don't transfer
+				 * the ownership of freed objects such as
+				 * json_ocode and json_scode to json.
+				 */
+				header1 = 0;
 			}
 
 			if (type == bgp_show_adj_route_advertised)
@@ -14912,31 +14907,12 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 					    output_count);
 			json_object_int_add(json, "filteredPrefixCounter",
 					    filtered_count);
-		}
-
-		/*
-		 * These fields only give up ownership to `json` when `header1`
-		 * is used (set to zero). See code in `show_adj_route` and
-		 * `show_adj_route_header`.
-		 *
-		 * For Route advertised and received, we do a vty_json_no_pretty
-		 * which internally frees the json object.
-		 * For best path and Route filtered, we are explicitly freeing
-		 * it
-		 */
-		if ((header1 == 1) && ((type != bgp_show_adj_route_advertised ||
-					type != bgp_show_adj_route_received))) {
-			json_object_free(json_scode);
-			json_object_free(json_ocode);
-		}
-
-		/*
-		 * This is an extremely expensive operation at scale
-		 * and non-pretty reduces memory footprint significantly.
-		 */
-		if ((type != bgp_show_adj_route_advertised) &&
-		    (type != bgp_show_adj_route_received))
+			if (header1 == 1) {
+				json_object_free(json_scode);
+				json_object_free(json_ocode);
+			}
 			vty_json_no_pretty(vty, json);
+		}
 	} else if (output_count > 0) {
 		if (!match && filtered_count > 0)
 			vty_out(vty,
