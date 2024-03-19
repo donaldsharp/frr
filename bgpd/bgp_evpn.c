@@ -1460,13 +1460,11 @@ static void evpn_delete_old_local_route(struct bgp *bgp, struct bgpevpn *vpn,
 int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 			      struct bgp_dest *dest, struct bgp_path_info *pi)
 {
-	struct bgp_path_info *old_select, *new_select;
+	struct bgp_path_info *old_select, *new_select, *first;
 	struct bgp_path_info_pair old_and_new;
 	afi_t afi = AFI_L2VPN;
 	safi_t safi = SAFI_EVPN;
 	int ret = 0;
-
-	SET_FLAG(pi->flags, BGP_PATH_UNSORTED);
 	/* If the flag BGP_NODE_SELECT_DEFER is set, do not add route to
 	 * the workqueue
 	 */
@@ -1476,6 +1474,22 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 				   bgp->name_pretty, dest, dest);
 
 		return ret;
+	}
+
+	first = bgp_dest_get_bgp_path_info(dest);
+	SET_FLAG(pi->flags, BGP_PATH_UNSORTED);
+
+	if (pi != first) {
+		if (pi->next)
+			pi->next->prev = pi->prev;
+		if (pi->prev)
+			pi->prev->next = pi->next;
+		
+		if (first)
+			first->prev = pi;
+		pi->next = first;
+		pi->prev = NULL;
+		bgp_dest_set_bgp_path_info(dest, pi);
 	}
 
 	/* Compute the best path. */
@@ -6704,9 +6718,10 @@ void bgp_filter_evpn_routes_upon_martian_change(
 
 		for (dest = bgp_table_top(table); dest;
 		     dest = bgp_route_next(dest)) {
+			struct bgp_path_info *next;
 
-			for (pi = bgp_dest_get_bgp_path_info(dest); pi;
-			     pi = pi->next) {
+			for (pi = bgp_dest_get_bgp_path_info(dest);
+			     (pi != NULL) && (next = pi->next, 1); pi = next) {
 				bool affected = false;
 				const struct prefix *p;
 
