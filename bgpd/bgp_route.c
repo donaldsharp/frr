@@ -508,9 +508,10 @@ struct bgp_dest *bgp_path_info_reap(struct bgp_dest *dest,
 		bgp_dest_set_bgp_path_info(dest, pi->next);
 
 	bgp_path_info_mpath_dequeue(pi);
-	bgp_path_info_unlock(pi);
+
 	hook_call(bgp_snmp_update_stats, dest, pi, false);
 
+	bgp_path_info_unlock(pi);
 	return bgp_dest_unlock_node(dest);
 }
 
