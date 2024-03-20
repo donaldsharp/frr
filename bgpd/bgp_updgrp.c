@@ -1013,6 +1013,7 @@ static struct update_group *update_group_create(struct peer_af *paf)
 
 	if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
 		zlog_debug("create update group %" PRIu64, updgrp->id);
+        frrtrace(2, frr_bgp, ug_create_delete, 1, updgrp->id);
 
 	UPDGRP_GLOBAL_STAT(updgrp, updgrps_created) += 1;
 
@@ -1024,6 +1025,7 @@ static void update_group_delete(struct update_group *updgrp)
 {
 	if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
 		zlog_debug("delete update group %" PRIu64, updgrp->id);
+        frrtrace(2, frr_bgp, ug_create_delete, 2, updgrp->id);
 
 	UPDGRP_GLOBAL_STAT(updgrp, updgrps_deleted) += 1;
 
@@ -1075,6 +1077,7 @@ update_subgroup_create(struct update_group *updgrp)
 	if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
 		zlog_debug("create subgroup u%" PRIu64 ":s%" PRIu64, updgrp->id,
 			   subgrp->id);
+        frrtrace(3, frr_bgp, ug_subgroup_create_delete, 1, updgrp->id, subgrp->id);
 
 	update_group_add_subgroup(updgrp, subgrp);
 
@@ -1099,9 +1102,13 @@ static void update_subgroup_delete(struct update_subgroup *subgrp)
 
 	sync_delete(subgrp);
 
-	if (BGP_DEBUG(update_groups, UPDATE_GROUPS) && subgrp->update_group)
+	if (subgrp->update_group) {
+            if(BGP_DEBUG(update_groups, UPDATE_GROUPS)) {
 		zlog_debug("delete subgroup u%" PRIu64 ":s%" PRIu64,
 			   subgrp->update_group->id, subgrp->id);
+            }
+            frrtrace(3, frr_bgp, ug_subgroup_create_delete, 2, subgrp->update_group->id, subgrp->id);
+        }
 
 	update_group_remove_subgroup(subgrp->update_group, subgrp);
 
@@ -1178,8 +1185,12 @@ static void update_subgroup_add_peer(struct update_subgroup *subgrp,
 	bpacket_add_peer(pkt, paf);
 
 	if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
-		zlog_debug("peer %s added to subgroup s%" PRIu64,
-				paf->peer->host, subgrp->id);
+		zlog_debug("peer %s(%s afid %d) added to subgroup s%" PRIu64 "peer count %d",
+                            paf->peer->host, get_afi_safi_str(paf->afi, paf->safi, false), paf->afid,
+                            subgrp->id, subgrp->peer_count);
+        frrtrace(7, frr_bgp, ug_subgroup_add_remove_peer, 1, paf->peer->host,
+                 paf->afi, paf->safi, paf->afid,
+                 subgrp->id, subgrp->peer_count);
 }
 
 /*
@@ -1206,9 +1217,13 @@ static void update_subgroup_remove_peer_internal(struct update_subgroup *subgrp,
 	subgrp->peer_count--;
 
 	if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
-		zlog_debug("peer %s deleted from subgroup s%"
-			   PRIu64 " peer cnt %d",
-			   paf->peer->host, subgrp->id, subgrp->peer_count);
+		zlog_debug("peer %s(%s afid %d) remove from subgroup s%" PRIu64 "peer count %d",
+                            paf->peer->host, get_afi_safi_str(paf->afi, paf->safi, false), paf->afid,
+                            subgrp->id, subgrp->peer_count);
+        frrtrace(7, frr_bgp, ug_subgroup_add_remove_peer, 2, paf->peer->host,
+                 paf->afi, paf->safi, paf->afid,
+                 subgrp->id, subgrp->peer_count);
+
 	SUBGRP_INCR_STAT(subgrp, prune_events);
 }
 
@@ -1371,6 +1386,9 @@ static void update_subgroup_merge(struct update_subgroup *subgrp,
 			   subgrp->update_group->id, subgrp->id, peer_count,
 			   target->update_group->id, target->id,
 			   reason ? reason : "unknown");
+        frrtrace(6,frr_bgp, ug_subgroup_merge, subgrp->update_group->id, subgrp->id,
+                 peer_count, target->update_group->id, target->id,
+                 reason ? reason : "unknown");
 
 	result = update_subgroup_check_delete(subgrp);
 	assert(result);
@@ -1801,9 +1819,11 @@ void update_subgroup_split_peer(struct peer_af *paf,
 			UPDGRP_PEER_DBG_EN(updgrp);
 		}
 		if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
-			zlog_debug("u%" PRIu64 ":s%" PRIu64" peer %s moved to u%" PRIu64 ":s%" PRIu64,
-				   old_id, subgrp->id, paf->peer->host,
+			zlog_debug("u%" PRIu64 ":s%" PRIu64 " old peer count:%d"" peer %s moved to u%" PRIu64 ":s%" PRIu64
+				   ,old_id, subgrp->id, old_subgrp->peer_count, paf->peer->host,
 				   updgrp->id, subgrp->id);
+                frrtrace(6, frr_bgp, ug_subgroup_split_peer, old_id, subgrp->id, old_subgrp->peer_count,
+                         paf->peer->host, updgrp->id, subgrp->id);
 
 		/*
 		 * The state of the subgroup (adj_out, advs, packet queue etc)
@@ -1835,9 +1855,17 @@ void update_subgroup_split_peer(struct peer_af *paf,
 	update_subgroup_copy_packets(subgrp, paf->next_pkt_to_send);
 
 	if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
-		zlog_debug("u%" PRIu64 ":s%" PRIu64" peer %s split and moved into u%" PRIu64":s%" PRIu64,
-			   paf->subgroup->update_group->id, paf->subgroup->id,
-			   paf->peer->host, updgrp->id, subgrp->id);
+		zlog_debug(
+			"u%" PRIu64 ":s%" PRIu64
+			" old peer count:%d peer %s split and moved into u%" PRIu64
+			":s%" PRIu64,
+			paf->subgroup->update_group->id, paf->subgroup->id,
+			old_subgrp->peer_count, paf->peer->host, updgrp->id,
+			subgrp->id);
+	frrtrace(6, frr_bgp, ug_subgroup_split_peer,
+		 paf->subgroup->update_group->id, paf->subgroup->id,
+		 old_subgrp->peer_count, paf->peer->host, updgrp->id,
+		 subgrp->id);
 
 	SUBGRP_INCR_STAT(paf->subgroup, split_events);
 

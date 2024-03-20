@@ -362,6 +362,23 @@ def print_kernel_cmd(field_val):
 
     return cmd_str
 
+def print_operation_ug_create_delete(field_val):
+    if field_val == 1:
+        return ("BGP update-group create")
+    elif field_val == 2:
+        return ("BGP update-group delete")
+
+def print_operation_ug_subgroup_create_delete(field_val):
+    if field_val == 1:
+        return ("BGP update-group subgroup create")
+    elif field_val == 2:
+        return ("BGP update-group subgroup delete")
+
+def print_operation_ug_subgroup_add_remove_peer(field_val):
+    if field_val == 1:
+        return ("BGP update-group subgroup add peer")
+    elif field_val == 2:
+        return ("BGP update-group subgroup remove peer")
 
 def get_field_list(event):
     """
@@ -882,6 +899,24 @@ def parse_frr_zebra_zebra_vxlan_handle_vni_transition(event):
 
     parse_event(event, field_parsers)
 
+def parse_frr_bgp_ug_create_delete(event):
+    field_parsers = {"operation": print_operation_ug_create_delete}
+    parse_event(event, field_parsers)
+
+def parse_frr_bgp_ug_subgroup_create_delete(event):
+    field_parsers = {"operation": print_operation_ug_subgroup_create_delete}
+    parse_event(event, field_parsers)
+
+def parse_frr_bgp_ug_subgroup_add_remove_peer(event):
+    field_parsers = {"operation": print_operation_ug_subgroup_add_remove_peer}
+    parse_event(event, field_parsers)
+
+def parse_frr_bgp_ug_bgp_aggregate_install(event):
+    field_parsers = {"prefix": print_prefix_addr,
+                     "afi": print_afi_string,
+                     "safi": print_safi_string}
+    parse_event(event, field_parsers)
+
 ############################ evpn parsers - end *#############################
 
 def main():
@@ -1012,6 +1047,14 @@ def main():
                      parse_frr_zebra_netlink_intf_err,
                      "frr_bgp:bgp_err_str":
                      parse_frr_bgp_err_str,
+                     "frr_bgp:ug_create_delete":
+                     parse_frr_bgp_ug_create_delete,
+                     "frr_bgp:ug_subgroup_create_delete":
+                     parse_frr_bgp_ug_subgroup_create_delete,
+                     "frr_bgp:ug_subgroup_add_remove_peer":
+                     parse_frr_bgp_ug_subgroup_add_remove_peer,
+                     "frr_bgp:ug_bgp_aggregate_install":
+                     parse_frr_bgp_ug_bgp_aggregate_install,
                     "frr_zebra:zebra_vxlan_handle_vni_transition":
                      parse_frr_zebra_zebra_vxlan_handle_vni_transition,
 }

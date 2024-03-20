@@ -7750,6 +7750,7 @@ static void bgp_aggregate_install(
 			if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
 				zlog_debug("%s: %pFX null attribute", __func__,
 					   p);
+                        frrtrace(4, frr_bgp, ug_bgp_aggregate_install, p, afi, safi, origin);
 			return;
 		}
 
