@@ -146,6 +146,8 @@ enum {
 #define RTM_NEWSTATS RTM_NEWSTATS
 	RTM_GETSTATS = 94,
 #define RTM_GETSTATS RTM_GETSTATS
+	RTM_SETSTATS,
+#define RTM_SETSTATS RTM_SETSTATS
 
 	RTM_NEWCACHEREPORT = 96,
 #define RTM_NEWCACHEREPORT RTM_NEWCACHEREPORT
@@ -185,15 +187,15 @@ enum {
 	RTM_GETNEXTHOPBUCKET,
 #define RTM_GETNEXTHOPBUCKET	RTM_GETNEXTHOPBUCKET
 
-        RTM_SETHWFLAGS = 119,
-#define RTM_SETHWFLAGS RTM_SETHWFLAGS
-
 	RTM_NEWTUNNEL = 120,
 #define RTM_NEWTUNNEL	RTM_NEWTUNNEL
 	RTM_DELTUNNEL,
 #define RTM_DELTUNNEL	RTM_DELTUNNEL
 	RTM_GETTUNNEL,
 #define RTM_GETTUNNEL	RTM_GETTUNNEL
+
+	RTM_SETHWFLAGS = 127,
+#define RTM_SETHWFLAGS	RTM_SETHWFLAGS
 
 	__RTM_MAX,
 #define RTM_MAX		(((__RTM_MAX + 3) & ~3) - 1)
@@ -228,11 +230,10 @@ struct rtattr {
 #define RTA_DATA(rta)   ((void*)(((char*)(rta)) + RTA_LENGTH(0)))
 #define RTA_PAYLOAD(rta) ((int)((rta)->rta_len) - RTA_LENGTH(0))
 #ifndef TUNNEL_RTA
-#define TUNNEL_RTA(r)                                                          \
-	((struct rtattr *)(((char *)(r)) +                                     \
-			   NLMSG_ALIGN(sizeof(struct tunnel_msg))))
+#define TUNNEL_RTA(r)                                                         \
+       ((struct rtattr *)(((char *)(r)) +                                     \
+                          NLMSG_ALIGN(sizeof(struct tunnel_msg))))
 #endif
-
 
 
 
@@ -342,8 +343,7 @@ enum rt_scope_t {
 #define RTM_F_FIB_MATCH	        0x2000	/* return full fib lookup match */
 #define RTM_F_OFFLOAD		0x4000	/* route is offloaded */
 #define RTM_F_TRAP		0x8000	/* route is trapping packets */
-#define RTM_F_LAST_ROUTE        0x00020000 /* overrides deprecated RTF_ALLONLINK
-					      in ipv6_route.h */
+#define RTM_F_LAST_ROUTE	0x00020000 /* overrides deprecated RTF_ALLONLINK in ipv6_route.h */
 #define RTM_F_OFFLOAD_FAILED	0x20000000 /* route offload failed, this value
 					    * is chosen to avoid conflicts with
 					    * other flags defined in
@@ -448,7 +448,7 @@ struct rtnexthop {
 /* RTA_VIA */
 struct rtvia {
 	__kernel_sa_family_t	rtvia_family;
-	__u8			rtvia_addr[0];
+	__u8			rtvia_addr[];
 };
 
 /* RTM_CACHEINFO */
@@ -643,6 +643,7 @@ enum {
 	TCA_INGRESS_BLOCK,
 	TCA_EGRESS_BLOCK,
 	TCA_DUMP_FLAGS,
+	TCA_EXT_WARN_MSG,
 	__TCA_MAX
 };
 
@@ -769,8 +770,12 @@ enum rtnetlink_groups {
 #define RTNLGRP_NEXTHOP		RTNLGRP_NEXTHOP
 	RTNLGRP_BRVLAN,
 #define RTNLGRP_BRVLAN		RTNLGRP_BRVLAN
+	RTNLGRP_MCTP_IFADDR,
+#define RTNLGRP_MCTP_IFADDR	RTNLGRP_MCTP_IFADDR
 	RTNLGRP_TUNNEL,
 #define RTNLGRP_TUNNEL		RTNLGRP_TUNNEL
+	RTNLGRP_STATS,
+#define RTNLGRP_STATS		RTNLGRP_STATS
 	__RTNLGRP_MAX
 };
 #define RTNLGRP_MAX	(__RTNLGRP_MAX - 1)
@@ -790,6 +795,7 @@ enum {
 	TCA_ROOT_FLAGS,
 	TCA_ROOT_COUNT,
 	TCA_ROOT_TIME_DELTA, /* in msecs */
+	TCA_ROOT_EXT_WARN_MSG,
 	__TCA_ROOT_MAX,
 #define	TCA_ROOT_MAX (__TCA_ROOT_MAX - 1)
 };
@@ -819,6 +825,7 @@ enum {
 #define RTEXT_FILTER_MRP	(1 << 4)
 #define RTEXT_FILTER_CFM_CONFIG	(1 << 5)
 #define RTEXT_FILTER_CFM_STATUS	(1 << 6)
+#define RTEXT_FILTER_MST	(1 << 7)
 
 /* End of information exported to user level */
 
