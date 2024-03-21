@@ -631,7 +631,6 @@ static void vty_show_ip_route(struct vty *vty, struct route_node *rn,
 	bool first_p = true;
 	bool nhg_from_backup = false;
 	time_t epoch_tbuf;
-	char epoch_str_buf[MONOTIME_STRLEN];
 
 	uptime2str(re->uptime, up_str, sizeof(up_str));
 	epoch_tbuf = time_to_epoch(UPTIMESECS(re->uptime));
@@ -894,7 +893,6 @@ static void do_show_route_helper(struct vty *vty, struct zebra_vrf *zvrf,
 	int first = 1;
 	rib_dest_t *dest;
 	json_object *json = NULL;
-	json_object *json_prefix = NULL;
 	uint32_t addr;
 	char buf[BUFSIZ];
 	int prefix_found = 0;
@@ -1255,8 +1253,6 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 		json_object_string_add(json, "vrf",
 				       vrf_id_to_name(nhe->vrf_id));
 	} else {
-		char epoch_str_buf[MONOTIME_STRLEN];
-
 		vty_out(vty, "ID: %u (%s)\n", nhe->id,
 			zebra_route_string(nhe->type));
 		vty_out(vty, "     RefCnt: %u\n", nhe->refcnt);
@@ -1676,11 +1672,12 @@ DEFPY(show_nexthop_group,
 
 	show_nexthop_group_cmd_helper(vty, zvrf, afi, type, json, brief);
 
-	if (uj)
+	if (uj) {
 		if (brief)
 			vty_json_no_pretty(vty, json);
 		else
 			vty_json(vty, json);
+	}
 
 	return CMD_SUCCESS;
 }

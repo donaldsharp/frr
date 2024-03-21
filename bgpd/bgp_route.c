@@ -14867,7 +14867,7 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 		    type == bgp_show_adj_route_received) {
 			if (header1) {
 				uint64_t version = table ? table->version : 0;
-				vty_out(vty, "\"bgpTableVersion\":%u", version);
+				vty_out(vty, "\"bgpTableVersion\":%" PRIu64, version);
 				vty_out(vty, ",\"bgpLocalRouterId\":\"%s\"",
 					inet_ntoa(bgp->router_id));
 				vty_out(vty, ",\"defaultLocPrf\":%u",
@@ -14964,9 +14964,9 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 	if (use_json) {
 		if (type == bgp_show_adj_route_advertised ||
 		    type == bgp_show_adj_route_received) {
-			vty_out(vty, ",\"totalPrefixCounter\":%u",
+			vty_out(vty, ",\"totalPrefixCounter\":%lu",
 				output_count);
-			vty_out(vty, ",\"filteredPrefixCounter\":%u",
+			vty_out(vty, ",\"filteredPrefixCounter\":%lu",
 				filtered_count);
 			json_object_free(json);
 		} else {
