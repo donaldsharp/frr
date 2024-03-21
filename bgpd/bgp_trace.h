@@ -1214,7 +1214,7 @@ TRACEPOINT_LOGLEVEL(frr_bgp, bgp_err_str, TRACE_INFO)
 TRACEPOINT_EVENT(
 	frr_bgp,
 	ug_bgp_aggregate_install,
-	TP_ARGS(struct prefix *, prefix, uint8_t, afi, uint8_t, safi,
+	TP_ARGS(const struct prefix *, prefix, uint8_t, afi, uint8_t, safi,
                 uint8_t, origin),
 	TP_FIELDS(
                 ctf_array(unsigned char, prefix, prefix, sizeof(struct prefix))

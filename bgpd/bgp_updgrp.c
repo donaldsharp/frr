@@ -57,6 +57,7 @@
 #include "bgpd/bgp_filter.h"
 #include "bgpd/bgp_io.h"
 #include "bgpd/bgp_trace.h"
+#include "bgpd/bgp_vty.h"
 
 /********************
  * PRIVATE FUNCTIONS

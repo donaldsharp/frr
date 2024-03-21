@@ -548,6 +548,7 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
 	}
 }
 
+#if defined(HAVE_CSMGR)
 /*
  * Cleans up stale ipv4 and ipv6 unicast routes that
  * were imported from default EVPN VRF into GR disabled
@@ -598,6 +599,7 @@ static void zebra_gr_cleanup_of_non_gr_vrf(struct zebra_gr_afi_clean *gac)
 		}
 	}
 }
+#endif
 
 static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
 				    struct zebra_gr_afi_clean *gac)
