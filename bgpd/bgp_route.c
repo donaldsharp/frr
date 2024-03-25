@@ -12439,6 +12439,8 @@ static void bgp_show_path_info(const struct prefix_rd *pfx_rd,
 	json_object *json_header = NULL;
 	json_object *json_paths = NULL;
 	const struct prefix *p = bgp_dest_get_prefix(bgp_node);
+	int prefix_path_count = 0, best_path_selected = 0, multi_path_count = 0;
+	json_object *json_flags = NULL;
 
 	for (pi = bgp_dest_get_bgp_path_info(bgp_node); pi; pi = pi->next) {
 		enum rpki_states rpki_curr_state = RPKI_NOT_BEING_USED;
@@ -12454,6 +12456,7 @@ static void bgp_show_path_info(const struct prefix_rd *pfx_rd,
 		if (json && !json_paths) {
 			/* Instantiate json_paths only if path is valid */
 			json_paths = json_object_new_array();
+			json_flags = json_object_new_object();
 			if (pfx_rd)
 				json_header = json_object_new_object();
 			else
@@ -12479,10 +12482,66 @@ static void bgp_show_path_info(const struct prefix_rd *pfx_rd,
 					     bgp_dest_get_prefix(bgp_node), pi,
 					     AFI_IP, safi, rpki_curr_state,
 					     json_paths);
+
+		prefix_path_count++;
+		if (CHECK_FLAG(pi->flags, BGP_PATH_MULTIPATH))
+			multi_path_count++;
+		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
+			best_path_selected = 1;
 	}
 
 	if (json && json_paths) {
 		json_object_object_add(json_header, "paths", json_paths);
+		json_object_int_add(json_header, "pathCount",
+				    prefix_path_count);
+		/* add +1 to the multipath count because it does
+		 * not include the best path itself
+		 */
+		json_object_int_add(json_header, "multiPathCount",
+				    multi_path_count + 1);
+
+		if ((CHECK_FLAG(bgp_node->flags, BGP_NODE_FIB_INSTALLED)) &&
+		    (!CHECK_FLAG(bgp_node->flags,
+				 BGP_NODE_FIB_INSTALL_PENDING)))
+			json_object_boolean_true_add(json_flags,
+						     "fibInstalled");
+		else
+			json_object_boolean_false_add(json_flags,
+						      "fibInstalled");
+
+		if ((CHECK_FLAG(bgp_node->flags,
+				BGP_NODE_FIB_INSTALL_PENDING)) &&
+		    (!CHECK_FLAG(bgp_node->flags, BGP_NODE_FIB_INSTALLED)))
+			json_object_boolean_true_add(json_flags,
+						     "fibWaitForInstall");
+		else
+			json_object_boolean_false_add(json_flags,
+						      "fibWaitForInstall");
+
+		if (CHECK_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_FIB_PENDING)) {
+			json_object_boolean_true_add(json_flags, "fibSuppress");
+			if (!(CHECK_FLAG(bgp_node->flags,
+					 BGP_NODE_FIB_INSTALLED)) &&
+			    (!CHECK_FLAG(bgp_node->flags,
+					 BGP_NODE_FIB_INSTALL_PENDING)))
+				json_object_boolean_true_add(
+					json_flags, "fibInstallFailed");
+			else
+				json_object_boolean_false_add(
+					json_flags, "fibInstallFailed");
+		} else {
+			json_object_boolean_false_add(json_flags,
+						      "fibSuppress");
+		}
+
+		if (best_path_selected)
+			json_object_boolean_true_add(json_flags,
+						     "bestPathExists");
+		else
+			json_object_boolean_false_add(json_flags,
+						      "bestPathExists");
+
+		json_object_object_add(json_header, "flags", json_flags);
 
 		if (pfx_rd)
 			json_object_object_addf(json, json_header, "%pRD",
