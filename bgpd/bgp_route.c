@@ -11940,21 +11940,22 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			 * is run on older cpu's or more underperforming
 			 * routers out there
 			 */
-			if (!brief)
+			if (!brief) {
 				vty_json_no_pretty(vty, json_paths);
+				vty_out(vty, ",");
+			} else {
+				/* Start per-prefix entry for brief */
+				vty_out(vty, "{\n");
+			}
 
 			if ((json_detail_header) || (brief)) {
-				if (!brief) {
-					vty_out(vty, ",\"pathCount\":%d\n",
-						prefix_path_count);
-				} else {
-					/* Start per-prefix entry for brief */
-					vty_out(vty, "{\n");
-					vty_out(vty, "\"pathCount\":%d\n",
-						prefix_path_count);
-				}
+				vty_out(vty, "\"pathCount\":%d\n",
+					prefix_path_count);
+				/* add +1 to the multipath count because
+				 * it does not include the best path itself
+				 */
 				vty_out(vty, ",\"multiPathCount\":%d\n",
-					multi_path_count);
+					multi_path_count + 1);
 				vty_out(vty, ",\"flags\": { \n");
 				if ((CHECK_FLAG(dest->flags,
 						BGP_NODE_FIB_INSTALLED)) &&

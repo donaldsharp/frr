@@ -3306,9 +3306,12 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 			if (json) {
 				json_object_int_add(json_prefix, "pathCount",
 						    prefix_path_count);
+				/* add +1 to the multipath count because it does
+				 * not include the best path itself
+				 */
 				json_object_int_add(json_prefix,
 						    "multiPathCount",
-						    multi_path_count);
+						    multi_path_count + 1);
 
 				if (add_prefix_to_json) {
 					if (!brief)
