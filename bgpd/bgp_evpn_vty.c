@@ -3311,59 +3311,6 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 							       json_paths);
 
 					json_flags = json_object_new_object();
-					if ((CHECK_FLAG(
-						    dest->flags,
-						    BGP_NODE_FIB_INSTALLED)) &&
-					    (!CHECK_FLAG(
-						    dest->flags,
-						    BGP_NODE_FIB_INSTALL_PENDING)))
-						json_object_boolean_true_add(
-							json_flags,
-							"fibInstalled");
-					else
-						json_object_boolean_false_add(
-							json_flags,
-							"fibInstalled");
-
-					if ((CHECK_FLAG(
-						    dest->flags,
-						    BGP_NODE_FIB_INSTALL_PENDING)) &&
-					    (!CHECK_FLAG(
-						    dest->flags,
-						    BGP_NODE_FIB_INSTALLED)))
-						json_object_boolean_true_add(
-							json_flags,
-							"fibWaitForInstall");
-					else
-						json_object_boolean_false_add(
-							json_flags,
-							"fibWaitForInstall");
-
-					if (CHECK_FLAG(
-						    bgp->flags,
-						    BGP_FLAG_SUPPRESS_FIB_PENDING)) {
-						json_object_boolean_true_add(
-							json_flags,
-							"fibSuppress");
-						if (!(CHECK_FLAG(
-							    dest->flags,
-							    BGP_NODE_FIB_INSTALLED)) &&
-						    (!CHECK_FLAG(
-							    dest->flags,
-							    BGP_NODE_FIB_INSTALL_PENDING)))
-							json_object_boolean_true_add(
-								json_flags,
-								"fibInstallFailed");
-						else
-							json_object_boolean_false_add(
-								json_flags,
-								"fibInstallFailed");
-					} else {
-						json_object_boolean_false_add(
-							json_flags,
-							"fibSuppress");
-					}
-
 					if (best_path_selected)
 						json_object_boolean_true_add(
 							json_flags,

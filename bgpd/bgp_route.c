@@ -11943,21 +11943,17 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 				vty_out(vty, ",\"multiPathCount\":%d\n",
 					multi_path_count);
 				vty_out(vty, ",\"flags\": { \n");
-				if ((CHECK_FLAG(dest->flags,
-						BGP_NODE_FIB_INSTALLED)) &&
-				    (!CHECK_FLAG(dest->flags,
-						 BGP_NODE_FIB_INSTALL_PENDING)))
+				if CHECK_FLAG(dest->flags,
+						BGP_NODE_FIB_INSTALLED)
 					vty_out(vty,
 						"\"fibInstalled\": \"true\" ");
 				else
 					vty_out(vty,
 						"\"fibInstalled\": \"false\" ");
 
-				if ((CHECK_FLAG(
+				if CHECK_FLAG(
 					    dest->flags,
-					    BGP_NODE_FIB_INSTALL_PENDING)) &&
-				    (!CHECK_FLAG(dest->flags,
-						 BGP_NODE_FIB_INSTALLED)))
+					    BGP_NODE_FIB_INSTALL_PENDING)
 					vty_out(vty,
 						",\"fibWaitForInstall\": \"true\" ");
 				else
