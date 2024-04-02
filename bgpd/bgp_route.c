@@ -11943,6 +11943,9 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			if (brief) {
 			    /* Start per-prefix entry for brief */
 			    vty_out(vty, "{\n");
+			    /* Free the json_paths as it is not part of brief
+			     * display */
+			    json_object_free(json_paths);
 			} else {
 			    vty_json_no_pretty(vty, json_paths);
 		            /* Delimiter between path and pathcount for detailed output */
