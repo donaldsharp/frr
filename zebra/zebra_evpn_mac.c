@@ -1404,7 +1404,7 @@ int zebra_evpn_mac_send_del_to_client(struct zebra_evpn *zevpn,
 		 * Upon receiving local delete ask bgp to reinstall
 		 * the best route (remote entry).
 		*/
-		zvrf = zebra_vrf_lookup_by_id(zevpn->vrf_id);
+		zvrf = zebra_vrf_get_evpn();
 		if (zvrf && zvrf->dad_freeze &&
 		    CHECK_FLAG(flags, ZEBRA_MAC_DUPLICATE))
 			state = ZEBRA_NEIGH_INACTIVE;
