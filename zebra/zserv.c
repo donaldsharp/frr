@@ -1163,11 +1163,9 @@ static void zebra_show_client_detail(struct vty *vty, struct zserv *client)
 		}
 	}
 
-#if defined DEV_BUILD
 	vty_out(vty, "Input Fifo: %zu:%zu Output Fifo: %zu:%zu\n",
 		client->ibuf_fifo->count, client->ibuf_fifo->max_count,
 		client->obuf_fifo->count, client->obuf_fifo->max_count);
-#endif
 	vty_out(vty, "\n");
 }
 
