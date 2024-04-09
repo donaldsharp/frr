@@ -2144,8 +2144,6 @@ void zebra_gr_last_rt_reinstall_check(void)
 	 *
 	 * Last route needs to be installed only once.
 	 */
-	z_gr_ctx.total_evpn_entries_queued = zebra_gr_queued_cnt_get();
-
 	if (zrouter.graceful_restart && zrouter.all_instances_gr_done &&
 	    !zrouter.gr_last_rt_installed) {
 		z_gr_ctx.total_evpn_entries_queued = zebra_gr_queued_cnt_get();
