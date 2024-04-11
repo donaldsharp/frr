@@ -11173,53 +11173,29 @@ static int bgp_show_community(struct vty *vty, struct bgp *bgp,
 static void bgp_fib_flags_info(struct vty *vty, struct bgp *bgp, struct bgp_dest *dest,
 			       json_object *json_flags)
 {
-	if CHECK_FLAG (dest->flags, BGP_NODE_FIB_INSTALLED) {
-		if (json_flags)
-			json_object_boolean_true_add(json_flags, "fibInstalled");
-		else
-			vty_out(vty, "\"fibInstalled\": \"true\" ");
-	} else {
-		if (json_flags)
-			json_object_boolean_false_add(json_flags, "fibInstalled");
-		else
-			vty_out(vty, "\"fibInstalled\": \"false\" ");
-	} /* End of fib install flag */
-
-	if CHECK_FLAG (dest->flags, BGP_NODE_FIB_INSTALL_PENDING) {
-		if (json_flags)
-			json_object_boolean_true_add(json_flags, "fibWaitForInstall");
-		else
-			vty_out(vty, ",\"fibWaitForInstall\": \"true\" ");
-	} else {
-		if (json_flags)
-			json_object_boolean_false_add(json_flags, "fibWaitForInstall");
-		else
-			vty_out(vty, ",\"fibWaitForInstall\": \"false\" ");
-	} /* End of fib wait for install flag */
-
 	if (CHECK_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_FIB_PENDING)) {
-		if (json_flags)
-			json_object_boolean_true_add(json_flags, "fibSuppress");
-		else
-			vty_out(vty, ",\"fibSuppress\": \"true\" ");
+		if (CHECK_FLAG(dest->flags, BGP_NODE_FIB_INSTALLED)) {
+			if (json_flags)
+				json_object_boolean_true_add(json_flags, "fibInstalled");
+			else
+				vty_out(vty, ",\"fibInstalled\": \"true\" ");
+		} /* End of fib install flag */
+
+		if (CHECK_FLAG(dest->flags, BGP_NODE_FIB_INSTALL_PENDING)) {
+			if (json_flags)
+				json_object_boolean_true_add(json_flags, "fibWaitForInstall");
+			else
+				vty_out(vty, ",\"fibWaitForInstall\": \"true\" ");
+		} /* End of fib wait for install flag */
+
 		if (!(CHECK_FLAG(dest->flags, BGP_NODE_FIB_INSTALLED)) &&
 		    (!CHECK_FLAG(dest->flags, BGP_NODE_FIB_INSTALL_PENDING))) {
 			if (json_flags)
 				json_object_boolean_true_add(json_flags, "fibInstallFailed");
 			else
 				vty_out(vty, ",\"fibInstallFailed\": \"true\" ");
-		} else {
-			if (json_flags)
-				json_object_boolean_false_add(json_flags, "fibInstallFailed");
-			else
-				vty_out(vty, ",\"fibInstallFailed\": \"false\" ");
 		}
-	} else {
-		if (json_flags)
-			json_object_boolean_false_add(json_flags, "fibSuppress");
-		else
-			vty_out(vty, ",\"fibSuppress\": \"false\" ");
-	} /* End of fib suppress flag */
+	} /*End of suppress FIB check */
 }
 
 static int bgp_show_table(struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
@@ -11723,13 +11699,12 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, afi_t afi, safi_t sa
 				 */
 				vty_out(vty, ",\"multiPathCount\":%d\n", multi_path_count + 1);
 				vty_out(vty, ",\"flags\": { \n");
+				if (best_path_selected)
+					vty_out(vty, "\"bestPathExists\": \"true\" ");
+				else
+					vty_out(vty, "\"bestPathExists\": \"false\" ");
 				/* Display fib flags */
 				bgp_fib_flags_info(vty, bgp, dest, NULL);
-
-				if (best_path_selected)
-					vty_out(vty, ",\"bestPathExists\": \"true\" ");
-				else
-					vty_out(vty, ",\"bestPathExists\": \"false\" ");
 				vty_out(vty, "}");
 			}
 
@@ -12226,15 +12201,14 @@ static void bgp_show_path_info(const struct prefix_rd *pfx_rd, struct bgp_dest *
 		json_object_int_add(json_header, "multiPathCount",
 				    multi_path_count + 1);
 
-		/* Display FIB flags */
-		bgp_fib_flags_info(vty, bgp, bgp_node, json_flags);
-
 		if (best_path_selected)
 			json_object_boolean_true_add(json_flags,
 						     "bestPathExists");
 		else
 			json_object_boolean_false_add(json_flags,
 						      "bestPathExists");
+		/* Display FIB flags */
+		bgp_fib_flags_info(vty, bgp, bgp_node, json_flags);
 
 		json_object_object_add(json_header, "flags", json_flags);
 
