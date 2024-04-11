@@ -3749,9 +3749,7 @@ static int install_uninstall_routes_for_vrf(struct bgp *bgp_vrf, int install)
  * particular VNI.
  */
 static int install_uninstall_routes_for_vni(struct bgp *bgp,
-					    struct bgpevpn *vpn,
-					    bgp_evpn_route_type rtype,
-					    int install)
+					    struct bgpevpn *vpn, int install)
 {
 	afi_t afi;
 	safi_t safi;
@@ -3782,7 +3780,9 @@ static int install_uninstall_routes_for_vni(struct bgp *bgp,
 				(const struct prefix_evpn *)bgp_dest_get_prefix(
 					dest);
 
-			if (evp->prefix.route_type != rtype)
+			if (evp->prefix.route_type != BGP_EVPN_IMET_ROUTE &&
+			    evp->prefix.route_type != BGP_EVPN_AD_ROUTE &&
+			    evp->prefix.route_type != BGP_EVPN_MAC_IP_ROUTE)
 				continue;
 
 			for (pi = bgp_dest_get_bgp_path_info(dest); pi;
@@ -3809,7 +3809,8 @@ static int install_uninstall_routes_for_vni(struct bgp *bgp,
 							bgp->vrf_id,
 							install ? "install"
 								: "uninstall",
-							rtype == BGP_EVPN_MAC_IP_ROUTE
+							evp->prefix.route_type ==
+									BGP_EVPN_MAC_IP_ROUTE
 								? "MACIP"
 								: "IMET",
 							vpn->vni);
@@ -3842,23 +3843,11 @@ static int install_routes_for_vrf(struct bgp *bgp_vrf)
  */
 static int install_routes_for_vni(struct bgp *bgp, struct bgpevpn *vpn)
 {
-	int ret;
-
-	/* Install type-3 routes followed by type-2 routes - the ones applicable
+	/*
+	 * Install type-3 routes followed by type-2 routes - the ones applicable
 	 * for this VNI.
 	 */
-	ret = install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_IMET_ROUTE,
-					       1);
-	if (ret)
-		return ret;
-
-	ret = install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_AD_ROUTE,
-					       1);
-	if (ret)
-		return ret;
-
-	return install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_MAC_IP_ROUTE,
-						1);
+	return install_uninstall_routes_for_vni(bgp, vpn, 1);
 }
 
 /* uninstall routes from l3vni vrf. */
@@ -3874,25 +3863,11 @@ static int uninstall_routes_for_vrf(struct bgp *bgp_vrf)
  */
 static int uninstall_routes_for_vni(struct bgp *bgp, struct bgpevpn *vpn)
 {
-	int ret;
-
-	/* Uninstall type-2 routes followed by type-3 routes - the ones
-	 * applicable
-	 * for this VNI.
+	/*
+	 * Uninstall type-2 routes followed by type-3 routes - the ones
+	 * applicable for this VNI.
 	 */
-	ret = install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_MAC_IP_ROUTE,
-					       0);
-	if (ret)
-		return ret;
-
-	ret = install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_AD_ROUTE,
-					       0);
-	if (ret)
-		return ret;
-
-
-	return install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_IMET_ROUTE,
-						0);
+	return install_uninstall_routes_for_vni(bgp, vpn, 0);
 }
 
 /*
