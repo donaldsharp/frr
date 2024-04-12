@@ -956,7 +956,7 @@ leak_update(struct bgp *to_bgp, struct bgp_dest *bn,
 
 		/* Process change. */
 		bgp_aggregate_increment(to_bgp, p, bpi, afi, safi);
-		bgp_process(to_bgp, bn, afi, safi);
+		bgp_process(to_bgp, bn, bpi, afi, safi);
 		bgp_dest_unlock_node(bn);
 
 		if (debug)
@@ -1033,7 +1033,7 @@ leak_update(struct bgp *to_bgp, struct bgp_dest *bn,
 	bgp_path_info_add(bn, new);
 
 	bgp_dest_unlock_node(bn);
-	bgp_process(to_bgp, bn, afi, safi);
+	bgp_process(to_bgp, bn, new, afi, safi);
 
 	if (debug)
 		zlog_debug("%s: ->%s: %pBD: Added new route", __func__,
@@ -1368,7 +1368,7 @@ void vpn_leak_from_vrf_withdraw(struct bgp *to_bgp,		/* to */
 
 		bgp_aggregate_decrement(to_bgp, p, bpi, afi, safi);
 		bgp_path_info_delete(bn, bpi);
-		bgp_process(to_bgp, bn, afi, safi);
+		bgp_process(to_bgp, bn, bpi, afi, safi);
 	}
 	bgp_dest_unlock_node(bn);
 }
@@ -1388,7 +1388,7 @@ void vpn_leak_from_vrf_withdraw_all(struct bgp *to_bgp, struct bgp *from_bgp,
 
 		struct bgp_table *table;
 		struct bgp_dest *bn;
-		struct bgp_path_info *bpi;
+		struct bgp_path_info *bpi, *next;
 
 		/* This is the per-RD table of prefixes */
 		table = bgp_dest_get_bgp_table_info(pdest);
@@ -1403,7 +1403,8 @@ void vpn_leak_from_vrf_withdraw_all(struct bgp *to_bgp, struct bgp *from_bgp,
 					   __func__, bn);
 			}
 
-			for (; bpi; bpi = bpi->next) {
+			for (; (bpi != NULL) && (next = bpi->next, 1);
+			     bpi = next) {
 				if (debug)
 					zlog_debug("%s: type %d, sub_type %d",
 						   __func__, bpi->type,
@@ -1424,7 +1425,7 @@ void vpn_leak_from_vrf_withdraw_all(struct bgp *to_bgp, struct bgp *from_bgp,
 						to_bgp, bgp_dest_get_prefix(bn),
 						bpi, afi, safi);
 					bgp_path_info_delete(bn, bpi);
-					bgp_process(to_bgp, bn, afi, safi);
+					bgp_process(to_bgp, bn, bpi, afi, safi);
 				}
 			}
 		}
@@ -1521,7 +1522,7 @@ vpn_leak_to_vrf_update_onevrf(struct bgp *to_bgp,	     /* to */
 					__func__, bpi);
 			bgp_aggregate_decrement(to_bgp, p, bpi, afi, safi);
 			bgp_path_info_delete(bn, bpi);
-			bgp_process(to_bgp, bn, afi, safi);
+			bgp_process(to_bgp, bn, bpi, afi, safi);
 		}
 		bgp_dest_unlock_node(bn);
 
@@ -1807,7 +1808,7 @@ void vpn_leak_to_vrf_withdraw(struct bgp *from_bgp,	   /* from */
 					   bpi);
 			bgp_aggregate_decrement(bgp, p, bpi, afi, safi);
 			bgp_path_info_delete(bn, bpi);
-			bgp_process(bgp, bn, afi, safi);
+			bgp_process(bgp, bn, bpi, afi, safi);
 		}
 		bgp_dest_unlock_node(bn);
 	}
@@ -1816,7 +1817,7 @@ void vpn_leak_to_vrf_withdraw(struct bgp *from_bgp,	   /* from */
 void vpn_leak_to_vrf_withdraw_all(struct bgp *to_bgp, afi_t afi)
 {
 	struct bgp_dest *bn;
-	struct bgp_path_info *bpi;
+	struct bgp_path_info *bpi, *next;
 	safi_t safi = SAFI_UNICAST;
 	int debug = BGP_DEBUG(vpn, VPN_LEAK_TO_VRF);
 
@@ -1828,8 +1829,8 @@ void vpn_leak_to_vrf_withdraw_all(struct bgp *to_bgp, afi_t afi)
 	for (bn = bgp_table_top(to_bgp->rib[afi][safi]); bn;
 	     bn = bgp_route_next(bn)) {
 
-		for (bpi = bgp_dest_get_bgp_path_info(bn); bpi;
-		     bpi = bpi->next) {
+		for (bpi = bgp_dest_get_bgp_path_info(bn);
+		     (bpi != NULL) && (next = bpi->next, 1); bpi = next) {
 			if (bpi->extra && bpi->extra->bgp_orig != to_bgp &&
 			    bpi->extra->parent &&
 			    is_pi_family_vpn(bpi->extra->parent)) {
@@ -1839,7 +1840,7 @@ void vpn_leak_to_vrf_withdraw_all(struct bgp *to_bgp, afi_t afi)
 							bgp_dest_get_prefix(bn),
 							bpi, afi, safi);
 				bgp_path_info_delete(bn, bpi);
-				bgp_process(to_bgp, bn, afi, safi);
+				bgp_process(to_bgp, bn, bpi, afi, safi);
 			}
 		}
 	}

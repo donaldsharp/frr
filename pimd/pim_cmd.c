@@ -960,7 +960,6 @@ static void igmp_group_print(struct interface *ifp, struct vty *vty, bool uj,
 			}
 		}
 	} else {
-		char epoch_str_buf[MONOTIME_STRLEN];
 		if (detail) {
 			struct listnode *srcnode;
 			struct gm_source *src;

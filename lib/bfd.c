@@ -752,7 +752,6 @@ void bfd_sess_show(struct vty *vty, struct json_object *json,
 	json_object *json_bfd = NULL;
 	char time_buf[64];
 	time_t epoch_tbuf;
-	char epoch_str_buf[MONOTIME_STRLEN];
 
 	if (!bsp)
 		return;
