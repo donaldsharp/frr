@@ -14863,11 +14863,7 @@ show_adj_route(struct vty *vty, struct peer *peer, struct bgp_table *table,
 
 	if (type == bgp_show_adj_route_advertised && subgrp
 	    && CHECK_FLAG(subgrp->sflags, SUBGRP_STATUS_DEFAULT_ORIGINATE)) {
-		if (use_json) {
-			json_object_string_add(
-				json, "bgpOriginatingDefaultNetwork",
-				(afi == AFI_IP) ? "0.0.0.0/0" : "::/0");
-		} else {
+		if (!use_json) {
 			vty_out(vty,
 				"BGP table version is %" PRIu64
 				", local router ID is %pI4, vrf id ",
@@ -15109,6 +15105,7 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 	bool use_json = CHECK_FLAG(show_flags, BGP_SHOW_OPT_JSON);
 	bool first = true;
 	int header1 = 0, header2 = 0;
+	struct update_subgroup *subgrp;
 
 	/* Init BGP headers here so they're only displayed once
 	 * even if 'table' is 2-tier (MPLS_VPN, ENCAP, EVPN).
@@ -15200,6 +15197,8 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 	else
 		table = bgp->rib[afi][safi];
 
+	subgrp = peer_subgroup(peer, afi, safi);
+
 	if (use_json) {
 		if (type == bgp_show_adj_route_advertised ||
 		    type == bgp_show_adj_route_received) {
@@ -15215,6 +15214,15 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 				vty_json_no_pretty(vty, json_scode);
 				vty_out(vty, ",\"bgpOriginCodes\": ");
 				vty_json_no_pretty(vty, json_ocode);
+				if (type == bgp_show_adj_route_advertised &&
+				    subgrp &&
+				    CHECK_FLAG(subgrp->sflags,
+					       SUBGRP_STATUS_DEFAULT_ORIGINATE))
+					vty_out(vty,
+						",\"bgpOriginatingDefaultNetwork\":\"%s\"",
+						(afi == AFI_IP) ? "0.0.0.0/0"
+								: "::/0");
+
 				/*
 				 * Set header1 to 0 so that we don't transfer
 				 * the ownership of freed objects such as
