@@ -691,12 +691,57 @@ def lines_to_config(ctx_keys, line, delete):
     """
     cmd = []
 
+    # NOTE: This list is separate from the ctx_keywords,
+    # which is used to build context from the run cfg
+    # or from frr.conf.
+    # This list is used to append 'exit' at end of context.
+    # route-map is skipped from the list.
+    cfg_ctx_keywords = {
+        "router bgp ": {
+            "address-family ": {
+                "vni ": {},
+            },
+            "vnc defaults": {},
+            "vnc nve-group ": {},
+            "vnc l2-group ": {},
+            "vrf-policy ": {},
+            "bmp targets ": {},
+            "segment-routing srv6": {},
+        },
+        "router rip": {},
+        "router ripng": {},
+        "router isis ": {},
+        "router openfabric ": {},
+        "router ospf": {},
+        "router ospf6": {},
+        "router eigrp ": {},
+        "router babel": {},
+        "mpls ldp": {"address-family ": {"interface ": {}}},
+        "l2vpn ": {"member pseudowire ": {}},
+        "key chain ": {"key ": {}},
+        "vrf ": {},
+        "interface ": {"link-params": {}},
+        "pseudowire ": {},
+        "segment-routing": {
+            "traffic-eng": {
+                "segment-list ": {},
+                "policy ": {"candidate-path ": {}},
+                "pcep": {"pcc": {}, "pce ": {}, "pce-config ": {}},
+            },
+            "srv6": {"locators": {"locator ": {}}},
+        },
+        "nexthop-group ": {},
+        "pbr-map ": {},
+        "rpki": {},
+        "bfd": {"peer ": {}, "profile ": {}},
+        "line vty": {},
+    }
     # If there's no `line` and `ctx_keys` length is 1, then it may be a single-line command.
     # In this case, we should treat it as a single command in an empty context.
     if len(ctx_keys) == 1 and not line:
         single = True
 
-        for k, v in ctx_keywords.items():
+        for k, v in cfg_ctx_keywords.items():
             if ctx_keys[0].startswith(k):
                 single = False
                 break
@@ -726,6 +771,9 @@ def lines_to_config(ctx_keys, line, delete):
             cmd.append(indent + line)
 
         for i in reversed(range(len(ctx_keys))):
+            # route-map with each match/set clause do not append exit
+            if ctx_keys[0].startswith("route-map "):
+                continue
             cmd.append(" " * i + "exit")
 
     # If line is None then we are typically deleting an entire
@@ -745,6 +793,9 @@ def lines_to_config(ctx_keys, line, delete):
             cmd.append("%sexit" % (" " * (len(ctx_keys) - 1)))
 
         for i in reversed(range(len(ctx_keys) - 1)):
+            # route-map delete do not append exit
+            if ctx_keys[0].startswith("route-map "):
+                continue
             cmd.append(" " * i + "exit")
 
     return cmd
