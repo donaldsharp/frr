@@ -1268,13 +1268,13 @@ bgp_attr_malformed(struct bgp_attr_parser_args *args, uint8_t subcode,
 	 */
 	uint8_t *notify_datap = (length > 0 ? args->startp : NULL);
 
-	char attr_str[BUFSIZ] = {0};
+	char attr_buf_str[BUFSIZ] = {0};
 
-	bgp_dump_attr(attr, attr_str, sizeof(attr_str));
+	bgp_dump_attr(attr, attr_buf_str, sizeof(attr_buf_str));
 	if (bgp_debug_update(peer, NULL, NULL, 1))
-		zlog_debug("%s: attributes: %s", __func__, attr_str);
+		zlog_debug("%s: attributes: %s", __func__, attr_buf_str);
 
-	frrtrace(2, frr_bgp, upd_malformed_attr, peer->host, attr_str);
+	frrtrace(2, frr_bgp, upd_malformed_attr, peer->host, attr_buf_str);
 
 	/* Only relax error handling for eBGP peers */
 	if (peer->sort != BGP_PEER_EBGP) {
