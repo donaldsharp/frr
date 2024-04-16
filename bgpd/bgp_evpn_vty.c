@@ -3165,6 +3165,11 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 	safi = SAFI_EVPN;
 	prefix_cnt = path_cnt = rd_prefix_cnt = 0;
 
+	if (brief && !json) {
+		vty_out(vty, "Brief cmd must be used only with json\n");
+		return;
+	}
+
 	/* EVPN routing table is a 2-level table with the first level being
 	 * the RD.
 	 */
@@ -3249,8 +3254,8 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 			multi_path_count = 0;
 			if (json) {
 				json_prefix = json_object_new_object();
-				json_paths = json_object_new_array();
 				if (!brief) {
+					json_paths = json_object_new_array();
 					json_object_string_addf(json_prefix,
 								"prefix",
 								"%pFX", p);
@@ -3279,22 +3284,30 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 				add_prefix_to_json = 1;
 				add_rd_to_json = 1;
 
-				if (json)
-					json_path = json_object_new_array();
+				if (!brief) {
+					if (json)
+						json_path =
+							json_object_new_array();
 
-				if (detail) {
-					route_vty_out_detail(
-						vty, bgp, dest,
-						bgp_dest_get_prefix(dest), pi,
-						AFI_L2VPN, SAFI_EVPN,
-						RPKI_NOT_BEING_USED, json_path);
-				} else
-					route_vty_out(vty, p, pi, 0, SAFI_EVPN,
-						      json_path, false, rd_str);
+					if (detail) {
+						route_vty_out_detail(
+							vty, bgp, dest,
+							bgp_dest_get_prefix(
+								dest),
+							pi, AFI_L2VPN,
+							SAFI_EVPN,
+							RPKI_NOT_BEING_USED,
+							json_path);
+					} else
+						route_vty_out(vty, p, pi, 0,
+							      SAFI_EVPN,
+							      json_path, false,
+							      rd_str);
 
-				if (json)
-					json_object_array_add(json_paths,
-							      json_path);
+					if (json)
+						json_object_array_add(
+							json_paths, json_path);
+				}
 
 				prefix_path_count++;
 				if (CHECK_FLAG(pi->flags, BGP_PATH_MULTIPATH))
@@ -3340,10 +3353,13 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 								"%pFX", p);
 				} else {
 					json_object_free(json_prefix);
-					json_object_free(json_paths);
+					if (!brief) {
+						json_object_free(json_paths);
+						json_paths = NULL;
+					}
+
 					json_object_free(json_flags);
 					json_prefix = NULL;
-					json_paths = NULL;
 					json_flags = NULL;
 				}
 			}

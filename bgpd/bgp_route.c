@@ -11793,6 +11793,11 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 	bool detail_routes = CHECK_FLAG(show_flags, BGP_SHOW_OPT_ROUTES_DETAIL);
 	int prefix_path_count, best_path_selected, multi_path_count;
 
+	if (brief && !use_json) {
+		vty_out(vty, "Brief cmd must be used only with json\n");
+		return CMD_SUCCESS;
+	}
+
 	if (output_cum && *output_cum != 0)
 		header = false;
 
@@ -11850,10 +11855,8 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 		prefix_path_count = 0;
 		best_path_selected = 0;
 		multi_path_count = 0;
-		if (use_json)
+		if (use_json && !brief)
 			json_paths = json_object_new_array();
-		else
-			json_paths = NULL;
 
 		for (; pi; pi = pi->next) {
 			struct community *picomm = NULL;
@@ -11862,303 +11865,357 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 
 			total_count++;
 
-			if (type == bgp_show_type_prefix_version) {
-				uint32_t version =
-					strtoul(output_arg, NULL, 10);
-				if (dest->version < version)
-					continue;
-			}
+			if (!brief) {
+				if (type == bgp_show_type_prefix_version) {
+					uint32_t version =
+						strtoul(output_arg, NULL, 10);
+					if (dest->version < version)
+						continue;
+				}
 
-			if (type == bgp_show_type_community_alias) {
-				char *alias = output_arg;
-				char **communities;
-				int num;
-				bool found = false;
+				if (type == bgp_show_type_community_alias) {
+					char *alias = output_arg;
+					char **communities;
+					int num;
+					bool found = false;
 
-				if (picomm) {
-					frrstr_split(picomm->str, " ",
-						     &communities, &num);
-					for (int i = 0; i < num; i++) {
-						const char *com2alias =
-							bgp_community2alias(
-								communities[i]);
-						if (!found
-						    && strcmp(alias, com2alias)
-							       == 0)
-							found = true;
-						XFREE(MTYPE_TMP,
-						      communities[i]);
+					if (picomm) {
+						frrstr_split(picomm->str, " ",
+							     &communities,
+							     &num);
+						for (int i = 0; i < num; i++) {
+							const char *com2alias =
+								bgp_community2alias(
+									communities
+										[i]);
+							if (!found &&
+							    strcmp(alias,
+								   com2alias) ==
+								    0)
+								found = true;
+							XFREE(MTYPE_TMP,
+							      communities[i]);
+						}
+						XFREE(MTYPE_TMP, communities);
 					}
-					XFREE(MTYPE_TMP, communities);
-				}
 
-				if (!found &&
-				    bgp_attr_get_lcommunity(pi->attr)) {
-					frrstr_split(bgp_attr_get_lcommunity(
-							     pi->attr)
-							     ->str,
-						     " ", &communities, &num);
-					for (int i = 0; i < num; i++) {
-						const char *com2alias =
-							bgp_community2alias(
-								communities[i]);
-						if (!found
-						    && strcmp(alias, com2alias)
-							       == 0)
-							found = true;
-						XFREE(MTYPE_TMP,
-						      communities[i]);
+					if (!found &&
+					    bgp_attr_get_lcommunity(pi->attr)) {
+						frrstr_split(
+							bgp_attr_get_lcommunity(
+								pi->attr)
+								->str,
+							" ", &communities,
+							&num);
+						for (int i = 0; i < num; i++) {
+							const char *com2alias =
+								bgp_community2alias(
+									communities
+										[i]);
+							if (!found &&
+							    strcmp(alias,
+								   com2alias) ==
+								    0)
+								found = true;
+							XFREE(MTYPE_TMP,
+							      communities[i]);
+						}
+						XFREE(MTYPE_TMP, communities);
 					}
-					XFREE(MTYPE_TMP, communities);
+
+					if (!found)
+						continue;
 				}
 
-				if (!found)
-					continue;
-			}
-
-			if (type == bgp_show_type_rpki) {
-				if (dest_p->family == AF_INET
-				    || dest_p->family == AF_INET6)
-					rpki_curr_state = hook_call(
-						bgp_rpki_prefix_status,
-						pi->peer, pi->attr, dest_p);
-				if (rpki_target_state != RPKI_NOT_BEING_USED
-				    && rpki_curr_state != rpki_target_state)
-					continue;
-			}
-
-			if (type == bgp_show_type_flap_statistics
-			    || type == bgp_show_type_flap_neighbor
-			    || type == bgp_show_type_dampend_paths
-			    || type == bgp_show_type_damp_neighbor) {
-				if (!(pi->extra && pi->extra->damp_info))
-					continue;
-			}
-			if (type == bgp_show_type_regexp) {
-				regex_t *regex = output_arg;
-
-				if (bgp_regexec(regex, pi->attr->aspath)
-				    == REG_NOMATCH)
-					continue;
-			}
-			if (type == bgp_show_type_prefix_list) {
-				struct prefix_list *plist = output_arg;
-
-				if (prefix_list_apply(plist, dest_p)
-				    != PREFIX_PERMIT)
-					continue;
-			}
-			if (type == bgp_show_type_access_list) {
-				struct access_list *alist = output_arg;
-
-				if (access_list_apply(alist, dest_p) !=
-				    FILTER_PERMIT)
-					continue;
-			}
-			if (type == bgp_show_type_filter_list) {
-				struct as_list *as_list = output_arg;
-
-				if (as_list_apply(as_list, pi->attr->aspath)
-				    != AS_FILTER_PERMIT)
-					continue;
-			}
-			if (type == bgp_show_type_route_map) {
-				struct route_map *rmap = output_arg;
-				struct bgp_path_info path;
-				struct bgp_path_info_extra extra;
-				struct attr dummy_attr = {};
-				route_map_result_t ret;
-
-				dummy_attr = *pi->attr;
-
-				prep_for_rmap_apply(&path, &extra, dest, pi,
-						    pi->peer, &dummy_attr);
-
-				ret = route_map_apply(rmap, dest_p, &path);
-				bgp_attr_flush(&dummy_attr);
-				if (ret == RMAP_DENYMATCH)
-					continue;
-			}
-			if (type == bgp_show_type_neighbor
-			    || type == bgp_show_type_flap_neighbor
-			    || type == bgp_show_type_damp_neighbor) {
-				union sockunion *su = output_arg;
-
-				if (pi->peer == NULL
-				    || pi->peer->su_remote == NULL
-				    || !sockunion_same(pi->peer->su_remote, su))
-					continue;
-			}
-			if (type == bgp_show_type_cidr_only) {
-				uint32_t destination;
-
-				destination = ntohl(dest_p->u.prefix4.s_addr);
-				if (IN_CLASSC(destination)
-				    && dest_p->prefixlen == 24)
-					continue;
-				if (IN_CLASSB(destination)
-				    && dest_p->prefixlen == 16)
-					continue;
-				if (IN_CLASSA(destination)
-				    && dest_p->prefixlen == 8)
-					continue;
-			}
-			if (type == bgp_show_type_prefix_longer) {
-				p = output_arg;
-				if (!prefix_match(p, dest_p))
-					continue;
-			}
-			if (type == bgp_show_type_community_all) {
-				if (!picomm)
-					continue;
-			}
-			if (type == bgp_show_type_community) {
-				struct community *com = output_arg;
-
-				if (!picomm || !community_match(picomm, com))
-					continue;
-			}
-			if (type == bgp_show_type_community_exact) {
-				struct community *com = output_arg;
-
-				if (!picomm || !community_cmp(picomm, com))
-					continue;
-			}
-			if (type == bgp_show_type_community_list) {
-				struct community_list *list = output_arg;
-
-				if (!community_list_match(picomm, list))
-					continue;
-			}
-			if (type == bgp_show_type_community_list_exact) {
-				struct community_list *list = output_arg;
-
-				if (!community_list_exact_match(picomm, list))
-					continue;
-			}
-			if (type == bgp_show_type_lcommunity) {
-				struct lcommunity *lcom = output_arg;
-
-				if (!bgp_attr_get_lcommunity(pi->attr) ||
-				    !lcommunity_match(
-					    bgp_attr_get_lcommunity(pi->attr),
-					    lcom))
-					continue;
-			}
-
-			if (type == bgp_show_type_lcommunity_exact) {
-				struct lcommunity *lcom = output_arg;
-
-				if (!bgp_attr_get_lcommunity(pi->attr) ||
-				    !lcommunity_cmp(
-					    bgp_attr_get_lcommunity(pi->attr),
-					    lcom))
-					continue;
-			}
-			if (type == bgp_show_type_lcommunity_list) {
-				struct community_list *list = output_arg;
-
-				if (!lcommunity_list_match(
-					    bgp_attr_get_lcommunity(pi->attr),
-					    list))
-					continue;
-			}
-			if (type
-			    == bgp_show_type_lcommunity_list_exact) {
-				struct community_list *list = output_arg;
-
-				if (!lcommunity_list_exact_match(
-					    bgp_attr_get_lcommunity(pi->attr),
-					    list))
-					continue;
-			}
-			if (type == bgp_show_type_lcommunity_all) {
-				if (!bgp_attr_get_lcommunity(pi->attr))
-					continue;
-			}
-			if (type == bgp_show_type_dampend_paths
-			    || type == bgp_show_type_damp_neighbor) {
-				if (!CHECK_FLAG(pi->flags, BGP_PATH_DAMPED)
-				    || CHECK_FLAG(pi->flags, BGP_PATH_HISTORY))
-					continue;
-			}
-			if (type == bgp_show_type_self_originated) {
-				if (pi->peer != bgp->peer_self)
-					continue;
-			}
-
-			if (!use_json && header) {
-				vty_out(vty,
-					"BGP table version is %" PRIu64
-					", local router ID is %pI4, vrf id ",
-					table->version, &bgp->router_id);
-				if (bgp->vrf_id == VRF_UNKNOWN)
-					vty_out(vty, "%s", VRFID_NONE_STR);
-				else
-					vty_out(vty, "%u", bgp->vrf_id);
-				vty_out(vty, "\n");
-				vty_out(vty, "Default local pref %u, ",
-					bgp->default_local_pref);
-				vty_out(vty, "local AS %u\n", bgp->as);
-				if (!detail_routes) {
-					vty_out(vty, BGP_SHOW_SCODE_HEADER);
-					vty_out(vty, BGP_SHOW_NCODE_HEADER);
-					vty_out(vty, BGP_SHOW_OCODE_HEADER);
-					vty_out(vty, BGP_SHOW_RPKI_HEADER);
+				if (type == bgp_show_type_rpki) {
+					if (dest_p->family == AF_INET ||
+					    dest_p->family == AF_INET6)
+						rpki_curr_state = hook_call(
+							bgp_rpki_prefix_status,
+							pi->peer, pi->attr,
+							dest_p);
+					if (rpki_target_state !=
+						    RPKI_NOT_BEING_USED &&
+					    rpki_curr_state !=
+						    rpki_target_state)
+						continue;
 				}
-				if (type == bgp_show_type_dampend_paths
-				    || type == bgp_show_type_damp_neighbor)
-					vty_out(vty, BGP_SHOW_DAMP_HEADER);
-				else if (type == bgp_show_type_flap_statistics
-					 || type == bgp_show_type_flap_neighbor)
-					vty_out(vty, BGP_SHOW_FLAP_HEADER);
-				else if (!detail_routes)
-					vty_out(vty, (wide ? BGP_SHOW_HEADER_WIDE
-							   : BGP_SHOW_HEADER));
-				header = false;
 
-			}
-			if (rd != NULL && !display && !output_count) {
-				if (!use_json)
+				if (type == bgp_show_type_flap_statistics ||
+				    type == bgp_show_type_flap_neighbor ||
+				    type == bgp_show_type_dampend_paths ||
+				    type == bgp_show_type_damp_neighbor) {
+					if (!(pi->extra &&
+					      pi->extra->damp_info))
+						continue;
+				}
+				if (type == bgp_show_type_regexp) {
+					regex_t *regex = output_arg;
+
+					if (bgp_regexec(regex,
+							pi->attr->aspath) ==
+					    REG_NOMATCH)
+						continue;
+				}
+				if (type == bgp_show_type_prefix_list) {
+					struct prefix_list *plist = output_arg;
+
+					if (prefix_list_apply(plist, dest_p) !=
+					    PREFIX_PERMIT)
+						continue;
+				}
+				if (type == bgp_show_type_access_list) {
+					struct access_list *alist = output_arg;
+
+					if (access_list_apply(alist, dest_p) !=
+					    FILTER_PERMIT)
+						continue;
+				}
+				if (type == bgp_show_type_filter_list) {
+					struct as_list *as_list = output_arg;
+
+					if (as_list_apply(as_list,
+							  pi->attr->aspath) !=
+					    AS_FILTER_PERMIT)
+						continue;
+				}
+				if (type == bgp_show_type_route_map) {
+					struct route_map *rmap = output_arg;
+					struct bgp_path_info path;
+					struct bgp_path_info_extra extra;
+					struct attr dummy_attr = {};
+					route_map_result_t ret;
+
+					dummy_attr = *pi->attr;
+
+					prep_for_rmap_apply(&path, &extra, dest,
+							    pi, pi->peer,
+							    &dummy_attr);
+
+					ret = route_map_apply(rmap, dest_p,
+							      &path);
+					bgp_attr_flush(&dummy_attr);
+					if (ret == RMAP_DENYMATCH)
+						continue;
+				}
+				if (type == bgp_show_type_neighbor ||
+				    type == bgp_show_type_flap_neighbor ||
+				    type == bgp_show_type_damp_neighbor) {
+					union sockunion *su = output_arg;
+
+					if (pi->peer == NULL ||
+					    pi->peer->su_remote == NULL ||
+					    !sockunion_same(pi->peer->su_remote,
+							    su))
+						continue;
+				}
+				if (type == bgp_show_type_cidr_only) {
+					uint32_t destination;
+
+					destination =
+						ntohl(dest_p->u.prefix4.s_addr);
+					if (IN_CLASSC(destination) &&
+					    dest_p->prefixlen == 24)
+						continue;
+					if (IN_CLASSB(destination) &&
+					    dest_p->prefixlen == 16)
+						continue;
+					if (IN_CLASSA(destination) &&
+					    dest_p->prefixlen == 8)
+						continue;
+				}
+				if (type == bgp_show_type_prefix_longer) {
+					p = output_arg;
+					if (!prefix_match(p, dest_p))
+						continue;
+				}
+				if (type == bgp_show_type_community_all) {
+					if (!picomm)
+						continue;
+				}
+				if (type == bgp_show_type_community) {
+					struct community *com = output_arg;
+
+					if (!picomm ||
+					    !community_match(picomm, com))
+						continue;
+				}
+				if (type == bgp_show_type_community_exact) {
+					struct community *com = output_arg;
+
+					if (!picomm ||
+					    !community_cmp(picomm, com))
+						continue;
+				}
+				if (type == bgp_show_type_community_list) {
+					struct community_list *list =
+						output_arg;
+
+					if (!community_list_match(picomm, list))
+						continue;
+				}
+				if (type ==
+				    bgp_show_type_community_list_exact) {
+					struct community_list *list =
+						output_arg;
+
+					if (!community_list_exact_match(picomm,
+									list))
+						continue;
+				}
+				if (type == bgp_show_type_lcommunity) {
+					struct lcommunity *lcom = output_arg;
+
+					if (!bgp_attr_get_lcommunity(
+						    pi->attr) ||
+					    !lcommunity_match(
+						    bgp_attr_get_lcommunity(
+							    pi->attr),
+						    lcom))
+						continue;
+				}
+
+				if (type == bgp_show_type_lcommunity_exact) {
+					struct lcommunity *lcom = output_arg;
+
+					if (!bgp_attr_get_lcommunity(
+						    pi->attr) ||
+					    !lcommunity_cmp(
+						    bgp_attr_get_lcommunity(
+							    pi->attr),
+						    lcom))
+						continue;
+				}
+				if (type == bgp_show_type_lcommunity_list) {
+					struct community_list *list =
+						output_arg;
+
+					if (!lcommunity_list_match(
+						    bgp_attr_get_lcommunity(
+							    pi->attr),
+						    list))
+						continue;
+				}
+				if (type ==
+				    bgp_show_type_lcommunity_list_exact) {
+					struct community_list *list =
+						output_arg;
+
+					if (!lcommunity_list_exact_match(
+						    bgp_attr_get_lcommunity(
+							    pi->attr),
+						    list))
+						continue;
+				}
+				if (type == bgp_show_type_lcommunity_all) {
+					if (!bgp_attr_get_lcommunity(pi->attr))
+						continue;
+				}
+				if (type == bgp_show_type_dampend_paths ||
+				    type == bgp_show_type_damp_neighbor) {
+					if (!CHECK_FLAG(pi->flags,
+							BGP_PATH_DAMPED) ||
+					    CHECK_FLAG(pi->flags,
+						       BGP_PATH_HISTORY))
+						continue;
+				}
+				if (type == bgp_show_type_self_originated) {
+					if (pi->peer != bgp->peer_self)
+						continue;
+				}
+
+				if (!use_json && header) {
 					vty_out(vty,
-						"Route Distinguisher: %s\n",
-						rd);
-			}
-			if (type == bgp_show_type_dampend_paths
-			    || type == bgp_show_type_damp_neighbor)
-				damp_route_vty_out(vty, dest_p, pi, display,
-						   AFI_IP, safi, use_json,
-						   json_paths);
-			else if (type == bgp_show_type_flap_statistics
-				 || type == bgp_show_type_flap_neighbor)
-				flap_route_vty_out(vty, dest_p, pi, display,
-						   AFI_IP, safi, use_json,
-						   json_paths);
-			else {
-				if (detail_routes || detail_json) {
-					const struct prefix_rd *prd = NULL;
-
-					if (dest->pdest)
-						prd = bgp_rd_from_dest(
-							dest->pdest, safi);
-
+						"BGP table version is %" PRIu64
+						", local router ID is %pI4, vrf id ",
+						table->version,
+						&bgp->router_id);
+					if (bgp->vrf_id == VRF_UNKNOWN)
+						vty_out(vty, "%s",
+							VRFID_NONE_STR);
+					else
+						vty_out(vty, "%u", bgp->vrf_id);
+					vty_out(vty, "\n");
+					vty_out(vty, "Default local pref %u, ",
+						bgp->default_local_pref);
+					vty_out(vty, "local AS %u\n", bgp->as);
+					if (!detail_routes) {
+						vty_out(vty,
+							BGP_SHOW_SCODE_HEADER);
+						vty_out(vty,
+							BGP_SHOW_NCODE_HEADER);
+						vty_out(vty,
+							BGP_SHOW_OCODE_HEADER);
+						vty_out(vty,
+							BGP_SHOW_RPKI_HEADER);
+					}
+					if (type == bgp_show_type_dampend_paths ||
+					    type == bgp_show_type_damp_neighbor)
+						vty_out(vty,
+							BGP_SHOW_DAMP_HEADER);
+					else if (
+						type == bgp_show_type_flap_statistics ||
+						type == bgp_show_type_flap_neighbor)
+						vty_out(vty,
+							BGP_SHOW_FLAP_HEADER);
+					else if (!detail_routes)
+						vty_out(vty,
+							(wide ? BGP_SHOW_HEADER_WIDE
+							      : BGP_SHOW_HEADER));
+					header = false;
+				}
+				if (rd != NULL && !display && !output_count) {
 					if (!use_json)
-						route_vty_out_detail_header(
-							vty, bgp, dest,
-							bgp_dest_get_prefix(
-								dest),
-							prd, table->afi, safi,
-							NULL, false);
+						vty_out(vty,
+							"Route Distinguisher: %s\n",
+							rd);
+				}
+				if (type == bgp_show_type_dampend_paths ||
+				    type == bgp_show_type_damp_neighbor)
+					damp_route_vty_out(vty, dest_p, pi,
+							   display, AFI_IP,
+							   safi, use_json,
+							   json_paths);
+				else if (
+					type == bgp_show_type_flap_statistics ||
+					type == bgp_show_type_flap_neighbor)
+					flap_route_vty_out(vty, dest_p, pi,
+							   display, AFI_IP,
+							   safi, use_json,
+							   json_paths);
+				else {
+					if (detail_routes || detail_json) {
+						const struct prefix_rd *prd =
+							NULL;
 
-					route_vty_out_detail(
-						vty, bgp, dest, dest_p, pi,
-						family2afi(dest_p->family),
-						safi, RPKI_NOT_BEING_USED,
-						json_paths);
-				} else {
-					route_vty_out(vty, dest_p, pi, display,
-						      safi, json_paths, wide,
-						      NULL);
+						if (dest->pdest)
+							prd = bgp_rd_from_dest(
+								dest->pdest,
+								safi);
+
+						if (!use_json)
+							route_vty_out_detail_header(
+								vty, bgp, dest,
+								bgp_dest_get_prefix(
+									dest),
+								prd, table->afi,
+								safi, NULL,
+								false);
+
+						route_vty_out_detail(
+							vty, bgp, dest, dest_p,
+							pi,
+							family2afi(
+								dest_p->family),
+							safi,
+							RPKI_NOT_BEING_USED,
+							json_paths);
+					} else {
+						route_vty_out(vty, dest_p, pi,
+							      display, safi,
+							      json_paths, wide,
+							      NULL);
+					}
 				}
 			}
 			display++;
@@ -12219,7 +12276,8 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			 *   "paths": [{path-1}, {path-N}]
 			 * }
 			 */
-			if (json_detail_header && json_paths != NULL) {
+			if (json_detail_header && json_paths != NULL &&
+			    !brief) {
 				const struct prefix_rd *prd;
 
 				/* Start per-prefix dictionary */
@@ -12248,9 +12306,6 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			if (brief) {
 			    /* Start per-prefix entry for brief */
 			    vty_out(vty, "{\n");
-			    /* Free the json_paths as it is not part of brief
-			     * display */
-			    json_object_free(json_paths);
 			} else {
 			    vty_json_no_pretty(vty, json_paths);
 		            /* Delimiter between path and pathcount for detailed output */
@@ -12284,7 +12339,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 
 			json_paths = NULL;
 			first = 0;
-		} else
+		} else if (!brief)
 			json_object_free(json_paths);
 	}
 
