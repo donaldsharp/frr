@@ -725,6 +725,7 @@ static void zebra_gr_delete_stale_route_table_afi(struct event *event)
 		client = zebra_gr_find_stale_client(gac->proto, gac->instance);
 		if (!client) {
 			LOG_GR("GR: %s Neither active nor stale client found", __func__);
+			frrtrace(3, frr_zebra, gr_client_not_found, gac->info->vrf_id, gac->afi, 2);
 			goto done;
 		}
 	}
@@ -893,6 +894,7 @@ void zebra_gr_process_client(afi_t afi, vrf_id_t vrf_id, uint8_t proto, uint8_t 
 		client = zebra_gr_find_stale_client(proto, instance);
 		if (!client) {
 			LOG_GR("GR: %s: Neither active nor stale client found", __func__);
+			frrtrace(3, frr_zebra, gr_client_not_found, vrf_id, afi, 1);
 			return;
 		}
 	}

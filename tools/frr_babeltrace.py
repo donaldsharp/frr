@@ -365,6 +365,12 @@ def location_last_route_re(field_val):
     elif field_val == 2:
         return ("RE not installed")
 
+def location_gr_client_not_found(field_val):
+    if field_val == 1:
+        return ("Process from GR queue")
+    elif field_val == 2:
+        return ("Stale route delete from table")
+
 def print_prefix_addr(field_val):
     """
     pretty print "struct prefix"
@@ -1274,7 +1280,7 @@ def main():
                      parse_frr_bgp_ug_subgroup_add_remove_peer,
                      "frr_bgp:ug_bgp_aggregate_install":
                      parse_frr_bgp_ug_bgp_aggregate_install,
-                    "frr_zebra:zebra_vxlan_handle_vni_transition":
+                     "frr_zebra:zebra_vxlan_handle_vni_transition":
                      parse_frr_zebra_zebra_vxlan_handle_vni_transition,
                      "frr_zebra:gr_client_not_found":
                      parse_frr_zebra_gr_client_not_found,
