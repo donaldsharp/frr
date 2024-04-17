@@ -4069,6 +4069,12 @@ DEFPY (interface_ip_pim_allowrp,
 	}
 
 	pim_ifp = ifp->info;
+	
+	if (no && !pim_ifp) {
+		vty_out(vty, "PIM is not enabled on the interface %s\n",
+			ifp->name);
+		return CMD_SUCCESS;
+	}
 
 	pim_ifp->allow_rp = !no;
 
