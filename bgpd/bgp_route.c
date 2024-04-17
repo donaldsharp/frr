@@ -12359,7 +12359,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 			unsigned long i;
 			for (i = 0; i < *json_header_depth; ++i) {
 				if (i == 1)
-					vty_out(vty, ",\"numPrefixes\":%d\n",
+					vty_out(vty, ",\"numPrefixes\":%ld\n",
 						output_count);
 				vty_out(vty, " } ");
 			}
