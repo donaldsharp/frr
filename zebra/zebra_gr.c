@@ -64,7 +64,8 @@ struct zebra_gr_afi_clean {
 /*
  * Forward declaration.
  */
-static struct zserv *zebra_gr_find_stale_client(struct zserv *client);
+static struct zserv *zebra_gr_find_stale_client(uint8_t proto,
+						uint16_t instance);
 static void zebra_gr_route_stale_delete_timer_expiry(struct thread *thread);
 static int32_t zebra_gr_delete_stale_routes(struct client_gr_info *info);
 static void zebra_gr_process_client_stale_routes(struct zserv *client,
@@ -175,7 +176,8 @@ int32_t zebra_gr_client_disconnect(struct zserv *client)
 	struct client_gr_info *info = NULL;
 
 	/* Find the stale client */
-	stale_client = zebra_gr_find_stale_client(client);
+	stale_client =
+		zebra_gr_find_stale_client(client->proto, client->instance);
 
 	/*
 	 * We should never be here.
@@ -267,7 +269,8 @@ static void zebra_gr_delete_stale_client(struct client_gr_info *info)
 /*
  * Function to find stale client.
  */
-static struct zserv *zebra_gr_find_stale_client(struct zserv *client)
+static struct zserv *zebra_gr_find_stale_client(uint8_t proto,
+						uint16_t instance)
 {
 	struct listnode *node, *nnode;
 	struct zserv *stale_client;
@@ -275,8 +278,8 @@ static struct zserv *zebra_gr_find_stale_client(struct zserv *client)
 	/* Find the stale client */
 	for (ALL_LIST_ELEMENTS(zrouter.stale_client_list, node, nnode,
 			       stale_client)) {
-		if (client->proto == stale_client->proto
-		    && client->instance == stale_client->instance) {
+		if (stale_client->proto == proto &&
+		    stale_client->instance == instance) {
 			return stale_client;
 		}
 	}
@@ -770,6 +773,18 @@ static void zebra_gr_delete_stale_route_table_afi(struct thread *event)
 	struct zebra_vrf *zvrf = zebra_vrf_lookup_by_id(gac->info->vrf_id);
 	struct zserv *client = zserv_find_client(gac->proto, gac->instance);
 
+	if (!client) {
+		/*
+		 * Active client doesn't exist. Look for stale client
+		 */
+		client = zebra_gr_find_stale_client(gac->proto, gac->instance);
+		if (!client) {
+			LOG_GR("GR: %s Neither active nor stale client found",
+			       __func__);
+			goto done;
+		}
+	}
+
 	if (!zvrf)
 		goto done;
 
@@ -927,6 +942,21 @@ void zebra_gr_process_client(afi_t afi, vrf_id_t vrf_id, uint8_t proto,
 	struct zserv *client = zserv_find_client(proto, instance);
 	struct client_gr_info *info = NULL;
 	struct zebra_gr_afi_clean *gac;
+
+	if (!client) {
+		/*
+		 * Active client doesn't exist. May be it's already been
+		 * unlinked from zrouter.client_list in zserv_close_client(),
+		 * which could happen when client goes down. See if stale client
+		 * exists
+		 */
+		client = zebra_gr_find_stale_client(proto, instance);
+		if (!client) {
+			LOG_GR("GR: %s: Neither active nor stale client found",
+			       __func__);
+			return;
+		}
+	}
 
 	TAILQ_FOREACH (info, &client->gr_info_queue, gr_info) {
 		if (info->vrf_id == vrf_id)
