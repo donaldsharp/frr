@@ -101,6 +101,7 @@ void zebra_gr_stale_client_cleanup(struct list *client_list)
 			if (info->t_stale_removal != NULL) {
 				EVENT_OFF(info->t_stale_removal);
 				info->do_delete = true;
+				info->stale_client = true;
 				/* Process the stale routes */
 				event_execute(
 					zrouter.master,
@@ -183,13 +184,14 @@ int32_t zebra_gr_client_disconnect(struct zserv *client)
 		    && (info->t_stale_removal == NULL)) {
 			struct vrf *vrf = vrf_lookup_by_id(info->vrf_id);
 
+			info->stale_client_ptr = client;
+			info->stale_client = true;
 			event_add_timer(
 				zrouter.master,
 				zebra_gr_route_stale_delete_timer_expiry, info,
 				info->stale_removal_time,
 				&info->t_stale_removal);
-			info->stale_client_ptr = client;
-			info->stale_client = true;
+
 			LOG_GR("%s: Client %s vrf %s(%u) Started stale cleanup timer. Interval: %d",
 			       __func__, zebra_route_string(client->proto), VRF_LOGNAME(vrf),
 			       info->vrf_id, info->stale_removal_time);
