@@ -184,7 +184,7 @@ int32_t zebra_gr_client_disconnect(struct zserv *client)
 	 * We should never be here.
 	 */
 	if (stale_client) {
-		LOG_GR("%s: Stale client %s exist, we should not be here!",
+		LOG_GR("GR: %s: Stale client %s exist, we should not be here!",
 		       __func__, zebra_route_string(client->proto));
 		frrtrace(1, frr_zebra, gr_client_disconnect_stale_exists,
 			 zebra_route_string(client->proto));
@@ -207,7 +207,7 @@ int32_t zebra_gr_client_disconnect(struct zserv *client)
 				info->stale_removal_time,
 				&info->t_stale_removal);
 
-			LOG_GR("%s: Client %s vrf %s(%u) Started stale cleanup timer. Interval: %d",
+			LOG_GR("GR %s: Client %s vrf %s(%u) Started stale cleanup timer. Interval: %d",
 			       __func__, zebra_route_string(client->proto),
 			       VRF_LOGNAME(vrf), info->vrf_id,
 			       info->stale_removal_time);
@@ -244,7 +244,7 @@ static void zebra_gr_delete_stale_client(struct client_gr_info *info)
 
 	TAILQ_REMOVE(&(s_client->gr_info_queue), info, gr_info);
 
-	LOG_GR("%s: Client %s gr count %d", __func__,
+	LOG_GR("GR %s: Client %s gr count %d", __func__,
 	       zebra_route_string(s_client->proto),
 	       s_client->gr_instance_count);
 	frrtrace(2, frr_zebra, gr_delete_stale_client,
@@ -255,7 +255,7 @@ static void zebra_gr_delete_stale_client(struct client_gr_info *info)
 		return;
 	}
 
-	LOG_GR("%s: Stale client %s is being deleted", __func__,
+	LOG_GR("GR %s: Stale client %s is being deleted", __func__,
 	       zebra_route_string(s_client->proto));
 	frrtrace(2, frr_zebra, gr_free_stale_client,
 		 zebra_route_string(s_client->proto), VRF_LOGNAME(vrf));
@@ -849,7 +849,7 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 		restart_time = s_client->restart_time;
 	}
 
-	LOG_GR("GR %s: Client %s %s(%u) stale routes are being deleted",
+	LOG_GR("GR %s: Client %s %s(%u) stale routes are scheduled for deletion",
 	       __func__, zebra_route_string(proto), VRF_LOGNAME(zvrf->vrf),
 	       zvrf->vrf->vrf_id);
 	frrtrace(2, frr_zebra, gr_delete_stale_route, zebra_route_string(proto),
