@@ -837,7 +837,7 @@ static int32_t zebra_gr_delete_stale_route(struct client_gr_info *info,
 		}
 		proto = client->proto;
 		instance = client->instance;
-		restart_time = zrouter.startup_time;
+		restart_time = client->restart_time;
 	} else {
 		s_client = info->stale_client_ptr;
 		if (s_client == NULL) {
