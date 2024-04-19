@@ -610,13 +610,31 @@ pbr_map_sequence_check_nexthops_valid(struct pbr_map_sequence *pbrms)
 	}
 }
 
+/*
+ * There are four options of these two ECN bits
+ * 00 => Non-ECN Packet ==> still valid (0-3)
+ * 01 => ECN capable
+ * 10 => ECN capable
+ * 11 =>  Congestion experienced (CE)
+ * Both 10 and 01 are same
+ *
+ * The dsfield is an 8-bit field where the first 6 bits are used for DSCP and
+ * the last 2 bits are used for ECN
+ *
+ * DSCP 000000 /ECN 00 should be considered though CLI, by default value is 0.
+ */
+
+
 static void pbr_map_sequence_check_not_empty(struct pbr_map_sequence *pbrms)
 {
-	if (!pbrms->src && !pbrms->dst && !pbrms->mark &&
+	if (!pbrms->src && !pbrms->dst && !pbrms->mark && !pbrms->dsfield &&
 	    !pbrms->action_vlan_id && !pbrms->action_vlan_flags &&
 	    !pbrms->action_pcp &&
-	    pbrms->action_queue_id == PBR_MAP_UNDEFINED_QUEUE_ID)
+	    pbrms->action_queue_id == PBR_MAP_UNDEFINED_QUEUE_ID) {
+
+		DEBUGD(&pbr_dbg_map, "pbr map check empty  %s", __func__);
 		pbrms->reason |= PBR_MAP_INVALID_EMPTY;
+	}
 }
 
 static void pbr_map_sequence_check_vlan_actions(struct pbr_map_sequence *pbrms)
