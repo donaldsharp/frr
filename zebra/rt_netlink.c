@@ -4724,13 +4724,14 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 						    zif->link_ifindex);
 		if (!link_if)
 			return 0;
-	} else if (IS_ZEBRA_IF_BRIDGE(ifp))
+	} else if (IS_ZEBRA_IF_BRIDGE(ifp)) {
 		link_if = ifp;
-	else {
+	} else {
 		link_if = NULL;
+
 		if (IS_ZEBRA_DEBUG_KERNEL)
-			zlog_debug(
-				"    Neighbor Entry received is not on a VLAN or a BRIDGE, ignoring");
+			zlog_debug(" Neighbor Entry IF %s(%u) and  IP %pIA is not on a VLAN or BRIDGE, ignoring",
+				   ifp->name, ndm->ndm_ifindex, &ip);
 	}
 
 	memset(&mac, 0, sizeof(mac));
