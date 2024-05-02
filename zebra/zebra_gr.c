@@ -611,7 +611,6 @@ static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
 static void zebra_gr_route_stale_delete_timer_expiry(struct event *thread)
 {
 	struct client_gr_info *info = EVENT_ARG(thread);
-	int32_t cnt = 0;
 	struct zserv *client;
 	struct vrf *vrf = vrf_lookup_by_id(info->vrf_id);
 
@@ -626,7 +625,7 @@ static void zebra_gr_route_stale_delete_timer_expiry(struct event *thread)
 	frrtrace(2, frr_zebra, gr_route_stale_delete_timer_expiry,
 		 zebra_route_string(client->proto), VRF_LOGNAME(vrf));
 
-	cnt = zebra_gr_delete_stale_routes(info);
+	zebra_gr_delete_stale_routes(info);
 
 	/* Schedule GR info and stale client deletion */
 	rib_add_gr_run(0, info->vrf_id, client->proto, client->instance, 0, 0, true);
