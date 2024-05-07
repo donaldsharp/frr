@@ -6160,7 +6160,7 @@ static int zebra_vxlan_sg_send(struct zebra_vrf *zvrf,
 		client->vxlan_sg_add_cnt++;
 	else
 		client->vxlan_sg_del_cnt++;
-
+	frrtrace(2, frr_zebra, zebra_vxlan_sg_send, sg_str, cmd);
 	return zserv_send_message(client, s);
 }
 
@@ -6193,6 +6193,9 @@ static struct zebra_vxlan_sg *zebra_vxlan_sg_new(struct zebra_vrf *zvrf,
 	prefix_sg2str(sg, vxlan_sg->sg_str);
 
 	vxlan_sg = hash_get(zvrf->vxlan_sg_table, vxlan_sg, hash_alloc_intern);
+
+	if (vxlan_sg)
+		frrtrace(1, frr_zebra, zebra_vxlan_sg_new, vxlan_sg->sg_str);
 
 	if (IS_ZEBRA_DEBUG_VXLAN)
 		zlog_debug("vxlan SG %s created", vxlan_sg->sg_str);
@@ -6261,6 +6264,9 @@ static void zebra_vxlan_sg_del(struct zebra_vxlan_sg *vxlan_sg)
 			vxlan_sg->sg_str, ZEBRA_VXLAN_SG_DEL);
 
 	hash_release(vxlan_sg->zvrf->vxlan_sg_table, vxlan_sg);
+
+	if (vxlan_sg)
+		frrtrace(1, frr_zebra, zebra_vxlan_sg_del, vxlan_sg->sg_str);
 
 	if (IS_ZEBRA_DEBUG_VXLAN)
 		zlog_debug("VXLAN SG %s deleted", vxlan_sg->sg_str);

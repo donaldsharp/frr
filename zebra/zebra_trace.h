@@ -261,7 +261,7 @@ TRACEPOINT_EVENT(
 TRACEPOINT_LOGLEVEL(frr_zebra, if_upd_ctx, TRACE_INFO)
 
 /*
- * Loc 0 -> DPLANE_OP_INTF_DELETE 
+ * Loc 0 -> DPLANE_OP_INTF_DELETE
  * Loc 1 -> DPLANE_OP_INTF_UPDATE
  */
 TRACEPOINT_EVENT(
@@ -1858,7 +1858,7 @@ TRACEPOINT_EVENT(
    )
 TRACEPOINT_LOGLEVEL(frr_zebra, gr_delete_stale_route, TRACE_INFO)
 
-/* 
+/*
  * LOC1: RE updated
  * LOC2: RE NOT install
  */
@@ -2066,6 +2066,38 @@ TRACEPOINT_EVENT(
    )
 TRACEPOINT_LOGLEVEL(frr_zebra, l3vni_remote_vtep_nh_upd, TRACE_INFO)
 
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_vxlan_sg_send,
+    TP_ARGS(const char *, sg_str, uint16_t, cmd),
+    TP_FIELDS(
+    	  ctf_string(SG, sg_str)
+        ctf_integer(uint16_t, action, cmd)
+
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_sg_send, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_vxlan_sg_new,
+    TP_ARGS(const char *, sg),
+    TP_FIELDS(
+    	  ctf_string(new_vxlan_sg_create, sg)
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_sg_new, TRACE_INFO)
+
+  TRACEPOINT_EVENT(
+    frr_zebra,
+    zebra_vxlan_sg_del,
+    TP_ARGS(const char *, sg),
+    TP_FIELDS(
+    	  ctf_string(vxlan_sg_del, sg)
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_sg_del, TRACE_INFO)
 /* clang-format on */
 #include <lttng/tracepoint-event.h>
 
