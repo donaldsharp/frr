@@ -1727,10 +1727,13 @@ static inline bool _netlink_set_tag(struct nlmsghdr *n, unsigned int maxlen,
  * The function returns true if the attribute could be added
  * to the message, otherwise false is returned.
  */
-static int netlink_route_nexthop_encap(struct nlmsghdr *n, size_t nlen,
-				       struct nexthop *nh)
+static int netlink_route_nexthop_encap(bool fpm, struct nlmsghdr *n,
+				       size_t nlen, struct nexthop *nh)
 {
 	struct rtattr *nest;
+
+	if (!fpm)
+		return true;
 
 	switch (nh->nh_encap_type) {
 	case NET_VXLAN:
@@ -2241,12 +2244,10 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 				 * Add encapsulation information when
 				 * installing via FPM.
 				 */
-				if (fpm) {
-					if (!netlink_route_nexthop_encap(&req->n,
-									 datalen,
-									 nexthop))
-						return 0;
-				}
+				if (!netlink_route_nexthop_encap(fpm, &req->n,
+								 datalen,
+								 nexthop))
+					return 0;
 
 				nexthop_num++;
 				break;
@@ -2301,11 +2302,10 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 				 * Add encapsulation information when installing via
 				 * FPM.
 				 */
-				if (fpm) {
-					if (!netlink_route_nexthop_encap(
-						    &req->n, datalen, nexthop))
-						return 0;
-				}
+				if (!netlink_route_nexthop_encap(fpm, &req->n,
+								 datalen,
+								 nexthop))
+					return 0;
 
 				if (!setsrc && src1) {
 					if (p->family == AF_INET)
