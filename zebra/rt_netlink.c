@@ -1732,6 +1732,47 @@ static inline bool _netlink_set_tag(struct nlmsghdr *n, unsigned int maxlen,
 	return true;
 }
 
+/*
+ * The function returns true if the attribute could be added
+ * to the message, otherwise false is returned.
+ */
+static int netlink_route_nexthop_encap(struct nlmsghdr *n, size_t nlen,
+				       struct nexthop *nh)
+{
+	struct rtattr *nest;
+	struct vxlan_nh_encap* encap_data;
+
+	switch (nh->nh_encap_type) {
+	case NET_VXLAN:
+		if (!nl_attr_put16(n, nlen, RTA_ENCAP_TYPE, nh->nh_encap_type))
+			return false;
+
+		nest = nl_attr_nest(n, nlen, RTA_ENCAP);
+		if (!nest)
+			return false;
+
+		encap_data = &nh->nh_encap.encap_data;
+
+		if (!nl_attr_put32(n, nlen, 0 /* VXLAN_VNI */,
+				   encap_data->vni))
+			return false;
+
+		if (ZEBRA_DEBUG_KERNEL)
+			zlog_debug(
+				"%s: VNI:%d RMAC:%pEA", __func__, encap_data->vni,
+				&encap_data->rmac);
+
+		if (!nl_attr_put(n, nlen, 1 /* VXLAN_RMAC */,
+					&encap_data->rmac, sizeof(encap_data->rmac)))
+			return false;
+
+		nl_attr_nest_end(n, nest);
+		break;
+	}
+
+	return true;
+}
+
 /* This function takes a nexthop as argument and
  * appends to the given netlink msg. If the nexthop
  * defines a preferred source, the src parameter
@@ -1970,47 +2011,6 @@ static bool nexthop_set_src(const struct nexthop *nexthop, int family,
 	}
 
 	return false;
-}
-
-/*
- * The function returns true if the attribute could be added
- * to the message, otherwise false is returned.
- */
-static int netlink_route_nexthop_encap(struct nlmsghdr *n, size_t nlen,
-				       struct nexthop *nh)
-{
-	struct rtattr *nest;
-	struct vxlan_nh_encap* encap_data;
-
-	switch (nh->nh_encap_type) {
-	case NET_VXLAN:
-		if (!nl_attr_put16(n, nlen, RTA_ENCAP_TYPE, nh->nh_encap_type))
-			return false;
-
-		nest = nl_attr_nest(n, nlen, RTA_ENCAP);
-		if (!nest)
-			return false;
-
-		encap_data = &nh->nh_encap.encap_data;
-
-		if (!nl_attr_put32(n, nlen, 0 /* VXLAN_VNI */,
-				   encap_data->vni))
-			return false;
-
-		if (ZEBRA_DEBUG_KERNEL)
-			zlog_debug(
-				"%s: VNI:%d RMAC:%pEA", __func__, encap_data->vni,
-				&encap_data->rmac);
-
-		if (!nl_attr_put(n, nlen, 1 /* VXLAN_RMAC */,
-					&encap_data->rmac, sizeof(encap_data->rmac)))
-			return false;
-
-		nl_attr_nest_end(n, nest);
-		break;
-	}
-
-	return true;
 }
 
 /*
