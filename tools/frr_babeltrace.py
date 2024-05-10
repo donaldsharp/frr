@@ -290,6 +290,20 @@ def location_gr_client_not_found(field_val):
     elif field_val == 2:
         return ("Stale route delete from table")
 
+def location_zevpn_build_vni_hash(field_val):
+    if field_val == 1:
+        return ("Create l3vni hash")
+    elif field_val == 2:
+        return ("EVPN hash already present")
+    elif field_val == 3:
+        return ("EVPN instance does not exist")
+
+def location_l3vni_remote_rmac(field_val):
+    if field_val == 1:
+        return ("Add")
+    elif field_val == 2:
+        return ("Del")
+
 def print_prefix_addr(field_val):
     """
     pretty print "struct prefix"
@@ -928,7 +942,40 @@ def parse_frr_zebra_gr_client_not_found(event):
     field_parsers = {"location" : location_gr_client_not_found}
     parse_event(event, field_parsers)
 
+def parse_frr_zebra_zevpn_build_vni_hash(event):
+    field_parsers = {"location" : location_zevpn_build_vni_hash}
+    parse_event(event, field_parsers)
 
+def parse_frr_zebra_l3vni_remote_rmac_update(event):
+    """
+    ctf_array(unsigned char, new_vtep, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, rmac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"new_vtep": print_ip_addr,
+                     "rmac": print_mac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_l3vni_remote_rmac(event):
+    """
+    ctf_array(unsigned char, vtep_ip, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, rmac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"vtep_ip": print_ip_addr,
+                     "rmac": print_mac,
+                     "location": location_l3vni_remote_rmac}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_l3vni_remote_vtep_nh_upd(event):
+    """
+    ctf_array(unsigned char, old_vtep, ip, sizeof(struct ipaddr))
+    ctf_array(unsigned char, rmac, mac, sizeof(struct ethaddr))
+    """
+    field_parsers = {"old_vtep": print_ip_addr,
+                     "rmac": print_mac}
+
+    parse_event(event, field_parsers)
 
 ############################ evpn parsers - end *#############################
 
@@ -1072,6 +1119,14 @@ def main():
                      parse_frr_zebra_zebra_vxlan_handle_vni_transition,
                      "frr_zebra:gr_client_not_found":
                      parse_frr_zebra_gr_client_not_found,
+                     "frr_zebra:zevpn_build_vni_hash":
+                     parse_frr_zebra_zevpn_build_vni_hash,
+                     "frr_zebra:l3vni_remote_rmac_update":
+                     parse_frr_zebra_l3vni_remote_rmac_update,
+                     "frr_zebra:l3vni_remote_rmac":
+                     parse_frr_zebra_l3vni_remote_rmac,
+                     "frr_zebra:l3vni_remote_vtep_nh_upd":
+                     parse_frr_zebra_l3vni_remote_vtep_nh_upd,
 }
 
     # get the trace path from the first command line argument
