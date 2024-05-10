@@ -909,9 +909,6 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn, uint32_t seq,
 				__func__, rn,
 				dest ? rnh_list_count(&dest->nht) : 0);
 
-		frrtrace(2, frr_zebra, zebra_rib_evaluate_rn_nexthops,
-			 srcdest_rnode2str(rn, buf, sizeof(buf)),
-			 dest ? rnh_list_count(&dest->nht) : 0);
 		if (rt_delete && (!dest || !rnh_list_count(&dest->nht))) {
 			if (IS_ZEBRA_DEBUG_NHT_DETAILED)
 				zlog_debug("%pRN has no tracking NHTs. Bailing",
