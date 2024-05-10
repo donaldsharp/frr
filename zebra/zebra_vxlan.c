@@ -1815,7 +1815,8 @@ static int zl3vni_remote_nh_add(struct zebra_l3vni *zl3vni,
 				"L3VNI %u RMAC change(%pEA --> %pEA) for nexthop %pIA, prefix %pFX",
 				zl3vni->vni, &nh->emac, rmac, vtep_ip,
 				host_prefix);
-
+		frrtrace(5, frr_zebra, remote_nh_add_rmac_change, zl3vni->vni,
+			 &nh->emac, rmac, vtep_ip, nh->refcnt);
 		zl3vni_check_del_rmac(zl3vni, nh->emac, vtep_ip);
 		memcpy(&nh->emac, rmac, ETH_ALEN);
 		/* install (update) the nh neigh in kernel */
@@ -1872,6 +1873,8 @@ static int svd_remote_nh_add(struct zebra_l3vni *zl3vni,
 				   &nh->emac, rmac, vtep_ip, host_prefix,
 				   nh->refcnt);
 
+		frrtrace(5, frr_zebra, remote_nh_add_rmac_change, zl3vni->vni,
+			 &nh->emac, rmac, vtep_ip, nh->refcnt);
 		zl3vni_check_del_rmac(zl3vni, nh->emac, vtep_ip);
 		memcpy(&nh->emac, rmac, ETH_ALEN);
 		/* install (update) the nh neigh in kernel */
