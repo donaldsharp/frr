@@ -1551,20 +1551,6 @@ TRACEPOINT_LOGLEVEL(frr_zebra, rib_uninstall_kernel_route, TRACE_INFO)
 
 TRACEPOINT_EVENT(
     frr_zebra,
-    zebra_rib_evaluate_rn_nexthops,
-    TP_ARGS(
-        const char*, prefix,
-        int, count),
-    TP_FIELDS(
-        ctf_string(prefix, prefix)
-        ctf_integer(int, count, count)
-        )
-   )
-
-TRACEPOINT_LOGLEVEL(frr_zebra, zebra_rib_evaluate_rn_nexthops, TRACE_INFO)
-
-TRACEPOINT_EVENT(
-    frr_zebra,
     zebra_rib_evaluate_nht_tracking_bailout,
     TP_ARGS(
         const char*, prefix),
