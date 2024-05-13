@@ -1923,6 +1923,149 @@ TRACEPOINT_EVENT(
    )
 TRACEPOINT_LOGLEVEL(frr_zebra, gr_client_not_found, TRACE_INFO)
 
+/*
+ * Loc 1: create l3vni hash
+ * Loc 2: EVPN hash already present
+ * Loc 3: EVPN instance does not exist
+ */
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zevpn_build_vni_hash,
+    TP_ARGS(
+        vni_t, vni,
+        char *, if_name,
+        ifindex_t, ifindex,
+        uint8_t, loc),
+    TP_FIELDS(
+        ctf_integer(vni_t, vni, vni)
+        ctf_string(interface, if_name)
+        ctf_integer(ifindex_t, ifindex, ifindex)
+        ctf_integer(uint8_t, location, loc)
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, zevpn_build_vni_hash, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zevpn_build_l2vni_hash,
+    TP_ARGS(
+        vni_t, vni,
+        char *, if_name,
+        ifindex_t, ifindex,
+        struct in_addr, vtep_ip),
+    TP_FIELDS(
+        ctf_integer(vni_t, vni, vni)
+        ctf_string(interface, if_name)
+        ctf_integer(ifindex_t, ifindex, ifindex)
+        ctf_string(vtep_ip, inet_ntoa(vtep_ip))
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, zevpn_build_l2vni_hash, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    zevpn_build_l3vni_hash,
+    TP_ARGS(
+        vni_t, vni,
+        const char *, svi_if_name,
+        const char *, mac_vlan_if_name),
+    TP_FIELDS(
+        ctf_integer(vni_t, vni, vni)
+        ctf_string(svi_interface, svi_if_name)
+        ctf_string(mac_vlan_interface, mac_vlan_if_name)
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, zevpn_build_l3vni_hash, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    intf_in_different_ns,
+    TP_ARGS(
+        char *, if_name,
+        ifindex_t, ifindex),
+    TP_FIELDS(
+        ctf_string(interface, if_name)
+        ctf_integer(ifindex_t, ifindex, ifindex)
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, intf_in_different_ns, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    building_vni_table,
+    TP_ARGS(
+        const char *, type,
+        char *, if_name),
+    TP_FIELDS(
+        ctf_string(interface_type, type)
+        ctf_string(interface, if_name)
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, building_vni_table, TRACE_INFO)
+
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    l3vni_remote_rmac_update,
+    TP_ARGS(
+        vni_t, vni,
+        struct in_addr, old_vtep_ip,
+        struct ipaddr *, ip,
+        const struct ethaddr *, rmac),
+    TP_FIELDS(
+        ctf_integer(vni_t, vni, vni)
+        ctf_string(old_vtep, inet_ntoa(old_vtep_ip))
+        ctf_array(unsigned char, new_vtep, ip,
+			  sizeof(struct ipaddr))
+        ctf_array(unsigned char, rmac, rmac,
+			  sizeof(struct ethaddr))
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, l3vni_remote_rmac_update, TRACE_INFO)
+
+/*
+ * Loc 1: Add
+ * Loc 2: Del
+ */
+TRACEPOINT_EVENT(
+    frr_zebra,
+    l3vni_remote_rmac,
+    TP_ARGS(
+        uint8_t, loc,
+        vni_t, vni,
+        const struct ipaddr *, ip,
+        const struct ethaddr *, rmac),
+    TP_FIELDS(
+        ctf_integer(uint8_t, location, loc)
+        ctf_integer(vni_t, vni, vni)
+        ctf_array(unsigned char, vtep_ip, ip,
+			  sizeof(struct ipaddr))
+        ctf_array(unsigned char, rmac, rmac,
+			  sizeof(struct ethaddr))
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, l3vni_remote_rmac, TRACE_INFO)
+
+
+TRACEPOINT_EVENT(
+    frr_zebra,
+    l3vni_remote_vtep_nh_upd,
+    TP_ARGS(
+        vni_t, vni,
+        const struct ipaddr *, ip,
+        struct in_addr, new_vtep_ip,
+        struct ethaddr, mac),
+    TP_FIELDS(
+        ctf_integer(vni_t, vni, vni)
+        ctf_array(unsigned char, old_vtep, ip,
+			  sizeof(struct ipaddr))
+        ctf_string(new_vtep, inet_ntoa(new_vtep_ip))
+        ctf_array(unsigned char, rmac, &mac,
+			  sizeof(struct ethaddr))
+        )
+   )
+TRACEPOINT_LOGLEVEL(frr_zebra, l3vni_remote_vtep_nh_upd, TRACE_INFO)
+
 /* clang-format on */
 #include <lttng/tracepoint-event.h>
 
