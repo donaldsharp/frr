@@ -914,11 +914,10 @@ struct bgp_dest *bgp_evpn_vni_node_lookup(const struct bgpevpn *vpn,
 /*
  * Add (update) or delete MACIP from zebra.
  */
-static int bgp_zebra_send_remote_macip(struct bgp *bgp, struct bgpevpn *vpn,
-				       const struct prefix_evpn *p,
-				       const struct ethaddr *mac,
-				       struct in_addr remote_vtep_ip, int add,
-				       uint8_t flags, uint32_t seq, esi_t *esi)
+static enum zclient_send_status bgp_zebra_send_remote_macip(
+	struct bgp *bgp, struct bgpevpn *vpn, const struct prefix_evpn *p,
+	const struct ethaddr *mac, struct in_addr remote_vtep_ip, int add,
+	uint8_t flags, uint32_t seq, esi_t *esi)
 {
 	struct stream *s;
 	uint16_t ipa_len;
@@ -926,8 +925,12 @@ static int bgp_zebra_send_remote_macip(struct bgp *bgp, struct bgpevpn *vpn,
 	bool esi_valid;
 
 	/* Check socket. */
-	if (!zclient || zclient->sock < 0)
-		return 0;
+	if (!zclient || zclient->sock < 0) {
+		if (BGP_DEBUG(zebra, ZEBRA))
+			zlog_debug("%s: No zclient or zclient->sock exists",
+				   __func__);
+		return ZCLIENT_SEND_SUCCESS;
+	}
 
 	/* Don't try to register if Zebra doesn't know of this instance. */
 	if (!IS_BGP_INST_KNOWN_TO_ZEBRA(bgp)) {
@@ -935,7 +938,7 @@ static int bgp_zebra_send_remote_macip(struct bgp *bgp, struct bgpevpn *vpn,
 			zlog_debug(
 				"%s: No zebra instance to talk to, not installing remote macip",
 				__func__);
-		return 0;
+		return ZCLIENT_SEND_SUCCESS;
 	}
 
 	if (!esi)
@@ -1001,24 +1004,26 @@ static int bgp_zebra_send_remote_macip(struct bgp *bgp, struct bgpevpn *vpn,
 	frrtrace(5, frr_bgp, evpn_mac_ip_zsend, add, vpn, p, remote_vtep_ip,
 		 esi);
 
-	if (zclient_send_message(zclient) == ZCLIENT_SEND_FAILURE)
-		return -1;
-
-	return 0;
+	return zclient_send_message(zclient);
 }
 
 /*
  * Add (update) or delete remote VTEP from zebra.
  */
-static int bgp_zebra_send_remote_vtep(struct bgp *bgp, struct bgpevpn *vpn,
-				      const struct prefix_evpn *p,
-				      int flood_control, int add)
+static enum zclient_send_status
+bgp_zebra_send_remote_vtep(struct bgp *bgp, struct bgpevpn *vpn,
+			   const struct prefix_evpn *p, int flood_control,
+			   int add)
 {
 	struct stream *s;
 
 	/* Check socket. */
-	if (!zclient || zclient->sock < 0)
-		return 0;
+	if (!zclient || zclient->sock < 0) {
+		if (BGP_DEBUG(zebra, ZEBRA))
+			zlog_debug("%s: No zclient or zclient->sock exists",
+				   __func__);
+		return ZCLIENT_SEND_SUCCESS;
+	}
 
 	/* Don't try to register if Zebra doesn't know of this instance. */
 	if (!IS_BGP_INST_KNOWN_TO_ZEBRA(bgp)) {
@@ -1026,7 +1031,7 @@ static int bgp_zebra_send_remote_vtep(struct bgp *bgp, struct bgpevpn *vpn,
 			zlog_debug(
 				"%s: No zebra instance to talk to, not installing remote vtep",
 				__func__);
-		return 0;
+		return ZCLIENT_SEND_SUCCESS;
 	}
 
 	s = zclient->obuf;
@@ -1043,7 +1048,7 @@ static int bgp_zebra_send_remote_vtep(struct bgp *bgp, struct bgpevpn *vpn,
 			EC_BGP_VTEP_INVALID,
 			"Bad remote IP when trying to %s remote VTEP for VNI %u",
 			add ? "ADD" : "DEL", (vpn ? vpn->vni : 0));
-		return -1;
+		return ZCLIENT_SEND_FAILURE;
 	}
 	stream_putl(s, flood_control);
 
@@ -1056,10 +1061,7 @@ static int bgp_zebra_send_remote_vtep(struct bgp *bgp, struct bgpevpn *vpn,
 
 	frrtrace(3, frr_bgp, evpn_bum_vtep_zsend, add, vpn, p);
 
-	if (zclient_send_message(zclient) == ZCLIENT_SEND_FAILURE)
-		return -1;
-
-	return 0;
+	return zclient_send_message(zclient);
 }
 
 /*
@@ -1285,14 +1287,15 @@ static void add_mac_mobility_to_attr(uint32_t seq_num, struct attr *attr)
 }
 
 /* Install EVPN route into zebra. */
-static int evpn_zebra_install(struct bgp *bgp, struct bgpevpn *vpn,
-			      const struct prefix_evpn *p,
-			      struct bgp_path_info *pi)
+enum zclient_send_status evpn_zebra_install(struct bgp *bgp,
+					    struct bgpevpn *vpn,
+					    const struct prefix_evpn *p,
+					    struct bgp_path_info *pi)
 {
-	int ret;
 	uint8_t flags;
 	int flood_control;
 	uint32_t seq;
+	enum zclient_send_status ret = ZCLIENT_SEND_SUCCESS;
 
 	if (p->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE) {
 		flags = 0;
@@ -1373,6 +1376,7 @@ static int evpn_zebra_install(struct bgp *bgp, struct bgpevpn *vpn,
 			flood_control = VXLAN_FLOOD_DISABLED;
 			break;
 		}
+
 		ret = bgp_zebra_send_remote_vtep(bgp, vpn, p, flood_control, 1);
 	}
 
@@ -1380,11 +1384,13 @@ static int evpn_zebra_install(struct bgp *bgp, struct bgpevpn *vpn,
 }
 
 /* Uninstall EVPN route from zebra. */
-static int evpn_zebra_uninstall(struct bgp *bgp, struct bgpevpn *vpn,
-				const struct prefix_evpn *p,
-				struct bgp_path_info *pi, bool is_sync)
+enum zclient_send_status evpn_zebra_uninstall(struct bgp *bgp,
+					      struct bgpevpn *vpn,
+					      const struct prefix_evpn *p,
+					      struct bgp_path_info *pi,
+					      bool is_sync)
 {
-	int ret;
+	enum zclient_send_status ret = ZCLIENT_SEND_SUCCESS;
 
 	if (p->prefix.route_type == BGP_EVPN_MAC_IP_ROUTE)
 		ret = bgp_zebra_send_remote_macip(
@@ -1399,7 +1405,7 @@ static int evpn_zebra_uninstall(struct bgp *bgp, struct bgpevpn *vpn,
 		ret = bgp_evpn_remote_es_evi_del(bgp, vpn, p);
 	else
 		ret = bgp_zebra_send_remote_vtep(bgp, vpn, p,
-					VXLAN_FLOOD_DISABLED, 0);
+						 VXLAN_FLOOD_DISABLED, 0);
 
 	return ret;
 }
@@ -1517,12 +1523,18 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	    && !CHECK_FLAG(dest->flags, BGP_NODE_USER_CLEAR)
 	    && !CHECK_FLAG(old_select->flags, BGP_PATH_ATTR_CHANGED)
 	    && !bgp_addpath_is_addpath_used(&bgp->tx_addpath, afi, safi)) {
-		if (bgp_zebra_has_route_changed(old_select))
-			ret = evpn_zebra_install(
-				bgp, vpn,
-				(const struct prefix_evpn *)bgp_dest_get_prefix(
-					dest),
-				old_select);
+		if (bgp_zebra_has_route_changed(old_select)) {
+			if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS))
+				evpn_zebra_install(
+					bgp, vpn,
+					(const struct prefix_evpn *)
+						bgp_dest_get_prefix(dest),
+					old_select);
+			else
+				bgp_zebra_route_install(dest, old_select, bgp,
+							true, vpn, false);
+		}
+
 		UNSET_FLAG(old_select->flags, BGP_PATH_MULTIPATH_CHG);
 		UNSET_FLAG(old_select->flags, BGP_PATH_LINK_BW_CHG);
 		bgp_zebra_clear_route_change_flags(dest);
@@ -1554,10 +1566,14 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	if (new_select && new_select->type == ZEBRA_ROUTE_BGP
 	    && (new_select->sub_type == BGP_ROUTE_IMPORTED ||
 			bgp_evpn_attr_is_sync(new_select->attr))) {
-		ret = evpn_zebra_install(
-			bgp, vpn,
-			(struct prefix_evpn *)bgp_dest_get_prefix(dest),
-			new_select);
+		if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS))
+			evpn_zebra_install(bgp, vpn,
+					   (const struct prefix_evpn *)
+						   bgp_dest_get_prefix(dest),
+					   new_select);
+		else
+			bgp_zebra_route_install(dest, new_select, bgp, true,
+						vpn, false);
 
 		/* If an old best existed and it was a "local" route, the only
 		 * reason
@@ -1574,13 +1590,20 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 			evpn_delete_old_local_route(bgp, vpn, dest,
 					old_select, new_select);
 	} else {
-		if (old_select && old_select->type == ZEBRA_ROUTE_BGP
-		    && old_select->sub_type == BGP_ROUTE_IMPORTED)
-			ret = evpn_zebra_uninstall(
-				bgp, vpn,
-				(const struct prefix_evpn *)bgp_dest_get_prefix(
-					dest),
-				old_select, false);
+		if (old_select && old_select->type == ZEBRA_ROUTE_BGP &&
+		    old_select->sub_type == BGP_ROUTE_IMPORTED) {
+			if (CHECK_FLAG(bgp->flags,
+				       BGP_FLAG_DELETE_IN_PROGRESS) ||
+			    CHECK_FLAG(bgp->flags, BGP_FLAG_VNI_DOWN))
+				evpn_zebra_uninstall(
+					bgp, vpn,
+					(const struct prefix_evpn *)
+						bgp_dest_get_prefix(dest),
+					old_select, false);
+			else
+				bgp_zebra_route_install(dest, old_select, bgp,
+							false, vpn, false);
+		}
 	}
 
 	/* Clear any route change flags. */
@@ -2142,9 +2165,19 @@ static void evpn_zebra_reinstall_best_route(struct bgp *bgp,
 	if (curr_select && curr_select->type == ZEBRA_ROUTE_BGP
 			&& (curr_select->sub_type == BGP_ROUTE_IMPORTED ||
 				bgp_evpn_attr_is_sync(curr_select->attr)))
-		evpn_zebra_install(bgp, vpn,
-		   (const struct prefix_evpn *)bgp_dest_get_prefix(dest),
-		   curr_select);
+		if (curr_select && curr_select->type == ZEBRA_ROUTE_BGP &&
+		    (curr_select->sub_type == BGP_ROUTE_IMPORTED ||
+		     bgp_evpn_attr_is_sync(curr_select->attr))) {
+			if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS))
+				evpn_zebra_install(
+					bgp, vpn,
+					(const struct prefix_evpn *)
+						bgp_dest_get_prefix(dest),
+					curr_select);
+			else
+				bgp_zebra_route_install(dest, curr_select, bgp,
+							true, vpn, false);
+		}
 }
 
 /*
@@ -2326,8 +2359,16 @@ static int update_evpn_route(struct bgp *bgp, struct bgpevpn *vpn,
 			 * has been removed.
 			 */
 			new_is_sync = bgp_evpn_attr_is_sync(pi->attr);
-			if (!new_is_sync && old_is_sync)
-				evpn_zebra_uninstall(bgp, vpn, p, pi, true);
+			if (!new_is_sync && old_is_sync) {
+				if (CHECK_FLAG(bgp->flags,
+					       BGP_FLAG_DELETE_IN_PROGRESS))
+					evpn_zebra_uninstall(bgp, vpn, p, pi,
+							     true);
+				else
+					bgp_zebra_route_install(dest, pi, bgp,
+								false, vpn,
+								true);
+			}
 		}
 	}
 	bgp_path_info_unlock(pi);
@@ -2594,8 +2635,16 @@ void bgp_evpn_update_type2_route_entry(struct bgp *bgp, struct bgpevpn *vpn,
 			 * has been removed.
 			 */
 			new_is_sync = bgp_evpn_attr_is_sync(pi->attr);
-			if (!new_is_sync && old_is_sync)
-				evpn_zebra_uninstall(bgp, vpn, &evp, pi, true);
+			if (!new_is_sync && old_is_sync) {
+				if (CHECK_FLAG(bgp->flags,
+					       BGP_FLAG_DELETE_IN_PROGRESS))
+					(void)evpn_zebra_uninstall(
+						bgp, vpn, &evp, pi, true);
+				else
+					bgp_zebra_route_install(dest, pi, bgp,
+								false, vpn,
+								true);
+			}
 		}
 	}
 
@@ -2866,7 +2915,22 @@ static int delete_routes_for_vni(struct bgp *bgp, struct bgpevpn *vpn)
 	delete_all_type2_routes(bgp, vpn);
 
 	build_evpn_type3_prefix(&p, vpn->originator_ip);
+
+	/*
+	 * To handle the following scenario:
+	 *  - Say, the new zebra announce fifo list has few vni Evpn prefixes
+	 * yet to be sent to zebra.
+	 *  - At this point if we have triggers like "no advertise-all-vni" or
+	 *    "networking restart", where a vni is going down.
+	 *
+	 * Perform the below
+	 *    1) send withdraw routes to zebra immediately in case it is
+	 * installed. 2) before we blow up the vni table, we need to walk the
+	 * list and pop all the dest whose za_vpn points to this vni.
+	 */
+	SET_FLAG(bgp->flags, BGP_FLAG_VNI_DOWN);
 	ret = delete_evpn_route(bgp, vpn, &p);
+	UNSET_FLAG(bgp->flags, BGP_FLAG_VNI_DOWN);
 	if (ret)
 		return ret;
 
@@ -3885,7 +3949,7 @@ int bgp_evpn_route_entry_install_if_vrf_match(struct bgp *bgp_vrf,
  * Install or uninstall mac-ip routes are appropriate for this
  * particular VRF.
  */
-static int install_uninstall_routes_for_vrf(struct bgp *bgp_vrf, int install)
+static int install_uninstall_routes_for_vrf(struct bgp *bgp_vrf, bool install)
 {
 	afi_t afi;
 	safi_t safi;
@@ -3946,9 +4010,7 @@ static int install_uninstall_routes_for_vrf(struct bgp *bgp_vrf, int install)
  * particular VNI.
  */
 static int install_uninstall_routes_for_vni(struct bgp *bgp,
-					    struct bgpevpn *vpn,
-					    bgp_evpn_route_type rtype,
-					    int install)
+					    struct bgpevpn *vpn, bool install)
 {
 	afi_t afi;
 	safi_t safi;
@@ -3979,7 +4041,9 @@ static int install_uninstall_routes_for_vni(struct bgp *bgp,
 				(const struct prefix_evpn *)bgp_dest_get_prefix(
 					dest);
 
-			if (evp->prefix.route_type != rtype)
+			if (evp->prefix.route_type != BGP_EVPN_IMET_ROUTE &&
+			    evp->prefix.route_type != BGP_EVPN_AD_ROUTE &&
+			    evp->prefix.route_type != BGP_EVPN_MAC_IP_ROUTE)
 				continue;
 
 			for (pi = bgp_dest_get_bgp_path_info(dest); pi;
@@ -4006,16 +4070,16 @@ static int install_uninstall_routes_for_vni(struct bgp *bgp,
 						bgp, vpn, evp, pi);
 
 				if (ret) {
-					flog_err(
-						EC_BGP_EVPN_FAIL,
-						"%u: Failed to %s EVPN %s route in VNI %u",
-						bgp->vrf_id,
-						install ? "install"
-							: "uninstall",
-						rtype == BGP_EVPN_MAC_IP_ROUTE
-							? "MACIP"
-							: "IMET",
-						vpn->vni);
+					flog_err(EC_BGP_EVPN_FAIL,
+						 "%u: Failed to %s EVPN %s route in VNI %u",
+						 bgp->vrf_id,
+						 install ? "install"
+							 : "uninstall",
+						 evp->prefix.route_type ==
+								 BGP_EVPN_MAC_IP_ROUTE
+							 ? "MACIP"
+							 : "IMET",
+						 vpn->vni);
 
 					bgp_dest_unlock_node(rd_dest);
 					bgp_dest_unlock_node(dest);
@@ -4033,7 +4097,7 @@ static int install_uninstall_routes_for_vni(struct bgp *bgp,
  */
 static int install_routes_for_vrf(struct bgp *bgp_vrf)
 {
-	install_uninstall_routes_for_vrf(bgp_vrf, 1);
+	install_uninstall_routes_for_vrf(bgp_vrf, true);
 	return 0;
 }
 
@@ -4044,29 +4108,17 @@ static int install_routes_for_vrf(struct bgp *bgp_vrf)
  */
 static int install_routes_for_vni(struct bgp *bgp, struct bgpevpn *vpn)
 {
-	int ret;
-
-	/* Install type-3 routes followed by type-2 routes - the ones applicable
+	/*
+	 * Install type-3 routes followed by type-2 routes - the ones applicable
 	 * for this VNI.
 	 */
-	ret = install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_IMET_ROUTE,
-					       1);
-	if (ret)
-		return ret;
-
-	ret = install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_AD_ROUTE,
-					       1);
-	if (ret)
-		return ret;
-
-	return install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_MAC_IP_ROUTE,
-						1);
+	return install_uninstall_routes_for_vni(bgp, vpn, true);
 }
 
 /* uninstall routes from l3vni vrf. */
 static int uninstall_routes_for_vrf(struct bgp *bgp_vrf)
 {
-	install_uninstall_routes_for_vrf(bgp_vrf, 0);
+	install_uninstall_routes_for_vrf(bgp_vrf, false);
 	return 0;
 }
 
@@ -4076,25 +4128,11 @@ static int uninstall_routes_for_vrf(struct bgp *bgp_vrf)
  */
 static int uninstall_routes_for_vni(struct bgp *bgp, struct bgpevpn *vpn)
 {
-	int ret;
-
-	/* Uninstall type-2 routes followed by type-3 routes - the ones
-	 * applicable
-	 * for this VNI.
+	/*
+	 * Uninstall type-2 routes followed by type-3 routes - the ones
+	 * applicable for this VNI.
 	 */
-	ret = install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_MAC_IP_ROUTE,
-					       0);
-	if (ret)
-		return ret;
-
-	ret = install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_AD_ROUTE,
-					       0);
-	if (ret)
-		return ret;
-
-
-	return install_uninstall_routes_for_vni(bgp, vpn, BGP_EVPN_IMET_ROUTE,
-						0);
+	return install_uninstall_routes_for_vni(bgp, vpn, false);
 }
 
 /*
@@ -6466,6 +6504,17 @@ struct bgpevpn *bgp_evpn_new(struct bgp *bgp, vni_t vni,
  */
 void bgp_evpn_free(struct bgp *bgp, struct bgpevpn *vpn)
 {
+	struct bgp_dest *dest = NULL;
+
+	while (zebra_announce_count(&bm->zebra_announce_head)) {
+		dest = zebra_announce_pop(&bm->zebra_announce_head);
+		if (dest->za_vpn == vpn) {
+			bgp_path_info_unlock(dest->za_bgp_pi);
+			bgp_dest_unlock_node(dest);
+		} else
+			zebra_announce_add_tail(&bm->zebra_announce_head, dest);
+	}
+
 	bgp_evpn_remote_ip_hash_destroy(vpn);
 	bgp_evpn_vni_es_cleanup(vpn);
 	bgpevpn_unlink_from_l3vni(vpn);
