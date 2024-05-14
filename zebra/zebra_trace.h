@@ -2098,6 +2098,31 @@ TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_sg_new, TRACE_INFO)
         )
    )
 TRACEPOINT_LOGLEVEL(frr_zebra, zebra_vxlan_sg_del, TRACE_INFO)
+
+TRACEPOINT_EVENT(
+        frr_zebra,
+	remote_nh_add_rmac_change,
+        TP_ARGS(
+	    vni_t , vni,
+	    const struct ethaddr *, oldmac,
+	    const struct ethaddr *, newmac,
+	    const struct ipaddr *, vtep_ip,
+	    uint8_t, refcnt),
+        TP_FIELDS(
+                ctf_integer(vni_t, vni, vni)
+                ctf_array(unsigned char, oldmac, oldmac,
+                          sizeof(struct ethaddr))
+		ctf_array(unsigned char, newmac, newmac,
+			  sizeof(struct ethaddr))
+		ctf_array(unsigned char, vtep_ip, vtep_ip,
+                          sizeof(struct ipaddr))
+		ctf_integer(uint8_t, refcnt, refcnt)
+       )
+   )
+
+TRACEPOINT_LOGLEVEL(frr_zebra, remote_nh_add_rmac_change, TRACE_INFO)
+
+
 /* clang-format on */
 #include <lttng/tracepoint-event.h>
 

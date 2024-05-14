@@ -977,6 +977,12 @@ def parse_frr_zebra_l3vni_remote_vtep_nh_upd(event):
 
     parse_event(event, field_parsers)
 
+def parse_frr_zebra_remote_nh_add_rmac_change(event):
+    field_parsers = {"oldmac": print_mac,
+                     "newmac": print_mac,
+                     "vtep_ip": print_ip_addr}
+    parse_event(event, field_parsers)
+
 ############################ evpn parsers - end *#############################
 
 def main():
@@ -1127,6 +1133,8 @@ def main():
                      parse_frr_zebra_l3vni_remote_rmac,
                      "frr_zebra:l3vni_remote_vtep_nh_upd":
                      parse_frr_zebra_l3vni_remote_vtep_nh_upd,
+                     "frr_zebra:remote_nh_add_rmac_change":
+                     parse_frr_zebra_remote_nh_add_rmac_change,
 }
 
     # get the trace path from the first command line argument
