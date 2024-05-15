@@ -1814,9 +1814,10 @@ static void bgp_handle_route_announcements_to_zebra(struct thread *e)
 
 		if (BGP_DEBUG(zebra, ZEBRA))
 			zlog_debug(
-				"BGP %s route %pBD(%s) with dest %p and flags 0x%x to zebra",
+				"BGP %s route %pBD(%s) with dest %p and flags 0x%x to zebra delete is set: %d",
 				install ? "announcing" : "withdrawing", dest,
-				table->bgp->name_pretty, dest, dest->flags);
+				table->bgp->name_pretty, dest, dest->flags,
+				CHECK_FLAG(dest->flags, BGP_NODE_SCHEDULE_FOR_DELETE));
 
 		if (install) {
 			if (is_evpn)
@@ -1859,6 +1860,10 @@ static void bgp_handle_route_announcements_to_zebra(struct thread *e)
 		thread_add_event(bm->master,
 				 bgp_handle_route_announcements_to_zebra, NULL,
 				 0, &bm->t_bgp_zebra_route);
+
+	zlog_debug("BGP Buffered: %u count: %zu and event: %p",
+		   status, zebra_announce_count(&bm->zebra_announce_head),
+		   bm->t_bgp_zebra_route);
 }
 
 /*
@@ -1867,6 +1872,7 @@ static void bgp_handle_route_announcements_to_zebra(struct thread *e)
  */
 static void bgp_zebra_buffer_write_ready(void)
 {
+	zlog_debug("BGP bgp_zebra_buffer_write_read callback");
 	bgp_handle_route_announcements_to_zebra(NULL);
 }
 
@@ -1931,9 +1937,16 @@ void bgp_zebra_route_install(struct bgp_dest *dest, struct bgp_path_info *info,
 	if (!bgp_install_info_to_zebra(bgp) && !is_evpn)
 		return;
 
+//	zlog_debug(
+//		"ZRI: %s route %pBD(%s) with dest %p and flags 0x%x to zebra",
+//		install ? "announcing" : "withdrawing", dest,
+//				table->bgp->name_pretty, dest, dest->flags);
+
 	if (!CHECK_FLAG(dest->flags, BGP_NODE_SCHEDULE_FOR_INSTALL) &&
 	    !CHECK_FLAG(dest->flags, BGP_NODE_SCHEDULE_FOR_DELETE)) {
 		zebra_announce_add_tail(&bm->zebra_announce_head, dest);
+//		zlog_debug("ZRI: route %pBD(%s) is added to tail",
+//			   dest, table->bgp->name_pretty);
 		/*
 		 * If neither flag is set and za_bgp_pi is not set then it is a
 		 * bug
@@ -1972,6 +1985,7 @@ void bgp_zebra_route_install(struct bgp_dest *dest, struct bgp_path_info *info,
 
 	thread_add_event(bm->master, bgp_handle_route_announcements_to_zebra,
 			 NULL, 0, &bm->t_bgp_zebra_route);
+	zlog_debug("BGP t_bgp_zebra_route: %p", bm->t_bgp_zebra_route);
 }
 
 /* Withdraw all entries in a BGP instances RIB table from Zebra */

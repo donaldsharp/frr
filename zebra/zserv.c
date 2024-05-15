@@ -343,10 +343,11 @@ static void zserv_read(struct thread *thread)
 					memory_order_relaxed);
 	p2p_avail = p2p_orig - client_ibuf_fifo_cnt;
 
-    /*
-     * Do nothing if ibuf_fifo count has reached its max limit. Otherwise
-     * proceed and reschedule ourselves if there is space in the ibuf_fifo.
-     */
+	zlog_debug("AAA p2p_orig: %u avail: %u", p2p_orig, p2p_avail);
+	/*
+	 * Do nothing if ibuf_fifo count has reached its max limit. Otherwise
+	 * proceed and reschedule ourselves if there is space in the ibuf_fifo.
+	 */
 	if (p2p_avail <= 0)
 		return;
 
@@ -454,6 +455,7 @@ static void zserv_read(struct thread *thread)
 	if (p2p < (uint32_t)p2p_avail) {
 		uint64_t time_now = monotime(NULL);
 
+		zlog_debug("AAA p2p: %u is less than p2p_avail: %u", p2p, (uint32_t)p2p_avail);
 		/* update session statistics */
 		frr_with_mutex (&client->stats_mtx) {
 			client->last_read_time = time_now;
@@ -471,11 +473,12 @@ static void zserv_read(struct thread *thread)
 		}
 
 		/* Schedule job to process those packets */
+		zlog_debug("AAA Tell master to process messages");
 		zserv_event(client, ZSERV_PROCESS_MESSAGES);
 	}
 
-	if (IS_ZEBRA_DEBUG_PACKET)
-		zlog_debug("Read %d packets from client: %s. Current ibuf fifo count: %zu. Conf P2p %d",
+//	if (IS_ZEBRA_DEBUG_PACKET)
+		zlog_debug("AAA Read %d packets from client: %s. Current ibuf fifo count: %zu. Conf P2p %d",
 			   p2p_avail - p2p, zebra_route_string(client->proto),
 			   client_ibuf_fifo_cnt, p2p_orig);
 
@@ -540,6 +543,7 @@ static void zserv_process_messages(struct thread *thread)
 	uint32_t p2p = zrouter.packets_to_process;
 	bool need_resched = false;
 
+	zlog_debug("AAA master processing messages");
 	frr_with_mutex (&client->ibuf_mtx) {
 		uint32_t i;
 		for (i = 0; i < p2p && stream_fifo_head(client->ibuf_fifo);
@@ -568,6 +572,7 @@ static void zserv_process_messages(struct thread *thread)
 		zserv_event(client, ZSERV_PROCESS_MESSAGES);
 
 	/* Ensure to include the read socket in the select/poll/etc.. */
+	zlog_debug("AAA zserv_process_messages CLIENT_READ");
 	zserv_client_event(client, ZSERV_CLIENT_READ);
 }
 
@@ -816,6 +821,7 @@ static struct zserv *zserv_client_create(int sock)
 				"zebra_apic");
 
 	/* start read loop */
+	zlog_debug("AAA client_create setup read");
 	zserv_client_event(client, ZSERV_CLIENT_READ);
 
 	/* call callbacks */
