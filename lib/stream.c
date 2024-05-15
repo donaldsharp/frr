@@ -1265,7 +1265,6 @@ void stream_fifo_push(struct stream_fifo *fifo, struct stream *s)
 
 	fifo->tail = s;
 	fifo->tail->next = NULL;
-	atomic_fetch_add_explicit(&fifo->count, 1, memory_order_release);
 	max = atomic_fetch_add_explicit(&fifo->count, 1, memory_order_release);
 	curmax = atomic_load_explicit(&fifo->max_count, memory_order_relaxed);
 	if (max > curmax)
