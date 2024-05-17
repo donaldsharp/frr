@@ -955,7 +955,7 @@ int community_list_unset(struct community_list_handler *ch, const char *name,
 	/* Lookup community list.  */
 	list = community_list_lookup(ch, name, 0, COMMUNITY_LIST_MASTER);
 	if (list == NULL)
-		return COMMUNITY_LIST_ERR_CANT_FIND_LIST;
+		return 0;
 
 	cm = community_list_master_lookup(ch, COMMUNITY_LIST_MASTER);
 	/* Delete all of entry belongs to this community-list.  */
@@ -975,7 +975,7 @@ int community_list_unset(struct community_list_handler *ch, const char *name,
 		entry = community_list_entry_lookup(list, str, direct);
 
 	if (!entry)
-		return COMMUNITY_LIST_ERR_CANT_FIND_LIST;
+		return 0;
 
 	community_list_entry_delete(cm, list, entry);
 	route_map_notify_dependencies(name, RMAP_EVENT_CLIST_DELETED);
@@ -1172,7 +1172,7 @@ int lcommunity_list_unset(struct community_list_handler *ch, const char *name,
 	/* Lookup community list.  */
 	list = community_list_lookup(ch, name, 0, LARGE_COMMUNITY_LIST_MASTER);
 	if (list == NULL)
-		return COMMUNITY_LIST_ERR_CANT_FIND_LIST;
+		return 0;
 
 	cm = community_list_master_lookup(ch, LARGE_COMMUNITY_LIST_MASTER);
 	/* Delete all of entry belongs to this community-list.  */
@@ -1201,7 +1201,7 @@ int lcommunity_list_unset(struct community_list_handler *ch, const char *name,
 		bgp_regex_free(regex);
 
 	if (!entry)
-		return COMMUNITY_LIST_ERR_CANT_FIND_LIST;
+		return 0;
 
 	community_list_entry_delete(cm, list, entry);
 	route_map_notify_dependencies(name, RMAP_EVENT_LLIST_DELETED);
@@ -1299,7 +1299,7 @@ int extcommunity_list_unset(struct community_list_handler *ch, const char *name,
 	/* Lookup extcommunity list.  */
 	list = community_list_lookup(ch, name, 0, EXTCOMMUNITY_LIST_MASTER);
 	if (list == NULL)
-		return COMMUNITY_LIST_ERR_CANT_FIND_LIST;
+		return 0;
 
 	cm = community_list_master_lookup(ch, EXTCOMMUNITY_LIST_MASTER);
 	/* Delete all of entry belongs to this extcommunity-list.  */
@@ -1319,7 +1319,7 @@ int extcommunity_list_unset(struct community_list_handler *ch, const char *name,
 		entry = community_list_entry_lookup(list, str, direct);
 
 	if (!entry)
-		return COMMUNITY_LIST_ERR_CANT_FIND_LIST;
+		return 0;
 
 	community_list_entry_delete(cm, list, entry);
 	route_map_notify_dependencies(name, RMAP_EVENT_ECLIST_DELETED);
