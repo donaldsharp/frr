@@ -127,7 +127,6 @@ struct community_list_handler {
 };
 
 /* Error code of community-list.  */
-#define COMMUNITY_LIST_ERR_CANT_FIND_LIST        -1
 #define COMMUNITY_LIST_ERR_MALFORMED_VAL         -2
 #define COMMUNITY_LIST_ERR_STANDARD_CONFLICT     -3
 #define COMMUNITY_LIST_ERR_EXPANDED_CONFLICT     -4
