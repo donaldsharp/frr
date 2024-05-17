@@ -3636,8 +3636,7 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 			 */
 			if (old_select &&
 			    is_route_parent_evpn(old_select))
-				bgp_zebra_route_install(dest, old_select, bgp,
-							false, NULL, false);
+				bgp_zebra_withdraw_actual(dest, old_select, bgp);
 
 			bgp_zebra_route_install(dest, new_select, bgp, true,
 						NULL, false);
