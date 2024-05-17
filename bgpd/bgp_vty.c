@@ -21693,15 +21693,10 @@ DEFUN (no_community_list_standard_all,
 	argv_find(argv, argc, "COMMUNITY_LIST_NAME", &idx);
 	cl_name_or_number = argv[idx]->arg;
 
-	int ret = community_list_unset(bgp_clist, cl_name_or_number, str, seq,
-				       direct, style);
+	community_list_unset(bgp_clist, cl_name_or_number, str, seq, direct,
+			     style);
 
 	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
 
 	return CMD_SUCCESS;
 }
@@ -21806,15 +21801,10 @@ DEFUN (no_community_list_expanded_all,
 	argv_find(argv, argc, "COMMUNITY_LIST_NAME", &idx);
 	cl_name_or_number = argv[idx]->arg;
 
-	int ret = community_list_unset(bgp_clist, cl_name_or_number, str, seq,
-				       direct, style);
+	community_list_unset(bgp_clist, cl_name_or_number, str, seq, direct,
+			     style);
 
 	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
 
 	return CMD_SUCCESS;
 }
@@ -21971,7 +21961,6 @@ static int lcommunity_list_set_vty(struct vty *vty, int argc,
 static int lcommunity_list_unset_vty(struct vty *vty, int argc,
 				     struct cmd_token **argv, int style)
 {
-	int ret;
 	int direct = 0;
 	char *str = NULL;
 	int idx = 0;
@@ -22004,17 +21993,12 @@ static int lcommunity_list_unset_vty(struct vty *vty, int argc,
 	argv_find(argv, argc, "LCOMMUNITY_LIST_NAME", &idx);
 
 	/* Unset community list.  */
-	ret = lcommunity_list_unset(bgp_clist, argv[idx]->arg, str, seq, direct,
-				    style);
+	lcommunity_list_unset(bgp_clist, argv[idx]->arg, str, seq, direct,
+			      style);
 
 	/* Free temporary community list string allocated by
 	   argv_concat().  */
 	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
 
 	return CMD_SUCCESS;
 }
@@ -22412,15 +22396,10 @@ DEFUN (no_extcommunity_list_standard_all,
 	argv_find(argv, argc, "EXTCOMMUNITY_LIST_NAME", &idx);
 	cl_number_or_name = argv[idx]->arg;
 
-	int ret = extcommunity_list_unset(bgp_clist, cl_number_or_name, str,
-					  seq, direct, style);
+	extcommunity_list_unset(bgp_clist, cl_number_or_name, str, seq, direct,
+				style);
 
 	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
 
 	return CMD_SUCCESS;
 }
@@ -22477,15 +22456,10 @@ DEFUN (no_extcommunity_list_expanded_all,
 	argv_find(argv, argc, "EXTCOMMUNITY_LIST_NAME", &idx);
 	cl_number_or_name = argv[idx]->arg;
 
-	int ret = extcommunity_list_unset(bgp_clist, cl_number_or_name, str,
-					  seq, direct, style);
+	extcommunity_list_unset(bgp_clist, cl_number_or_name, str, seq, direct,
+				style);
 
 	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
 
 	return CMD_SUCCESS;
 }
