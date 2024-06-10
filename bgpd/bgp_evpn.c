@@ -5819,6 +5819,7 @@ uint16_t bgp_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi,
 				     struct bgpevpn *vpn, bool evpn_select)
 {
 	struct bgp_dest *dest = NULL;
+	struct bgp_dest *prev_dest = NULL;
 
 	for (dest = bgp_table_top(table);
 	     dest && bgp->gr_info[afi][safi].gr_deferred != 0 &&
@@ -5853,6 +5854,11 @@ uint16_t bgp_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi,
 			bgp_process_main_one(bgp, dest, afi, safi);
 
 		cnt++;
+
+		/* Record the enqueued deferred bestpath */
+		if (CHECK_FLAG(dest->flags, BGP_NODE_SCHEDULE_FOR_INSTALL) ||
+		    CHECK_FLAG(dest->flags, BGP_NODE_SCHEDULE_FOR_DELETE))
+			prev_dest = dest;
 	}
 
 	/* If iteration stopped before the entire table was traversed then the
@@ -5861,6 +5867,24 @@ uint16_t bgp_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi,
 	if (dest) {
 		bgp_dest_unlock_node(dest);
 		dest = NULL;
+	} else {
+		if (prev_dest) {
+			bgp_dest_lock_node(prev_dest);
+			/*
+			 * Set flag on the last enqueued
+			 * BGP deferred dest
+			 */
+			SET_FLAG(prev_dest->flags,
+				 BGP_NODE_DEFERRED_PREFIX_LAST);
+			bgp_dest_unlock_node(prev_dest);
+			/*
+			 * Set UPADTE_COMPLETE_SCHEDULED flag so that
+			 * BGP can skip sending it in
+			 * bgp_do_deferred_path_selection() function.
+			 */
+			SET_FLAG(bgp->gr_info[afi][safi].flags,
+				 BGP_GR_UPDATE_COMPLETE_SCHEDULED);
+		}
 	}
 
 	return cnt;

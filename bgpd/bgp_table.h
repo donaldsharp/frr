@@ -120,7 +120,7 @@ struct bgp_node {
 #define BGP_NODE_SOFT_RECONFIG (1 << 8)
 #define BGP_NODE_SCHEDULE_FOR_INSTALL (1 << 9)
 #define BGP_NODE_SCHEDULE_FOR_DELETE (1 << 10)
-
+#define BGP_NODE_DEFERRED_PREFIX_LAST (1 << 11)
 	struct bgp_addpath_node_data tx_addpath;
 
 	enum bgp_path_selection_reason reason;
