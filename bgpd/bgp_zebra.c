@@ -1913,6 +1913,22 @@ static void bgp_handle_route_announcements_to_zebra(struct thread *e)
 
 			if (table->bgp->gr_info[table->afi][table->safi]
 				    .route_sync_tier2) {
+				if (BGP_DEBUG(graceful_restart,
+					      GRACEFUL_RESTART))
+					zlog_debug(
+						"%s sending UPDATE_COMPLETE after last prefix for %s AFI:%d SAFI:%d ",
+						__func__,
+						table->bgp->name_pretty,
+						table->afi, table->safi);
+
+				frrtrace(
+					5, frr_bgp, gr_zebra_update,
+					table->bgp->name_pretty, table->afi,
+					table->safi,
+					zserv_gr_client_cap_string(
+						ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE),
+					2);
+
 				bgp_zebra_update(
 					table->bgp, table->afi, table->safi,
 					ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE);
@@ -4170,8 +4186,8 @@ int bgp_zebra_update(struct bgp *bgp, afi_t afi, safi_t safi,
 		return BGP_GR_FAILURE;
 	}
 
-	frrtrace(4, frr_bgp, gr_zebra_update, bgp->name_pretty, afi, safi,
-		 zserv_gr_client_cap_string(type));
+	frrtrace(5, frr_bgp, gr_zebra_update, bgp->name_pretty, afi, safi,
+		 zserv_gr_client_cap_string(type), 1);
 
 	return BGP_GR_SUCCESS;
 }
