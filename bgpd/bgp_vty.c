@@ -1335,6 +1335,49 @@ void bgp_clear_soft_in(struct bgp *bgp, afi_t afi, safi_t safi)
 	bgp_clear(NULL, bgp, afi, safi, clear_all, BGP_CLEAR_SOFT_IN, NULL);
 }
 
+static int peer_flag_modify_vty(struct vty *vty, const char *ip_str,
+				uint64_t flag, int set)
+{
+	int ret;
+	struct peer *peer;
+
+	peer = peer_and_group_lookup_vty(vty, ip_str);
+	if (!peer)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	/*
+	 * If 'neighbor <interface>', then this is for directly connected peers,
+	 * we should not accept disable-connected-check.
+	 */
+	if (peer->conf_if && (flag == PEER_FLAG_DISABLE_CONNECTED_CHECK)) {
+		vty_out(vty,
+			"%s is directly connected peer, cannot accept disable-connected-check\n",
+			ip_str);
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	if (!set && flag == PEER_FLAG_SHUTDOWN)
+		peer_tx_shutdown_message_unset(peer);
+
+	if (set)
+		ret = peer_flag_set(peer, flag);
+	else
+		ret = peer_flag_unset(peer, flag);
+
+	return bgp_vty_return(vty, ret);
+}
+
+static int peer_flag_set_vty(struct vty *vty, const char *ip_str, uint64_t flag)
+{
+	return peer_flag_modify_vty(vty, ip_str, flag, 1);
+}
+
+static int peer_flag_unset_vty(struct vty *vty, const char *ip_str,
+			       uint64_t flag)
+{
+	return peer_flag_modify_vty(vty, ip_str, flag, 0);
+}
+
 #ifndef VTYSH_EXTRACT_PL
 #include "bgpd/bgp_vty_clippy.c"
 #endif
@@ -3534,6 +3577,42 @@ DEFUN (no_bgp_neighbor_graceful_restart_disable,
 	return bgp_vty_return(vty, ret);
 }
 
+DEFPY (neighbor_graceful_shutdown,
+       neighbor_graceful_shutdown_cmd,
+       "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor graceful-shutdown",
+       NO_STR
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR2
+       "Graceful shutdown\n")
+{
+	afi_t afi;
+	safi_t safi;
+	struct peer *peer;
+	VTY_DECLVAR_CONTEXT(bgp, bgp);
+	int ret;
+
+	peer = peer_and_group_lookup_vty(vty, neighbor);
+	if (!peer)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	if (no)
+		ret = peer_flag_unset_vty(vty, neighbor,
+					  PEER_FLAG_GRACEFUL_SHUTDOWN);
+	else
+		ret = peer_flag_set_vty(vty, neighbor,
+					PEER_FLAG_GRACEFUL_SHUTDOWN);
+
+	FOREACH_AFI_SAFI (afi, safi) {
+		if (!peer->afc[afi][safi])
+			continue;
+
+		bgp_clear(vty, bgp, afi, safi, clear_peer, BGP_CLEAR_SOFT_IN,
+			  neighbor);
+	}
+
+	return ret;
+}
+
 DEFUN_HIDDEN (bgp_graceful_restart_disable_eor,
               bgp_graceful_restart_disable_eor_cmd,
               "bgp graceful-restart disable-eor",
@@ -5437,49 +5516,6 @@ ALIAS_HIDDEN(no_neighbor_set_peer_group, no_neighbor_set_peer_group_hidden_cmd,
 	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
 	     "Member of the peer-group\n"
 	     "Peer-group name\n")
-
-static int peer_flag_modify_vty(struct vty *vty, const char *ip_str,
-				uint64_t flag, int set)
-{
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/*
-	 * If 'neighbor <interface>', then this is for directly connected peers,
-	 * we should not accept disable-connected-check.
-	 */
-	if (peer->conf_if && (flag == PEER_FLAG_DISABLE_CONNECTED_CHECK)) {
-		vty_out(vty,
-			"%s is directly connected peer, cannot accept disable-connected-check\n",
-			ip_str);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (!set && flag == PEER_FLAG_SHUTDOWN)
-		peer_tx_shutdown_message_unset(peer);
-
-	if (set)
-		ret = peer_flag_set(peer, flag);
-	else
-		ret = peer_flag_unset(peer, flag);
-
-	return bgp_vty_return(vty, ret);
-}
-
-static int peer_flag_set_vty(struct vty *vty, const char *ip_str, uint64_t flag)
-{
-	return peer_flag_modify_vty(vty, ip_str, flag, 1);
-}
-
-static int peer_flag_unset_vty(struct vty *vty, const char *ip_str,
-			       uint64_t flag)
-{
-	return peer_flag_modify_vty(vty, ip_str, flag, 0);
-}
 
 /* neighbor passive. */
 DEFUN (neighbor_passive,
@@ -17384,6 +17420,10 @@ static void bgp_config_write_peer_global(struct vty *vty, struct bgp *bgp,
 		}
 	}
 
+	/* graceful-shutdown */
+	if (peergroup_flag_check(peer, PEER_FLAG_GRACEFUL_SHUTDOWN))
+		vty_out(vty, " neighbor %s graceful-shutdown\n", addr);
+
 	/* role */
 	if (peergroup_flag_check(peer, PEER_FLAG_ROLE) &&
 	    peer->local_role != ROLE_UNDEFINED)
@@ -18910,6 +18950,9 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &neighbor_role_cmd);
 	install_element(BGP_NODE, &neighbor_role_strict_cmd);
 	install_element(BGP_NODE, &no_neighbor_role_cmd);
+
+	/* "neighbor graceful-shutdown" command */
+	install_element(BGP_NODE, &neighbor_graceful_shutdown_cmd);
 
 	/* bgp disable-ebgp-connected-nh-check */
 	install_element(BGP_NODE, &bgp_disable_connected_route_check_cmd);
