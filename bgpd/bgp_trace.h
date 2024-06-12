@@ -760,14 +760,20 @@ TRACEPOINT_EVENT(
 )
 TRACEPOINT_LOGLEVEL(frr_bgp, gr_send_capabilities, TRACE_INFO)
 
+/*
+ * LOC 1: Sent
+ * LOC 2: Sending after last prefix
+ */
 TRACEPOINT_EVENT(
 	frr_bgp,
 	gr_zebra_update,
-	TP_ARGS(char *, bgp_name, uint8_t, afi, uint8_t, safi, const char *, type),
+	TP_ARGS(char *, bgp_name, uint8_t, afi, uint8_t, 
+            safi, const char *, type, uint8_t, location),
 	TP_FIELDS(ctf_string(bgp_instance, bgp_name)
 		ctf_integer(uint8_t, afi, afi)
 		ctf_integer(uint8_t, safi, safi)
 		ctf_string(type, type)
+        ctf_integer(uint8_t, location, location)
 	)
 )
 TRACEPOINT_LOGLEVEL(frr_bgp, gr_zebra_update, TRACE_INFO)
