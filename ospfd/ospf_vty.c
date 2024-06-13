@@ -13186,8 +13186,14 @@ DEFUN (clear_ip_ospf_interface,
 		ifp = if_lookup_by_name(argv[idx_ifname]->arg, vrf_id);
 		if (ifp == NULL)
 			vty_out(vty, "No such interface name\n");
-		else
-			ospf_interface_clear(ifp);
+		else {
+			if (ospf_oi_count(ifp) == 0) {
+				vty_out(vty,
+					"OSPF not enabled on this interface\n");
+			} else {
+				ospf_interface_clear(ifp);
+			}
+		}
 	}
 
 	return CMD_SUCCESS;
