@@ -222,7 +222,7 @@ struct dplane_intf_info {
 
 	uint32_t table_id;
 
-	struct zebra_l2info_bridge binfo;
+	struct zebra_l2_bridge_if_dplane binfo;
 	struct zebra_l2info_vlan vinfo;
 	struct zebra_l2info_vxlan vxinfo;
 	struct zebra_l2info_gre grinfo;
@@ -1720,14 +1720,14 @@ dplane_ctx_get_ifp_vlan_info(const struct zebra_dplane_ctx *ctx)
 }
 
 void dplane_ctx_set_ifp_bridge_info(struct zebra_dplane_ctx *ctx,
-				    struct zebra_l2info_bridge *binfo)
+				    struct zebra_l2_bridge_if_dplane *binfo)
 {
 	DPLANE_CTX_VALID(ctx);
 
 	ctx->u.intf.binfo = *binfo;
 }
 
-const struct zebra_l2info_bridge *
+const struct zebra_l2_bridge_if_dplane *
 dplane_ctx_get_ifp_bridge_info(const struct zebra_dplane_ctx *ctx)
 {
 	DPLANE_CTX_VALID(ctx);

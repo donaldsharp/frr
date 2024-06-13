@@ -351,10 +351,10 @@ void dplane_ctx_set_ifp_hw_addr(struct zebra_dplane_ctx *ctx,
 				int32_t hw_addr_len, uint8_t *hw_addr);
 int32_t dplane_ctx_get_ifp_hw_addr_len(const struct zebra_dplane_ctx *ctx);
 const uint8_t *dplane_ctx_get_ifp_hw_addr(const struct zebra_dplane_ctx *ctx);
-struct zebra_l2info_bridge;
+struct zebra_l2_bridge_if_dplane;
 void dplane_ctx_set_ifp_bridge_info(struct zebra_dplane_ctx *ctx,
-				    struct zebra_l2info_bridge *binfo);
-const struct zebra_l2info_bridge *
+				    struct zebra_l2_bridge_if_dplane *binfo);
+const struct zebra_l2_bridge_if_dplane *
 dplane_ctx_get_ifp_bridge_info(const struct zebra_dplane_ctx *ctx);
 struct zebra_l2info_vlan;
 void dplane_ctx_set_ifp_vlan_info(struct zebra_dplane_ctx *ctx,
