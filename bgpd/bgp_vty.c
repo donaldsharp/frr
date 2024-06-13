@@ -3732,6 +3732,7 @@ DEFPY (neighbor_graceful_shutdown,
 	safi_t safi;
 	struct peer *peer;
 	int ret;
+	struct peer_af *paf;
 
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 
@@ -3752,6 +3753,11 @@ DEFPY (neighbor_graceful_shutdown,
 
 		bgp_clear(vty, bgp, afi, safi, clear_peer, BGP_CLEAR_SOFT_IN,
 			  neighbor);
+		paf = peer_af_find(peer, afi, safi);
+		if (paf) {
+			update_group_adjust_peer(paf);
+			bgp_announce_route(peer, afi, safi, false);
+		}
 	}
 
 	return ret;
