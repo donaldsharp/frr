@@ -3686,6 +3686,32 @@ DEFUN (no_bgp_graceful_restart_rib_stale_time,
 	return CMD_SUCCESS;
 }
 
+DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
+      "[no$no] bgp advertise-origin",
+      NO_STR BGP_STR "Attach route origin ext community\n")
+{
+	VTY_DECLVAR_CONTEXT(bgp, bgp);
+	afi_t afi = bgp_node_afi(vty);
+	safi_t safi = bgp_node_safi(vty);
+
+	if (no)
+		UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
+			   BGP_FLAG_ADVERTISE_ORIGIN);
+		/*
+			TODO: Advertise routes in this address-family without
+			SOO ext community where value of SOO is router-id
+		*/
+	else
+		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
+			 BGP_FLAG_ADVERTISE_ORIGIN);
+		/*
+			TODO: Advertise routes in this address-family with
+			SOO ext community where value of SOO is router-id
+		*/
+
+	return CMD_SUCCESS;
+}
+
 DEFUN(bgp_llgr_stalepath_time, bgp_llgr_stalepath_time_cmd,
       "bgp long-lived-graceful-restart stale-time (1-4294967295)",
       BGP_STR
@@ -17919,6 +17945,11 @@ static void bgp_config_write_family(struct vty *vty, struct bgp *bgp, afi_t afi,
 
 	bgp_config_write_redistribute(vty, bgp, afi, safi);
 
+	if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+		       BGP_FLAG_ADVERTISE_ORIGIN)) {
+		vty_out(vty, "  bgp advertise-origin\n");
+	}
+
 	/* BGP flag dampening. */
 	if (CHECK_FLAG(bgp->af_flags[afi][safi], BGP_CONFIG_DAMPENING))
 		bgp_config_write_damp(vty, afi, safi);
@@ -20142,6 +20173,9 @@ void bgp_vty_init(void)
 	install_element(BGP_VPNV6_NODE, &no_neighbor_soo_cmd);
 	install_element(BGP_EVPN_NODE, &neighbor_soo_cmd);
 	install_element(BGP_EVPN_NODE, &no_neighbor_soo_cmd);
+	/* Auto generate SOO for nexthop-group*/
+	install_element(BGP_IPV4_NODE, &bgp_advertise_origin_cmd);
+	install_element(BGP_IPV6_NODE, &bgp_advertise_origin_cmd);
 
 	/* address-family commands. */
 	install_element(BGP_NODE, &address_family_ipv4_safi_cmd);
