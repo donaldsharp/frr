@@ -628,6 +628,7 @@ static inline struct nexthop_group *rib_get_fib_backup_nhg(
 }
 
 extern void zebra_vty_init(void);
+extern uint32_t zebra_rib_dplane_results_count(void);
 
 extern pid_t pid;
 
