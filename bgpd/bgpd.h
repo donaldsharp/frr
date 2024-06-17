@@ -892,6 +892,11 @@ struct bgp {
 
 	bool fast_convergence;
 
+#define BGP_FLAG_ADVERTISE_ORIGIN (1ULL << 0)
+
+	/* BGP per source NHG flags */
+	uint8_t per_src_nhg_flags[AFI_MAX][SAFI_MAX];
+
 	/* BGP Conditional advertisement */
 	uint32_t condition_check_period;
 	uint32_t condition_filter_count;
