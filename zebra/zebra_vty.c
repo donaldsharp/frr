@@ -4038,6 +4038,22 @@ DEFPY (clear_evpn_dup_addr,
 	struct list *input;
 	struct yang_data *yang_dup = NULL, *yang_dup_ip = NULL,
 			 *yang_dup_mac = NULL;
+	struct zebra_l3vni *zl3vni = NULL;
+	struct zebra_evpn *zevpn = NULL;
+
+	if (!is_evpn_enabled()) {
+		vty_out(vty, "%% EVPN not enabled\n");
+		return CMD_SUCCESS;
+	}
+
+	zl3vni = zl3vni_lookup(vni);
+	if (!zl3vni) {
+		zevpn = zebra_evpn_lookup(vni);
+		if (!zevpn) {
+			vty_out(vty, "%% VNI %u does not exist\n", vni);
+			return CMD_SUCCESS;
+		}
+	}
 
 	input = list_new();
 
