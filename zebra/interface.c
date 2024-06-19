@@ -1733,8 +1733,10 @@ static void interface_if_protodown(struct interface *ifp, bool protodown,
 				   uint32_t rc_bitfield)
 {
 	struct zebra_if *zif = ifp->info;
-	bool old_protodown;
+	bool old_protodown, reason_extern;
 
+	reason_extern =
+		!!CHECK_FLAG(zif->protodown_rc, ZEBRA_PROTODOWN_EXTERNAL);
 	/*
 	 * Set our reason code to note it wasn't us.
 	 * If the reason we got from the kernel is ONLY frr though, don't
@@ -1750,8 +1752,9 @@ static void interface_if_protodown(struct interface *ifp, bool protodown,
 		return;
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_ES || IS_ZEBRA_DEBUG_DPLANE)
-		zlog_debug("interface %s dplane change, protodown %s",
-			   ifp->name, protodown ? "on" : "off");
+		zlog_debug(
+			"interface %s dplane change, protodown %s curr reason_extern %u",
+			ifp->name, protodown ? "on" : "off", reason_extern);
 
 	/* Set protodown, respectively */
 	COND_FLAG(zif->flags, ZIF_FLAG_PROTODOWN, protodown);
@@ -1779,6 +1782,14 @@ static void interface_if_protodown(struct interface *ifp, bool protodown,
 
 			frrtrace(5, frr_zebra, if_protodown, ifp, old_protodown,
 				 0, 0, 7);
+			return;
+		}
+
+		if (!protodown && reason_extern) {
+			if (IS_ZEBRA_DEBUG_EVPN_MH_ES || IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug(
+					"bond member %s has protodown reason external and clear the reason, skip reinstall.",
+					ifp->name);
 			return;
 		}
 
