@@ -855,6 +855,7 @@ struct bgp {
 	bool fast_convergence;
 
 #define BGP_FLAG_ADVERTISE_ORIGIN (1ULL << 0)
+#define BGP_FLAG_NHG_PER_ORIGIN (1ULL << 1)
 
 	/* BGP per source NHG flags */
 	uint8_t per_src_nhg_flags[AFI_MAX][SAFI_MAX];
