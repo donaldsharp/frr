@@ -3927,6 +3927,22 @@ DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
 	return CMD_SUCCESS;
 }
 
+DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
+      NO_STR BGP_STR "Process SOO for per source nexthop group\n")
+{
+	VTY_DECLVAR_CONTEXT(bgp, bgp);
+	afi_t afi = bgp_node_afi(vty);
+	safi_t safi = bgp_node_safi(vty);
+
+	if (no)
+		UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
+			   BGP_FLAG_NHG_PER_ORIGIN);
+	else
+		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
+			 BGP_FLAG_NHG_PER_ORIGIN);
+	return CMD_SUCCESS;
+}
+
 DEFUN(bgp_llgr_stalepath_time, bgp_llgr_stalepath_time_cmd,
       "bgp long-lived-graceful-restart stale-time (1-16777215)",
       BGP_STR
@@ -19260,6 +19276,10 @@ static void bgp_config_write_family(struct vty *vty, struct bgp *bgp, afi_t afi,
 		       BGP_FLAG_ADVERTISE_ORIGIN)) {
 		vty_out(vty, "  bgp advertise-origin\n");
 	}
+	if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+		       BGP_FLAG_NHG_PER_ORIGIN)) {
+		vty_out(vty, "  bgp nhg-per-origin\n");
+	}
 
 	/* BGP flag dampening. */
 	if (CHECK_FLAG(bgp->af_flags[afi][safi], BGP_CONFIG_DAMPENING))
@@ -21697,6 +21717,10 @@ void bgp_vty_init(void)
 	/* Auto generate SOO for nexthop-group*/
 	install_element(BGP_IPV4_NODE, &bgp_advertise_origin_cmd);
 	install_element(BGP_IPV6_NODE, &bgp_advertise_origin_cmd);
+
+	/* Process SOO for nexthop-group*/
+	install_element(BGP_IPV4_NODE, &bgp_nhg_per_origin_cmd);
+	install_element(BGP_IPV6_NODE, &bgp_nhg_per_origin_cmd);
 
 	/* address-family commands. */
 	install_element(BGP_NODE, &address_family_ipv4_safi_cmd);
