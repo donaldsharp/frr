@@ -267,7 +267,7 @@ static void clear_all_entries(bool uninstall_p)
 /*
  * Reschedule the timer event.
  */
-static void nt_resched_timer(uint32_t timeout)
+static void nt_resched_timer(time_t timeout)
 {
 	if (timeout > 0)
 		thread_add_timer(zrouter.master, nt_handle_timer, NULL, timeout,
@@ -277,7 +277,7 @@ static void nt_resched_timer(uint32_t timeout)
 /*
  * Reschedule the holddown timer event.
  */
-static void nt_resched_hold_timer(uint32_t timeout)
+static void nt_resched_hold_timer(time_t timeout)
 {
 	if (timeout > 0)
 		thread_add_timer(zrouter.master, nt_handle_hold_timer, NULL,
@@ -336,7 +336,7 @@ static void nt_handle_timer(struct thread *event)
 	now = time(NULL);
 
 	if (IS_ZEBRA_DEBUG_RIB)
-		zlog_debug("%s: called at %u", __func__, (uint32_t)now);
+		zlog_debug("%s: called at %lld", __func__, (long long)now);
 
 	/* Process expired entries */
 	frr_each_safe (nt_entry_list, &nt_globals.entry_list, entry) {
@@ -602,8 +602,8 @@ void zebra_neigh_throttle_set_timeout(uint32_t timeout, bool reset)
 		nt_resched_timer(nt_globals.timeout_secs);
 
 	if (IS_ZEBRA_DEBUG_RIB)
-		zlog_debug("%s: timeout set to %u secs", __func__,
-			   (uint32_t)nt_globals.timeout_secs);
+		zlog_debug("%s: timeout set to %lld secs", __func__,
+			   (long long)nt_globals.timeout_secs);
 }
 
 /* Set delay for blackhole entries (in seconds); if 'reset', reset to
@@ -811,8 +811,8 @@ json_done:
 
 	now = time(NULL);
 
-	vty_out(vty, "Timeout: %u secs, limit: %u, exp: %u\n",
-		(uint32_t)nt_globals.timeout_secs, nt_globals.max_entries,
+	vty_out(vty, "Timeout: %lld secs, limit: %u, exp: %u\n",
+		(long long)nt_globals.timeout_secs, nt_globals.max_entries,
 		nt_globals.max_expirations);
 	vty_out(vty, "Entries: (%zu)\n",
 		nt_entry_list_count(&nt_globals.entry_list));
@@ -860,8 +860,8 @@ int zebra_neigh_throttle_config_write(struct vty *vty)
 			nt_globals.max_entries);
 
 	if (nt_globals.timeout_secs != ZEBRA_NEIGH_THROTTLE_DEFAULT_TIMEOUT)
-		vty_out(vty, ZEBRA_NEIGH_THROTTLE_STR " timeout %u\n",
-			(uint32_t)nt_globals.timeout_secs);
+		vty_out(vty, ZEBRA_NEIGH_THROTTLE_STR " timeout %lld\n",
+			(long long)nt_globals.timeout_secs);
 
 	return CMD_SUCCESS;
 }
