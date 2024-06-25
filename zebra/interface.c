@@ -1790,6 +1790,8 @@ static void interface_if_protodown(struct interface *ifp, bool protodown,
 				zlog_debug(
 					"bond member %s has protodown reason external and clear the reason, skip reinstall.",
 					ifp->name);
+			frrtrace(5, frr_zebra, if_protodown, ifp, old_protodown,
+					zif->protodown_rc, 0, 10);
 			return;
 		}
 

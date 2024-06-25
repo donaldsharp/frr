@@ -139,6 +139,9 @@ def location_if_protodown(field_val):
         return ("Bond Mbr reinstate protodown in the dplane")
     elif field_val == 9:
         return ("Intf Sweeping Protodown")
+    elif field_val == 10:
+        return ("clear external protodown")
+
 
 def location_if_upd_ctx_dplane_res(field_val):
     if field_val == 0:
