@@ -1785,6 +1785,8 @@ static void interface_if_protodown(struct interface *ifp, bool protodown,
 			if (IS_ZEBRA_DEBUG_EVPN_MH_ES || IS_ZEBRA_DEBUG_KERNEL)
 				zlog_debug("bond member %s has protodown reason external and clear the reason, skip reinstall.",
 					   ifp->name);
+			frrtrace(5, frr_zebra, if_protodown, ifp, old_protodown, zif->protodown_rc,
+				 0, 10);
 			return;
 		}
 
