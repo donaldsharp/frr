@@ -413,15 +413,16 @@ netlink_gre_set_msg_encoder(struct zebra_dplane_ctx *ctx, void *buf,
 	return NLMSG_ALIGN(req->n.nlmsg_len);
 }
 
-static int netlink_extract_bridge_info(struct rtattr *link_data,
-				       struct zebra_l2info_bridge *bridge_info)
+static int
+netlink_extract_bridge_info(struct rtattr *link_data,
+			    struct zebra_l2_bridge_if_dplane *bridge_info)
 {
 	struct rtattr *attr[IFLA_BR_MAX + 1];
 
 	memset(bridge_info, 0, sizeof(*bridge_info));
 	netlink_parse_rtattr_nested(attr, IFLA_BR_MAX, link_data);
 	if (attr[IFLA_BR_VLAN_FILTERING])
-		bridge_info->bridge.vlan_aware =
+		bridge_info->vlan_aware =
 			*(uint8_t *)RTA_DATA(attr[IFLA_BR_VLAN_FILTERING]);
 	return 0;
 }
@@ -569,7 +570,7 @@ static void netlink_interface_update_l2info(struct zebra_dplane_ctx *ctx,
 					    struct rtattr *link_data, int add,
 					    ns_id_t link_nsid)
 {
-	struct zebra_l2info_bridge bridge_info;
+	struct zebra_l2_bridge_if_dplane bridge_info;
 	struct zebra_l2info_vlan vlan_info;
 	struct zebra_l2info_vxlan vxlan_info;
 	struct zebra_l2info_gre gre_info;

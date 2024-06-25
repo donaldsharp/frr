@@ -87,6 +87,17 @@ struct zebra_l2_brvlan_mac_ctx {
 	struct json_object *json; /* Used for JSON Output */
 };
 
+/*
+ * Ctx processing in the data plane does not require the MAC table.
+ * Hence replicating a structure of zebra_l2_bridge_if without the
+ * MAC table
+ */
+struct zebra_l2_bridge_if_dplane {
+	uint8_t vlan_aware;
+	struct zebra_if *br_zif;
+	struct hash *vlan_table;
+};
+
 struct zebra_l2_bridge_if {
 	uint8_t vlan_aware;
 	struct zebra_if *br_zif;
@@ -207,7 +218,7 @@ extern void
 zebra_l2_unmap_slave_from_bridge(struct zebra_l2info_brslave *br_slave);
 extern void
 zebra_l2_bridge_add_update(struct interface *ifp,
-			   const struct zebra_l2info_bridge *bridge_info,
+			   const struct zebra_l2_bridge_if_dplane *bridge_info,
 			   int add);
 extern void zebra_l2_bridge_del(struct interface *ifp);
 extern void zebra_l2_vlanif_update(struct interface *ifp,

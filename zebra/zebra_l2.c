@@ -267,9 +267,9 @@ static void zebra_init_mac_table(struct zebra_l2_bridge_if *br)
  * Handle Bridge interface add or update. Update relevant info,
  * map slaves (if any) to the bridge.
  */
-void zebra_l2_bridge_add_update(struct interface *ifp,
-				const struct zebra_l2info_bridge *bridge_info,
-				int add)
+void zebra_l2_bridge_add_update(
+	struct interface *ifp,
+	const struct zebra_l2_bridge_if_dplane *bridge_info, int add)
 {
 	struct zebra_if *zif;
 	struct zebra_l2_bridge_if *br;
@@ -278,7 +278,7 @@ void zebra_l2_bridge_add_update(struct interface *ifp,
 	assert(zif);
 
 	br = BRIDGE_FROM_ZEBRA_IF(zif);
-	br->vlan_aware = bridge_info->bridge.vlan_aware;
+	br->vlan_aware = bridge_info->vlan_aware;
 	zebra_l2_bridge_if_add(ifp);
 	if (add)
 		zebra_init_mac_table(br);
