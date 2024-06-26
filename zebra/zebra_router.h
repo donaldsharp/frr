@@ -207,10 +207,15 @@ struct zebra_router {
 	bool graceful_restart;
 
 	/*
-	 * Time for when we sweep the rib from old routes
+	 * zebra start time and time of sweeping RIB of old routes
 	 */
 	uint64_t startup_time;
-	struct event *sweeper;
+	time_t rib_sweep_time;
+
+	/* FRR fast/graceful restart info */
+	int gr_cleanup_time;
+#define ZEBRA_GR_DEFAULT_RIB_SWEEP_TIME 500
+	struct event *t_rib_sweep;
 
 	bool maint_mode;
 
