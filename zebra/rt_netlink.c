@@ -4573,12 +4573,10 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 		link_if = ifp;
 	} else {
 		link_if = NULL;
-		char ip_buf[ETHER_ADDR_STRLEN];
 		if (IS_ZEBRA_DEBUG_KERNEL)
 			zlog_debug(
-				" Neighbor Entry IF %s(%u) and  IP %s is not on a VLAN or BRIDGE, ignoring",
-				ifp->name, ndm->ndm_ifindex,
-				ipaddr2str(&ip, ip_buf, sizeof(ip_buf)));
+				" Neighbor Entry IF %s(%u) and  IP %pIA is not on a VLAN or BRIDGE, ignoring",
+				ifp->name, ndm->ndm_ifindex, &ip);
 	}
 
 	memset(&mac, 0, sizeof(mac));

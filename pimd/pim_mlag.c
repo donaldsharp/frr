@@ -691,8 +691,7 @@ static void pim_mlag_process_peer_frr_state_change(struct mlag_frr_status msg)
 			 PIM_MLAGF_PEER_ZEBRA_UP_NOTIFY_RECEIVE_PENDING);
 		if (PIM_DEBUG_MLAG)
 			zlog_debug(
-				"%s: msg ignored mlagd process state down, \
-			        Setting Local MLAG Pending flag",
+				"%s: msg ignored mlagd process state down, Setting Local MLAG Pending flag",
 				__func__);
 		return;
 	}

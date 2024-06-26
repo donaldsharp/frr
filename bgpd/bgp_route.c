@@ -15687,7 +15687,7 @@ DEFPY(show_ip_bgp_instance_neighbor_advertised_route,
 
 	if (brief && !uj) {
 		vty_out(vty, "Brief cmd must be used only with json\n");
-		return;
+		return CMD_SUCCESS;
 	}
 
 	if (!all) {

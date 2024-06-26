@@ -4050,7 +4050,7 @@ DEFPY (clear_evpn_dup_addr,
 	if (!zl3vni) {
 		zevpn = zebra_evpn_lookup(vni);
 		if (!zevpn) {
-			vty_out(vty, "%% VNI %u does not exist\n", vni);
+			vty_out(vty, "%% VNI %lu does not exist\n", vni);
 			return CMD_SUCCESS;
 		}
 	}
