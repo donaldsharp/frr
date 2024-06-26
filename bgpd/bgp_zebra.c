@@ -1660,7 +1660,7 @@ bgp_zebra_announce_actual(struct bgp_dest *dest, struct bgp_path_info *info,
 		int i;
 
 		zlog_debug(
-			"Tx route %s VRF %%s %pFX metric %u tag %" ROUTE_TAG_PRI
+			"Tx route %s VRF %s %pFX metric %u tag %" ROUTE_TAG_PRI
 			" count %d nhg %d",
 			valid_nh_count ? "add" : "delete", bgp->name_pretty,
 			&api.prefix, api.metric, api.tag, api.nexthop_num,
