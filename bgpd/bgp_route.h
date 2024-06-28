@@ -832,6 +832,8 @@ extern int bgp_path_info_cmp_compatible(struct bgp *bgp,
 					enum bgp_path_selection_reason *reason);
 extern void bgp_attr_add_llgr_community(struct attr *attr);
 extern void bgp_attr_add_gshut_community(struct attr *attr);
+extern void bgp_attr_add_soo_community(struct ecommunity *soo,
+				       struct attr *attr);
 
 extern void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 			       struct bgp_maxpaths_cfg *mpath_cfg,
