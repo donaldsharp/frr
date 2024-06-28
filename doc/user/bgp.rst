@@ -1778,6 +1778,17 @@ Configuring Peers
    outputs. It's easier to troubleshoot if you have a number of BGP peers
    and a number of routes to check.
 
+.. clicmd:: bgp advertise-origin 
+
+   This command attaches a Site of Origin (SOO) attribute to all routes advertised
+   within the specified address-family. The SOO value is automatically derived from
+   the BGP router ID.
+
+.. clicmd:: bgp nhg-per-origin
+
+   This command processes the Site of Origin (SOO) attribute, facilitating the creation
+   of nexthop groups based on the value of SOO.
+
 .. clicmd:: neighbor PEER advertisement-interval (0-600)
 
    Setup the minimum route advertisement interval(mrai) for the
