@@ -3908,6 +3908,8 @@ DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 	afi_t afi = bgp_node_afi(vty);
 	safi_t safi = bgp_node_safi(vty);
+	struct peer *tmp_peer;
+	struct listnode *node, *nnode;
 
 	if (no)
 		UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
@@ -3923,6 +3925,9 @@ DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
 			TODO: Advertise routes in this address-family with
 			SOO ext community where value of SOO is router-id
 		*/
+
+	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, tmp_peer))
+		bgp_announce_route(tmp_peer, afi, safi, true);
 
 	return CMD_SUCCESS;
 }

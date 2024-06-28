@@ -2106,6 +2106,30 @@ void bgp_attr_add_gshut_community(struct attr *attr)
 	attr->local_pref = BGP_GSHUT_LOCAL_PREF;
 }
 
+void bgp_attr_add_soo_community(struct ecommunity *soo, struct attr *attr)
+{
+	struct ecommunity *old;
+	struct ecommunity *new;
+	struct ecommunity *merge;
+
+	old = bgp_attr_get_ecommunity(attr);
+
+	assert(soo);
+
+	if (old) {
+		merge = ecommunity_merge(ecommunity_dup(old), soo);
+
+		if (old->refcnt == 0)
+			ecommunity_free(&old);
+
+		new = ecommunity_uniq_sort(merge);
+		ecommunity_free(&merge);
+	} else {
+		new = ecommunity_dup(soo);
+	}
+
+	bgp_attr_set_ecommunity(attr, new);
+}
 
 /* Notify BGP Conditional advertisement scanner process. */
 void bgp_notify_conditional_adv_scanner(struct update_subgroup *subgrp)
@@ -2831,6 +2855,10 @@ bool subgroup_announce_check(struct bgp_dest *dest, struct bgp_path_info *pi,
 							bgp_attr_get_ecommunity(
 								attr)));
 	}
+
+	if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+		       BGP_FLAG_ADVERTISE_ORIGIN))
+		bgp_attr_add_soo_community(bgp->per_source_nhg_soo, attr);
 
 	/*
 	 * When the next hop is set to ourselves, if all multipaths have

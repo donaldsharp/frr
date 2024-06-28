@@ -1027,6 +1027,11 @@ void subgroup_default_originate(struct update_subgroup *subgrp, bool withdraw)
 			    (CHECK_FLAG(peer->flags, PEER_FLAG_GRACEFUL_SHUTDOWN)))
 				bgp_attr_add_gshut_community(new_attr);
 
+			if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+				       BGP_FLAG_ADVERTISE_ORIGIN))
+				bgp_attr_add_soo_community(
+					bgp->per_source_nhg_soo, new_attr);
+
 			SET_FLAG(subgrp->sflags,
 				 SUBGRP_STATUS_DEFAULT_ORIGINATE);
 			subgroup_default_update_packet(subgrp, new_attr, from);
