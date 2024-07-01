@@ -4056,11 +4056,17 @@ dplane_route_update_internal(struct route_node *rn,
 		}
 
 		/*
-		 * If the old and new context type, and nexthop group id
-		 * are the same there is no need to send down a route replace
-		 * as that we know we have sent a nexthop group replace
-		 * or an upper level protocol has sent us the exact
-		 * same route again.
+		 * Following is the condition on the decision to skip sending
+		 * down a route to replace old ctx and new ctx are same (&&) (one
+		 * of the below three is true)
+		 *   - old and new Nexthop group id's are same (&&)
+		 *     upper level protocol has sent us the exact same route
+		 *     again.
+		 *   - Route update on the new ctx (&&) new ctx flags are
+		 *     OFFLOADED or TRAPPED or OFFLOAD_FAILED
+		 *   - old and new Nexthop group Id's are same (&&)
+		 *     Route update on the new ctx (&&)
+		 *     old ctx flags are OFFLOADED or TRAPPED or OFFLOAD_FAILED
 		 */
 		flags = dplane_ctx_get_flags(ctx);
 		old_flags = dplane_ctx_get_old_flags(ctx);

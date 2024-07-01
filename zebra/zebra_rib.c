@@ -783,6 +783,11 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 		break;
 	}
 	case ZEBRA_DPLANE_REQUEST_SUCCESS:
+		/*
+		 * Entering this condition means that the current route to be
+		 * installed in ASIC is already installed. So we simply copy
+		 * old_re flags to new re and notify the owner(BGP)
+		 */
 		if (old) {
 			if (CHECK_FLAG(old->flags, ZEBRA_FLAG_OFFLOADED))
 				SET_FLAG(re->flags, ZEBRA_FLAG_OFFLOADED);
