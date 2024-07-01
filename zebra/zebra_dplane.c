@@ -4077,11 +4077,7 @@ dplane_route_update_internal(struct route_node *rn,
 		       dplane_ctx_get_old_nhe_id(ctx)) &&
 		      (dplane_ctx_get_op(ctx) == DPLANE_OP_ROUTE_UPDATE) &&
 		      (CHECK_FLAG(old_flags, ZEBRA_FLAG_OFFLOADED) ||
-		       CHECK_FLAG(old_flags, ZEBRA_FLAG_OFFLOAD_FAILED)))) &&
-		    ((CHECK_FLAG(old_flags, ZEBRA_FLAG_OFFLOADED) ==
-		      CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOADED)) &&
-		     (CHECK_FLAG(old_flags, ZEBRA_FLAG_OFFLOAD_FAILED) ==
-		      CHECK_FLAG(flags, ZEBRA_FLAG_OFFLOAD_FAILED)))) {
+		       CHECK_FLAG(old_flags, ZEBRA_FLAG_OFFLOAD_FAILED))))) {
 			struct nexthop *nexthop;
 
 			if (IS_ZEBRA_DEBUG_DPLANE_DETAIL) {
