@@ -2778,6 +2778,7 @@ static void zebra_evpn_mh_on_first_local_es(void)
 	zebra_evpn_mh_advertise_reach_neigh_only();
 	zebra_evpn_mh_advertise_svi_mac();
 	zebra_evpn_mh_garp_flood_set(true);
+	zebra_evpn_arp_nd_failover_enable();
 }
 
 static void zebra_evpn_es_local_info_set(struct zebra_evpn_es *es,
