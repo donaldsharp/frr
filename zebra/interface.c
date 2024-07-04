@@ -2053,6 +2053,7 @@ static void zebra_if_dplane_ifp_handling(struct zebra_dplane_ctx *ctx)
 		enum zebra_slave_iftype zif_slave_type;
 		uint8_t bypass;
 		uint64_t flags;
+		uint64_t change_flags;
 		vrf_id_t vrf_id;
 		uint32_t mtu;
 		ns_id_t link_nsid;
@@ -2062,6 +2063,7 @@ static void zebra_if_dplane_ifp_handling(struct zebra_dplane_ctx *ctx)
 		uint8_t old_hw_addr[INTERFACE_HWADDR_MAX];
 		char *desc;
 		uint8_t family;
+		bool promiscuity;
 
 		/* If VRF, create or update the VRF structure itself. */
 		if (zif_type == ZEBRA_IF_VRF && !vrf_is_backend_netns())
@@ -2073,16 +2075,30 @@ static void zebra_if_dplane_ifp_handling(struct zebra_dplane_ctx *ctx)
 		bond_ifindex = dplane_ctx_get_ifp_bond_ifindex(ctx);
 		bypass = dplane_ctx_get_ifp_bypass(ctx);
 		flags = dplane_ctx_get_ifp_flags(ctx);
+		change_flags = dplane_ctx_get_ifp_change_flags(ctx);
 		vrf_id = dplane_ctx_get_ifp_vrf_id(ctx);
 		mtu = dplane_ctx_get_ifp_mtu(ctx);
 		link_ifindex = dplane_ctx_get_ifp_link_ifindex(ctx);
 		link_nsid = dplane_ctx_get_ifp_link_nsid(ctx);
 		protodown_set = dplane_ctx_get_ifp_protodown_set(ctx);
 		protodown = dplane_ctx_get_ifp_protodown(ctx);
+		promiscuity = dplane_ctx_get_ifp_promiscuity(ctx);
 		rc_bitfield = dplane_ctx_get_ifp_rc_bitfield(ctx);
 		startup = dplane_ctx_get_ifp_startup(ctx);
 		desc = dplane_ctx_get_ifp_desc(ctx);
 		family = dplane_ctx_get_ifp_family(ctx);
+
+		/* check for promiscuity messages, ignore if that is the only
+		 * change flag */
+		if (promiscuity && (change_flags == IFF_PROMISC)) {
+			if (IS_ZEBRA_DEBUG_KERNEL)
+				zlog_debug(
+					"%s: ignoring IFLA_PROMISCUITY change message",
+					__func__);
+			frrtrace(4, frr_zebra, if_dplane_ifp_handling, ctx,
+				 name, ifindex, 6);
+			return;
+		}
 
 #ifndef AF_BRIDGE
 		/*
