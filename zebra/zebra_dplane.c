@@ -231,6 +231,9 @@ struct dplane_intf_info {
 
 	uint32_t metric;
 	uint32_t flags;
+	uint32_t change_flags;
+
+	bool promiscuity;
 
 	bool protodown;
 	bool protodown_set;
@@ -1504,6 +1507,21 @@ uint64_t dplane_ctx_get_ifp_flags(const struct zebra_dplane_ctx *ctx)
 	return ctx->u.intf.flags;
 }
 
+void dplane_ctx_set_ifp_change_flags(struct zebra_dplane_ctx *ctx,
+				     uint64_t change_flags)
+{
+	DPLANE_CTX_VALID(ctx);
+
+	ctx->u.intf.change_flags = change_flags;
+}
+
+uint64_t dplane_ctx_get_ifp_change_flags(const struct zebra_dplane_ctx *ctx)
+{
+	DPLANE_CTX_VALID(ctx);
+
+	return ctx->u.intf.change_flags;
+}
+
 void dplane_ctx_set_ifp_bypass(struct zebra_dplane_ctx *ctx, uint8_t bypass)
 {
 	DPLANE_CTX_VALID(ctx);
@@ -1647,6 +1665,21 @@ bool dplane_ctx_get_ifp_protodown(const struct zebra_dplane_ctx *ctx)
 	DPLANE_CTX_VALID(ctx);
 
 	return ctx->u.intf.protodown;
+}
+
+void dplane_ctx_set_ifp_promiscuity(struct zebra_dplane_ctx *ctx,
+				    bool promiscuity)
+{
+	DPLANE_CTX_VALID(ctx);
+
+	ctx->u.intf.promiscuity = promiscuity;
+}
+
+bool dplane_ctx_get_ifp_promiscuity(const struct zebra_dplane_ctx *ctx)
+{
+	DPLANE_CTX_VALID(ctx);
+
+	return ctx->u.intf.promiscuity;
 }
 
 ifindex_t dplane_ctx_get_ifp_bond_ifindex(const struct zebra_dplane_ctx *ctx)

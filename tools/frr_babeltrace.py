@@ -170,6 +170,8 @@ def location_if_dplane_ifp_handling(field_val):
         return ("RTM_NEWLINK UPD: Intf has come Up")
     elif field_val == 5:
         return ("RTM_NEWLINK UPD: Intf has gone Down-2")
+    elif field_val == 6:
+        return ("RTM_NEWLINK UPD: ignoring PROMISCUITY change")
 
 def location_if_dplane_ifp_handling_new(field_val):
     if field_val == 0:
