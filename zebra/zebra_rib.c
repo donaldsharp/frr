@@ -783,7 +783,29 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 		break;
 	}
 	case ZEBRA_DPLANE_REQUEST_SUCCESS:
-		if (old) {
+		/*
+		 * Entering this condition means that the current route to be
+		 * installed in ASIC is already installed.
+		 *
+		 * Copy old_re flags to new re only if new re has neither
+		 * OFFLOADED nor OFFLOAD_FAILED flag set, else honor whatever is
+		 * in new re and notify the owner(BGP)
+		 *
+		 *   New                     Old                 Result
+		 * ************** For below cases, honor new-re *************
+		 * Offloaded              Offloaded            Offloaded
+		 * Offloaded              Offload-failed       Offloaded
+		 * Offloaded              none                 Offloaded
+		 * Offload-failed         Offloaded            Offload-failed
+		 * Offload-failed         Offload-failed       Offload-failed
+		 * Offload-failed         none                 Offload-failed
+		 * ************** For below cases, honor old-re *************
+		 * None                   Offloaded            Offloaded
+		 * None                   Offload-failed       Offload-failed
+		 * None                   None                 None
+		 */
+		if (old && !CHECK_FLAG(re->flags, ZEBRA_FLAG_OFFLOADED) &&
+		    !CHECK_FLAG(re->flags, ZEBRA_FLAG_OFFLOAD_FAILED)) {
 			if (CHECK_FLAG(old->flags, ZEBRA_FLAG_OFFLOADED))
 				SET_FLAG(re->flags, ZEBRA_FLAG_OFFLOADED);
 			if (CHECK_FLAG(old->flags, ZEBRA_FLAG_OFFLOAD_FAILED))
