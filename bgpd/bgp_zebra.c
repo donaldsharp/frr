@@ -1314,9 +1314,9 @@ static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
 	return true;
 }
 
-static enum zclient_send_status
-bgp_zebra_announce_actual(struct bgp_dest *dest, struct bgp_path_info *info,
-			  struct bgp *bgp)
+enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
+						   struct bgp_path_info *info,
+						   struct bgp *bgp)
 {
 	struct zapi_route api = { 0 };
 	struct zapi_nexthop *api_nh;
