@@ -135,4 +135,7 @@ extern int bgp_zebra_srv6_manager_release_locator_chunk(const char *name);
 extern enum zclient_send_status
 bgp_zebra_withdraw_actual(struct bgp_dest *dest, struct bgp_path_info *info,
 			  struct bgp *bgp);
+enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
+						   struct bgp_path_info *info,
+						   struct bgp *bgp);
 #endif /* _QUAGGA_BGP_ZEBRA_H */

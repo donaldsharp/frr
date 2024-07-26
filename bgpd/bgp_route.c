@@ -3630,8 +3630,17 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 			    is_route_parent_evpn(old_select))
 				bgp_zebra_withdraw_actual(dest, old_select, bgp);
 
-			bgp_zebra_route_install(dest, new_select, bgp, true,
-						NULL, false);
+			/* For EVPN imported route skip putting route add
+			 * to pending queue rather send directly to zebra.
+			 * else case covers the non EVPN impoted routes.
+			 */
+			if (is_route_parent_evpn(new_select))
+				bgp_zebra_announce_actual(dest, new_select,
+							  bgp);
+			else
+				bgp_zebra_route_install(dest, new_select, bgp,
+							true, NULL, false);
+
 		} else {
 			/* Withdraw the route from the kernel. */
 			if (old_select && old_select->type == ZEBRA_ROUTE_BGP
