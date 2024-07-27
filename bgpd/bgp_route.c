@@ -3947,19 +3947,8 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 		/* Send route processing complete message to RIB */
 		if (!bgp->gr_info[afi][safi].route_sync_tier2 &&
 		    BGP_GR_SELECT_DEFER_DONE(bgp, afi, safi)) {
-
-			/*
-			 * If UPDATE_COMPLETE is not scheduled (which could
-			 * happen if none of the sessions came up for an
-			 * AFI-SAFI, as a result no prefixes are present in the
-			 * table) then send the UPDATE_COMPLETE to zebra here.
-			 */
-			if (!CHECK_FLAG(bgp->gr_info[afi][safi].flags,
-					BGP_GR_UPDATE_COMPLETE_SCHEDULED))
-				bgp_zebra_update(
-					bgp, afi, safi,
-					ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE);
-
+			bgp_zebra_update(bgp, afi, safi,
+					 ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE);
 			bgp->gr_info[afi][safi].route_sync_tier2 = true;
 		}
 
