@@ -3516,13 +3516,20 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 			if (bgp_fibupd_safi(safi)
 			    && !bgp_option_check(BGP_OPT_NO_FIB)) {
 
-				if (new_select->type == ZEBRA_ROUTE_BGP
-				    && (new_select->sub_type == BGP_ROUTE_NORMAL
-					|| new_select->sub_type
-						   == BGP_ROUTE_IMPORTED))
-					bgp_zebra_route_install(
-						dest, old_select, bgp, true,
-						NULL, false);
+				if (new_select->type == ZEBRA_ROUTE_BGP &&
+				    (new_select->sub_type == BGP_ROUTE_NORMAL ||
+				     new_select->sub_type ==
+					     BGP_ROUTE_IMPORTED)) {
+					if (CHECK_FLAG(bgp->gr_info[afi][safi]
+							       .flags,
+						       BGP_GR_SKIP_BP))
+						bgp_zebra_announce_actual(
+							dest, old_select, bgp);
+					else
+						bgp_zebra_route_install(
+							dest, old_select, bgp,
+							true, NULL, false);
+				}
 			}
 		}
 
@@ -3626,15 +3633,16 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 			 * we need to withdraw the route first to clear
 			 * the nh neigh and the RMAC entry.
 			 */
-			if (old_select &&
-			    is_route_parent_evpn(old_select))
+			if (old_select && is_route_parent_evpn(old_select))
 				bgp_zebra_withdraw_actual(dest, old_select, bgp);
 
 			/* For EVPN imported route skip putting route add
 			 * to pending queue rather send directly to zebra.
 			 * else case covers the non EVPN impoted routes.
 			 */
-			if (is_route_parent_evpn(new_select))
+			if (is_route_parent_evpn(new_select) ||
+			    CHECK_FLAG(bgp->gr_info[afi][safi].flags,
+				       BGP_GR_SKIP_BP))
 				bgp_zebra_announce_actual(dest, new_select,
 							  bgp);
 			else
@@ -3643,12 +3651,19 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 
 		} else {
 			/* Withdraw the route from the kernel. */
-			if (old_select && old_select->type == ZEBRA_ROUTE_BGP
-			    && (old_select->sub_type == BGP_ROUTE_NORMAL
-				|| old_select->sub_type == BGP_ROUTE_AGGREGATE
-				|| old_select->sub_type == BGP_ROUTE_IMPORTED))
-				bgp_zebra_route_install(dest, old_select, bgp,
-							false, NULL, false);
+			if (old_select && old_select->type == ZEBRA_ROUTE_BGP &&
+			    (old_select->sub_type == BGP_ROUTE_NORMAL ||
+			     old_select->sub_type == BGP_ROUTE_AGGREGATE ||
+			     old_select->sub_type == BGP_ROUTE_IMPORTED)) {
+				if (CHECK_FLAG(bgp->gr_info[afi][safi].flags,
+					       BGP_GR_SKIP_BP))
+					bgp_zebra_withdraw_actual(
+						dest, old_select, bgp);
+				else
+					bgp_zebra_route_install(
+						dest, old_select, bgp, false,
+						NULL, false);
+			}
 		}
 	}
 
