@@ -1498,12 +1498,14 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	    && !CHECK_FLAG(old_select->flags, BGP_PATH_ATTR_CHANGED)
 	    && !bgp_addpath_is_addpath_used(&bgp->tx_addpath, afi, safi)) {
 		if (bgp_zebra_has_route_changed(old_select)) {
-			if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS))
+			/* BP is disabled when  BGP instance is being deleted or
+			 * GR is in progress.
+			 */
+			if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS) ||
+			    CHECK_FLAG(bgp->gr_info[afi][safi].flags, BGP_GR_SKIP_BP))
 				ret = evpn_zebra_install(bgp, vpn,
-							 (const struct prefix_evpn
-								  *)
-								 bgp_dest_get_prefix(
-									 dest),
+							 (const struct prefix_evpn *)
+								 bgp_dest_get_prefix(dest),
 							 old_select);
 			else
 				bgp_zebra_route_install(dest, old_select, bgp,
@@ -1541,11 +1543,11 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	if (new_select && new_select->type == ZEBRA_ROUTE_BGP
 	    && (new_select->sub_type == BGP_ROUTE_IMPORTED ||
 			bgp_evpn_attr_is_sync(new_select->attr))) {
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS))
+		if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS) ||
+		    CHECK_FLAG(bgp->gr_info[afi][safi].flags, BGP_GR_SKIP_BP))
 			ret = evpn_zebra_install(bgp, vpn,
-						 (const struct prefix_evpn *)
-							 bgp_dest_get_prefix(
-								 dest),
+						 (const struct prefix_evpn *)bgp_dest_get_prefix(
+							 dest),
 						 new_select);
 		else
 			bgp_zebra_route_install(dest, new_select, bgp, true,
@@ -1569,12 +1571,11 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 		if (old_select && old_select->type == ZEBRA_ROUTE_BGP &&
 		    old_select->sub_type == BGP_ROUTE_IMPORTED) {
 			if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS) ||
-			    CHECK_FLAG(bgp->flags, BGP_FLAG_VNI_DOWN))
+			    CHECK_FLAG(bgp->flags, BGP_FLAG_VNI_DOWN) ||
+			    CHECK_FLAG(bgp->gr_info[afi][safi].flags, BGP_GR_SKIP_BP))
 				ret = evpn_zebra_uninstall(bgp, vpn,
-							   (const struct prefix_evpn
-								    *)
-								   bgp_dest_get_prefix(
-									   dest),
+							   (const struct prefix_evpn *)
+								   bgp_dest_get_prefix(dest),
 							   old_select, false);
 			else
 				bgp_zebra_route_install(dest, old_select, bgp,
@@ -5851,6 +5852,9 @@ uint16_t bgp_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi,
 {
 	struct bgp_dest *dest = NULL;
 
+	/* This is set to disable BP with GR. */
+	SET_FLAG(bgp->gr_info[afi][safi].flags, BGP_GR_SKIP_BP);
+
 	for (dest = bgp_table_top(table);
 	     dest && bgp->gr_info[afi][safi].gr_deferred != 0 && cnt < BGP_MAX_BEST_ROUTE_SELECT;
 	     dest = bgp_route_next(dest)) {
@@ -5881,6 +5885,8 @@ uint16_t bgp_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi,
 
 		cnt++;
 	}
+
+	UNSET_FLAG(bgp->gr_info[afi][safi].flags, BGP_GR_SKIP_BP);
 
 	/* If iteration stopped before the entire table was traversed then the
 	 * node needs to be unlocked.
