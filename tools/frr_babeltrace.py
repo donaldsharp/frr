@@ -309,12 +309,6 @@ def location_l3vni_remote_rmac(field_val):
     elif field_val == 2:
         return ("Del")
 
-def location_gr_zebra_update(field_val):
-    if field_val == 1:
-        return ("Sent")
-    elif field_val == 2:
-        return ("Sending after last prefix")
-
 def print_prefix_addr(field_val):
     """
     pretty print "struct prefix"
@@ -879,8 +873,7 @@ def parse_frr_bgp_gr_continue_deferred_path_selection(event):
 
 def parse_frr_bgp_gr_zebra_update(event):
     field_parsers = {"afi": print_afi_string,
-                     "safi": print_safi_string,
-                     "location": location_gr_zebra_update}
+                     "safi": print_safi_string}
 
     parse_event(event, field_parsers)
 
@@ -994,7 +987,6 @@ def parse_frr_zebra_remote_nh_add_rmac_change(event):
                      "newmac": print_mac,
                      "vtep_ip": print_ip_addr}
     parse_event(event, field_parsers)
-
 
 ############################ evpn parsers - end *#############################
 
