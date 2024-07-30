@@ -50,6 +50,8 @@ extern struct thread_master *master;
 #define VTYSH_PATHD     0x80000
 #define VTYSH_PIM6D     0x100000
 
+#define VTYSH_RCV_BUF_MAX 16777216
+
 #define VTYSH_WAS_ACTIVE (-2)
 
 /* commands in REALLYALL are crucial to correct vtysh operation */
