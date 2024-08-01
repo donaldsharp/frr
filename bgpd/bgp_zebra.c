@@ -1896,48 +1896,6 @@ static void bgp_handle_route_announcements_to_zebra(struct thread *e)
 			UNSET_FLAG(dest->flags, BGP_NODE_SCHEDULE_FOR_DELETE);
 		}
 
-		/*
-		 * Send UPDATE_COMPLETE to zebra if this is the last deferred
-		 * bestpath
-		 */
-		if (CHECK_FLAG(dest->flags, BGP_NODE_DEFERRED_PREFIX_LAST)) {
-			/*
-			 * Send UPDATE_COMPLETE only if GR for this AFI SAFI is
-			 * done. If not, just unset the
-			 * BGP_NODE_DEFERRED_PREFIX_LAST and
-			 * BGP_GR_UPDATE_COMPLETE_SCHEDULED since BGP could
-			 * still be waiting to receive EOR from more peers and
-			 * in that case, both of these flags will be set again.
-			 */
-			UNSET_FLAG(dest->flags, BGP_NODE_DEFERRED_PREFIX_LAST);
-			UNSET_FLAG(table->bgp->gr_info[table->afi][table->safi]
-					   .flags,
-				   BGP_GR_UPDATE_COMPLETE_SCHEDULED);
-
-			if (table->bgp->gr_info[table->afi][table->safi]
-				    .route_sync_tier2) {
-				if (BGP_DEBUG(graceful_restart,
-					      GRACEFUL_RESTART))
-					zlog_debug(
-						"%s sending UPDATE_COMPLETE after last prefix for %s AFI:%d SAFI:%d ",
-						__func__,
-						table->bgp->name_pretty,
-						table->afi, table->safi);
-
-				frrtrace(
-					5, frr_bgp, gr_zebra_update,
-					table->bgp->name_pretty, table->afi,
-					table->safi,
-					zserv_gr_client_cap_string(
-						ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE),
-					2);
-
-				bgp_zebra_update(
-					table->bgp, table->afi, table->safi,
-					ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE);
-			}
-		}
-
 		bgp_path_info_unlock(dest->za_bgp_pi);
 		dest->za_bgp_pi = NULL;
 		dest->za_vpn = NULL;
@@ -4189,8 +4147,8 @@ int bgp_zebra_update(struct bgp *bgp, afi_t afi, safi_t safi,
 		return BGP_GR_FAILURE;
 	}
 
-	frrtrace(5, frr_bgp, gr_zebra_update, bgp->name_pretty, afi, safi,
-		 zserv_gr_client_cap_string(type), 1);
+	frrtrace(4, frr_bgp, gr_zebra_update, bgp->name_pretty, afi, safi,
+		 zserv_gr_client_cap_string(type));
 
 	return BGP_GR_SUCCESS;
 }

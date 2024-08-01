@@ -368,7 +368,7 @@ struct graceful_restart_info {
 	bool select_defer_over_tier2;
 	bool route_sync_tier2;
 	uint8_t flags;
-#define BGP_GR_UPDATE_COMPLETE_SCHEDULED (1 << 0)
+#define BGP_GR_SKIP_BP (1 << 0)
 };
 
 enum global_mode {

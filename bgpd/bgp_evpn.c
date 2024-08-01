@@ -1524,7 +1524,13 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	    && !CHECK_FLAG(old_select->flags, BGP_PATH_ATTR_CHANGED)
 	    && !bgp_addpath_is_addpath_used(&bgp->tx_addpath, afi, safi)) {
 		if (bgp_zebra_has_route_changed(old_select)) {
-			if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS))
+			/* BP is disabled when  BGP instance is being deleted or
+			 * GR is in progress.
+			 */
+			if (CHECK_FLAG(bgp->flags,
+				       BGP_FLAG_DELETE_IN_PROGRESS) ||
+			    CHECK_FLAG(bgp->gr_info[afi][safi].flags,
+				       BGP_GR_SKIP_BP))
 				evpn_zebra_install(
 					bgp, vpn,
 					(const struct prefix_evpn *)
@@ -1566,7 +1572,8 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 	if (new_select && new_select->type == ZEBRA_ROUTE_BGP
 	    && (new_select->sub_type == BGP_ROUTE_IMPORTED ||
 			bgp_evpn_attr_is_sync(new_select->attr))) {
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS))
+		if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS) ||
+		    CHECK_FLAG(bgp->gr_info[afi][safi].flags, BGP_GR_SKIP_BP))
 			evpn_zebra_install(bgp, vpn,
 					   (const struct prefix_evpn *)
 						   bgp_dest_get_prefix(dest),
@@ -1594,7 +1601,9 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 		    old_select->sub_type == BGP_ROUTE_IMPORTED) {
 			if (CHECK_FLAG(bgp->flags,
 				       BGP_FLAG_DELETE_IN_PROGRESS) ||
-			    CHECK_FLAG(bgp->flags, BGP_FLAG_VNI_DOWN))
+			    CHECK_FLAG(bgp->flags, BGP_FLAG_VNI_DOWN) ||
+			    CHECK_FLAG(bgp->gr_info[afi][safi].flags,
+				       BGP_GR_SKIP_BP))
 				evpn_zebra_uninstall(
 					bgp, vpn,
 					(const struct prefix_evpn *)
@@ -5819,7 +5828,9 @@ uint16_t bgp_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi,
 				     struct bgpevpn *vpn, bool evpn_select)
 {
 	struct bgp_dest *dest = NULL;
-	struct bgp_dest *prev_dest = NULL;
+
+	/* This is set to disable BP with GR. */
+	SET_FLAG(bgp->gr_info[afi][safi].flags, BGP_GR_SKIP_BP);
 
 	for (dest = bgp_table_top(table);
 	     dest && bgp->gr_info[afi][safi].gr_deferred != 0 &&
@@ -5854,12 +5865,9 @@ uint16_t bgp_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi,
 			bgp_process_main_one(bgp, dest, afi, safi);
 
 		cnt++;
-
-		/* Record the enqueued deferred bestpath */
-		if (CHECK_FLAG(dest->flags, BGP_NODE_SCHEDULE_FOR_INSTALL) ||
-		    CHECK_FLAG(dest->flags, BGP_NODE_SCHEDULE_FOR_DELETE))
-			prev_dest = dest;
 	}
+
+	UNSET_FLAG(bgp->gr_info[afi][safi].flags, BGP_GR_SKIP_BP);
 
 	/* If iteration stopped before the entire table was traversed then the
 	 * node needs to be unlocked.
@@ -5867,24 +5875,6 @@ uint16_t bgp_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi,
 	if (dest) {
 		bgp_dest_unlock_node(dest);
 		dest = NULL;
-	} else {
-		if (prev_dest) {
-			bgp_dest_lock_node(prev_dest);
-			/*
-			 * Set flag on the last enqueued
-			 * BGP deferred dest
-			 */
-			SET_FLAG(prev_dest->flags,
-				 BGP_NODE_DEFERRED_PREFIX_LAST);
-			bgp_dest_unlock_node(prev_dest);
-			/*
-			 * Set UPADTE_COMPLETE_SCHEDULED flag so that
-			 * BGP can skip sending it in
-			 * bgp_do_deferred_path_selection() function.
-			 */
-			SET_FLAG(bgp->gr_info[afi][safi].flags,
-				 BGP_GR_UPDATE_COMPLETE_SCHEDULED);
-		}
 	}
 
 	return cnt;
