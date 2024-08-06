@@ -239,6 +239,11 @@ extern void zebra_vxlan_set_accept_bgp_seq(bool set);
 extern bool zebra_vxlan_get_accept_bgp_seq(void);
 extern void zebra_vxlan_stale_hrep_add(struct in_addr vtep_ip, vni_t vni);
 extern void zebra_evpn_stale_entries_cleanup(uint64_t gr_cleanup_time);
+extern void vlan_id_range_state_change(struct interface *ifp, uint16_t id_start,
+				       uint16_t id_end, uint8_t state);
+extern void vxlan_vni_state_change(struct zebra_if *zif, uint16_t id,
+				   uint8_t state);
+extern const char *port_state2str(uint8_t state);
 #ifdef __cplusplus
 }
 #endif

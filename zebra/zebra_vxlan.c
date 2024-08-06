@@ -59,6 +59,7 @@
 #include "zebra/zebra_router.h"
 #include "zebra/zebra_evpn_arp_nd.h"
 #include "zebra/zebra_trace.h"
+#include <linux/if_bridge.h>
 
 DEFINE_MTYPE_STATIC(ZEBRA, HOST_PREFIX, "host prefix");
 DEFINE_MTYPE_STATIC(ZEBRA, ZL3VNI, "L3 VNI hash");
@@ -6759,4 +6760,73 @@ static void zl3vni_stale_remote_nh_read_add(struct zebra_l3vni *zl3vni,
 			"EVPN-GR: Added stale remote NH entry: IP %pIA MAC %pEA, L3VNI %u",
 			ip, macaddr, zl3vni->vni);
 #endif
+}
+
+const char *port_state2str(uint8_t state)
+{
+	switch (state) {
+	case BR_STATE_DISABLED:
+		return "DISABLED";
+	case BR_STATE_LISTENING:
+		return "LISTENING";
+	case BR_STATE_LEARNING:
+		return "LEARNING";
+	case BR_STATE_FORWARDING:
+		return "FORWARDING";
+	case BR_STATE_BLOCKING:
+		return "BLOCKING";
+	}
+
+	return "UNKNOWN";
+}
+
+void vxlan_vni_state_change(struct zebra_if *zif, uint16_t id, uint8_t state)
+{
+	struct zebra_vxlan_vni *vnip;
+
+	vnip = zebra_vxlan_if_vlanid_vni_find(zif, id);
+
+	if (!vnip) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"Cannot find VNI for VID (%u) IF %s for vlan state update",
+				id, zif->ifp->name);
+
+		frrtrace(3, frr_zebra, netlink_intf_err, zif->ifp->name, id, 3);
+
+		return;
+	}
+
+	if (zif)
+		frrtrace(4, frr_zebra, vxlan_vni_state_change, id, zif,
+			 vnip->vni, state);
+
+	switch (state) {
+	case BR_STATE_FORWARDING:
+		zebra_vxlan_if_vni_up(zif->ifp, vnip);
+		break;
+	case BR_STATE_BLOCKING:
+		zebra_vxlan_if_vni_down(zif->ifp, vnip);
+		break;
+	case BR_STATE_DISABLED:
+	case BR_STATE_LISTENING:
+	case BR_STATE_LEARNING:
+	default:
+		/* Not used for anything at the moment */
+		break;
+	}
+}
+
+void vlan_id_range_state_change(struct interface *ifp, uint16_t id_start,
+				uint16_t id_end, uint8_t state)
+{
+	struct zebra_if *zif;
+
+	zif = (struct zebra_if *)ifp->info;
+
+	if (!zif)
+		return;
+
+	for (uint16_t i = id_start; i <= id_end; i++)
+		vxlan_vni_state_change(zif, i, state);
 }
