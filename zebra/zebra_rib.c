@@ -1995,7 +1995,8 @@ static void zebra_gr_reinstall_last_route(void)
 		 z_gr_ctx.total_evpn_entries_queued, z_gr_ctx.total_evpn_entries_processed);
 
 	/* Reinstall the last route */
-	if (z_gr_ctx.rn && z_gr_ctx.re && !CHECK_FLAG(z_gr_ctx.re->status, ROUTE_ENTRY_REMOVED)) {
+	if (z_gr_ctx.rn && z_gr_ctx.rn->info && z_gr_ctx.re &&
+	    !CHECK_FLAG(z_gr_ctx.re->status, ROUTE_ENTRY_REMOVED)) {
 		if (IS_ZEBRA_DEBUG_EVENT)
 			zlog_debug("GR %s: Reinstalling last route %pRN %u:%u", __func__,
 				   z_gr_ctx.rn, z_gr_ctx.re->vrf_id, z_gr_ctx.re->table);
