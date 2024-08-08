@@ -2047,7 +2047,7 @@ static void zebra_gr_reinstall_last_route(void)
 
 
 	/* Reinstall the last route */
-	if (z_gr_ctx.rn && z_gr_ctx.re &&
+	if (z_gr_ctx.rn && z_gr_ctx.rn->info && z_gr_ctx.re &&
 	    !CHECK_FLAG(z_gr_ctx.re->status, ROUTE_ENTRY_REMOVED)) {
 		if (IS_ZEBRA_DEBUG_EVENT)
 			zlog_debug("GR %s: Reinstalling last route %pRN %u:%u",
@@ -2122,8 +2122,9 @@ static void zebra_gr_reinstall_last_route(void)
 				 2);
 		}
 	} else {
-		zlog_info("GR %s Last route not found. rn %p, re %p", __func__,
-			  z_gr_ctx.rn, z_gr_ctx.re);
+		zlog_info(
+			"GR %s Last route not found. rn %p, re %p",
+			__func__, z_gr_ctx.rn, z_gr_ctx.re);
 	}
 
 	if (IS_ZEBRA_DEBUG_EVENT)
