@@ -18667,7 +18667,7 @@ static void bgp_config_end(void)
 #define BGP_POST_CONFIG_DELAY_SECONDS 1
 	uint32_t bgp_post_config_delay =
 		thread_is_scheduled(bm->t_rmap_update)
-			? thread_timer_remain_second(bm->t_rmap_update)
+			? thread_timer_remain_second(bm->t_rmap_update) + 1
 			: BGP_POST_CONFIG_DELAY_SECONDS;
 
 	/* If BGP config processing thread isn't running, then
