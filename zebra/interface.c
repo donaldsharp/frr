@@ -2486,6 +2486,7 @@ void zebra_if_dplane_result(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_TC_DELETE:
 	case DPLANE_OP_ROUTE_LAST:
 	case DPLANE_OP_STARTUP_STAGE:
+	case DPLANE_OP_VLAN_INSTALL:
 		break; /* should never hit here */
 	}
 }

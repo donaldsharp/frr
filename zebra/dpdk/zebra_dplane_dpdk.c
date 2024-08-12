@@ -420,6 +420,7 @@ static void zd_dpdk_rule_update(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_INTF_UPDATE:
 	case DPLANE_OP_INTF_DELETE:
 	case DPLANE_OP_ROUTE_LAST:
+	case DPLANE_OP_VLAN_INSTALL,
 		break;
 	}
 }
@@ -480,6 +481,7 @@ static void zd_dpdk_process_update(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_INTF_UPDATE:
 	case DPLANE_OP_INTF_DELETE:
 	case DPLANE_OP_ROUTE_LAST:
+	case DPLANE_OP_VLAN_INSTALL,
 		atomic_fetch_add_explicit(&dpdk_stat->ignored_updates, 1,
 					  memory_order_relaxed);
 
