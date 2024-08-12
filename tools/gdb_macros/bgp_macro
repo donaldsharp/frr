@@ -1,0 +1,215 @@
+#include <arpa/inet.h>
+
+define print_bp_master_and_items
+  set $bm = (struct bgp_master *) $arg0
+  printf " ############################################ \n"
+  printf " BGP MASTER %p\n", $bm
+  printf " ############################################ \n"
+  printf "  Master = %p\n", $bm->master
+  printf "  Listen_sockets = %p\n", $bm->listen_sockets
+  printf "  Port = %u\n", $bm->port
+  printf "  Addresses = %p\n", $bm->addresses
+  printf "  Self_mac_hash = %p\n", $bm->self_mac_hash
+  printf "  Start_time = %ld\n", $bm->start_time
+  printf "  Options = %x\n", $bm->options
+  printf "  Updgrp_idspace = %llu\n", $bm->updgrp_idspace
+  printf "  Subgrp_idspace = %llu\n", $bm->subgrp_idspace
+  printf "  Rmap_update_timer = %u\n", $bm->rmap_update_timer
+  printf "  Bgp_evpn = %p\n", $bm->bgp_evpn
+  printf "  Socket_buffer = %u\n", $bm->socket_buffer
+  printf "  Wait_for_fib = %d\n", $bm->wait_for_fib
+  printf "  Mh_info = %p\n", $bm->mh_info
+  printf "  V_update_delay = %u\n", $bm->v_update_delay
+  printf "  V_establish_wait = %u\n", $bm->v_establish_wait
+  printf "  Flags = 0x%x\n", $bm->flags
+  printf "  Restart_time = %u\n", $bm->restart_time
+  printf "  Stalepath_time = %u\n", $bm->stalepath_time
+  printf "  Select_defer_time = %u\n", $bm->select_defer_time
+  printf "  Rib_stale_time = %u\n", $bm->rib_stale_time
+  printf "  Startup_time = %ld\n", $bm->startup_time
+  printf "  GR_completion_time = %ld\n", $bm->gr_completion_time
+  printf "  Terminating = %d\n", $bm->terminating
+  printf "  Inq_limit = %u\n", $bm->inq_limit
+  printf "  Outq_limit = %u\n", $bm->outq_limit
+  printf "  T_rmap_update = %p\n", $bm->t_rmap_update
+  printf "  T_bgp_zebra_route = %p\n", $bm->t_bgp_zebra_route
+  #printf "  zebra_announce_head = %p\n", $bm->zebra_announce_head
+
+  printf " ======================================= \n"
+  printf " Details about BGP instances (Struct bgp) \n"
+  printf " ======================================= \n"
+  set $head = $bm->bgp->head
+  set $entry = (struct bgp*)$head->data
+  while $entry != 0
+    print_bgp_and_items ($entry)
+    set $head = $head->next
+    if ($head)
+      set $entry = (struct bgp*)$head->data
+    end
+  end
+end
+
+define print_bgp_and_items
+  set $bgp = (struct bgp *) $arg0
+  printf " ======================================= \n"
+  printf " BGP INSTANCE - %s %p\n",$bgp->name_pretty, $bgp
+  printf " ======================================= \n"
+  printf "  AS = %u\n", $bgp->as
+  printf "  Inst_Type = %d\n", $bgp->inst_type
+  printf "  Vrf_Id = %u\n", $bgp->vrf_id
+  printf "  Bgp_Flags = 0x%x\n", $entry->flags
+  printf "  Lock = %d\n", $bgp->lock
+  printf "  peer_self = %p\n", $bgp->peer_self
+  printf "  peer = %p\n", $bgp->peer
+  printf "  peerhash = %p\n", $bgp->peerhash
+  printf "  group = %p\n", $bgp->group
+  printf "  dynamic_neighbors_limit = %d\n", $bgp->dynamic_neighbors_limit
+  printf "  dynamic_neighbors_count = %d\n", $bgp->dynamic_neighbors_count
+  printf "  update_groups = %p\n", $bgp->update_groups
+  printf "  config = %u\n", $bgp->config
+  #printf "  router_id = "
+  #print_ip &$bgp->router_id
+  printf "\n"
+  #printf "  router_id_static = "
+  #print_ip &$bgp->router_id_static
+  printf "\n"
+  #printf "  router_id_zebra = "
+  #print_ip &$bgp->router_id_zebra
+  printf "\n"
+  printf "  v_maxmed_onstartup = %u\n", $bgp->v_maxmed_onstartup
+  printf "  maxmed_onstartup_value = %u\n", $bgp->maxmed_onstartup_value
+  printf "  t_maxmed_onstartup = %p\n", $bgp->t_maxmed_onstartup
+  printf "  maxmed_onstartup_over = %u\n", $bgp->maxmed_onstartup_over
+  printf "  v_maxmed_admin = %d\n", $bgp->v_maxmed_admin
+  printf "  maxmed_admin_value = %u\n", $bgp->maxmed_admin_value
+  printf "  maxmed_active = %u\n", $bgp->maxmed_active
+  printf "  maxmed_value = %u\n", $bgp->maxmed_value
+  printf "  t_update_delay = %p\n", $bgp->t_update_delay
+  printf "  t_establish_wait = %p\n", $bgp->t_establish_wait
+  printf "  update_delay_over = %u\n", $bgp->update_delay_over
+  printf "  main_zebra_update_hold = %u\n", $bgp->main_zebra_update_hold
+  printf "  main_peers_update_hold = %u\n", $bgp->main_peers_update_hold
+  printf "  v_update_delay = %u\n", $bgp->v_update_delay
+  printf "  v_establish_wait = %u\n", $bgp->v_establish_wait
+  printf "  established = %u\n", $bgp->established
+  printf "  restarted_peers = %u\n", $bgp->restarted_peers
+  printf "  implicit_eors = %u\n", $bgp->implicit_eors
+  printf "  explicit_eors = %u\n", $bgp->explicit_eors
+  printf "  lb_ref_bw = %llu\n", $bgp->lb_ref_bw
+  printf "  flags = %llu\n", $bgp->flags
+  printf "  present_zebra_gr_state = %d\n", $bgp->present_zebra_gr_state
+  printf "  gr_route_sync_pending = %d\n", $bgp->gr_route_sync_pending
+  printf "  address_hash = %p\n", $bgp->address_hash
+  printf "  tip_hash = %p\n", $bgp->tip_hash
+  printf "  pbr_match_hash = %p\n", $bgp->pbr_match_hash
+  printf "  pbr_rule_hash = %p\n", $bgp->pbr_rule_hash
+  printf "  pbr_action_hash = %p\n", $bgp->pbr_action_hash
+  printf "  t_rmap_def_originate_eval = %p\n", $bgp->t_rmap_def_originate_eval
+  printf "  default_local_pref = %u\n", $bgp->default_local_pref
+  printf "  default_subgroup_pkt_queue_max = %u\n", $bgp->default_subgroup_pkt_queue_max
+  printf "  default_holdtime = %u\n", $bgp->default_holdtime
+  printf "  default_keepalive = %u\n", $bgp->default_keepalive
+  printf "  default_connect_retry = %u\n", $bgp->default_connect_retry
+  printf "  default_delayopen = %u\n", $bgp->default_delayopen
+  printf "  default_min_holdtime = %u\n", $bgp->default_min_holdtime
+  printf "  restart_time = %u\n", $bgp->restart_time
+  printf "  stalepath_time = %u\n", $bgp->stalepath_time
+  printf "  select_defer_time = %u\n", $bgp->select_defer_time
+  printf "  rib_stale_time = %u\n", $bgp->rib_stale_time
+  printf "  llgr_stale_time = %u\n", $bgp->llgr_stale_time
+  printf "  heuristic_coalesce = %d\n", $bgp->heuristic_coalesce
+  printf "  coalesce_time = %u\n", $bgp->coalesce_time
+  printf "  autoshutdown = %d\n", $bgp->autoshutdown
+  printf "  vnihash = %p\n", $bgp->vnihash
+  printf "  vni_svi_hash = %p\n", $bgp->vni_svi_hash
+  printf "  advertise_gw_macip = %d\n", $bgp->advertise_gw_macip
+  printf "  advertise_all_vni = %d\n", $bgp->advertise_all_vni
+  printf "  reject_as_sets = %d\n", $bgp->reject_as_sets
+  printf "  evpn_info = %p\n", $bgp->evpn_info
+  printf "  advertise_autort_rfc8365 = %d\n", $bgp->advertise_autort_rfc8365
+  printf "  vxlan_flood_ctrl = %d\n", $bgp->vxlan_flood_ctrl
+  printf "  import_rt_hash = %p\n", $bgp->import_rt_hash
+  printf "  vrf_import_rt_hash = %p\n", $bgp->vrf_import_rt_hash
+  printf "  l3vni = %u\n", $bgp->l3vni
+  #printf "  rmac = %p\n", $bgp->rmac
+  #printf "  originator_ip = "
+  #print_ip &$bgp->originator_ip
+  printf "\n"
+  printf "  l3vni_svi_ifindex = %u\n", $bgp->l3vni_svi_ifindex
+  #printf "  es_vrf_rb_tree = %p\n", $bgp->es_vrf_rb_tree
+  printf "  evpn_nh_table = %p\n", $bgp->evpn_nh_table
+  printf "  resolve_overlay_index = %d\n", $bgp->resolve_overlay_index
+  printf "  vrf_flags = %u\n", $bgp->vrf_flags
+  printf "  vrf_rd_id = %u\n", $bgp->vrf_rd_id
+  #printf "  vrf_prd_auto = %p\n", $bgp->vrf_prd_auto
+  #printf "  vrf_prd = %p\n", $bgp->vrf_prd
+  printf "  vrf_import_rtl = %p\n", $bgp->vrf_import_rtl
+  printf "  vrf_export_rtl = %p\n", $bgp->vrf_export_rtl
+  printf "  l2vnis = %p\n", $bgp->l2vnis
+  printf "  established_peers = %u\n", $bgp->established_peers
+  printf "  lb_handling = %d\n", $bgp->lb_handling
+  printf "  process_queue = %p\n", $bgp->process_queue
+  printf "  fast_convergence = %d\n", $bgp->fast_convergence
+  printf "  condition_check_period = %u\n", $bgp->condition_check_period
+  printf "  condition_filter_count = %u\n", $bgp->condition_filter_count
+  printf "  t_condition_check = %p\n", $bgp->t_condition_check
+  printf "  allow_martian = %d\n", $bgp->allow_martian
+
+  printf " ======================================== \n"
+  printf " Details about GR INFO (Struct graceful_restart_info) \n"
+  printf " ======================================== \n"
+  printf "  GR information of IPV4 \n"
+  print_graceful_restart_info (&$bgp->gr_info[1][1])
+  printf "  GR information of IPV6\n"
+  print_graceful_restart_info (&$bgp->gr_info[2][1])
+  printf "  GR information of L2VPN-EVPN\n"
+  print_graceful_restart_info (&$bgp->gr_info[3][5])
+
+
+  #set $peer_head = (struct peer*)$bgp->peer
+  #set $peer_entry = $peer_head
+  #while $peer_entry != 0
+    #printf "Peer at %p\n", $peer_entry
+    # Add more peer fields here as needed
+    #set $peer_entry = $peer_entry->next
+  #end
+end
+
+define print_graceful_restart_info
+  set $gr_info = (struct graceful_restart_info *) $arg0
+  printf "  GR Deferred %u\n", $gr_info->gr_deferred
+  printf "  AF Enabled: %u\n", $gr_info->af_enabled
+  printf "  Route Sync: %u\n", $gr_info->route_sync
+  printf "  Select Defer Over: %u\n", $gr_info->select_defer_over
+  printf "  Select Defer Tier2 Required: %u\n", $gr_info-> select_defer_tier2_required
+  printf "  Select Defer Over Tier2: %u\n", $gr_info-> select_defer_over_tier2
+  printf "  Route Sync Tier2 %u\n", $gr_info-> route_sync_tier2
+  printf "  Flags: 0x%x\n\n", $gr_info->flags
+end
+
+define print_ip
+  set $ip = (struct in_addr *) $arg0
+  printf "%s", inet_ntoa(*$ip)
+end
+
+define print_bgp_table
+  set $table = (struct bgp_table *) $arg0
+  printf "BGP Table at %p\n", $table
+  printf "  Parent Table: %p\n", $table->parent
+  printf "  Children Table: %p\n", $table->children
+  printf "  Next Table: %p\n", $table->next
+  printf "  Top Node: %p\n", $table->top
+  printf "  AFI: %d\n", $table->afi
+  printf "  SAFI: %d\n", $table->safi
+  printf "  BGP Instance: %p\n", $table->bgp
+  printf "  Table: %p\n", $table->table
+
+  set $node = $table->top
+  while $node != 0
+    printf "  Node at %p\n", $node
+    printf "    Prefix: %s/%d\n", inet_ntoa($node->p.u.prefix4), $node->p.prefixlen
+    printf "    Info: %p\n", $node->info
+    set $node = $node->next
+  end
+end
+
