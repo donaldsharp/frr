@@ -1,0 +1,68 @@
+ command to print a single route_entry
+define print_route_entry
+    # Argument is a pointer to route_entry
+    set $route_entry = (struct route_entry *)$arg0
+
+    printf "Route Entry:\n"
+    printf "  NHE: %p\n", $route_entry->nhe
+    printf "  NHE ID: %u\n", $route_entry->nhe_id
+    printf "  NHE Installed ID: %u\n", $route_entry->nhe_installed_id
+    printf "  Type: %d\n", $route_entry->type
+    printf "  VRF ID: %d\n", $route_entry->vrf_id
+    printf "  Table: %u\n", $route_entry->table
+    printf "  Metric: %u\n", $route_entry->metric
+    printf "  MTU: %u\n", $route_entry->mtu
+    printf "  Nexthop MTU: %u\n", $route_entry->nexthop_mtu
+    printf "  Flags: %u\n", $route_entry->flags
+    printf "  Status: %u\n", $route_entry->status
+    printf "  Dplane Sequence: %u\n", $route_entry->dplane_sequence
+    printf "  Instance: %u\n", $route_entry->instance
+    printf "  Distance: %u\n", $route_entry->distance
+    printf "  Tag: %u\n", $route_entry->tag
+    printf "  Uptime: %ld\n", $route_entry->uptime
+    printf "  Opaque: %p\n", $route_entry->opaque
+end
+
+# Define a command to iterate over the route_entries for a given rib_dest_t
+define iterate_route_entries
+    # Argument is a pointer to rib_dest_t
+    set $rib_dest = (rib_dest_t *)$arg0
+
+    printf "Iterating over route entries:\n"
+
+    # Access the first slist_item in the routes list
+    set $re_item = $rib_dest->routes.sh.first
+
+    # Get the address of the sentinel value
+    set $sentinel = &typesafe_slist_sentinel
+
+    # Loop through all route entries until reaching the sentinel
+    while $re_item != $sentinel
+        # Calculate the address of the containing structure from the list item
+        set $route_entry = (struct route_entry *)((char *)$re_item - (unsigned long)&((struct route_entry *)0)->next)
+
+        # Print the current route_entry
+        print_route_entry $route_entry
+
+        # Move to the next item in the list
+        set $re_item = $re_item->next
+    end
+end
+
+# Define a command to start from a route_node and process its rib_dest_t
+define print_route_node
+    # Argument is a pointer to route_node
+    set $rnode = (struct route_node *)$arg0
+
+    # Retrieve rib_dest_t from route_node
+    set $rib_dest = (rib_dest_t *)$rnode->info
+
+    # Iterate over all route entries
+    iterate_route_entries $rib_dest
+end
+
+# Document the command
+document print_route_node
+Take a route_node pointer, retrieve the associated rib_dest_t, and print all route_entries.
+end
+
