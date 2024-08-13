@@ -8008,10 +8008,14 @@ static void bgp_aggregate_install(
 	if (aggregate->count > 0) {
 		/*
 		 * If the aggregate information has not changed
-		 * no need to re-install it again.
+		 * and aggregate route do not have route-map applied
+                 * to it no need to re-install it again.
+                 * In case route-map is configured, we need to proceed
+                 * and reinstall the route as per change(s) in route-map.
 		 */
 		if (pi && bgp_aggregate_info_same(pi, origin, aspath, community,
-						  ecommunity, lcommunity)) {
+						  ecommunity, lcommunity)
+                    && !aggregate->rmap.name) {
 			bgp_dest_unlock_node(dest);
 
 			if (aspath)
