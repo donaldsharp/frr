@@ -305,6 +305,8 @@ void ospf6_interface_delete(struct ospf6_interface *oi)
 	/* Free BFD allocated data. */
 	XFREE(MTYPE_TMP, oi->bfd_config.profile);
 
+	XFREE(MTYPE_OSPF6_AUTH_MANUAL_KEY, oi->at_data.auth_key);
+	XFREE(MTYPE_OSPF6_AUTH_KEYCHAIN, oi->at_data.keychain);
 	XFREE(MTYPE_OSPF6_IF, oi);
 }
 
