@@ -1481,6 +1481,7 @@ struct nhe_show_context {
 	int type;
 	json_object *json;
 	bool brief;
+	uint32_t nhg_count;
 };
 
 static int nhe_show_walker(struct hash_bucket *bucket, void *arg)
@@ -1500,6 +1501,7 @@ static int nhe_show_walker(struct hash_bucket *bucket, void *arg)
 		goto done;
 
 	show_nexthop_group_out(ctx->vty, nhe, ctx->json, ctx->brief);
+	ctx->nhg_count++;
 
 done:
 	return HASHWALK_CONTINUE;
@@ -1508,7 +1510,7 @@ done:
 static void show_nexthop_group_cmd_helper(struct vty *vty,
 					  struct zebra_vrf *zvrf, afi_t afi,
 					  int type, json_object *json,
-					  bool brief)
+					  bool brief, uint32_t *nhg_count)
 {
 	struct nhe_show_context ctx;
 
@@ -1518,8 +1520,10 @@ static void show_nexthop_group_cmd_helper(struct vty *vty,
 	ctx.type = type;
 	ctx.json = json;
 	ctx.brief = brief;
+	ctx.nhg_count = 0;
 
 	hash_walk(zrouter.nhgs_id, nhe_show_walker, &ctx);
+	*nhg_count = ctx.nhg_count;
 }
 
 static void if_nexthop_group_dump_vty(struct vty *vty, struct interface *ifp)
@@ -1600,6 +1604,7 @@ DEFPY(show_nexthop_group,
 	bool uj = use_json(argc, argv);
 	json_object *json = NULL;
 	json_object *json_vrf = NULL;
+	uint32_t nhg_count = 0;
 
 	if (uj)
 		json = json_object_new_object();
@@ -1644,10 +1649,14 @@ DEFPY(show_nexthop_group,
 				vty_out(vty, "VRF: %s\n", vrf->name);
 
 			show_nexthop_group_cmd_helper(vty, zvrf, afi, type,
-						      json_vrf, brief);
-			if (uj)
+						      json_vrf, brief,
+						      &nhg_count);
+			if (uj) {
+				json_object_int_add(json, "nhgCount",
+						    nhg_count);
 				json_object_object_add(json, vrf->name,
 						       json_vrf);
+			}
 		}
 
 		if (uj)
@@ -1670,9 +1679,11 @@ DEFPY(show_nexthop_group,
 		return CMD_WARNING;
 	}
 
-	show_nexthop_group_cmd_helper(vty, zvrf, afi, type, json, brief);
+	show_nexthop_group_cmd_helper(vty, zvrf, afi, type, json, brief,
+				      &nhg_count);
 
 	if (uj) {
+		json_object_int_add(json, "nhgCount", nhg_count);
 		if (brief)
 			vty_json_no_pretty(vty, json);
 		else
