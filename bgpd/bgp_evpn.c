@@ -1531,7 +1531,7 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 				       BGP_FLAG_DELETE_IN_PROGRESS) ||
 			    CHECK_FLAG(bgp->gr_info[afi][safi].flags,
 				       BGP_GR_SKIP_BP))
-				evpn_zebra_install(
+				ret = evpn_zebra_install(
 					bgp, vpn,
 					(const struct prefix_evpn *)
 						bgp_dest_get_prefix(dest),
@@ -1574,10 +1574,11 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 			bgp_evpn_attr_is_sync(new_select->attr))) {
 		if (CHECK_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS) ||
 		    CHECK_FLAG(bgp->gr_info[afi][safi].flags, BGP_GR_SKIP_BP))
-			evpn_zebra_install(bgp, vpn,
-					   (const struct prefix_evpn *)
-						   bgp_dest_get_prefix(dest),
-					   new_select);
+			ret = evpn_zebra_install(
+				bgp, vpn,
+				(const struct prefix_evpn *)bgp_dest_get_prefix(
+					dest),
+				new_select);
 		else
 			bgp_zebra_route_install(dest, new_select, bgp, true,
 						vpn, false);
@@ -1604,7 +1605,7 @@ int evpn_route_select_install(struct bgp *bgp, struct bgpevpn *vpn,
 			    CHECK_FLAG(bgp->flags, BGP_FLAG_VNI_DOWN) ||
 			    CHECK_FLAG(bgp->gr_info[afi][safi].flags,
 				       BGP_GR_SKIP_BP))
-				evpn_zebra_uninstall(
+				ret = evpn_zebra_uninstall(
 					bgp, vpn,
 					(const struct prefix_evpn *)
 						bgp_dest_get_prefix(dest),
