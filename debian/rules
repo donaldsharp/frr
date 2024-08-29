@@ -97,6 +97,7 @@ override_dh_auto_configure:
 		--enable-grpc=yes \
 		--enable-bgp-lttng=yes \
 		--enable-zebra-lttng=yes \
+		--with-log-timestamp-precision=6 \
 		# end
 
 override_dh_auto_install:
