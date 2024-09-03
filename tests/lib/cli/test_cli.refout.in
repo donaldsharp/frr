@@ -406,6 +406,7 @@ frr defaults @DFLT_NAME@
 !
 hostname test
 domainname test.domain
+log timestamp precision 6
 !
 !
 !
@@ -422,6 +423,7 @@ frr defaults @DFLT_NAME@
 !
 hostname foohost
 domainname test.domain
+log timestamp precision 6
 !
 !
 !
