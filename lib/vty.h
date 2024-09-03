@@ -223,6 +223,8 @@ struct vty {
 	 * Used for password-obfuscate to differentiate whether the passwords
 	 * are encrpyted or not after frr restart.*/
 	bool read_from_conf;
+
+	uint64_t vty_buf_size_accumulated;
 };
 
 static inline void vty_push_context(struct vty *vty, int node, uint64_t id)
@@ -324,6 +326,12 @@ struct vty_arg {
 
 /* Vty read buffer size. */
 #define VTY_READ_BUFSIZ 512
+
+/* Vty max send buffer size */
+#define VTY_SEND_BUF_MAX 16777216
+
+/* Vty flush intermediate size */
+#define VTY_MAX_INTERMEDIATE_FLUSH 131072
 
 /* Directory separator. */
 #ifndef DIRECTORY_SEP
