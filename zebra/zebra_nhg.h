@@ -150,6 +150,11 @@ struct nhg_hash_entry {
  * Track FPM installation status..
  */
 #define NEXTHOP_GROUP_FPM (1 << 6)
+
+/*
+ * Recursion requested/allowed
+ */
+#define NEXTHOP_GROUP_RECURSION_REQ (1 << 10)
 };
 
 /* Upper 4 bits of the NHG are reserved for indicating the NHG type */
@@ -204,7 +209,7 @@ struct nhg_ctx {
 	afi_t afi;
 
 	/*
-	 * This should only ever be ZEBRA_ROUTE_NHG unless we get a a kernel
+	 * This should only ever be ZEBRA_ROUTE_NHG unless we get a kernel
 	 * created nexthop not made by us.
 	 */
 	int type;
@@ -381,6 +386,9 @@ extern void zebra_nhg_mark_keep(void);
 /* Nexthop resolution processing */
 struct route_entry; /* Forward ref to avoid circular includes */
 extern int nexthop_active_update(struct route_node *rn, struct route_entry *re);
+
+/* Determine nhg address-family, with special rules for singletons */
+afi_t zebra_nhg_get_afi(const struct nexthop_group *nhg, afi_t route_afi);
 
 #ifdef _FRR_ATTRIBUTE_PRINTFRR
 #pragma FRR printfrr_ext "%pNG" (const struct nhg_hash_entry *)
