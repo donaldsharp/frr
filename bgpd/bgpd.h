@@ -867,6 +867,9 @@ struct bgp {
 	/* SOO value derived from BGP router-id*/
 	struct ecommunity *per_source_nhg_soo;
 
+	/* Hash table of per source NHG based on soo*/
+	struct hash *per_src_nhg_table;
+
 	/* BGP Conditional advertisement */
 	uint32_t condition_check_period;
 	uint32_t condition_filter_count;
