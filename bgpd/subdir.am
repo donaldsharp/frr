@@ -61,6 +61,7 @@ bgpd_libbgp_a_SOURCES = \
 	bgpd/bgp_open.c \
 	bgpd/bgp_packet.c \
 	bgpd/bgp_pbr.c \
+	bgpd/bgp_per_src_nhg.c \
 	bgpd/bgp_rd.c \
 	bgpd/bgp_regex.c \
 	bgpd/bgp_route.c \
@@ -145,6 +146,7 @@ noinst_HEADERS += \
 	bgpd/bgp_open.h \
 	bgpd/bgp_packet.h \
 	bgpd/bgp_pbr.h \
+	bgpd/bgp_per_src_nhg.h \
 	bgpd/bgp_rd.h \
 	bgpd/bgp_regex.h \
 	bgpd/bgp_rpki.h \
