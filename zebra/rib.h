@@ -647,6 +647,9 @@ extern pid_t pid;
 
 extern bool v6_rr_semantics;
 
+void route_entry_dump_nh(const struct route_entry *re, const char *straddr,
+			 const struct vrf *re_vrf,
+			 const struct nexthop *nexthop);
 #ifdef __cplusplus
 }
 #endif
