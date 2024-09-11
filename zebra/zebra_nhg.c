@@ -3006,7 +3006,6 @@ static struct nhg_hash_entry *zebra_nhg_rib_compare_old_nhe(
 {
 	struct nexthop *nhop, *old_nhop;
 	bool same = true;
-	struct vrf *vrf = vrf_lookup_by_id(re->vrf_id);
 
 	if (IS_ZEBRA_DEBUG_NHG_DETAIL) {
 		char straddr[PREFIX_STRLEN];
@@ -3016,11 +3015,11 @@ static struct nhg_hash_entry *zebra_nhg_rib_compare_old_nhe(
 			   new_nhe->id, old_nhe->id);
 		zlog_debug("%s: %pRN NEW", __func__, rn);
 		for (ALL_NEXTHOPS(new_nhe->nhg, nhop))
-			route_entry_dump_nh(re, straddr, vrf, nhop);
+			route_entry_dump_nh(re, straddr, nhop);
 
 		zlog_debug("%s: %pRN OLD", __func__, rn);
 		for (ALL_NEXTHOPS(old_nhe->nhg, nhop))
-			route_entry_dump_nh(re, straddr, vrf, nhop);
+			route_entry_dump_nh(re, straddr, nhop);
 	}
 
 	nhop = new_nhe->nhg.nexthop;
