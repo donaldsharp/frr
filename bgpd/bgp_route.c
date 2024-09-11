@@ -16631,7 +16631,7 @@ static void show_bgp_peerhash_entry(struct hash_bucket *bucket, void *arg)
        struct vty *vty = arg;
        struct peer *peer = bucket->data;
 
-       vty_out(vty, "\tPeer: %s %pSU\n", peer->host, &peer->su);
+       vty_out(vty, "\tPeer: %s %pSU %d\n", peer->host, &peer->su, peer->bit_index);
 }
 
 DEFUN (show_bgp_listeners,

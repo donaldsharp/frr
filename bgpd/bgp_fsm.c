@@ -2698,8 +2698,12 @@ static int bgp_establish(struct peer *peer)
 
 	other = peer->doppelganger;
 	hash_release(peer->bgp->peerhash, peer);
-	if (other)
+	bf_release_index(peer->bgp->bgp_peer_id_bitmap, peer->bit_index);
+
+	if (other) {
 		hash_release(peer->bgp->peerhash, other);
+		bf_release_index(peer->bgp->bgp_peer_id_bitmap, other->bit_index);
+	}
 
 	peer = peer_xfer_conn(peer);
 	if (!peer) {
@@ -2712,9 +2716,14 @@ static int bgp_establish(struct peer *peer)
 		 * when a lookup is done
 		 */
 		(void)hash_get(orig->bgp->peerhash, orig, hash_alloc_intern);
-		if (other)
+		bf_assign_index(orig->bgp->bgp_peer_id_bitmap, orig->bit_index);
+
+		if (other) {
 			(void)hash_get(other->bgp->peerhash, other,
 				       hash_alloc_intern);
+			bf_assign_index(other->bgp->bgp_peer_id_bitmap,
+					other->bit_index);
+		}
 		return BGP_FSM_FAILURE;
 	}
 
@@ -2829,6 +2838,7 @@ static int bgp_establish(struct peer *peer)
 	 * so the hash_release is the same for either.
 	 */
 	(void)hash_get(peer->bgp->peerhash, peer, hash_alloc_intern);
+	bf_release_index(peer->bgp->bgp_peer_id_bitmap, peer->bit_index);
 
 	/* Start BFD peer if not already running. */
 	if (peer->bfd_config)

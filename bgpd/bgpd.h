@@ -52,6 +52,7 @@ PREDECL_LIST(zebra_announce);
 
 #define BGP_MAX_HOSTNAME 64	/* Linux max, is larger than most other sys */
 #define BGP_PEER_MAX_HASH_SIZE 16384
+#define BGP_PEER_INIT_BITMAP_SIZE 128
 
 /* Default interval for IPv6 RAs when triggered by BGP unnumbered neighbor. */
 #define BGP_UNNUM_DEFAULT_RA_INTERVAL 10
@@ -441,6 +442,7 @@ struct bgp {
 	/* BGP peer. */
 	struct list *peer;
 	struct hash *peerhash;
+	bitfield_t bgp_peer_id_bitmap;
 
 	/* BGP peer group.  */
 	struct list *group;
@@ -1840,6 +1842,9 @@ struct peer {
 	struct llgr_info llgr[AFI_MAX][SAFI_MAX];
 
 	bool shut_during_cfg;
+
+	/* Assign a bit index for this peer, this is used for per source NHG*/
+	uint32_t bit_index;
 
 	QOBJ_FIELDS;
 };
