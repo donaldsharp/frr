@@ -4339,9 +4339,9 @@ void rib_delnode(struct route_node *rn, struct route_entry *re)
 /*
  * Helper that debugs a single nexthop within a route-entry
  */
-static void _route_entry_dump_nh(const struct route_entry *re,
-				 const char *straddr,
-				 const struct nexthop *nexthop)
+void route_entry_dump_nh(const struct route_entry *re, const char *straddr,
+			 const struct vrf *re_vrf,
+			 const struct nexthop *nexthop)
 {
 	char nhname[PREFIX_STRLEN];
 	char backup_str[50];
@@ -4466,14 +4466,14 @@ void _route_entry_dump(const char *func, union prefixconstptr pp,
 
 	/* Dump nexthops */
 	for (ALL_NEXTHOPS(re->nhe->nhg, nexthop))
-		_route_entry_dump_nh(re, straddr, nexthop);
+		route_entry_dump_nh(re, straddr, vrf, nexthop);
 
 	if (zebra_nhg_get_backup_nhg(re->nhe)) {
 		zlog_debug("%s: backup nexthops:", straddr);
 
 		nhg = zebra_nhg_get_backup_nhg(re->nhe);
 		for (ALL_NEXTHOPS_PTR(nhg, nexthop))
-			_route_entry_dump_nh(re, straddr, nexthop);
+			route_entry_dump_nh(re, straddr, vrf, nexthop);
 	}
 
 	zlog_debug("%s: dump complete", straddr);
