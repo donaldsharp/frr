@@ -11234,7 +11234,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, afi_t afi, safi_t sa
 
 	if (brief && !use_json) {
 		vty_out(vty, "Brief cmd must be used only with json\n");
-		return CMD_SUCCESS;
+		return CMD_WARNING;
 	}
 
 	if (output_cum && *output_cum != 0)
