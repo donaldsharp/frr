@@ -258,6 +258,25 @@ static inline unsigned int bf_find_next_set_bit(bitfield_t v,
 			(b) < max;                                 \
 			(b) = bf_find_next_set_bit((v), (b) + 1))
 
+/* Check if bitfield1 is a subset of bitfield2*/
+static inline bool bf_is_subset(bitfield_t *bitfield1, bitfield_t *bitfield2)
+{
+	size_t i;
+	size_t max_words = bitfield1->m;
+
+	for (i = 0; i < max_words; i++) {
+		word_t w1 = bitfield1->data[i];
+		word_t w2 = (i < bitfield2->m) ? bitfield2->data[i] : 0;
+
+		// Check if there are any bits set in w1 that are not set in w2
+		if ((w1 & ~w2) != 0) {
+			return false; // bitfield1 is not a subset of bitfield2
+		}
+	}
+
+	return true; // bitfield1 is a subset of bitfield2
+}
+
 /*
  * Free the allocated memory for data
  * @v: an instance of bitfield_t struct.
