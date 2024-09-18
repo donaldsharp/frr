@@ -1818,6 +1818,7 @@ void zebra_evpn_print_neigh(struct zebra_neigh *n, void *ctxt,
 		vty_out(vty, " Uptime: %s\n", up_str);
 		vty_out(vty, " MAC: %s\n",
 			prefix_mac2str(&n->emac, buf1, sizeof(buf1)));
+                vty_out(vty, " VLAN: %d\n", n->zevpn->vid);
 		vty_out(vty, " Sync-info:");
 		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL_INACTIVE)) {
 			vty_out(vty, " local-inactive");
@@ -1847,6 +1848,7 @@ void zebra_evpn_print_neigh(struct zebra_neigh *n, void *ctxt,
 		json_object_string_add(json, "type", type_str);
 		json_object_string_add(json, "state", state_str);
 		json_object_string_add(json, "mac", buf1);
+		json_object_int_add(json, "vlan", n->zevpn->vid);
 		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL_INACTIVE))
 			json_object_boolean_true_add(json, "localInactive");
 		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_ES_PEER_PROXY))
