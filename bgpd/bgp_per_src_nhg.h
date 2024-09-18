@@ -43,7 +43,7 @@ struct bgp_dest_soo_hash_entry {
 	//TODO, do we need to back pointer for bgp path info
 
 	//TODO, need to store the bitmaps of NH for soo
-	bitfield_t nh;
+	bitfield_t bgp_pi_bitmap;
 };
 
 DECLARE_DLIST(bgp_dest_soo_qlist, struct bgp_dest_soo_hash_entry, item);
@@ -70,7 +70,7 @@ struct bgp_per_src_nhg_hash_entry {
 	struct bgp_dest_soo_qlist_head dest_soo_list;
 
 	//TODO, need to store the bitmaps of NH for soo
-	bitfield_t nh;
+	bitfield_t bgp_soo_route_pi_bitmap;
 
 	uint32_t refcnt;
 
