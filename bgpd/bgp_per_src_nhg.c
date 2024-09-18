@@ -89,6 +89,9 @@ bgp_dest_soo_add(struct bgp_per_src_nhg_hash_entry *nhe, struct ipaddr *ip)
 	dest_he->nhe = nhe;
 
 	bgp_dest_soo_qlist_add_tail(&nhe->dest_soo_list, dest_he);
+	bf_init(dest_he->bgp_pi_bitmap, BGP_PEER_INIT_BITMAP_SIZE);
+	bf_assign_zero_index(dest_he->bgp_pi_bitmap);
+
 	//TODO Add Processing pending
 
 	//if (BGP_DEBUG())
@@ -244,6 +247,9 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 
 	bgp_dest_soo_init(nhe);
 	bgp_dest_soo_qlist_init(&nhe->dest_soo_list);
+	bf_init(nhe->bgp_soo_route_pi_bitmap, BGP_PEER_INIT_BITMAP_SIZE);
+	bf_assign_zero_index(nhe->bgp_soo_route_pi_bitmap);
+
 	//TODO Add Processing pending
 
 	//if (BGP_DEBUG())
@@ -344,4 +350,47 @@ void bgp_per_src_nhg_finish(struct bgp *bgp)
 		     NULL);
 	hash_clean(bgp->per_src_nhg_table,
 		   (void (*)(void *))bgp_per_src_nhe_free);
+}
+
+// Check if 'SoO route' pi(path info) bitmap is a subset of 'route with SoO'
+static bool is_soo_rt_pi_subset_of_rt_with_soo_pi(
+	struct bgp_dest_soo_hash_entry *bgp_dest_with_soo_entry)
+{
+	if (!bgp_dest_with_soo_entry) {
+		return false;
+	}
+
+	bitfield_t rt_with_soo_pi_bitmap =
+		bgp_dest_with_soo_entry->bgp_pi_bitmap;
+	bitfield_t soo_rt_pi_bitmap =
+		bgp_dest_with_soo_entry->nhe->bgp_soo_route_pi_bitmap;
+
+	return bf_is_subset(&soo_rt_pi_bitmap, &rt_with_soo_pi_bitmap);
+}
+
+/* Check if SOO route path info bitmap is subset of path info bitmap of "all"
+ * the routes with SOO. This function walks all the "route with SOO" and checks
+ * if "SOO route" path info bitmap is a subset of each one of them
+ *
+ * TODO: Implement a more efficient way using 'count' array which checks if 'SoO
+ * route' pi bitmap is subset of ALL 'route with SoO'
+ */
+static bool is_soo_rt_pi_subset_of_all_rts_with_soo_pi(
+	struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_entry)
+{
+	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
+	bool is_subset_of_all_routes = true;
+
+	// Walk all the 'routes with SoO'
+	frr_each (bgp_dest_soo_qlist, &bgp_per_src_nhg_entry->dest_soo_list,
+		  bgp_dest_soo_entry) {
+		// Check if 'SoO route' pi bitmap a subset of 'route with SoO'
+		if (!is_soo_rt_pi_subset_of_rt_with_soo_pi(
+			    bgp_dest_soo_entry)) {
+			is_subset_of_all_routes = false;
+		}
+	}
+
+	// 'SoO route' pi bitmap is subset of ALL 'route with SoO'
+	return is_subset_of_all_routes;
 }
