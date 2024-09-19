@@ -9,7 +9,7 @@ class TestFlag(frrtest.TestMultiOut):
 # $> ./test_peer_attr 2>&1 | sed -n 's/\\/\\\\/g; s/\S\+ \[test\] \(.\+\)/TestFlag.okfail(\x27\1\x27)/pg'
 #
 TestFlag.okfail("peer\\advertisement-interval")
-TestFlag.okfail("peer\\capability dynamic")
+#TestFlag.okfail("peer\\capability dynamic")
 TestFlag.okfail("peer\\capability extended-nexthop")
 # TestFlag.okfail('peer\\capability extended-nexthop')
 TestFlag.okfail("peer\\description")
