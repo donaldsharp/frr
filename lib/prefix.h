@@ -513,6 +513,10 @@ extern void prefix_evpn_hexdump(const struct prefix_evpn *p);
 extern bool ipv4_unicast_valid(const struct in_addr *addr);
 extern int evpn_prefix2prefix(const struct prefix *evpn, struct prefix *to);
 
+
+extern void inaddrv42prefix(const struct in_addr *ip, uint16_t prefixlen,
+			    struct prefix *p);
+
 static inline int ipv6_martian(const struct in6_addr *addr)
 {
 	struct in6_addr localhost_addr;
