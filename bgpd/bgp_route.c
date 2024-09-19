@@ -2745,6 +2745,13 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 	char path_buf[PATH_ADDPATH_STR_BUFFER];
 	enum bgp_path_selection_reason reason = bgp_path_selection_none;
 	bool unsorted_items = true;
+	bool is_evpn = false;
+	struct bgp_table *table = NULL;
+
+	table = bgp_dest_table(dest);
+	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
+		is_evpn = true;
+
 
 	bgp_mp_list_init(&mp_list);
 	do_mpath =
@@ -2822,6 +2829,7 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 			bgp_path_info_set_flag(dest, new_select,
 					       BGP_PATH_DMED_SELECTED);
 
+			// SOO TODO, add dest_soo entry
 			if (debug) {
 				bgp_path_info_path_with_addpath_rx_str(
 					new_select, path_buf, sizeof(path_buf));
@@ -3116,6 +3124,14 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 						dest, bgp->name_pretty,
 						path_buf);
 				bgp_mp_list_add(&mp_list, pi);
+				if (CHECK_FLAG(
+					    bgp->per_source_nhg_flags[afi][safi],
+					    BGP_FLAG_PROCESS_SOO_FOR_PER_SOURCE_NHG) &&
+				    !is_evpn) {
+					bgp_process_route_soo_attr(bgp, dest,
+								   pi, true);
+				}
+
 				continue;
 			}
 
@@ -3146,6 +3162,13 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 						"%pBD: %s is equivalent to the bestpath, add to the multipath list",
 						dest, path_buf);
 				bgp_mp_list_add(&mp_list, pi);
+				if (CHECK_FLAG(
+					    bgp->per_source_nhg_flags[afi][safi],
+					    BGP_FLAG_PROCESS_SOO_FOR_PER_SOURCE_NHG) &&
+				    !is_evpn) {
+					bgp_process_route_soo_attr(bgp, dest,
+								   pi, true);
+				}
 			}
 		}
 	}
@@ -3419,6 +3442,12 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 	struct bgp_path_info *old_select;
 	struct bgp_path_info_pair old_and_new;
 	int debug = 0;
+	bool is_evpn = false;
+	struct bgp_table *table = NULL;
+
+	table = bgp_dest_table(dest);
+	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
+		is_evpn = true;
 
 	/*
 	 * For default bgp instance, which is deleted i.e. marked hidden
@@ -3537,6 +3566,7 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 	    && !CHECK_FLAG(old_select->flags, BGP_PATH_ATTR_CHANGED)
 	    && !bgp_addpath_is_addpath_used(&bgp->tx_addpath, afi, safi)) {
 		if (bgp_zebra_has_route_changed(old_select)) {
+
 #ifdef ENABLE_BGP_VNC
 			vnc_import_bgp_add_route(bgp, p, old_select);
 			vnc_import_bgp_exterior_add_route(bgp, p, old_select);
@@ -3676,6 +3706,15 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 			    (old_select->sub_type == BGP_ROUTE_NORMAL ||
 			     old_select->sub_type == BGP_ROUTE_AGGREGATE ||
 			     old_select->sub_type == BGP_ROUTE_IMPORTED)) {
+				if (CHECK_FLAG(
+					    bgp->per_source_nhg_flags[afi]
+								     [safi],
+					    BGP_FLAG_PROCESS_SOO_FOR_PER_SOURCE_NHG) &&
+				    !is_evpn) {
+					bgp_process_route_soo_attr(
+						bgp, dest, old_select, false);
+				}
+
 				if (CHECK_FLAG(bgp->gr_info[afi][safi].flags,
 					       BGP_GR_SKIP_BP))
 					bgp_zebra_withdraw_actual(

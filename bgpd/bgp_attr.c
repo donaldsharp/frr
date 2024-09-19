@@ -4776,3 +4776,46 @@ bool route_matches_soo(struct bgp_path_info *pi, struct ecommunity *soo)
 
 	return soo_in_ecom(ecom, soo);
 }
+
+bool route_has_soo_attr(struct bgp_path_info *pi)
+{
+	struct attr *attr = pi->attr;
+	struct ecommunity *ecom;
+
+	if (!CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_EXT_COMMUNITIES)))
+		return false;
+
+	ecom = attr->ecommunity;
+	if (!ecom || !ecom->size)
+		return false;
+
+	if (ecommunity_lookup(ecom, ECOMMUNITY_ENCODE_AS,
+			      ECOMMUNITY_SITE_ORIGIN) ||
+	    ecommunity_lookup(ecom, ECOMMUNITY_ENCODE_AS4,
+			      ECOMMUNITY_SITE_ORIGIN) ||
+	    ecommunity_lookup(ecom, ECOMMUNITY_ENCODE_IP,
+			      ECOMMUNITY_SITE_ORIGIN)) {
+		return true;
+	}
+
+	return false;
+}
+
+/*call this api only after validating the soo attr*/
+bool route_get_ip_from_soo_attr(struct bgp_path_info *pi, struct in_addr *ip)
+{
+	struct ecommunity_val *ecom_val;
+	struct attr *attr = pi->attr;
+	struct ecommunity *ecom;
+
+	ecom = attr->ecommunity;
+	ecom_val = ecommunity_lookup(ecom, ECOMMUNITY_ENCODE_IP,
+				     ECOMMUNITY_SITE_ORIGIN);
+
+	if (ecom_val) {
+		memcpy(ip, &ecom_val->val[2], sizeof(struct in_addr));
+		return true;
+	}
+
+	return false;
+}

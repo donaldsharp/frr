@@ -64,27 +64,30 @@ static void *bgp_dest_soo_alloc(void *p)
 }
 
 static struct bgp_dest_soo_hash_entry *
-bgp_dest_soo_find(struct bgp_per_src_nhg_hash_entry *nhe, struct ipaddr *ip)
+bgp_dest_soo_find(struct bgp_per_src_nhg_hash_entry *nhe, struct prefix *p)
 {
 	struct bgp_dest_soo_hash_entry tmp;
 	struct bgp_dest_soo_hash_entry *dest_he;
 
 	memset(&tmp, 0, sizeof(tmp));
-	memcpy(&tmp.ip, ip, sizeof(struct ipaddr));
+	prefix_copy(&tmp.p, p);
 	dest_he = hash_lookup(nhe->dest_with_soo, &tmp);
 
 	return dest_he;
 }
 
 static struct bgp_dest_soo_hash_entry *
-bgp_dest_soo_add(struct bgp_per_src_nhg_hash_entry *nhe, struct ipaddr *ip)
+bgp_dest_soo_add(struct bgp_per_src_nhg_hash_entry *nhe, struct prefix *p)
 {
 	struct bgp_dest_soo_hash_entry tmp_he;
 	struct bgp_dest_soo_hash_entry *dest_he = NULL;
 	char buf[INET6_ADDRSTRLEN];
+	char pfxprint[PREFIX2STR_BUFFER];
+
+	prefix2str(p, pfxprint, sizeof(pfxprint));
 
 	memset(&tmp_he, 0, sizeof(tmp_he));
-	memcpy(&tmp_he.ip, ip, sizeof(struct ipaddr));
+	prefix_copy(&tmp_he.p, p);
 	dest_he = hash_get(nhe->dest_with_soo, &tmp_he, bgp_dest_soo_alloc);
 	dest_he->nhe = nhe;
 
@@ -92,13 +95,12 @@ bgp_dest_soo_add(struct bgp_per_src_nhg_hash_entry *nhe, struct ipaddr *ip)
 	bf_init(dest_he->bgp_pi_bitmap, BGP_PEER_INIT_BITMAP_SIZE);
 	bf_assign_zero_index(dest_he->bgp_pi_bitmap);
 
-	//TODO Add Processing pending
+	// TODO Add Processing pending
 
 	//if (BGP_DEBUG())
 	zlog_debug("bgp vrf %s per src nhg %s dest soo %s add",
 		   nhe->bgp->name_pretty,
-		   ipaddr2str(&nhe->ip, buf, sizeof(buf)),
-		   ipaddr2str(&dest_he->ip, buf, sizeof(buf)));
+		   ipaddr2str(&nhe->ip, buf, sizeof(buf)), pfxprint);
 
 	return dest_he;
 }
@@ -109,31 +111,27 @@ static void bgp_dest_soo_del(struct bgp_dest_soo_hash_entry *dest_he)
 	struct bgp_per_src_nhg_hash_entry *nhe = dest_he->nhe;
 	struct bgp_dest_soo_hash_entry *tmp_he;
 	char buf[INET6_ADDRSTRLEN];
+	char pfxprint[PREFIX2STR_BUFFER];
+
+	prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
 
 
-	//TODO Del Processing pending
+	// TODO: Del Processing pending
 
 	//if (BGP_DEBUG())
 	zlog_debug("bgp vrf %s per src nhg %s dest soo %s del",
 		   nhe->bgp->name_pretty,
-		   ipaddr2str(&nhe->ip, buf, sizeof(buf)),
-		   ipaddr2str(&dest_he->ip, buf, sizeof(buf)));
+		   ipaddr2str(&nhe->ip, buf, sizeof(buf)), pfxprint);
 
 	bgp_dest_soo_qlist_del(&nhe->dest_soo_list, dest_he);
 	tmp_he = hash_release(nhe->dest_with_soo, dest_he);
 	XFREE(MTYPE_BGP_DEST_SOO_HE, tmp_he);
 }
 
-static unsigned int bgp_dest_soo_hash_keymake(const void *p)
+static uint32_t bgp_dest_soo_hash_keymake(const void *p)
 {
 	const struct bgp_dest_soo_hash_entry *dest_he = p;
-	const struct ipaddr *ip = &dest_he->ip;
-
-	if (IS_IPADDR_V4(ip))
-		return jhash_1word(ip->ipaddr_v4.s_addr, 0);
-
-	return jhash2(ip->ipaddr_v6.s6_addr32,
-		      array_size(ip->ipaddr_v6.s6_addr32), 0);
+	return prefix_hash_key((void *)&dest_he->p);
 }
 
 static bool bgp_dest_soo_cmp(const void *p1, const void *p2)
@@ -147,15 +145,16 @@ static bool bgp_dest_soo_cmp(const void *p1, const void *p2)
 	if (dest_he1 == NULL || dest_he2 == NULL)
 		return false;
 
-	return (ipaddr_cmp(&dest_he1->ip, &dest_he2->ip) == 0);
+	// TODO: check with Donald, host part ignored
+	return (prefix_cmp(&dest_he1->p, &dest_he2->p) == 0);
 }
 
 void bgp_dest_soo_init(struct bgp_per_src_nhg_hash_entry *nhe)
 {
 	char buf[INET6_ADDRSTRLEN];
 
-	//TODO, enable per src NHG debug
-	//if (BGP_DEBUG(,))
+	// TODO: enable per src NHG debug
+	// if (BGP_DEBUG(,))
 	zlog_debug("bgp vrf %s per source nhg %s dest soo hash init",
 		   nhe->bgp->name_pretty,
 		   ipaddr2str(&nhe->ip, buf, sizeof(buf)));
@@ -174,15 +173,17 @@ static void bgp_dest_soo_flush_entry(struct bgp_dest_soo_hash_entry *dest_he)
 {
 	struct bgp_per_src_nhg_hash_entry *nhe = dest_he->nhe;
 	char buf[INET6_ADDRSTRLEN];
+	char pfxprint[PREFIX2STR_BUFFER];
+
+	prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
 
 	bgp_dest_soo_qlist_del(&nhe->dest_soo_list, dest_he);
-	//TODO, flush processing pending
+	// TODO: flush processing pending
 
 	//if (BGP_DEBUG(,))
 	zlog_debug("bgp vrf %s per src nhg %s dest soo %s flush",
 		   nhe->bgp->name_pretty,
-		   ipaddr2str(&nhe->ip, buf, sizeof(buf)),
-		   ipaddr2str(&dest_he->ip, buf, sizeof(buf)));
+		   ipaddr2str(&nhe->ip, buf, sizeof(buf)), pfxprint);
 }
 
 static void bgp_dest_soo_flush_cb(struct hash_bucket *bucket, void *ctxt)
@@ -244,6 +245,7 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 	memcpy(&tmp_nhe.ip, ip, sizeof(struct ipaddr));
 	nhe = hash_get(bgp->per_src_nhg_table, &tmp_nhe, bgp_per_src_nhg_alloc);
 	nhe->bgp = bgp;
+	nhe->t_select_nh_eval = NULL;
 
 	bgp_dest_soo_init(nhe);
 	bgp_dest_soo_qlist_init(&nhe->dest_soo_list);
@@ -393,4 +395,138 @@ static bool is_soo_rt_pi_subset_of_all_rts_with_soo_pi(
 
 	// 'SoO route' pi bitmap is subset of ALL 'route with SoO'
 	return is_subset_of_all_routes;
+}
+
+void bgp_process_route_with_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
+				     struct bgp_path_info *pi,
+				     struct in_addr *ipaddr, bool is_add)
+{
+	struct bgp_dest_soo_hash_entry *dest_he;
+	struct bgp_per_src_nhg_hash_entry *nhe;
+	struct ipaddr ip;
+
+	memset(&ip, 0, sizeof(ip));
+	SET_IPADDR_V4(&ip);
+	memcpy(&ip.ipaddr_v4, ipaddr, sizeof(ip.ipaddr_v4));
+
+
+	nhe = bgp_per_src_nhg_find(bgp, &ip);
+	if (!nhe) {
+		// TODO, check with Donald, handling in absence of nhe
+		return;
+	}
+
+	dest_he = bgp_dest_soo_find(nhe, &dest->p);
+	if (!dest_he) {
+		if (is_add)
+			dest_he = bgp_dest_soo_add(nhe, &dest->p);
+		else
+			return;
+	}
+
+	if (is_add) {
+		if (!bf_test_index(dest_he->bgp_pi_bitmap,
+				   pi->peer->bit_index)) {
+			bf_set_bit(dest_he->bgp_pi_bitmap, pi->peer->bit_index);
+		}
+	} else {
+		if (bf_test_index(dest_he->bgp_pi_bitmap,
+				  pi->peer->bit_index)) {
+			bf_release_index(dest_he->bgp_pi_bitmap,
+					 pi->peer->bit_index);
+		}
+	}
+}
+
+void bgp_soo_route_select_nh_eval(struct thread *thread)
+{
+	struct bgp_per_src_nhg_hash_entry *nhe;
+
+	nhe = THREAD_ARG(thread);
+
+	// TODO: processing
+
+	// TODO: Need to free nhe if refcnt is 0, take a call after
+	// processing function is complete
+
+	THREAD_OFF(nhe->t_select_nh_eval);
+}
+
+void bgp_process_soo_route(struct bgp *bgp, struct bgp_dest *dest,
+			   struct bgp_path_info *pi, struct in_addr *ipaddr,
+			   bool is_add)
+{
+	struct ipaddr ip;
+	struct bgp_per_src_nhg_hash_entry *nhe;
+
+	/* find-create nh */
+	memset(&ip, 0, sizeof(ip));
+	SET_IPADDR_V4(&ip);
+	memcpy(&ip.ipaddr_v4, ipaddr, sizeof(ip.ipaddr_v4));
+
+	nhe = bgp_per_src_nhg_find(bgp, &ip);
+	if (!nhe) {
+		if (is_add)
+			nhe = bgp_per_src_nhg_add(bgp, &ip);
+		else
+			return;
+	}
+
+	if (is_add) {
+		if (!bf_test_index(nhe->bgp_soo_route_pi_bitmap,
+				   pi->peer->bit_index)) {
+			bf_set_bit(nhe->bgp_soo_route_pi_bitmap,
+				   pi->peer->bit_index);
+			nhe->refcnt++;
+		}
+	} else {
+		if (bf_test_index(nhe->bgp_soo_route_pi_bitmap,
+				  pi->peer->bit_index)) {
+			bf_release_index(nhe->bgp_soo_route_pi_bitmap,
+					 pi->peer->bit_index);
+			nhe->refcnt--;
+		}
+	}
+
+	if (!nhe->t_select_nh_eval) {
+		thread_add_timer_msec(bm->master, bgp_soo_route_select_nh_eval,
+				      nhe, PER_SRC_NHG_UPDATE_TIMER,
+				      &nhe->t_select_nh_eval);
+	}
+}
+
+
+bool bgp_is_soo_route(struct bgp_dest *dest, struct bgp_path_info *pi,
+		      struct in_addr *ip)
+{
+	struct prefix to;
+
+	memset(ip, 0, sizeof(*ip));
+	if (!route_get_ip_from_soo_attr(pi, ip))
+		return false;
+
+	inaddrv42prefix(ip, 32, &to);
+
+	if (prefix_same(&to, &dest->p))
+		return true;
+
+	return false;
+}
+
+void bgp_process_route_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
+				struct bgp_path_info *pi, bool is_add)
+{
+	struct in_addr ip;
+
+	if (route_has_soo_attr(pi)) {
+		if (bgp_is_soo_route(dest, pi, &ip)) {
+			/*processing of soo route*/
+			bgp_process_soo_route(bgp, dest, pi, &ip, is_add);
+
+		} else {
+			/*processing of route with soo attr*/
+			bgp_process_route_with_soo_attr(bgp, dest, pi, &ip,
+							is_add);
+		}
+	}
 }
