@@ -1443,6 +1443,16 @@ bool ipv4_unicast_valid(const struct in_addr *addr)
 	return true;
 }
 
+void inaddrv42prefix(const struct in_addr *ip, uint16_t prefixlen,
+		     struct prefix *p)
+{
+	p->family = AF_INET;
+	p->u.prefix4 = *ip;
+	p->prefixlen = prefixlen;
+
+	return;
+}
+
 static int ipaddr2prefix(const struct ipaddr *ip, uint16_t prefixlen,
 			 struct prefix *p)
 {

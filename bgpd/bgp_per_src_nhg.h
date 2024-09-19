@@ -34,8 +34,7 @@ struct bgp_dest_soo_hash_entry {
 	struct bgp *bgp;
 	struct bgp_per_src_nhg_hash_entry *nhe;
 
-	/* SOO Attr */
-	struct ipaddr ip;
+	struct prefix p;
 
 	/* Time since last update */
 	uint64_t uptime;
@@ -98,8 +97,8 @@ struct bgp_per_src_nhg_hash_entry {
  */
 #define PER_SRC_NEXTHOP_GROUP_TIMER_ON (1 << 3)
 
-//TODO, recursive flag?
-
+	struct event *t_select_nh_eval;
+#define PER_SRC_NHG_UPDATE_TIMER 200
 };
 
 
