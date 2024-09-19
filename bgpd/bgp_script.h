@@ -21,11 +21,14 @@
 #define __BGP_SCRIPT__
 
 #include <zebra.h>
-#include "bgpd.h"
 
 #ifdef HAVE_SCRIPTING
 
 #include "frrlua.h"
+
+/* Forward references */
+struct peer;
+struct attr;
 
 /*
  * Initialize scripting stuff.
