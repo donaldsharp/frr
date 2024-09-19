@@ -1,5 +1,23 @@
 #!/usr/bin/make -f
 
+# HOW TO BUILD FOR CUMULUS
+# Currently master FRR needs libyang2.1.128 or
+# greater but this is not available in our build
+# env.  So we need to make things work a bit better
+# for the moment.  
+# Steps:
+# 1) Run due --run and choose one of the deb 12 environments
+# 2) in the FRR directory
+#    git checkout -b sharpd/internal_master origin/sharpd/internal_master
+#    sharpd/internal_master is the branch that has the starting point
+#    for getting master to build.
+# 3) Install packages listed in debian/control starting
+#    on line 7.
+# 4) Install the libyang2*.debs in /home/sharpd/master
+# 5) Run dpkg-buildpackage -us -uc
+# 6) If things are not working remember you can cd into the
+#    build directory and do a `make -j<some high number`
+# 5) Profit
 # standard Debian options & profiles
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
