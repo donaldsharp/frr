@@ -1431,7 +1431,7 @@ PKG_CHECK_MODULES([PROTOBUF_C], [libprotobuf-c >= 1.1.0],, [
   AC_MSG_FAILURE([minimum version (1.1.0) of libprotobuf-c not found.  Install minimum required version of protobuf-c.])
 ])
 
-if test "$enable_protobuf3" = "yes"; then
+if test "$enable_protobuf" = "yes"; then
   PROTO3=true
   AC_CHECK_HEADER([google/protobuf-c/protobuf-c.h],
                   [AC_CHECK_DECLS(PROTOBUF_C_LABEL_NONE,
