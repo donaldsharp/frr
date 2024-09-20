@@ -712,6 +712,7 @@ static int zebra_evpn_map_vlan_ns(struct ns *ns,
 				zebra_vxlan_if_access_vlan_vni_find(zif, br_if);
 			if (vni_id) {
 				found = 1;
+				route_unlock_node(rn);
 				break;
 			}
 		}
@@ -808,6 +809,7 @@ static int zebra_evpn_from_svi_ns(struct ns *ns,
 				zebra_vxlan_if_access_vlan_vni_find(zif, br_if);
 			if (vni_id) {
 				found = 1;
+				route_unlock_node(rn);
 				break;
 			}
 		}
@@ -895,6 +897,7 @@ static int zvni_map_to_macvlan_ns(struct ns *ns,
 
 		if (zif->link == in_param->svi_if) {
 			*p_ifp = tmp_if;
+			route_unlock_node(rn);
 			return NS_WALK_STOP;
 		}
 	}
