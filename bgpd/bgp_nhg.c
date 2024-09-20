@@ -15,10 +15,11 @@
  * L3 NHGs are used for fast failover of nexthops in the dplane. These are
  * the APIs for allocating L3 NHG ids. Management of the L3 NHG itself is
  * left to the application using it.
- * PS: Currently EVPN host routes is the only app using L3 NHG for fast
- * failover of remote ES links.
+ * PS: Currently there are 2 apps using bgp nhgs
+ * 1. EVPN host routes using NHG for fast failover of remote ES links.
+ * 2. Per Source NHG feature using BGP NHG
  ***************************************************************************/
-static bitfield_t bgp_nh_id_bitmap;
+static bgp_nhg_app_info_t bgp_nhg_app_info[APP_MAX];
 static uint32_t bgp_nhg_start;
 
 /* XXX - currently we do nothing on the callbacks */
@@ -47,53 +48,75 @@ static void bgp_nhg_del_cb(const char *name)
 static void bgp_nhg_zebra_init(void)
 {
 	static bool bgp_nhg_zebra_inited;
-
 	if (bgp_nhg_zebra_inited)
 		return;
 
 	bgp_nhg_zebra_inited = true;
 	bgp_nhg_start = zclient_get_nhg_start(ZEBRA_ROUTE_BGP);
-	nexthop_group_init(bgp_nhg_add_cb, bgp_nhg_modify_cb,
-			   bgp_nhg_add_nexthop_cb, bgp_nhg_del_nexthop_cb,
-			   bgp_nhg_del_cb);
+        nexthop_group_init(bgp_nhg_add_cb, bgp_nhg_modify_cb,
+                           bgp_nhg_add_nexthop_cb, bgp_nhg_del_nexthop_cb,
+                           bgp_nhg_del_cb);
 }
 
 void bgp_nhg_init(void)
 {
-	uint32_t id_max;
+	uint32_t cumulative_offset = 0;
+	bgp_nhg_start = zclient_get_nhg_start(ZEBRA_ROUTE_BGP);
 
-	id_max = MIN(ZEBRA_NHG_PROTO_SPACING - 1, 16 * 1024);
-	bf_init(bgp_nh_id_bitmap, id_max);
-	bf_assign_zero_index(bgp_nh_id_bitmap);
+	for (bgp_nhg_app_t app = EVPN_MH; app < APP_MAX; app++) {
+		if (app == EVPN_MH) {
+			bgp_nhg_app_info[app].id_max = MIN(ZEBRA_NHG_PROTO_SPACING - 1,
+							   EVPN_MH_NH_ID_SPACE);
+		} else if (app == PER_SRC_NHG) {
+			bgp_nhg_app_info[app].id_max = MIN(ZEBRA_NHG_PROTO_SPACING - 1,
+							   PER_SRC_NH_ID_SPACE);
+		} else {
+			bgp_nhg_app_info[app].id_max = MIN(ZEBRA_NHG_PROTO_SPACING - 1,
+							   DEFAULT_ID_SPACE);
+		}
 
-	if (BGP_DEBUG(nht, NHT) || BGP_DEBUG(evpn_mh, EVPN_MH_ES))
-		zlog_debug("bgp nhg range %u - %u", bgp_nhg_start + 1,
-			   bgp_nhg_start + id_max);
+		bgp_nhg_app_info[app].start_id = bgp_nhg_start + cumulative_offset;
+		cumulative_offset += bgp_nhg_app_info[app].id_max;
+
+		bf_init(bgp_nhg_app_info[app].bitmap, bgp_nhg_app_info[app].id_max);
+		bf_assign_zero_index(bgp_nhg_app_info[app].bitmap);
+
+		if (BGP_DEBUG(nht, NHT) || BGP_DEBUG(evpn_mh, EVPN_MH_ES)) {
+			uint32_t start = bgp_nhg_app_info[app].start_id + 1;
+			uint32_t end = bgp_nhg_app_info[app].start_id + bgp_nhg_app_info[app].id_max;
+			zlog_debug("bgp nhg range for APP%d: %u - %u", app + 1, start, end);
+		}
+	}
 }
 
 void bgp_nhg_finish(void)
 {
-	bf_free(bgp_nh_id_bitmap);
+	for (bgp_nhg_app_t app = EVPN_MH; app < APP_MAX; app++) {
+		bf_free(bgp_nhg_app_info[app].bitmap);
+	}
 }
 
-uint32_t bgp_nhg_id_alloc(void)
+uint32_t bgp_nhg_id_alloc(bgp_nhg_app_t app)
 {
+	if (app >= APP_MAX)
+		return 0;
+
 	uint32_t nhg_id = 0;
 
 	bgp_nhg_zebra_init();
-	bf_assign_index(bgp_nh_id_bitmap, nhg_id);
+	bf_assign_index(bgp_nhg_app_info[app].bitmap, nhg_id);
 	if (nhg_id)
-		nhg_id += bgp_nhg_start;
+		nhg_id += bgp_nhg_app_info[app].start_id;
 
 	return nhg_id;
 }
 
-void bgp_nhg_id_free(uint32_t nhg_id)
+void bgp_nhg_id_free(bgp_nhg_app_t app, uint32_t nhg_id)
 {
-	if (!nhg_id || (nhg_id <= bgp_nhg_start))
+	if (app >= APP_MAX || !nhg_id || (nhg_id <= bgp_nhg_app_info[app].start_id))
 		return;
 
-	nhg_id -= bgp_nhg_start;
+	nhg_id = nhg_id - bgp_nhg_app_info[app].start_id;
 
-	bf_release_index(bgp_nh_id_bitmap, nhg_id);
+	bf_release_index(bgp_nhg_app_info[app].bitmap, nhg_id);
 }
