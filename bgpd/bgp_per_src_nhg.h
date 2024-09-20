@@ -51,7 +51,7 @@ DECLARE_DLIST(bgp_dest_soo_qlist, struct bgp_dest_soo_hash_entry, item);
  * Hashtables containing nhg entries is in `bgp_vrf`.
  */
 struct bgp_per_src_nhg_hash_entry {
-	uint32_t id;
+	uint32_t nhg_id;
 	struct bgp *bgp;
 
 	/* SOO Attr */
