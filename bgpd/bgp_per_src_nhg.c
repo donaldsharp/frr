@@ -46,6 +46,7 @@
 #include "bgpd/bgp_zebra.h"
 #include "bgpd/bgp_flowspec_util.h"
 #include "bgpd/bgp_per_src_nhg.h"
+#include "bgpd/bgp_nht.h"
 
 DEFINE_MTYPE_STATIC(BGPD, BGP_PER_SRC_NHG, "BGP Per Source NHG Information");
 DEFINE_MTYPE_STATIC(BGPD, BGP_DEST_SOO_HE, "BGP Dest SOO hash entry Information");
@@ -253,6 +254,7 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 	bf_assign_zero_index(nhe->bgp_soo_route_pi_bitmap);
 
 	//TODO Add Processing pending
+	nhe->nhg_id = bgp_l3nhg_id_alloc(PER_SRC_NHG);
 
 	//if (BGP_DEBUG())
 	zlog_debug("bgp vrf %s per src nhg %s add", bgp->name_pretty,
@@ -268,6 +270,7 @@ static void bgp_per_src_nhg_del(struct bgp_per_src_nhg_hash_entry *nhe)
 	char buf[INET6_ADDRSTRLEN];
 
 	//TODO Del Processing pending
+	bgp_l3nhg_id_free(PER_SRC_NHG, nhe->nhg_id);
 
 	//if (BGP_DEBUG())
 	zlog_debug("bgp vrf %s per src nhg %s del", nhe->bgp->name_pretty,
@@ -328,6 +331,7 @@ static void bgp_per_src_nhg_flush_entry(struct bgp_per_src_nhg_hash_entry *nhe)
 	bgp_dest_soo_qlist_fini(&nhe->dest_soo_list);
 	bgp_dest_soo_finish(nhe);
 	//TODO, flush processing pending
+	bgp_l3nhg_id_free(PER_SRC_NHG, nhe->nhg_id);
 
 	//if (BGP_DEBUG(,))
 	zlog_debug("bgp vrf %s per src nhg %s flush", nhe->bgp->name_pretty,
