@@ -3167,7 +3167,7 @@ static void evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 
 	if (brief && !json) {
 		vty_out(vty, "Brief cmd must be used only with json\n");
-		return CMD_WARNING;
+		return;
 	}
 
 	/* EVPN routing table is a 2-level table with the first level being
