@@ -32,6 +32,7 @@
 #include "vrf.h"
 #include "filter.h"
 #include "nexthop_group.h"
+#include "wheel.h"
 #include "lib/jhash.h"
 
 #include "bgpd/bgpd.h"
@@ -50,6 +51,94 @@
 
 DEFINE_MTYPE_STATIC(BGPD, BGP_PER_SRC_NHG, "BGP Per Source NHG Information");
 DEFINE_MTYPE_STATIC(BGPD, BGP_DEST_SOO_HE, "BGP Dest SOO hash entry Information");
+
+static unsigned int bgp_per_src_nhg_slot_key(const void *item)
+{
+	const struct bgp_per_src_nhg_hash_entry *nhe = item;
+	const struct ipaddr *ip = &nhe->ip;
+
+	if (IS_IPADDR_V4(ip))
+		return jhash_1word(ip->ipaddr_v4.s_addr, 0) %
+				BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS;
+
+	return jhash2(ip->ipaddr_v6.s6_addr32,
+		array_size(ip->ipaddr_v6.s6_addr32), 0) %
+		BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS;
+}
+
+static void bgp_start_soo_timer(struct bgp *bgp,
+                         struct bgp_per_src_nhg_hash_entry *soo_entry)
+{
+	if (!bgp->per_src_nhg_soo_timer_wheel) {
+		return;
+	}
+
+	if (!soo_entry->soo_timer_running) {
+		// if soo timer is not already running, insert it in to the
+		// timer wheel
+		wheel_add_item(bgp->per_src_nhg_soo_timer_wheel, soo_entry);
+		soo_entry->soo_timer_running = true;
+	}
+}
+
+static void bgp_stop_soo_timer(struct bgp *bgp,
+                        struct bgp_per_src_nhg_hash_entry *soo_entry)
+{
+	// if soo timer is not already running, insert it in the timer wheel
+	if (!bgp->per_src_nhg_soo_timer_wheel) {
+		return;
+	}
+
+	if (soo_entry->soo_timer_running) {
+		wheel_remove_item(bgp->per_src_nhg_soo_timer_wheel, soo_entry);
+		soo_entry->soo_timer_running = false;
+	}
+}
+
+// SOO timer expiry
+static void bgp_per_src_nhg_timer_slot_run(void *item)
+{
+	struct bgp_per_src_nhg_hash_entry *soo_entry = item;
+	/* TODO
+	if SOO selected NHs match installed SOO NHG AND all routes w/ SOO point
+	to SOO NHG done
+
+	# Case for moving routes from zebra NHG to SOO NHG
+	if SOO selected NHs match installed SOO NHG
+	-- Evaluate all routes w/ SOO and update those were the SOO NHG's NHs
+	are a strict subset of route's selected NHs to SOO NHG; other routes
+	remain on zebra NHG
+	-- done
+
+	# Case for expanding the SOO NHG
+	If the SOO's new selected NHs are still a strict subset of all the
+	routes that already point to SOO_NHG expand the SOO_NHG done
+	*/
+
+	// remove the timer from the timer wheel since processing is done
+	bgp_stop_soo_timer(soo_entry->bgp, soo_entry);
+}
+
+static void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
+{
+	if (!bgp->per_src_nhg_soo_timer_wheel_created) {
+		bgp->per_src_nhg_soo_timer_wheel = wheel_init(
+				bm->master, BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD,
+				BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS,
+				bgp_per_src_nhg_slot_key,
+				bgp_per_src_nhg_timer_slot_run,
+				"BGP per src NHG SoO Timer Wheel");
+		bgp->per_src_nhg_soo_timer_wheel_created = true;
+	}
+}
+
+static void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp)
+{
+	if (bgp->per_src_nhg_soo_timer_wheel_created) {
+		wheel_delete(bgp->per_src_nhg_soo_timer_wheel);
+		bgp->per_src_nhg_soo_timer_wheel_created = false;
+	}
+}
 
 /*dest soo hash table per per source NHG*/
 static void *bgp_dest_soo_alloc(void *p)
@@ -246,7 +335,6 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 	memcpy(&tmp_nhe.ip, ip, sizeof(struct ipaddr));
 	nhe = hash_get(bgp->per_src_nhg_table, &tmp_nhe, bgp_per_src_nhg_alloc);
 	nhe->bgp = bgp;
-	nhe->t_select_nh_eval = NULL;
 
 	bgp_dest_soo_init(nhe);
 	bgp_dest_soo_qlist_init(&nhe->dest_soo_list);
@@ -255,6 +343,7 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 
 	//TODO Add Processing pending
 	nhe->nhg_id = bgp_nhg_id_alloc(PER_SRC_NHG);
+	bgp_start_soo_timer(bgp, nhe);
 
 	//if (BGP_DEBUG())
 	zlog_debug("bgp vrf %s per src nhg %s add", bgp->name_pretty,
@@ -263,14 +352,21 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 	return nhe;
 }
 
+static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
+{
+	bgp_start_soo_timer(nhe->bgp, nhe);
+}
+
 /* Delete nexthop entry if there are no paths referencing it */
 static void bgp_per_src_nhg_del(struct bgp_per_src_nhg_hash_entry *nhe)
 {
 	struct bgp_per_src_nhg_hash_entry *tmp_nhe;
 	char buf[INET6_ADDRSTRLEN];
 
-	//TODO Del Processing pending
+	// TODO Del Processing pending, also make sure to do NHG replace or
+	// install blackhole route
 	bgp_nhg_id_free(PER_SRC_NHG, nhe->nhg_id);
+	bgp_stop_soo_timer(nhe->bgp, nhe);
 
 	//if (BGP_DEBUG())
 	zlog_debug("bgp vrf %s per src nhg %s del", nhe->bgp->name_pretty,
@@ -316,6 +412,7 @@ void bgp_per_src_nhg_init(struct bgp *bgp)
 	bgp->per_src_nhg_table =
 		hash_create(bgp_per_src_nhg_hash_keymake, bgp_per_src_nhg_cmp,
 			    "BGP Per Source NHG hash table");
+	bgp_per_src_nhg_soo_timer_wheel_init(bgp);
 }
 
 
@@ -332,6 +429,7 @@ static void bgp_per_src_nhg_flush_entry(struct bgp_per_src_nhg_hash_entry *nhe)
 	bgp_dest_soo_finish(nhe);
 	//TODO, flush processing pending
 	bgp_nhg_id_free(PER_SRC_NHG, nhe->nhg_id);
+	bgp_stop_soo_timer(nhe->bgp, nhe);
 
 	//if (BGP_DEBUG(,))
 	zlog_debug("bgp vrf %s per src nhg %s flush", nhe->bgp->name_pretty,
@@ -356,6 +454,7 @@ void bgp_per_src_nhg_finish(struct bgp *bgp)
 		     NULL);
 	hash_clean(bgp->per_src_nhg_table,
 		   (void (*)(void *))bgp_per_src_nhe_free);
+	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
 }
 
 // Check if 'SoO route' pi(path info) bitmap is a subset of 'route with SoO'
@@ -442,20 +541,6 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
 	}
 }
 
-void bgp_soo_route_select_nh_eval(struct event *event)
-{
-	struct bgp_per_src_nhg_hash_entry *nhe;
-
-	nhe = EVENT_ARG(event);
-
-	// TODO: processing
-
-	// TODO: Need to free nhe if refcnt is 0, take a call after
-	// processing function is complete
-
-	EVENT_OFF(nhe->t_select_nh_eval);
-}
-
 void bgp_process_soo_route(struct bgp *bgp, struct bgp_dest *dest,
 			   struct bgp_path_info *pi, struct in_addr *ipaddr,
 			   bool is_add)
@@ -474,6 +559,8 @@ void bgp_process_soo_route(struct bgp *bgp, struct bgp_dest *dest,
 			nhe = bgp_per_src_nhg_add(bgp, &ip);
 		else
 			return;
+	} else {
+		bgp_per_src_nhg_update(nhe);
 	}
 
 	if (is_add) {
@@ -490,12 +577,6 @@ void bgp_process_soo_route(struct bgp *bgp, struct bgp_dest *dest,
 					 pi->peer->bit_index);
 			nhe->refcnt--;
 		}
-	}
-
-	if (!nhe->t_select_nh_eval) {
-		event_add_timer_msec(bm->master, bgp_soo_route_select_nh_eval,
-				      nhe, PER_SRC_NHG_UPDATE_TIMER,
-				      &nhe->t_select_nh_eval);
 	}
 }
 

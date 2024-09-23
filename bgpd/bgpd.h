@@ -909,6 +909,9 @@ struct bgp {
 
 	/* Hash table of per source NHG based on soo*/
 	struct hash *per_src_nhg_table;
+	/* Timer wheel for per source NHG SoO*/
+	struct timer_wheel *per_src_nhg_soo_timer_wheel;
+	bool per_src_nhg_soo_timer_wheel_created;
 
 	/* BGP Conditional advertisement */
 	uint32_t condition_check_period;

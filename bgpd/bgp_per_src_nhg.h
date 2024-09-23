@@ -74,6 +74,8 @@ struct bgp_per_src_nhg_hash_entry {
 	uint32_t refcnt;
 
 	uint32_t flags;
+
+	bool soo_timer_running;
 /*
  * Is this nexthop group valid, ie all nexthops are fully resolved.
  * What is fully resolved?  It's a nexthop that is either self contained
@@ -96,11 +98,11 @@ struct bgp_per_src_nhg_hash_entry {
  * Is this a nexthop group timer on?
  */
 #define PER_SRC_NEXTHOP_GROUP_TIMER_ON (1 << 3)
-
-	struct event *t_select_nh_eval;
-#define PER_SRC_NHG_UPDATE_TIMER 200
 };
 
+#define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS 10
+#define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD                                 \
+	50 // in milli seconds, total timer wheel period
 
 void bgp_dest_soo_init(struct bgp_per_src_nhg_hash_entry *nhe);
 void bgp_dest_soo_finish(struct bgp_per_src_nhg_hash_entry *nhe);
