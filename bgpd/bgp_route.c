@@ -15221,6 +15221,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 		struct bgp_adj_in *ain = NULL;
 		struct bgp_adj_out *adj = NULL;
 		struct peer_af *paf = NULL;
+		bool json_pfx_populated = false;
 
 		if (type == bgp_show_adj_route_received) {
 			for (ain = dest->adj_in; ain; ain = ain->next) {
@@ -15238,6 +15239,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 						best_path_selected = true;
 					prefix_path_count++;
 				}
+
 				bgp_fib_flags_info(vty, bgp, dest, json_flags,
 						   best_path_selected);
 				bgp_prefix_json_info_add(
@@ -15245,6 +15247,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 					prefix_path_count, multi_path_count);
 				json_object_object_addf(json_prefix, json_info,
 							"%pFX", rn_p);
+				json_pfx_populated = true;
 			}
 			ain = NULL;
 		} else if (type == bgp_show_adj_route_advertised) {
@@ -15268,6 +15271,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 								true;
 						prefix_path_count++;
 					}
+
 					bgp_fib_flags_info(vty, bgp, dest,
 							   json_flags,
 							   best_path_selected);
@@ -15278,12 +15282,14 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 					json_object_object_addf(json_prefix,
 								json_info,
 								"%pFX", rn_p);
+					json_pfx_populated = true;
 				}
 			}
 			adj = NULL;
 		}
 
-		if (prefix_path_count == 0) {
+		/* Free up the below only if json_pfx is not populated */
+		if (prefix_path_count == 0 && !json_pfx_populated) {
 			json_object_free(json_info);
 			json_object_free(json_flags);
 		}
