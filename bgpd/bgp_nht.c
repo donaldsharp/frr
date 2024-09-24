@@ -51,7 +51,7 @@ extern struct zclient *zclient;
 
 static void register_zebra_rnh(struct bgp_nexthop_cache *bnc);
 static void unregister_zebra_rnh(struct bgp_nexthop_cache *bnc);
-static int make_prefix(int afi, struct bgp_path_info *pi, struct prefix *p);
+int make_prefix(int afi, struct bgp_path_info *pi, struct prefix *p);
 static void bgp_nht_ifp_initial(struct thread *thread);
 
 static int bgp_isvalid_nexthop(struct bgp_nexthop_cache *bnc)
@@ -940,7 +940,7 @@ void bgp_cleanup_nexthops(struct bgp *bgp)
  * make_prefix - make a prefix structure from the path (essentially
  * path's node.
  */
-static int make_prefix(int afi, struct bgp_path_info *pi, struct prefix *p)
+int make_prefix(int afi, struct bgp_path_info *pi, struct prefix *p)
 {
 
 	int is_bgp_static = ((pi->type == ZEBRA_ROUTE_BGP)

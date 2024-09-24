@@ -67,6 +67,7 @@
 #include "bgpd/bgp_trace.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_lcommunity.h"
+#include "bgpd/bgp_per_src_nhg.h"
 
 /* All information about zebra. */
 struct zclient *zclient = NULL;
@@ -1014,8 +1015,8 @@ bool bgp_zebra_nexthop_set(union sockunion *local, union sockunion *remote,
 	return v6_ll_avail;
 }
 
-static struct in6_addr *
-bgp_path_info_to_ipv6_nexthop(struct bgp_path_info *path, ifindex_t *ifindex)
+struct in6_addr *bgp_path_info_to_ipv6_nexthop(struct bgp_path_info *path,
+					       ifindex_t *ifindex)
 {
 	struct in6_addr *nexthop = NULL;
 
@@ -1415,7 +1416,8 @@ enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
 	do_wt_ecmp = bgp_path_info_mpath_chkwtd(bgp, info);
 
 	/* EVPN MAC-IP routes are installed with a L3 NHG id */
-	if (bgp_evpn_path_es_use_nhg(bgp, info, &nhg_id)) {
+	if (bgp_evpn_path_es_use_nhg(bgp, info, &nhg_id) ||
+	    bgp_per_src_nhg_use_nhgid(bgp, dest, info, &nhg_id)) {
 		mpinfo = NULL;
 		api.nhgid = nhg_id;
 		if (nhg_id)

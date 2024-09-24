@@ -89,6 +89,7 @@
 #include "bgpd/bgp_flowspec.h"
 #include "bgpd/bgp_flowspec_util.h"
 #include "bgpd/bgp_pbr.h"
+#include "bgpd/bgp_per_src_nhg.h"
 
 #ifndef VTYSH_EXTRACT_PL
 #include "bgpd/bgp_route_clippy.c"
@@ -3125,11 +3126,11 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 						path_buf);
 				bgp_mp_list_add(&mp_list, pi);
 				if (CHECK_FLAG(
-					    bgp->per_source_nhg_flags[afi][safi],
-					    BGP_FLAG_PROCESS_SOO_FOR_PER_SOURCE_NHG) &&
+					    bgp->per_src_nhg_flags[afi][safi],
+					    BGP_FLAG_NHG_PER_ORIGIN) &&
 				    !is_evpn) {
-					bgp_process_route_soo_attr(bgp, dest,
-								   pi, true);
+					bgp_process_route_soo_attr(
+						bgp, afi, dest, pi, true);
 				}
 
 				continue;
@@ -3163,11 +3164,11 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 						dest, path_buf);
 				bgp_mp_list_add(&mp_list, pi);
 				if (CHECK_FLAG(
-					    bgp->per_source_nhg_flags[afi][safi],
-					    BGP_FLAG_PROCESS_SOO_FOR_PER_SOURCE_NHG) &&
+					    bgp->per_src_nhg_flags[afi][safi],
+					    BGP_FLAG_NHG_PER_ORIGIN) &&
 				    !is_evpn) {
-					bgp_process_route_soo_attr(bgp, dest,
-								   pi, true);
+					bgp_process_route_soo_attr(
+						bgp, afi, dest, pi, true);
 				}
 			}
 		}
@@ -3707,12 +3708,12 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 			     old_select->sub_type == BGP_ROUTE_AGGREGATE ||
 			     old_select->sub_type == BGP_ROUTE_IMPORTED)) {
 				if (CHECK_FLAG(
-					    bgp->per_source_nhg_flags[afi]
-								     [safi],
-					    BGP_FLAG_PROCESS_SOO_FOR_PER_SOURCE_NHG) &&
+					    bgp->per_src_nhg_flags[afi][safi],
+					    BGP_FLAG_NHG_PER_ORIGIN) &&
 				    !is_evpn) {
 					bgp_process_route_soo_attr(
-						bgp, dest, old_select, false);
+						bgp, afi, dest, old_select,
+						false);
 				}
 
 				if (CHECK_FLAG(bgp->gr_info[afi][safi].flags,
