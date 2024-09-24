@@ -76,6 +76,7 @@
 #include "bgpd/bgp_flowspec.h"
 #include "bgpd/bgp_flowspec_util.h"
 #include "bgpd/bgp_pbr.h"
+#include "bgpd/bgp_per_src_nhg.h"
 
 #include "bgpd/bgp_route_clippy.c"
 
@@ -3349,8 +3350,8 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 					    bgp->per_src_nhg_flags[afi][safi],
 					    BGP_FLAG_NHG_PER_ORIGIN) &&
 				    !is_evpn) {
-					bgp_process_route_soo_attr(bgp, dest,
-								   pi, true);
+					bgp_process_route_soo_attr(
+						bgp, afi, dest, pi, true);
 				}
 
 				continue;
@@ -3390,8 +3391,8 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 					    bgp->per_src_nhg_flags[afi][safi],
 					    BGP_FLAG_NHG_PER_ORIGIN) &&
 				    !is_evpn) {
-					bgp_process_route_soo_attr(bgp, dest,
-								   pi, true);
+					bgp_process_route_soo_attr(
+						bgp, afi, dest, pi, true);
 				}
 			}
 		}
@@ -4025,7 +4026,7 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, saf
                                             BGP_FLAG_NHG_PER_ORIGIN) &&
                                     !is_evpn) {
                                         bgp_process_route_soo_attr(
-                                                bgp, dest, old_select, false);
+                                                bgp, afi, dest, old_select, false);
                                 }
 				if (is_route_parent_evpn(old_select) ||
 				    CHECK_FLAG(bgp->gr_info[afi][safi].flags,

@@ -54,6 +54,7 @@
 #include "bgpd/bgp_trace.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_lcommunity.h"
+#include "bgpd/bgp_per_src_nhg.h"
 
 /* All information about zebra. */
 struct zclient *zclient = NULL;
@@ -930,8 +931,8 @@ bool bgp_zebra_nexthop_set(union sockunion *local, union sockunion *remote,
 	return v6_ll_avail;
 }
 
-static struct in6_addr *
-bgp_path_info_to_ipv6_nexthop(struct bgp_path_info *path, ifindex_t *ifindex)
+struct in6_addr *bgp_path_info_to_ipv6_nexthop(struct bgp_path_info *path,
+					       ifindex_t *ifindex)
 {
 	struct in6_addr *nexthop = NULL;
 
@@ -1235,7 +1236,7 @@ static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, struct attr *attr,
 }
 
 static void bgp_zebra_announce_parse_nexthop(
-	struct bgp_path_info *info, const struct prefix *p, struct bgp *bgp,
+	struct bgp_dest *dest, struct bgp_path_info *info, const struct prefix *p, struct bgp *bgp,
 	struct zapi_route *api, unsigned int *valid_nh_count, afi_t afi,
 	safi_t safi, uint32_t *nhg_id, uint32_t *metric, route_tag_t *tag,
 	bool *allow_recursion)
@@ -1268,7 +1269,8 @@ static void bgp_zebra_announce_parse_nexthop(
 		nh_othervrf = 1;
 
 	/* EVPN MAC-IP routes are installed with a L3 NHG id */
-	if (nhg_id && bgp_evpn_path_es_use_nhg(bgp, info, nhg_id)) {
+	if (nhg_id && (bgp_evpn_path_es_use_nhg(bgp, info, nhg_id) || 
+		  bgp_per_src_nhg_use_nhgid(bgp, dest, info, nhg_id))) {
 		mpinfo = NULL;
 		zapi_route_set_nhg_id(api, nhg_id);
 	} else {
@@ -1589,7 +1591,7 @@ bgp_zebra_announce_actual(struct bgp_dest *dest, struct bgp_path_info *info,
 	/* Metric is currently based on the best-path only */
 	metric = info->attr->med;
 
-	bgp_zebra_announce_parse_nexthop(info, p, bgp, &api, &valid_nh_count,
+	bgp_zebra_announce_parse_nexthop(dest, info, p, bgp, &api, &valid_nh_count,
 					 table->afi, table->safi, &nhg_id,
 					 &metric, &tag, &allow_recursion);
 
