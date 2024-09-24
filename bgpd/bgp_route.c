@@ -15174,8 +15174,8 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 	json_object *json_prefix = NULL; /* JSON per prefix */
 	struct bgp_dest *dest;
 
-	json = json_object_new_object();
 	if (!peer || !peer->afc[afi][safi]) {
+		json = json_object_new_object();
 		json_object_string_add(json, "warning",
 				       "No such neighbor or address family");
 		vty_out(vty, "%s\n", json_object_to_json_string(json));
@@ -15185,6 +15185,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 	if ((type == bgp_show_adj_route_received ||
 	     type == bgp_show_adj_route_filtered) &&
 	    !CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_SOFT_RECONFIG)) {
+		json = json_object_new_object();
 		json_object_string_add(
 			json, "warning",
 			"Inbound soft reconfiguration not enabled");
@@ -15287,10 +15288,11 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 			json_object_free(json_flags);
 		}
 	}
+
 	vty_json_no_pretty(
 		vty,
 		json_prefix); /* Free's all the JSON's associted with prefix */
-	json_object_free(json);
+
 	return CMD_SUCCESS;
 }
 
