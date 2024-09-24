@@ -93,6 +93,7 @@
 #include "bgpd/bgp_evpn_mh.h"
 #include "bgpd/bgp_mac.h"
 #include "bgpd/bgp_trace.h"
+#include "bgpd/bgp_per_src_nhg.h"
 
 DEFINE_MTYPE_STATIC(BGPD, PEER_TX_SHUTDOWN_MSG, "Peer shutdown message (TX)");
 DEFINE_QOBJ_TYPE(bgp_master);
@@ -3571,6 +3572,7 @@ int bgp_get(struct bgp **bgp_val, as_t *as, const char *name,
 	bgp_address_init(bgp);
 	bgp_tip_hash_init(bgp);
 	bgp_scan_init(bgp);
+	bgp_per_src_nhg_init(bgp);
 	*bgp_val = bgp;
 
 	bgp->t_rmap_def_originate_eval = NULL;
@@ -3992,6 +3994,7 @@ void bgp_free(struct bgp *bgp)
 	bgp_scan_finish(bgp);
 	bgp_address_destroy(bgp);
 	bgp_tip_hash_destroy(bgp);
+	bgp_per_src_nhg_finish(bgp);
 
 	/* release the auto RD id */
 	bf_release_index(bm->rd_idspace, bgp->vrf_rd_id);

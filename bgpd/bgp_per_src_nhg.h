@@ -24,6 +24,27 @@
 #define _BGP_PER_SRC_NHG_H
 
 
+PREDECL_RBTREE_UNIQ(bgp_nhg_nexthop_cache);
+
+struct bgp_nhg_nexthop_cache {
+	// afi_t afi;
+	ifindex_t ifindex;
+	struct prefix prefix;
+	struct nexthop nh;
+	int refcnt;
+	/* RB-tree entry. */
+	struct bgp_nhg_nexthop_cache_item entry;
+	struct bgp_nhg_nexthop_cache_head *tree;
+};
+
+
+extern int bgp_nhg_nexthop_cache_compare(const struct bgp_nhg_nexthop_cache *a,
+					 const struct bgp_nhg_nexthop_cache *b);
+
+DECLARE_RBTREE_UNIQ(bgp_nhg_nexthop_cache, struct bgp_nhg_nexthop_cache, entry,
+		    bgp_nhg_nexthop_cache_compare);
+
+
 PREDECL_DLIST(bgp_dest_soo_qlist);
 
 /*
@@ -39,7 +60,8 @@ struct bgp_dest_soo_hash_entry {
 	/* Time since last update */
 	uint64_t uptime;
 
-	//TODO, do we need to back pointer for bgp path info
+	// we need to back pointer for dest
+	struct bgp_dest *dest;
 
 	//TODO, need to store the bitmaps of NH for soo
 	bitfield_t bgp_pi_bitmap;
@@ -60,7 +82,7 @@ struct bgp_per_src_nhg_hash_entry {
 	/* Time since last update */
 	uint64_t uptime;
 
-	struct nexthop_group nhg;
+	struct bgp_nhg_nexthop_cache_head nhg_nexthop_cache_table;
 
 	/* hash table of dest with soo attribute */
 	struct hash *dest_with_soo;
@@ -98,6 +120,9 @@ struct bgp_per_src_nhg_hash_entry {
  * Is this a nexthop group timer on?
  */
 #define PER_SRC_NEXTHOP_GROUP_TIMER_ON (1 << 3)
+	/*temp timer, will be removed after timer wheel is ut*/
+	struct thread *t_select_nh_eval;
+#define PER_SRC_NHG_UPDATE_TIMER 200
 };
 
 #define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS 10
@@ -108,4 +133,9 @@ void bgp_dest_soo_init(struct bgp_per_src_nhg_hash_entry *nhe);
 void bgp_dest_soo_finish(struct bgp_per_src_nhg_hash_entry *nhe);
 void bgp_per_src_nhg_init(struct bgp *bgp);
 void bgp_per_src_nhg_finish(struct bgp *bgp);
+void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi,
+				struct bgp_dest *dest, struct bgp_path_info *pi,
+				bool is_add);
+bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
+			       struct bgp_path_info *pi, uint32_t *nhg_id);
 #endif /* _BGP_PER_SRC_NHG_H */
