@@ -15174,8 +15174,8 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 	json_object *json_prefix = NULL; /* JSON per prefix */
 	struct bgp_dest *dest;
 
-	json = json_object_new_object();
 	if (!peer || !peer->afc[afi][safi]) {
+		json = json_object_new_object();
 		json_object_string_add(json, "warning",
 				       "No such neighbor or address family");
 		vty_out(vty, "%s\n", json_object_to_json_string(json));
@@ -15185,6 +15185,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 	if ((type == bgp_show_adj_route_received ||
 	     type == bgp_show_adj_route_filtered) &&
 	    !CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_SOFT_RECONFIG)) {
+		json = json_object_new_object();
 		json_object_string_add(
 			json, "warning",
 			"Inbound soft reconfiguration not enabled");
@@ -15220,6 +15221,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 		struct bgp_adj_in *ain = NULL;
 		struct bgp_adj_out *adj = NULL;
 		struct peer_af *paf = NULL;
+		bool json_pfx_populated = false;
 
 		if (type == bgp_show_adj_route_received) {
 			for (ain = dest->adj_in; ain; ain = ain->next) {
@@ -15237,6 +15239,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 						best_path_selected = true;
 					prefix_path_count++;
 				}
+
 				bgp_fib_flags_info(vty, bgp, dest, json_flags,
 						   best_path_selected);
 				bgp_prefix_json_info_add(
@@ -15244,6 +15247,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 					prefix_path_count, multi_path_count);
 				json_object_object_addf(json_prefix, json_info,
 							"%pFX", rn_p);
+				json_pfx_populated = true;
 			}
 			ain = NULL;
 		} else if (type == bgp_show_adj_route_advertised) {
@@ -15267,6 +15271,7 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 								true;
 						prefix_path_count++;
 					}
+
 					bgp_fib_flags_info(vty, bgp, dest,
 							   json_flags,
 							   best_path_selected);
@@ -15277,20 +15282,23 @@ static int peer_adj_routes_brief(struct vty *vty, struct peer *peer, afi_t afi,
 					json_object_object_addf(json_prefix,
 								json_info,
 								"%pFX", rn_p);
+					json_pfx_populated = true;
 				}
 			}
 			adj = NULL;
 		}
 
-		if (prefix_path_count == 0) {
+		/* Free up the below only if json_pfx is not populated */
+		if (prefix_path_count == 0 && !json_pfx_populated) {
 			json_object_free(json_info);
 			json_object_free(json_flags);
 		}
 	}
+
 	vty_json_no_pretty(
 		vty,
 		json_prefix); /* Free's all the JSON's associted with prefix */
-	json_object_free(json);
+
 	return CMD_SUCCESS;
 }
 
