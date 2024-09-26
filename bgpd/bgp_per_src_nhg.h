@@ -115,7 +115,7 @@ struct bgp_per_src_nhg_hash_entry {
  * Has the nexthop group been queued to be send to the ZEBRA?
  * The NEXTHOP_GROUP_VALID flag should also be set by this point.
  */
-#define PER_SRC_NEXTHOP_GROUP_QUEUED (1 << 2)
+#define PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING (1 << 2)
 /*
  * Is this a nexthop group timer on?
  */
