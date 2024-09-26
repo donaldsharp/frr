@@ -65,6 +65,7 @@
 #include "bgpd/bgp_mac.h"
 #include "bgpd/bgp_flowspec.h"
 #include "bgpd/bgp_conditional_adv.h"
+#include "bgpd/bgp_per_src_nhg.h"
 #ifdef ENABLE_BGP_VNC
 #include "bgpd/rfapi/bgp_rfapi_cfg.h"
 #endif
@@ -20307,6 +20308,61 @@ static void bgp_vty_if_init(void)
 			&mpls_bgp_l3vpn_multi_domain_switching_cmd);
 }
 
+static void vty_print_bitfield(struct vty *vty, const bitfield_t *bf)
+{
+	unsigned int bit;
+	unsigned int approx_last_set_bit_index =
+		bf_approx_last_set_bit_index(bf);
+
+	vty_out(vty, "bits set:");
+
+	bf_for_each_set_bit((*bf), bit, approx_last_set_bit_index)
+	{
+		vty_out(vty, " %u", bit);
+	}
+
+	vty_out(vty, "\n");
+}
+
+static void show_bgp_soo_entry(struct hash_bucket *bucket, void *arg)
+{
+	struct vty *vty = arg;
+	struct bgp_per_src_nhg_hash_entry *soo_entry = bucket->data;
+
+	vty_out(vty,
+		"\tSoO route: %pIA NHG: %d Num paths: %u Path info bitmap ",
+		&soo_entry->ip, soo_entry->nhg_id, soo_entry->refcnt);
+	vty_print_bitfield(vty, &soo_entry->bgp_soo_route_pi_bitmap);
+
+	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
+
+	vty_out(vty, "\t\tRoute with SoO:\n");
+	frr_each (bgp_dest_soo_qlist, &soo_entry->dest_soo_list,
+		  bgp_dest_soo_entry) {
+		char pfxprint[PREFIX2STR_BUFFER];
+		prefix2str(&bgp_dest_soo_entry->p, pfxprint, sizeof(pfxprint));
+		vty_out(vty, "\t\t\t%s Path info bitmap ", pfxprint);
+		vty_print_bitfield(vty, &bgp_dest_soo_entry->bgp_pi_bitmap);
+	}
+}
+
+DEFUN(show_bgp_soo_routes, show_bgp_soo_routes_cmd, "show bgp soo routes",
+      SHOW_STR BGP_STR
+      "Site-of-Origin\n"
+      "Display information about per source NHG soo routes\n")
+{
+	struct list *instances = bm->bgp;
+	struct listnode *node;
+	struct bgp *bgp;
+
+	for (ALL_LIST_ELEMENTS_RO(instances, node, bgp)) {
+		vty_out(vty, "BGP: %s\n", bgp->name_pretty);
+		hash_iterate(bgp->per_src_nhg_table, show_bgp_soo_entry, vty);
+	}
+
+	return CMD_SUCCESS;
+}
+
 void bgp_vty_init(void)
 {
 	cmd_variable_handler_register(bgp_var_neighbor);
@@ -21917,6 +21973,9 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &no_bgp_sid_vpn_export_cmd);
 
 	bgp_vty_if_init();
+
+	/* per source nhg commands */
+	install_element(VIEW_NODE, &show_bgp_soo_routes_cmd);
 }
 
 #include "memory.h"
