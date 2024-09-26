@@ -334,6 +334,7 @@ static void bgp_per_src_nhg_add_send(struct bgp_per_src_nhg_hash_entry *nhe)
 	 */
 
 	api_nhg.id = nhg_id;
+	SET_FLAG(api_nhg.flags, ZEBRA_FLAG_ALLOW_RECURSION);
 	tree = &nhe->nhg_nexthop_cache_table;
 
 	frr_each (bgp_nhg_nexthop_cache, tree, bnc_iter) {
@@ -356,6 +357,7 @@ static void bgp_per_src_nhg_add_send(struct bgp_per_src_nhg_hash_entry *nhe)
 
 	zclient_nhg_send(zclient, ZEBRA_NHG_ADD, &api_nhg);
 	SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
+	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
 }
 
 static void bgp_per_src_nhg_del_send(struct bgp_per_src_nhg_hash_entry *nhe)
@@ -376,6 +378,7 @@ static void bgp_per_src_nhg_del_send(struct bgp_per_src_nhg_hash_entry *nhe)
 
 	zclient_nhg_send(zclient, ZEBRA_NHG_DEL, &api_nhg);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
+	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
 }
 
 static struct bgp_nhg_nexthop_cache *
@@ -405,10 +408,13 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 		// TODO, check with Donald, the number of nexthop per pi peer
 		bnc = bnc_nhg_new(&nhe->nhg_nexthop_cache_table, &p, ifindex);
 		if (pi->attr) {
+			bnc->nh.gate.ipv4 = pi->attr->nexthop;
+			bnc->nh.ifindex = 0;
+			bnc->nh.type = NEXTHOP_TYPE_IPV4;
 			if (afi == AF_INET) {
 				bnc->nh.gate.ipv4 = pi->attr->nexthop;
-				bnc->nh.ifindex = pi->attr->nh_ifindex;
-				bnc->nh.type = NEXTHOP_TYPE_IPV4_IFINDEX;
+				bnc->nh.ifindex = 0;
+				bnc->nh.type = NEXTHOP_TYPE_IPV4;
 			} else if (afi == AF_INET6) {
 				ifindex_t ifindex = IFINDEX_INTERNAL;
 				struct in6_addr *nexthop;
@@ -416,17 +422,30 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 					pi, &ifindex);
 				bnc->nh.ifindex = ifindex;
 				bnc->nh.gate.ipv6 = *nexthop;
-				bnc->nh.type = NEXTHOP_TYPE_IPV6_IFINDEX;
+				bnc->nh.type = NEXTHOP_TYPE_IPV6;
 			}
 		}
 
 		bnc->nh.vrf_id = nhe->bgp->vrf_id;
-		bnc->nh.flags = NEXTHOP_FLAG_ONLINK;
+		bnc->nh.flags = NEXTHOP_FLAG_RECURSIVE;
 		bnc->nh.weight = nh_weight;
 		SET_FLAG(bnc->nh.flags, BGP_NEXTHOP_VALID);
+		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
+		zlog_debug(
+			"Allocated bnc nhg %pFX(%d)(%s) peer %p refcnt:%d type::%d afi:%d",
+			&bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty,
+			pi->peer, nhe->refcnt, bnc->nh.type, afi);
+	} else {
+		zlog_debug(
+			"Found existing bnc nhg %pFX(%d)(%s) peer %p refcnt:%d",
+			&bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty,
+			pi->peer, nhe->refcnt);
 	}
 
 	bnc->refcnt++;
+	zlog_debug("Link pi to  bnc nhg %pFX(%d)(%s) peer %p refcnt(%d)",
+		   &bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty, pi->peer,
+		   bnc->refcnt);
 	return bnc;
 }
 
@@ -445,9 +464,16 @@ void bgp_per_src_nhg_nc_del(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 	if (!bnc)
 		return;
 
+	zlog_debug("Unlink pi bnc nhg %pFX(%d)(%s) peer %p refcnt(%d)",
+		   &bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty, pi->peer,
+		   bnc->refcnt);
 	bnc->refcnt--;
-	if (!bnc->refcnt)
+	if (!bnc->refcnt) {
+		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
+		zlog_debug("Free bnc nhg %pFX(%d)(%s) peer %p", &bnc->prefix,
+			   bnc->ifindex, nhe->bgp->name_pretty, pi->peer);
 		bnc_nhg_free(bnc);
+	}
 }
 
 
@@ -830,12 +856,16 @@ void bgp_soo_route_select_nh_eval(struct thread *thread)
 	THREAD_OFF(nhe->t_select_nh_eval);
 	if (nhe->refcnt) {
 		bgp_per_src_nhg_add_send(nhe);
-	}
-	// TODO: Re-enable this again
-	/*else {
+		if (CHECK_FLAG(nhe->flags,
+			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+			bgp_per_src_nhg_add_send(nhe);
+	} else {
 		bgp_per_src_nhg_del_send(nhe);
+		if (CHECK_FLAG(nhe->flags,
+			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+			bgp_per_src_nhg_del_send(nhe);
 		bgp_per_src_nhg_del(nhe);
-	}*/
+	}
 }
 
 
