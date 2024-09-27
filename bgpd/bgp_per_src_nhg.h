@@ -79,6 +79,9 @@ struct bgp_per_src_nhg_hash_entry {
 	/* SOO Attr */
 	struct ipaddr ip;
 
+	// we need to back pointer for dest
+	struct bgp_dest *dest;
+
 	/* Time since last update */
 	uint64_t uptime;
 
