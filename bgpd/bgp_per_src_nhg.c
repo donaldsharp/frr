@@ -269,6 +269,10 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 	struct bgp_per_src_nhg_hash_entry *nhe;
 	bool is_evpn = false;
 	struct bgp_table *table = NULL;
+	struct ipaddr ip;
+	bool is_soo_route = false;
+
+	memset(&ip, 0, sizeof(ip));
 
 	table = bgp_dest_table(dest);
 	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
@@ -282,20 +286,20 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 	}
 
 	if (route_has_soo_attr(pi)) {
-		if (bgp_is_soo_route(dest, pi, &in)) {
-			struct ipaddr ip;
+		is_soo_route = bgp_is_soo_route(dest, pi, &in);
+		SET_IPADDR_V4(&ip);
+		memcpy(&ip.ipaddr_v4, &in, sizeof(ip.ipaddr_v4));
 
-			memset(&ip, 0, sizeof(ip));
-			SET_IPADDR_V4(&ip);
-			memcpy(&ip.ipaddr_v4, &in, sizeof(ip.ipaddr_v4));
+		nhe = bgp_per_src_nhg_find(bgp, &ip);
+		if ((!nhe) ||
+		    (!CHECK_FLAG(nhe->flags,
+				 PER_SRC_NEXTHOP_GROUP_VALID)))
+			return false;
 
-
-			nhe = bgp_per_src_nhg_find(bgp, &ip);
-			if ((!nhe) ||
-			    (!CHECK_FLAG(nhe->flags,
-					 PER_SRC_NEXTHOP_GROUP_VALID)))
-				return false;
-
+		if (is_soo_route) {
+			*nhg_id = nhe->nhg_id;
+			return true;
+		} else {
 			dest_he = bgp_dest_soo_find(nhe, &dest->p);
 			if (!dest_he)
 				return false;
@@ -305,6 +309,7 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 
 			*nhg_id = nhe->nhg_id;
 			return true;
+
 		}
 	}
 
@@ -582,11 +587,13 @@ void bgp_dest_soo_init(struct bgp_per_src_nhg_hash_entry *nhe)
 {
 	char buf[INET6_ADDRSTRLEN];
 
+	ipaddr2str(&nhe->ip, buf, sizeof(buf));
+
 	// TODO: enable per src NHG debug
 	// if (BGP_DEBUG(,))
 	zlog_debug("bgp vrf %s per source nhg %s dest soo hash init",
 		   nhe->bgp->name_pretty,
-		   ipaddr2str(&nhe->ip, buf, sizeof(buf)));
+		   buf);
 	nhe->dest_with_soo =
 		hash_create(bgp_dest_soo_hash_keymake, bgp_dest_soo_cmp,
 			    "BGP Dest SOO hash table");
@@ -850,22 +857,59 @@ static bool is_soo_rt_pi_subset_of_all_rts_with_soo_pi(
 void bgp_soo_route_select_nh_eval(struct thread *thread)
 {
 	struct bgp_per_src_nhg_hash_entry *nhe;
+	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
+	struct bgp_dest *dest;
+	struct bgp_path_info *pi;
 
 	nhe = THREAD_ARG(thread);
 
 	THREAD_OFF(nhe->t_select_nh_eval);
+
 	if (nhe->refcnt) {
-		bgp_per_src_nhg_add_send(nhe);
 		if (CHECK_FLAG(nhe->flags,
 			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
 			bgp_per_src_nhg_add_send(nhe);
 	} else {
-		bgp_per_src_nhg_del_send(nhe);
 		if (CHECK_FLAG(nhe->flags,
 			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
 			bgp_per_src_nhg_del_send(nhe);
 		bgp_per_src_nhg_del(nhe);
 	}
+
+	//check for expansion case and then install the soo route with soo NHGID if it satisfies
+	dest = nhe->dest;
+	for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
+		    (pi->type == ZEBRA_ROUTE_BGP &&
+		     pi->sub_type == BGP_ROUTE_NORMAL)) {
+			bgp_zebra_route_install(dest, pi, nhe->bgp, true,
+					NULL, false);
+
+		}
+	}
+
+	// Walk all the 'routes with SoO' and move from zebra nhid to soo nhid
+	frr_each (bgp_dest_soo_qlist, &nhe->dest_soo_list,
+		  bgp_dest_soo_entry) {
+		dest = bgp_dest_soo_entry->dest;
+
+		/*move dest soo to soo NHIG if its superset of soo NHG*/
+		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
+			    (pi->type == ZEBRA_ROUTE_BGP &&
+			     pi->sub_type == BGP_ROUTE_NORMAL)) {
+				//call the below install  code if decide to change nh-id of dest
+				if(is_soo_rt_pi_subset_of_rt_with_soo_pi(bgp_dest_soo_entry)) {
+					bgp_zebra_route_install(dest, pi, nhe->bgp, true,
+							NULL, false);
+				}
+
+			}
+
+		}
+
+	}
+
 }
 
 
@@ -876,24 +920,37 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
 	struct bgp_dest_soo_hash_entry *dest_he;
 	struct bgp_per_src_nhg_hash_entry *nhe;
 	struct ipaddr ip;
+	char buf[INET6_ADDRSTRLEN];
+	char pfxprint[PREFIX2STR_BUFFER];
+
+	prefix2str(&dest->p, pfxprint, sizeof(pfxprint));
 
 	memset(&ip, 0, sizeof(ip));
 	SET_IPADDR_V4(&ip);
 	memcpy(&ip.ipaddr_v4, ipaddr, sizeof(ip.ipaddr_v4));
-
+	ipaddr2str(&ip, buf, sizeof(buf));
 
 	nhe = bgp_per_src_nhg_find(bgp, &ip);
 	if (!nhe) {
-		// TODO, check with Donald, handling in absence of nhe
-		return;
+		if (is_add)
+			nhe = bgp_per_src_nhg_add(bgp, &ip);
+		else {
+			//if (BGP_DEBUG())
+			zlog_debug("bgp vrf %s per src nhg not found %s dest soo %s del",
+					bgp->name_pretty, buf, pfxprint);
+			return;
+		}
 	}
 
 	dest_he = bgp_dest_soo_find(nhe, &dest->p);
 	if (!dest_he) {
 		if (is_add)
 			dest_he = bgp_dest_soo_add(nhe, dest);
-		else
+		else {
+			zlog_debug("bgp vrf %s per src nhg %s dest soo %s not found for del oper",
+				bgp->name_pretty, buf, pfxprint);
 			return;
+		}
 	}
 
 	if (is_add) {
@@ -925,9 +982,10 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, struct bgp_dest *dest,
 
 	nhe = bgp_per_src_nhg_find(bgp, &ip);
 	if (!nhe) {
-		if (is_add)
+		if (is_add) {
 			nhe = bgp_per_src_nhg_add(bgp, &ip);
-		else
+			nhe->dest = dest;
+		} else
 			return;
 	} else {
 		bgp_per_src_nhg_update(nhe);
