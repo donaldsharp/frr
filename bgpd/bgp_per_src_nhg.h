@@ -23,6 +23,8 @@
 #ifndef _BGP_PER_SRC_NHG_H
 #define _BGP_PER_SRC_NHG_H
 
+// TODO, karthik to give valid range
+#define IS_VALID_SOO_NHGID(nhg_id) (nhg_id != 0)
 
 PREDECL_RBTREE_UNIQ(bgp_nhg_nexthop_cache);
 
@@ -47,11 +49,13 @@ DECLARE_RBTREE_UNIQ(bgp_nhg_nexthop_cache, struct bgp_nhg_nexthop_cache, entry,
 
 PREDECL_DLIST(bgp_dest_soo_qlist);
 
+PREDECL_DLIST(bgp_dest_soo_use_soo_nhgid_qlist);
 /*
  * Hashtables containing nhg entries is in `bgp_vrf`.
  */
 struct bgp_dest_soo_hash_entry {
 	struct bgp_dest_soo_qlist_item item;
+	struct bgp_dest_soo_use_soo_nhgid_qlist_item item1;
 	struct bgp *bgp;
 	struct bgp_per_src_nhg_hash_entry *nhe;
 
@@ -65,9 +69,15 @@ struct bgp_dest_soo_hash_entry {
 
 	//TODO, need to store the bitmaps of NH for soo
 	bitfield_t bgp_pi_bitmap;
+
+	uint32_t flags;
+#define DEST_PRESENT_IN_NHGID_USE_LIST (1 << 0)
 };
 
 DECLARE_DLIST(bgp_dest_soo_qlist, struct bgp_dest_soo_hash_entry, item);
+
+DECLARE_DLIST(bgp_dest_soo_use_soo_nhgid_qlist, struct bgp_dest_soo_hash_entry,
+	      item1);
 
 /*
  * Hashtables containing nhg entries is in `bgp_vrf`.
@@ -93,14 +103,17 @@ struct bgp_per_src_nhg_hash_entry {
 	/*linked list of dest_soo for easier walkthrough*/
 	struct bgp_dest_soo_qlist_head dest_soo_list;
 
+	struct bgp_dest_soo_use_soo_nhgid_qlist_head dest_soo_use_nhid_list;
 	//TODO, need to store the bitmaps of NH for soo
 	bitfield_t bgp_soo_route_pi_bitmap;
+	bitfield_t bgp_selected_soo_route_pi_bitmap;
 
 	uint32_t refcnt;
 
+	bool soo_timer_running;
+
 	uint32_t flags;
 
-	bool soo_timer_running;
 /*
  * Is this nexthop group valid, ie all nexthops are fully resolved.
  * What is fully resolved?  It's a nexthop that is either self contained
@@ -126,6 +139,7 @@ struct bgp_per_src_nhg_hash_entry {
 	/*temp timer, will be removed after timer wheel is ut*/
 	struct event *t_select_nh_eval;
 #define PER_SRC_NHG_UPDATE_TIMER 200
+#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL (1 << 4)
 };
 
 #define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS 10
@@ -141,4 +155,7 @@ void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi,
 				bool is_add);
 bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 			       struct bgp_path_info *pi, uint32_t *nhg_id);
+void bgp_process_route_install_result_for_soo(struct bgp *bgp,
+					      struct bgp_dest *dest,
+					      struct bgp_path_info *pi);
 #endif /* _BGP_PER_SRC_NHG_H */
