@@ -396,9 +396,10 @@ static void bgp_per_src_nhg_add_send(struct bgp_per_src_nhg_hash_entry *nhe)
 		return;
 
 	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-	// if(debug)
-	zlog_debug("bgp vrf %s per src nhg %s id %d add to zebra",
-		   nhe->bgp->name_pretty, buf, nhe->nhg_id);
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg %s id %d add to zebra",
+			   nhe->bgp->name_pretty, buf, nhe->nhg_id);
 
 	/* only the gateway ip changes for each NH. rest of the params
 	 * are constant
@@ -447,9 +448,9 @@ static void bgp_per_src_nhg_del_send(struct bgp_per_src_nhg_hash_entry *nhe)
 		return;
 
 	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-	// if ()
-	zlog_debug("bgp vrf %s per src nhg %s id %d del to zebra",
-		   nhe->bgp->name_pretty, buf, nhe->nhg_id);
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg %s id %d del to zebra",
+			   nhe->bgp->name_pretty, buf, nhe->nhg_id);
 
 	zclient_nhg_send(zclient, ZEBRA_NHG_DEL, &api_nhg);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
@@ -510,21 +511,26 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 		bnc->nh.weight = nh_weight;
 		SET_FLAG(bnc->nh.flags, BGP_NEXTHOP_VALID);
 		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
-		zlog_debug(
-			"Allocated bnc nhg %pFX(%d)(%s) peer %p refcnt:%d type::%d afi:%d",
-			&bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty,
-			pi->peer, nhe->refcnt, bnc->nh.type, afi);
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"Allocated bnc nhg %pFX(%d)(%s) peer %p refcnt:%d type::%d afi:%d",
+				&bnc->prefix, bnc->ifindex,
+				nhe->bgp->name_pretty, pi->peer, nhe->refcnt,
+				bnc->nh.type, afi);
 	} else {
-		zlog_debug(
-			"Found existing bnc nhg %pFX(%d)(%s) peer %p refcnt:%d",
-			&bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty,
-			pi->peer, nhe->refcnt);
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"Found existing bnc nhg %pFX(%d)(%s) peer %p refcnt:%d",
+				&bnc->prefix, bnc->ifindex,
+				nhe->bgp->name_pretty, pi->peer, nhe->refcnt);
 	}
 
 	bnc->refcnt++;
-	zlog_debug("Link pi to  bnc nhg %pFX(%d)(%s) peer %p refcnt(%d)",
-		   &bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty, pi->peer,
-		   bnc->refcnt);
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug(
+			"Link pi to  bnc nhg %pFX(%d)(%s) peer %p refcnt(%d)",
+			&bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty,
+			pi->peer, bnc->refcnt);
 	return bnc;
 }
 
@@ -542,15 +548,17 @@ void bgp_per_src_nhg_nc_del(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 	bnc = bnc_nhg_find(&nhe->nhg_nexthop_cache_table, &p, ifindex);
 	if (!bnc)
 		return;
-
-	zlog_debug("Unlink pi bnc nhg %pFX(%d)(%s) peer %p refcnt(%d)",
-		   &bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty, pi->peer,
-		   bnc->refcnt);
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("Unlink pi bnc nhg %pFX(%d)(%s) peer %p refcnt(%d)",
+			   &bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty,
+			   pi->peer, bnc->refcnt);
 	bnc->refcnt--;
 	if (!bnc->refcnt) {
 		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
-		zlog_debug("Free bnc nhg %pFX(%d)(%s) peer %p", &bnc->prefix,
-			   bnc->ifindex, nhe->bgp->name_pretty, pi->peer);
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug("Free bnc nhg %pFX(%d)(%s) peer %p",
+				   &bnc->prefix, bnc->ifindex,
+				   nhe->bgp->name_pretty, pi->peer);
 		bnc_nhg_free(bnc);
 	}
 }
@@ -606,9 +614,10 @@ bgp_dest_soo_add(struct bgp_per_src_nhg_hash_entry *nhe, struct bgp_dest *dest)
 	// TODO Add Processing pending
 
 	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-	//if (BGP_DEBUG())
-	zlog_debug("bgp vrf %s per src nhg %s dest soo %s add",
-		   nhe->bgp->name_pretty, buf, pfxprint);
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg %s dest soo %s add",
+			   nhe->bgp->name_pretty, buf, pfxprint);
 
 	return dest_he;
 }
@@ -618,18 +627,18 @@ static void bgp_dest_soo_del(struct bgp_dest_soo_hash_entry *dest_he)
 {
 	struct bgp_per_src_nhg_hash_entry *nhe = dest_he->nhe;
 	struct bgp_dest_soo_hash_entry *tmp_he;
-	char buf[INET6_ADDRSTRLEN];
-	char pfxprint[PREFIX2STR_BUFFER];
-
-	prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
-
 
 	// TODO: Del Processing pending
 
-	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-	//if (BGP_DEBUG())
-	zlog_debug("bgp vrf %s per src nhg %s dest soo %s del",
-		   nhe->bgp->name_pretty, buf, pfxprint);
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+		char buf[INET6_ADDRSTRLEN];
+		char pfxprint[PREFIX2STR_BUFFER];
+
+		ipaddr2str(&nhe->ip, buf, sizeof(buf));
+		prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
+		zlog_debug("bgp vrf %s per src nhg %s dest soo %s del",
+			   nhe->bgp->name_pretty, buf, pfxprint);
+	}
 
 	bgp_dest_soo_qlist_del(&nhe->dest_soo_list, dest_he);
 	bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
@@ -665,11 +674,9 @@ void bgp_dest_soo_init(struct bgp_per_src_nhg_hash_entry *nhe)
 
 	ipaddr2str(&nhe->ip, buf, sizeof(buf));
 
-	// TODO: enable per src NHG debug
-	// if (BGP_DEBUG(,))
-	zlog_debug("bgp vrf %s per source nhg %s dest soo hash init",
-		   nhe->bgp->name_pretty,
-		   buf);
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per source nhg %s dest soo hash init",
+			   nhe->bgp->name_pretty, buf);
 	nhe->dest_with_soo =
 		hash_create(bgp_dest_soo_hash_keymake, bgp_dest_soo_cmp,
 			    "BGP Dest SOO hash table");
@@ -695,9 +702,10 @@ static void bgp_dest_soo_flush_entry(struct bgp_dest_soo_hash_entry *dest_he)
 	// TODO: flush processing pending
 
 	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-	//if (BGP_DEBUG(,))
-	zlog_debug("bgp vrf %s per src nhg %s dest soo %s flush",
-		   nhe->bgp->name_pretty, buf, pfxprint);
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg %s dest soo %s flush",
+			   nhe->bgp->name_pretty, buf, pfxprint);
 }
 
 static void bgp_dest_soo_flush_cb(struct hash_bucket *bucket, void *ctxt)
@@ -713,9 +721,10 @@ void bgp_dest_soo_finish(struct bgp_per_src_nhg_hash_entry *nhe)
 	char buf[INET6_ADDRSTRLEN];
 
 	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-	//if (BGP_DEBUG(,))
-	zlog_debug("bgp vrf %s per source nhg %s dest soo hash finish",
-		   nhe->bgp->name_pretty, buf);
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per source nhg %s dest soo hash finish",
+			   nhe->bgp->name_pretty, buf);
 	hash_iterate(
 		nhe->dest_with_soo,
 		(void (*)(struct hash_bucket *, void *))bgp_dest_soo_flush_cb,
@@ -777,8 +786,10 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 	bgp_nhg_nexthop_cache_init(&nhe->nhg_nexthop_cache_table);
 
 	ipaddr2str(ip, buf, sizeof(buf));
-	//if (BGP_DEBUG())
-	zlog_debug("bgp vrf %s per src nhg %s add", bgp->name_pretty, buf);
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg %s add", bgp->name_pretty,
+			   buf);
 
 	return nhe;
 }
@@ -802,8 +813,10 @@ static void bgp_per_src_nhg_del(struct bgp_per_src_nhg_hash_entry *nhe)
 	bgp_nhg_nexthop_cache_reset(&nhe->nhg_nexthop_cache_table);
 
 	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-	//if (BGP_DEBUG())
-	zlog_debug("bgp vrf %s per src nhg %s del", nhe->bgp->name_pretty, buf);
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg %s del",
+			   nhe->bgp->name_pretty, buf);
 
 	bgp_dest_soo_qlist_fini(&nhe->dest_soo_list);
 	bgp_dest_soo_use_soo_nhgid_qlist_fini(&nhe->dest_soo_use_nhid_list);
@@ -840,9 +853,9 @@ static bool bgp_per_src_nhg_cmp(const void *p1, const void *p2)
 
 void bgp_per_src_nhg_init(struct bgp *bgp)
 {
-	// TODO, enable per src NHG debug
-	// if (BGP_DEBUG(,))
-	// zlog_debug("bgp vrf %s per source nhg hash init", bgp->name_pretty);
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per source nhg hash init",
+			   bgp->name_pretty);
 	bgp->per_src_nhg_table =
 		hash_create(bgp_per_src_nhg_hash_keymake, bgp_per_src_nhg_cmp,
 			    "BGP Per Source NHG hash table");
@@ -868,9 +881,10 @@ static void bgp_per_src_nhg_flush_entry(struct bgp_per_src_nhg_hash_entry *nhe)
 	bgp_stop_soo_timer(nhe->bgp, nhe);
 
 	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-	//if (BGP_DEBUG(,))
-	zlog_debug("bgp vrf %s per src nhg %s flush", nhe->bgp->name_pretty,
-		   buf);
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg %s flush",
+			   nhe->bgp->name_pretty, buf);
 }
 
 static void bgp_per_src_nhg_flush_cb(struct hash_bucket *bucket, void *ctxt)
@@ -883,14 +897,16 @@ static void bgp_per_src_nhg_flush_cb(struct hash_bucket *bucket, void *ctxt)
 
 void bgp_per_src_nhg_finish(struct bgp *bgp)
 {
-	//if (BGP_DEBUG(,))
-	/*zlog_debug("bgp vrf %s per src nhg finish", bgp->name_pretty);
+	/*
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg finish", bgp->name_pretty);
 	hash_iterate(bgp->per_src_nhg_table,
 		     (void (*)(struct hash_bucket *,
 			       void *))bgp_per_src_nhg_flush_cb,
 		     NULL);
 	hash_clean(bgp->per_src_nhg_table,
-		   (void (*)(void *))bgp_per_src_nhe_free);*/
+		   (void (*)(void *))bgp_per_src_nhe_free);
+	*/
 	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
 }
 
@@ -1048,8 +1064,9 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
 		if (is_add)
 			nhe = bgp_per_src_nhg_add(bgp, &ip);
 		else {
-			//if (BGP_DEBUG())
-			zlog_debug("bgp vrf %s per src nhg not found %s dest soo %s del",
+			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+				zlog_debug(
+					"bgp vrf %s per src nhg not found %s dest soo %s del",
 					bgp->name_pretty, buf, pfxprint);
 			return;
 		}
@@ -1060,8 +1077,10 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
 		if (is_add)
 			dest_he = bgp_dest_soo_add(nhe, dest);
 		else {
-			zlog_debug("bgp vrf %s per src nhg %s dest soo %s not found for del oper",
-				bgp->name_pretty, buf, pfxprint);
+			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+				zlog_debug(
+					"bgp vrf %s per src nhg %s dest soo %s not found for del oper",
+					bgp->name_pretty, buf, pfxprint);
 			return;
 		}
 	}
