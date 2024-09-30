@@ -62,6 +62,7 @@ unsigned long conf_bgp_debug_bestpath;
 unsigned long conf_bgp_debug_zebra;
 unsigned long conf_bgp_debug_allow_martians;
 unsigned long conf_bgp_debug_nht;
+unsigned long conf_bgp_debug_per_src_nhg;
 unsigned long conf_bgp_debug_update_groups;
 unsigned long conf_bgp_debug_vpn;
 unsigned long conf_bgp_debug_flowspec;
@@ -82,6 +83,7 @@ unsigned long term_bgp_debug_bestpath;
 unsigned long term_bgp_debug_zebra;
 unsigned long term_bgp_debug_allow_martians;
 unsigned long term_bgp_debug_nht;
+unsigned long term_bgp_debug_per_src_nhg;
 unsigned long term_bgp_debug_update_groups;
 unsigned long term_bgp_debug_vpn;
 unsigned long term_bgp_debug_flowspec;
@@ -911,6 +913,32 @@ DEFUN (no_debug_bgp_nht,
 	return CMD_SUCCESS;
 }
 
+/* debug bgp per source nexthop group */
+DEFUN(debug_bgp_per_src_nhg, debug_bgp_per_src_nhg_cmd,
+      "debug bgp per-source-nhg",
+      DEBUG_STR BGP_STR "BGP per source nexthop group events\n")
+{
+	if (vty->node == CONFIG_NODE)
+		DEBUG_ON(per_src_nhg, PER_SRC_NHG);
+	else {
+		TERM_DEBUG_ON(per_src_nhg, PER_SRC_NHG);
+		vty_out(vty, "BGP per source nexthop group debugging is on\n");
+	}
+	return CMD_SUCCESS;
+}
+
+DEFUN(no_debug_bgp_per_src_nhg, no_debug_bgp_per_src_nhg_cmd,
+      "no debug bgp per-src-nhg",
+      NO_STR DEBUG_STR BGP_STR "BGP per source nexthop group events\n")
+{
+	if (vty->node == CONFIG_NODE)
+		DEBUG_OFF(per_src_nhg, PER_SRC_NHG);
+	else {
+		TERM_DEBUG_OFF(per_src_nhg, PER_SRC_NHG);
+		vty_out(vty, "BGP per source nexthop group debugging is off\n");
+	}
+	return CMD_SUCCESS;
+}
 /* debug bgp keepalives */
 DEFUN (debug_bgp_keepalive,
        debug_bgp_keepalive_cmd,
@@ -2143,6 +2171,7 @@ DEFUN (no_debug_bgp,
 	TERM_DEBUG_OFF(zebra, ZEBRA);
 	TERM_DEBUG_OFF(allow_martians, ALLOW_MARTIANS);
 	TERM_DEBUG_OFF(nht, NHT);
+	TERM_DEBUG_OFF(per_src_nhg, PER_SRC_NHG);
 	TERM_DEBUG_OFF(vpn, VPN_LEAK_FROM_VRF);
 	TERM_DEBUG_OFF(vpn, VPN_LEAK_TO_VRF);
 	TERM_DEBUG_OFF(vpn, VPN_LEAK_RMAP_EVENT);
@@ -2191,6 +2220,10 @@ DEFUN_NOSH (show_debugging_bgp,
 
 	if (BGP_DEBUG(nht, NHT))
 		vty_out(vty, "  BGP next-hop tracking debugging is on\n");
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		vty_out(vty,
+			"  BGP per source nexthop group debugging is on\n");
 
 	if (BGP_DEBUG(update_groups, UPDATE_GROUPS))
 		vty_out(vty, "  BGP update-groups debugging is on\n");
@@ -2282,6 +2315,11 @@ static int bgp_config_write_debug(struct vty *vty)
 
 	if (CONF_BGP_DEBUG(nht, NHT)) {
 		vty_out(vty, "debug bgp nht\n");
+		write++;
+	}
+
+	if (CONF_BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+		vty_out(vty, "debug bgp per-source-nhg\n");
 		write++;
 	}
 
@@ -2402,6 +2440,8 @@ void bgp_debug_init(void)
 	install_element(CONFIG_NODE, &debug_bgp_neighbor_events_cmd);
 	install_element(ENABLE_NODE, &debug_bgp_nht_cmd);
 	install_element(CONFIG_NODE, &debug_bgp_nht_cmd);
+	install_element(ENABLE_NODE, &debug_bgp_per_src_nhg_cmd);
+	install_element(CONFIG_NODE, &debug_bgp_per_src_nhg_cmd);
 	install_element(ENABLE_NODE, &debug_bgp_keepalive_cmd);
 	install_element(CONFIG_NODE, &debug_bgp_keepalive_cmd);
 	install_element(ENABLE_NODE, &debug_bgp_update_cmd);
@@ -2465,6 +2505,8 @@ void bgp_debug_init(void)
 	install_element(CONFIG_NODE, &no_debug_bgp_neighbor_events_cmd);
 	install_element(ENABLE_NODE, &no_debug_bgp_nht_cmd);
 	install_element(CONFIG_NODE, &no_debug_bgp_nht_cmd);
+	install_element(ENABLE_NODE, &no_debug_bgp_per_src_nhg_cmd);
+	install_element(CONFIG_NODE, &no_debug_bgp_per_src_nhg_cmd);
 	install_element(ENABLE_NODE, &no_debug_bgp_keepalive_cmd);
 	install_element(CONFIG_NODE, &no_debug_bgp_keepalive_cmd);
 	install_element(ENABLE_NODE, &no_debug_bgp_update_cmd);
