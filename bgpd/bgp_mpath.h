@@ -1,15 +1,16 @@
 /*
  * BGP Multipath
  * Copyright (C) 2010 Google Inc.
+ *               2024 Nvidia Corporation
  *
- * This file is part of Quagga
+ * This file is part of FRR
  *
- * Quagga is free software; you can redistribute it and/or modify it
+ * FRR is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; either version 2, or (at your option) any
  * later version.
  *
- * Quagga is distributed in the hope that it will be useful, but
+ * FRR is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
@@ -26,12 +27,6 @@
  * multipath selections, lazily allocated to save memory
  */
 struct bgp_path_info_mpath {
-	/* Points to the first multipath (on bestpath) or the next multipath */
-	struct bgp_path_info_mpath *mp_next;
-
-	/* Points to the previous multipath or NULL on bestpath */
-	struct bgp_path_info_mpath *mp_prev;
-
 	/* Points to bgp_path_info associated with this multipath info */
 	struct bgp_path_info *mp_info;
 
@@ -65,14 +60,11 @@ extern int bgp_maximum_paths_unset(struct bgp *bgp, afi_t afi, safi_t safi,
  */
 extern int bgp_path_info_nexthop_cmp(struct bgp_path_info *bpi1,
 				     struct bgp_path_info *bpi2);
-extern void bgp_mp_list_init(struct list *mp_list);
-extern void bgp_mp_list_clear(struct list *mp_list);
-extern void bgp_mp_list_add(struct list *mp_list, struct bgp_path_info *mpinfo);
 extern void bgp_mp_dmed_deselect(struct bgp_path_info *dmed_best);
 extern void bgp_path_info_mpath_update(struct bgp *bgp, struct bgp_dest *dest,
 				       struct bgp_path_info *new_best,
 				       struct bgp_path_info *old_best,
-				       struct list *mp_list,
+				       uint32_t num_candidates,
 				       struct bgp_maxpaths_cfg *mpath_cfg);
 extern void
 bgp_path_info_mpath_aggregate_update(struct bgp_path_info *new_best,
