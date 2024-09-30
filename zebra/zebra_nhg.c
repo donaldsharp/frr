@@ -856,7 +856,6 @@ static bool zebra_nhe_find(struct nhg_hash_entry **nhe, /* return value */
 done:
 	/* Reset time since last update */
 	(*nhe)->uptime = monotime_nano();
-
 	return created;
 }
 
@@ -976,6 +975,11 @@ static int nhg_ctx_get_afi(const struct nhg_ctx *ctx)
 	return ctx->afi;
 }
 
+static bool nhg_ctx_get_startup(const struct nhg_ctx *ctx)
+{
+	return ctx->startup;
+}
+
 static struct nexthop *nhg_ctx_get_nh(struct nhg_ctx *ctx)
 {
 	return &ctx->u.nh;
@@ -1030,7 +1034,8 @@ done:
 static struct nhg_ctx *nhg_ctx_init(uint32_t id, struct nexthop *nh,
 				    struct nh_grp *grp, vrf_id_t vrf_id,
 				    afi_t afi, int type, uint8_t count,
-				    struct nhg_resilience *resilience)
+				    struct nhg_resilience *resilience,
+				    bool startup)
 {
 	struct nhg_ctx *ctx = NULL;
 
@@ -1041,6 +1046,7 @@ static struct nhg_ctx *nhg_ctx_init(uint32_t id, struct nexthop *nh,
 	ctx->afi = afi;
 	ctx->type = type;
 	ctx->count = count;
+	ctx->startup = startup;
 
 	if (resilience)
 		ctx->resilience = *resilience;
@@ -1177,6 +1183,7 @@ static int nhg_ctx_process_new(struct nhg_ctx *ctx)
 	vrf_id_t vrf_id = nhg_ctx_get_vrf_id(ctx);
 	int type = nhg_ctx_get_type(ctx);
 	afi_t afi = nhg_ctx_get_afi(ctx);
+	bool startup = nhg_ctx_get_startup(ctx);
 
 	lookup = zebra_nhg_lookup_id(id);
 
@@ -1234,6 +1241,18 @@ static int nhg_ctx_process_new(struct nhg_ctx *ctx)
 	SET_FLAG(nhe->flags, NEXTHOP_GROUP_VALID);
 	SET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
 
+	/*
+	 * On startup Zebra is creating the nexthop group cache entry
+	 * after the router has it's startup time set.  This is because
+	 * the process of grabbing routes and nexthops is now *after*
+	 * the dataplane starts up, which is after the routers startup
+	 * time is set.  So let's just cheat a tiny bit on the time
+	 * and set the nexthop group hash entry startup time to be
+	 * slightly before the zrouter.startup_time.  Then graceful
+	 * restart sweeping will work properly for these nexthop entries
+	 */
+	if (startup)
+		nhe->uptime = zrouter.startup_time - 1;
 	return 0;
 }
 
@@ -1342,7 +1361,7 @@ int zebra_nhg_kernel_find(uint32_t id, struct nexthop *nh, struct nh_grp *grp,
 		 */
 		id_counter = id;
 
-	ctx = nhg_ctx_init(id, nh, grp, vrf_id, afi, type, count, nhgr);
+	ctx = nhg_ctx_init(id, nh, grp, vrf_id, afi, type, count, nhgr, startup);
 	nhg_ctx_set_op(ctx, NHG_CTX_OP_NEW);
 
 	/* Under statup conditions, we need to handle them immediately
@@ -1365,7 +1384,7 @@ int zebra_nhg_kernel_del(uint32_t id, vrf_id_t vrf_id)
 {
 	struct nhg_ctx *ctx = NULL;
 
-	ctx = nhg_ctx_init(id, NULL, NULL, vrf_id, 0, 0, 0, NULL);
+	ctx = nhg_ctx_init(id, NULL, NULL, vrf_id, 0, 0, 0, NULL, false);
 
 	nhg_ctx_set_op(ctx, NHG_CTX_OP_DEL);
 
