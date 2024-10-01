@@ -3915,18 +3915,9 @@ DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
 	if (no)
 		UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			   BGP_FLAG_ADVERTISE_ORIGIN);
-		/*
-			TODO: Advertise routes in this address-family without
-			SOO ext community where value of SOO is router-id
-		*/
 	else
 		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			 BGP_FLAG_ADVERTISE_ORIGIN);
-		/*
-			TODO: Advertise routes in this address-family with
-			SOO ext community where value of SOO is router-id
-		*/
-
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, tmp_peer))
 		bgp_announce_route(tmp_peer, afi, safi, true);
 
@@ -3946,6 +3937,14 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 	else
 		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			 BGP_FLAG_NHG_PER_ORIGIN);
+
+	/* TODO: This is WRONG: Passing BGP_CLEAR_SOFT_NONE will flap the
+	   sessions We should pass BGP_CLEAR_SOFT_IN. Debug why this is not
+	   working
+	 */
+	bgp_clear_vty(vty, bgp->name, afi, safi, clear_all, BGP_CLEAR_SOFT_NONE,
+		      NULL);
+
 	return CMD_SUCCESS;
 }
 
