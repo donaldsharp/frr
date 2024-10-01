@@ -108,6 +108,12 @@ void bgp_per_src_nhg_nc_del(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 static bool is_soo_rt_pi_subset_of_rt_with_selected_soo_pi(
 	struct bgp_dest_soo_hash_entry *bgp_dest_with_soo_entry);
 
+static void bgp_per_src_nhg_add_send(struct bgp_per_src_nhg_hash_entry *nhe);
+static void bgp_per_src_nhg_del_send(struct bgp_per_src_nhg_hash_entry *nhe);
+static void bgp_soo_zebra_route_install(struct bgp_per_src_nhg_hash_entry *nhe,
+					struct bgp_dest *dest);
+static void bgp_per_src_nhg_del(struct bgp_per_src_nhg_hash_entry *nhe);
+
 static unsigned int bgp_per_src_nhg_slot_key(const void *item)
 {
 	const struct bgp_per_src_nhg_hash_entry *nhe = item;
@@ -132,6 +138,11 @@ static void bgp_start_soo_timer(struct bgp *bgp,
 	if (!soo_entry->soo_timer_running) {
 		// if soo timer is not already running, insert it in to the
 		// timer wheel
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"bgp vrf %s per src nhg soo %pIA add to timer wheel",
+				bgp->name_pretty, &soo_entry->ip);
+
 		wheel_add_item(bgp->per_src_nhg_soo_timer_wheel, soo_entry);
 		soo_entry->soo_timer_running = true;
 	}
@@ -146,6 +157,10 @@ static void bgp_stop_soo_timer(struct bgp *bgp,
 	}
 
 	if (soo_entry->soo_timer_running) {
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"bgp vrf %s per src nhg soo %pIA remove from timer wheel",
+				bgp->name_pretty, &soo_entry->ip);
 		wheel_remove_item(bgp->per_src_nhg_soo_timer_wheel, soo_entry);
 		soo_entry->soo_timer_running = false;
 	}
@@ -154,7 +169,10 @@ static void bgp_stop_soo_timer(struct bgp *bgp,
 // SOO timer expiry
 static void bgp_per_src_nhg_timer_slot_run(void *item)
 {
-	struct bgp_per_src_nhg_hash_entry *soo_entry = item;
+	struct bgp_per_src_nhg_hash_entry *nhe = item;
+	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
+	struct bgp_dest *dest;
+	struct bgp_path_info *pi;
 	/* TODO
 	if SOO selected NHs match installed SOO NHG AND all routes w/ SOO point
 	to SOO NHG done
@@ -171,13 +189,85 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 	routes that already point to SOO_NHG expand the SOO_NHG done
 	*/
 
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg soo %pIA timer slot run",
+			   nhe->bgp->name_pretty, &nhe->ip);
+
 	// remove the timer from the timer wheel since processing is done
-	bgp_stop_soo_timer(soo_entry->bgp, soo_entry);
+	bgp_stop_soo_timer(nhe->bgp, nhe);
+
+	if (is_soo_rt_pi_subset_of_all_rts_with_soo_pi(nhe)) {
+		// program the running ecmp and do NHG replace
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"bgp vrf %s per src nhg soo route %pIA pi is subset of all route with soo using soo nhg",
+				nhe->bgp->name_pretty, &nhe->ip);
+		if (nhe->refcnt) {
+			if (CHECK_FLAG(nhe->flags,
+				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+				bgp_per_src_nhg_add_send(nhe);
+		} else {
+			if (CHECK_FLAG(nhe->flags,
+				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+				bgp_per_src_nhg_del_send(nhe);
+			bgp_per_src_nhg_del(nhe);
+		}
+	}
+
+	dest = nhe->dest;
+	// 'SOO route' dest
+	if (!CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL)) {
+		bgp_soo_zebra_route_install(nhe, dest);
+		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL);
+	}
+
+	// check for expansion case and then install the soo route with soo
+	// NHGID if it satisfies
+
+	// Walk all the 'routes with SoO' and move from zebra nhid to soo nhid
+	frr_each (bgp_dest_soo_qlist, &nhe->dest_soo_list, bgp_dest_soo_entry) {
+		dest = bgp_dest_soo_entry->dest;
+
+		/*move dest soo to soo NHIG if its superset of soo NHG*/
+		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
+			    (pi->type == ZEBRA_ROUTE_BGP &&
+			     pi->sub_type == BGP_ROUTE_NORMAL)) {
+				// call the below install  code if decide to
+				// change nh-id of dest
+				if (is_soo_rt_pi_subset_of_rt_with_soo_pi(
+					    bgp_dest_soo_entry)) {
+					if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+						zlog_debug(
+							"bgp vrf %s per src nhg soo route %pIA pi is "
+							"subset of route with soo %s "
+							"(program it in zebra to use soo nhg %u)",
+							nhe->bgp->name_pretty,
+							&nhe->ip,
+							bgp_dest_get_prefix_str(
+								dest),
+							nhe->nhg_id);
+
+					bgp_zebra_route_install(dest, pi,
+								nhe->bgp, true,
+								NULL, false);
+				}
+			}
+		}
+	}
 }
 
 static void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
 {
 	if (!bgp->per_src_nhg_soo_timer_wheel_created) {
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"bgp vrf %s per src nhg soo timer wheel init total "
+				"period %u ms slots %u",
+				bgp->name_pretty,
+				BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD,
+				BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS);
+
 		bgp->per_src_nhg_soo_timer_wheel = wheel_init(
 				bm->master, BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD,
 				BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS,
@@ -191,6 +281,11 @@ static void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
 static void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp)
 {
 	if (bgp->per_src_nhg_soo_timer_wheel_created) {
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"bgp vrf %s per src nhg soo timer wheel delete",
+				bgp->name_pretty);
+
 		wheel_delete(bgp->per_src_nhg_soo_timer_wheel);
 		bgp->per_src_nhg_soo_timer_wheel_created = false;
 	}
@@ -762,41 +857,109 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 {
 	struct bgp_per_src_nhg_hash_entry tmp_nhe;
 	struct bgp_per_src_nhg_hash_entry *nhe = NULL;
-	char buf[INET6_ADDRSTRLEN];
 
 	memset(&tmp_nhe, 0, sizeof(tmp_nhe));
 	memcpy(&tmp_nhe.ip, ip, sizeof(struct ipaddr));
 	nhe = hash_get(bgp->per_src_nhg_table, &tmp_nhe, bgp_per_src_nhg_alloc);
 	nhe->bgp = bgp;
 
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg soo entry create: %pIA",
+			   bgp->name_pretty, &nhe->ip);
+
 	bgp_dest_soo_init(nhe);
 	bgp_dest_soo_qlist_init(&nhe->dest_soo_list);
 	bgp_dest_soo_use_soo_nhgid_qlist_init(&nhe->dest_soo_use_nhid_list);
+
 	bf_init(nhe->bgp_soo_route_pi_bitmap, BGP_PEER_INIT_BITMAP_SIZE);
 	bf_assign_zero_index(nhe->bgp_soo_route_pi_bitmap);
 	bf_init(nhe->bgp_selected_soo_route_pi_bitmap,
 		BGP_PEER_INIT_BITMAP_SIZE);
 	bf_assign_zero_index(nhe->bgp_selected_soo_route_pi_bitmap);
 
-	//TODO Add Processing pending
-	nhe->nhg_id = bgp_nhg_id_alloc(PER_SRC_NHG);
-	bgp_start_soo_timer(bgp, nhe);
-
 	// TODO, check with Donald if table needs to be per afi
 	bgp_nhg_nexthop_cache_init(&nhe->nhg_nexthop_cache_table);
 
-	ipaddr2str(ip, buf, sizeof(buf));
-
-	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+		char buf[INET6_ADDRSTRLEN];
+		ipaddr2str(ip, buf, sizeof(buf));
 		zlog_debug("bgp vrf %s per src nhg %s add", bgp->name_pretty,
 			   buf);
+	}
 
 	return nhe;
 }
 
 static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 {
-	bgp_start_soo_timer(nhe->bgp, nhe);
+	/*
+	bgp_selected_soo_route_pi_bitmap -> what is installed in the kernel
+	(old/existing)
+	bgp_soo_route_pi_bitmap 		 -> what is received from BGP
+	update (new)
+
+	We can have 4 cases between bgp_soo_route_pi_bitmap and
+	bgp_selected_soo_route_pi_bitmap
+	Case 1: bgp_soo_route_pi_bitmap and bgp_selected_soo_route_pi_bitmap are
+	'DISJOINT'
+	TODO: What to do?
+
+	Case 2: bgp_soo_route_pi_bitmap and bgp_selected_soo_route_pi_bitmap are
+	'OVERLAPPING'
+	TODO: What to do?
+
+	Case 3: bgp_soo_route_pi_bitmap is 'SUBSET' of
+	bgp_selected_soo_route_pi_bitmap
+		Case a:
+			ECMP Case (3).(a).(i): ECMP Shrink
+				Example 1: old = NH1 NH2 NH3
+							new = NH1 NH3
+		Case b: W-ECMP Case
+			(3).(b).(i): Same ECMP but weights increase or decrease
+				Example 1: old = NH1,255/NH2,85/NH3,127
+						   new = NH1,255/NH2,255/NH3,255
+				Example 2: old = NH1,255/NH2,255/NH3,255
+						   new = NH1,255/NH2,85/NH3,127
+			case (3).(b).(ii):ECMP Shrink with weights increase or decrease
+				Example 1: old = NH1,255/NH2,255/NH3,166
+						new = NH1,255/NH3,85
+				Example 2: old = NH1,255/NH2,255/NH3,166
+						new = NH1,255/NH3,255
+
+	Case 4: bgp_soo_route_pi_bitmap is 'SUPERSET' of
+	bgp_selected_soo_route_pi_bitmap
+	*/
+
+	// running is subset of installed - shrink case - immediate nhg replace
+	if (bf_is_subset(&nhe->bgp_soo_route_pi_bitmap,
+			 &nhe->bgp_selected_soo_route_pi_bitmap)) {
+		// Case 3: NHG replace can be done immediately without waiting
+		// for any timer
+		// TODO: Call code to do NHG replace
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"bgp vrf %s per src nhg soo route upd: %pIA NHG replace",
+				nhe->bgp->name_pretty, &nhe->ip);
+
+		if (nhe->refcnt) {
+			if (CHECK_FLAG(nhe->flags,
+				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+				bgp_per_src_nhg_add_send(nhe);
+		}
+	}
+
+	// installed is subset of running - expansion case - start timer
+	if (bf_is_subset(&nhe->bgp_selected_soo_route_pi_bitmap,
+			 &nhe->bgp_soo_route_pi_bitmap)) {
+		// Case 4: This is ECMP expansion case, this can be done after
+		// the soo timer expiry
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"bgp vrf %s per src nhg soo route upd: %pIA NHG expansion "
+				"(add to timer wheel if not done yet)",
+				nhe->bgp->name_pretty, &nhe->ip);
+		bgp_start_soo_timer(nhe->bgp, nhe);
+	}
 }
 
 /* Delete nexthop entry if there are no paths referencing it */
@@ -919,10 +1082,10 @@ static bool is_soo_rt_pi_subset_of_rt_with_selected_soo_pi(
 
 	bitfield_t rt_with_soo_pi_bitmap =
 		bgp_dest_with_soo_entry->bgp_pi_bitmap;
-	bitfield_t soo_rt_pi_bitmap =
+	bitfield_t soo_rt_selected_pi_bitmap =
 		bgp_dest_with_soo_entry->nhe->bgp_selected_soo_route_pi_bitmap;
 
-	return bf_is_subset(&soo_rt_pi_bitmap, &rt_with_soo_pi_bitmap);
+	return bf_is_subset(&soo_rt_selected_pi_bitmap, &rt_with_soo_pi_bitmap);
 }
 
 // Check if 'SoO route' pi(path info) bitmap is a subset of 'route with SoO'
@@ -955,7 +1118,8 @@ static bool is_soo_rt_pi_subset_of_all_rts_with_soo_pi(
 	bool is_subset_of_all_routes = true;
 
 	// Walk all the 'routes with SoO'
-	frr_each (bgp_dest_soo_qlist, &bgp_per_src_nhg_entry->dest_soo_list,
+	frr_each (bgp_dest_soo_use_soo_nhgid_qlist,
+		  &bgp_per_src_nhg_entry->dest_soo_use_nhid_list,
 		  bgp_dest_soo_entry) {
 		// Check if 'SoO route' pi bitmap a subset of 'route with SoO'
 		if (!is_soo_rt_pi_subset_of_rt_with_soo_pi(
@@ -976,6 +1140,15 @@ static void bgp_soo_zebra_route_install(struct bgp_per_src_nhg_hash_entry *nhe,
 		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
 		    (pi->type == ZEBRA_ROUTE_BGP &&
 		     pi->sub_type == BGP_ROUTE_NORMAL)) {
+			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+				zlog_debug(
+					"bgp vrf %s per src nhg soo route zebra install soo %pIA "
+					"nhg %d dest %s peer %pSU idx %d",
+					nhe->bgp->name_pretty, &nhe->ip,
+					nhe->nhg_id,
+					bgp_dest_get_prefix_str(dest),
+					&pi->peer->connection->su, pi->peer->bit_index);
+			}
 			bgp_zebra_route_install(dest, pi, nhe->bgp, true, NULL,
 						false);
 		}
@@ -988,57 +1161,57 @@ static void bgp_soo_zebra_route_install(struct bgp_per_src_nhg_hash_entry *nhe,
 /*temp code, will be deleted after timer wheel test*/
 void bgp_soo_route_select_nh_eval(struct event *event)
 {
-	struct bgp_per_src_nhg_hash_entry *nhe;
-	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
-	struct bgp_dest *dest;
-	struct bgp_path_info *pi;
+	// struct bgp_per_src_nhg_hash_entry *nhe;
+	// struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
+	// struct bgp_dest *dest;
+	// struct bgp_path_info *pi;
 
-	nhe = EVENT_ARG(event);
+	// nhe = THREAD_ARG(thread);
 
-	EVENT_OFF(nhe->t_select_nh_eval);
-	if (nhe->refcnt) {
-		if (CHECK_FLAG(nhe->flags,
-			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
-			bgp_per_src_nhg_add_send(nhe);
-	} else {
-		if (CHECK_FLAG(nhe->flags,
-			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
-			bgp_per_src_nhg_del_send(nhe);
-		bgp_per_src_nhg_del(nhe);
-	}
+	// THREAD_OFF(nhe->t_select_nh_eval);
 
-	dest = nhe->dest;
-	if (!CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL)) {
-		bgp_soo_zebra_route_install(nhe, dest);
-		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL);
-	}
+	// if (nhe->refcnt) {
+	// 	if (CHECK_FLAG(nhe->flags,
+	// 		       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+	// 		bgp_per_src_nhg_add_send(nhe);
+	// } else {
+	// 	if (CHECK_FLAG(nhe->flags,
+	// 		       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+	// 		bgp_per_src_nhg_del_send(nhe);
+	// 	bgp_per_src_nhg_del(nhe);
+	// }
 
-	// check for expansion case and then install the soo route with soo
-	// NHGID if it satisfies
+	// dest = nhe->dest;
+	// // 'SOO route' dest
+	// if (!CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL))
+	// { 	bgp_soo_zebra_route_install(nhe, dest);
+	// SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL);
+	// }
 
-	// Walk all the 'routes with SoO' and move from zebra nhid to soo nhid
-	frr_each (bgp_dest_soo_qlist, &nhe->dest_soo_list,
-		  bgp_dest_soo_entry) {
-		dest = bgp_dest_soo_entry->dest;
+	// // check for expansion case and then install the soo route with soo
+	// // NHGID if it satisfies
 
-		/*move dest soo to soo NHIG if its superset of soo NHG*/
-		bgp_soo_zebra_route_install(nhe, dest);
-		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
-			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
-			    (pi->type == ZEBRA_ROUTE_BGP &&
-			     pi->sub_type == BGP_ROUTE_NORMAL)) {
-				//call the below install  code if decide to change nh-id of dest
-				if(is_soo_rt_pi_subset_of_rt_with_soo_pi(bgp_dest_soo_entry)) {
-					bgp_zebra_route_install(dest, pi, nhe->bgp, true,
-							NULL, false);
-				}
+	// // Walk all the 'routes with SoO' and move from zebra nhid to soo
+	// nhid frr_each (bgp_dest_soo_qlist, &nhe->dest_soo_list,
+	// 	  bgp_dest_soo_entry) {
+	// 	dest = bgp_dest_soo_entry->dest;
 
-			}
+	// 	/*move dest soo to soo NHIG if its superset of soo NHG*/
+	// 	for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+	// 		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
+	// 		    (pi->type == ZEBRA_ROUTE_BGP &&
+	// 		     pi->sub_type == BGP_ROUTE_NORMAL)) {
+	// 			//call the below install  code if decide to
+	// change nh-id of dest
+	// 			if(is_soo_rt_pi_subset_of_rt_with_soo_pi(bgp_dest_soo_entry))
+	// { 				bgp_zebra_route_install(dest, pi, nhe->bgp,
+	// true, 						NULL, false);
+	// 			}
 
-		}
+	// 		}
 
-	}
-
+	// 	}
+	// }
 }
 
 
@@ -1074,14 +1247,31 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
 
 	dest_he = bgp_dest_soo_find(nhe, &dest->rn->p);
 	if (!dest_he) {
-		if (is_add)
+		if (is_add) {
+			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+				zlog_debug(
+					"bgp vrf %s per src nhg route with soo %s dest %s "
+					"peer %pSU idx %d add",
+					bgp->name_pretty, buf,
+					bgp_dest_get_prefix_str(dest),
+					&pi->peer->connection->su, pi->peer->bit_index);
+			}
 			dest_he = bgp_dest_soo_add(nhe, dest);
-		else {
+		} else {
 			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 				zlog_debug(
 					"bgp vrf %s per src nhg %s dest soo %s not found for del oper",
 					bgp->name_pretty, buf, pfxprint);
 			return;
+		}
+	} else {
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+			zlog_debug(
+				"bgp vrf %s per src nhg route with soo %s dest %s "
+				"peer %pSU idx %d %s",
+				bgp->name_pretty, buf,
+				bgp_dest_get_prefix_str(dest), &pi->peer->connection->su,
+				pi->peer->bit_index, is_add ? "upd" : "del");
 		}
 	}
 
@@ -1115,11 +1305,35 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, struct bgp_dest *dest,
 	nhe = bgp_per_src_nhg_find(bgp, &ip);
 	if (!nhe) {
 		if (is_add) {
+			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+				char buf[INET6_ADDRSTRLEN];
+				ipaddr2str(&ip, buf, sizeof(buf));
+				zlog_debug(
+					"bgp vrf %s per src nhg soo route soo %s dest %s "
+					"peer %pSU idx %d add",
+					bgp->name_pretty, buf,
+					bgp_dest_get_prefix_str(dest),
+					&pi->peer->connection->su, pi->peer->bit_index);
+			}
 			nhe = bgp_per_src_nhg_add(bgp, &ip);
 			nhe->dest = dest;
+			// Even though NHG is allocated here, it is programed
+			// in to zebra after soo timer expiry
+			nhe->nhg_id = bgp_nhg_id_alloc(PER_SRC_NHG);
+			bgp_start_soo_timer(bgp, nhe);
 		} else
 			return;
 	} else {
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+			char buf[INET6_ADDRSTRLEN];
+			ipaddr2str(&ip, buf, sizeof(buf));
+			zlog_debug(
+				"bgp vrf %s per src nhg soo route soo %s dest %s "
+				"peer %pSU idx %d %s",
+				bgp->name_pretty, buf,
+				bgp_dest_get_prefix_str(dest), &pi->peer->connection->su,
+				pi->peer->bit_index, is_add ? "upd" : "del");
+		}
 		bgp_per_src_nhg_update(nhe);
 	}
 
@@ -1173,6 +1387,13 @@ void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi,
 {
 	struct in_addr ip;
 
+	/* 	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+			zlog_debug(
+				"bgp vrf %s per src nhg check if dest: %s has
+	   soo attr peer:%pSU", bgp->name_pretty, bgp_dest_get_prefix_str(dest),
+	   &pi->peer->su);
+		} */
+
 	if (route_has_soo_attr(pi)) {
 		if (bgp_is_soo_route(dest, pi, &ip)) {
 			/*processing of soo route*/
@@ -1183,5 +1404,12 @@ void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi,
 			bgp_process_route_with_soo_attr(bgp, dest, pi, &ip,
 							is_add);
 		}
+	} else {
+		/* 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+					zlog_debug(
+						"bgp vrf %s per src nhg dest: %s
+		   does not have soo attr", bgp->name_pretty,
+		   bgp_dest_get_prefix_str(dest));
+				} */
 	}
 }
