@@ -1295,7 +1295,8 @@ void bgp_fsm_change_status(struct peer *peer, enum bgp_fsm_status status)
 		 * Clearing
 		 * (or Deleted).
 		 */
-		if (!work_queue_is_scheduled(peer->clear_node_queue) &&
+		if (!CHECK_FLAG(peer->flags, PEER_FLAG_CLEARING_BATCH) &&
+		    !work_queue_is_scheduled(peer->clear_node_queue) &&
 		    status != Deleted)
 			BGP_EVENT_ADD(peer, Clearing_Completed);
 	}
