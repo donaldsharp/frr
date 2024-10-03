@@ -158,4 +158,6 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 void bgp_process_route_install_result_for_soo(struct bgp *bgp,
 					      struct bgp_dest *dest,
 					      struct bgp_path_info *pi);
+extern void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp);
+extern void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp);
 #endif /* _BGP_PER_SRC_NHG_H */
