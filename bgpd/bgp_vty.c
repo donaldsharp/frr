@@ -8029,6 +8029,58 @@ DEFPY (bgp_condadv_period,
 	return CMD_SUCCESS;
 }
 
+DEFPY(bgp_per_src_nhg_convergence_timer, bgp_per_src_nhg_convergence_timer_cmd,
+      "bgp per-source-nhg convergence-timer (5-1000)$period",
+      BGP_STR
+      "Per Source NHG Convergence settings\n"
+      "Time in milli secs to wait before processing SOO for per source\n"
+      "nexthop group; Default is 50 msec\n")
+{
+	VTY_DECLVAR_CONTEXT(bgp, bgp);
+
+	if (period == bgp->per_src_nhg_convergence_timer)
+		return CMD_SUCCESS;
+
+	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
+
+	bgp->per_src_nhg_convergence_timer = period;
+	bgp_per_src_nhg_soo_timer_wheel_init(bgp);
+
+	bgp_clear_vty(vty, bgp->name, AFI_IP, SAFI_UNICAST, clear_all,
+		      BGP_CLEAR_SOFT_NONE, NULL);
+	bgp_clear_vty(vty, bgp->name, AFI_IP6, SAFI_UNICAST, clear_all,
+		      BGP_CLEAR_SOFT_NONE, NULL);
+
+	return CMD_SUCCESS;
+}
+
+DEFPY(no_bgp_per_src_nhg_convergence_timer,
+      no_bgp_per_src_nhg_convergence_timer_cmd,
+      "no bgp per-source-nhg convergence-timer",
+      NO_STR BGP_STR
+      "Per Source NHG Convergence settings\n"
+      "Time in milli secs to wait before processing SOO for per source nexthop group\n")
+{
+	VTY_DECLVAR_CONTEXT(bgp, bgp);
+
+	if (bgp->per_src_nhg_convergence_timer ==
+	    BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD)
+		return CMD_SUCCESS;
+
+	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
+
+	bgp->per_src_nhg_convergence_timer =
+		BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD;
+	bgp_per_src_nhg_soo_timer_wheel_init(bgp);
+
+	bgp_clear_vty(vty, bgp->name, AFI_IP, SAFI_UNICAST, clear_all,
+		      BGP_CLEAR_SOFT_NONE, NULL);
+	bgp_clear_vty(vty, bgp->name, AFI_IP6, SAFI_UNICAST, clear_all,
+		      BGP_CLEAR_SOFT_NONE, NULL);
+
+	return CMD_SUCCESS;
+}
+
 DEFPY (neighbor_advertise_map,
        neighbor_advertise_map_cmd,
        "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor advertise-map RMAP_NAME$advertise_str <exist-map|non-exist-map>$exist RMAP_NAME$condition_str",
@@ -18127,6 +18179,13 @@ int bgp_config_write(struct vty *vty)
 			vty_out(vty, " bgp router-id %pI4\n",
 				&bgp->router_id_static);
 
+		/* BGP Per Source NHG Convergence time setting */
+		if (bgp->per_src_nhg_convergence_timer !=
+		    BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD)
+			vty_out(vty,
+				" bgp per-source-nhg convergence-timer %d\n",
+				bgp->per_src_nhg_convergence_timer);
+
 		/* Suppress fib pending */
 		if (CHECK_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_FIB_PENDING))
 			vty_out(vty, " bgp suppress-fib-pending\n");
@@ -19056,6 +19115,10 @@ void bgp_vty_init(void)
 	/* "bgp confederation" commands. */
 	install_element(BGP_NODE, &bgp_confederation_identifier_cmd);
 	install_element(BGP_NODE, &no_bgp_confederation_identifier_cmd);
+
+	/*bgp per source nhg convergence timer commands. */
+	install_element(BGP_NODE, &bgp_per_src_nhg_convergence_timer_cmd);
+	install_element(BGP_NODE, &no_bgp_per_src_nhg_convergence_timer_cmd);
 
 	/* "bgp confederation peers" commands. */
 	install_element(BGP_NODE, &bgp_confederation_peers_cmd);

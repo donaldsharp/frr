@@ -874,6 +874,8 @@ struct bgp {
 	/* Timer wheel for per source NHG SoO*/
 	struct timer_wheel *per_src_nhg_soo_timer_wheel;
 	bool per_src_nhg_soo_timer_wheel_created;
+	/* per source nhg convergence wait timer*/
+	int per_src_nhg_convergence_timer;
 
 	/* BGP Conditional advertisement */
 	uint32_t condition_check_period;

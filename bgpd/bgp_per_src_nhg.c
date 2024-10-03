@@ -257,7 +257,7 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 	}
 }
 
-static void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
+void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
 {
 	if (!bgp->per_src_nhg_soo_timer_wheel_created) {
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -265,20 +265,20 @@ static void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
 				"bgp vrf %s per src nhg soo timer wheel init total "
 				"period %u ms slots %u",
 				bgp->name_pretty,
-				BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD,
+				bgp->per_src_nhg_convergence_timer,
 				BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS);
 
 		bgp->per_src_nhg_soo_timer_wheel = wheel_init(
-				bm->master, BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD,
-				BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS,
-				bgp_per_src_nhg_slot_key,
-				bgp_per_src_nhg_timer_slot_run,
-				"BGP per src NHG SoO Timer Wheel");
+			bm->master, bgp->per_src_nhg_convergence_timer,
+			BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS,
+			bgp_per_src_nhg_slot_key,
+			bgp_per_src_nhg_timer_slot_run,
+			"BGP per src NHG SoO Timer Wheel");
 		bgp->per_src_nhg_soo_timer_wheel_created = true;
 	}
 }
 
-static void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp)
+void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp)
 {
 	if (bgp->per_src_nhg_soo_timer_wheel_created) {
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -1018,6 +1018,8 @@ void bgp_per_src_nhg_init(struct bgp *bgp)
 	bgp->per_src_nhg_table =
 		hash_create(bgp_per_src_nhg_hash_keymake, bgp_per_src_nhg_cmp,
 			    "BGP Per Source NHG hash table");
+	bgp->per_src_nhg_convergence_timer =
+		BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD;
 	bgp_per_src_nhg_soo_timer_wheel_init(bgp);
 }
 
