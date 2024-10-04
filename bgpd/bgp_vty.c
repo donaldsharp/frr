@@ -20366,56 +20366,131 @@ static void bgp_vty_if_init(void)
 			&mpls_bgp_l3vpn_multi_domain_switching_cmd);
 }
 
-static void vty_print_bitfield(struct vty *vty, const bitfield_t *bf)
+static void vty_print_bitfield(struct vty *vty, const char *str,
+			       const bitfield_t *bf)
 {
 	unsigned int bit;
 	unsigned int approx_last_set_bit_index =
 		bf_approx_last_set_bit_index(bf);
 
-	vty_out(vty, "bits set:");
+	vty_out(vty, "%s bits set:", str ? str : "");
 
 	bf_for_each_set_bit((*bf), bit, approx_last_set_bit_index)
 	{
+		if (bit == 0)
+			continue;
 		vty_out(vty, " %u", bit);
 	}
 
 	vty_out(vty, "\n");
 }
 
-static void show_bgp_soo_entry(struct hash_bucket *bucket, void *arg)
+static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
+			       struct vty *vty)
 {
-	struct vty *vty = arg;
-	struct bgp_per_src_nhg_hash_entry *soo_entry = bucket->data;
+	if (!soo_entry) {
+		return;
+	}
 
-	vty_out(vty,
-		"\tSoO route: %pIA NHG: %d Num paths: %u Path info bitmap ",
-		&soo_entry->ip, soo_entry->nhg_id, soo_entry->refcnt);
-	vty_print_bitfield(vty, &soo_entry->bgp_soo_route_pi_bitmap);
+	vty_out(vty, "SoO route: %pIA numPaths: %u, NHG: %d ", &soo_entry->ip,
+		soo_entry->refcnt, soo_entry->nhg_id);
+
+	if (CHECK_FLAG(soo_entry->flags, PER_SRC_NEXTHOP_GROUP_VALID))
+		vty_out(vty, "Valid ");
+	else if (CHECK_FLAG(soo_entry->flags, PER_SRC_NEXTHOP_GROUP_INSTALLED))
+		vty_out(vty, "Installed ");
+	else if (CHECK_FLAG(soo_entry->flags,
+			    PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+		vty_out(vty, "Pending");
+
+	vty_out(vty, "\n");
+	vty_out(vty, "  Peer BitIndex Mappings:\n");
+
+	struct bgp_path_info *pi;
+
+	for (pi = bgp_dest_get_bgp_path_info(soo_entry->dest); pi;
+	     pi = pi->next) {
+		vty_out(vty, "    %pSU: %u\n", &pi->peer->connection->su,
+			pi->peer->bit_index);
+	}
+
+	vty_out(vty, "  Bitmaps:\n");
+	vty_print_bitfield(vty, "    Selected path info bitmap ",
+			   &soo_entry->bgp_soo_route_pi_bitmap);
+	vty_print_bitfield(vty, "    Installed path info bitmap",
+			   &soo_entry->bgp_selected_soo_route_pi_bitmap);
 
 	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
 
-	vty_out(vty, "\t\tRoute with SoO:\n");
+	vty_out(vty, "  Route with SoO:\n");
 	frr_each (bgp_dest_soo_qlist, &soo_entry->dest_soo_list,
 		  bgp_dest_soo_entry) {
 		char pfxprint[PREFIX2STR_BUFFER];
 		prefix2str(&bgp_dest_soo_entry->p, pfxprint, sizeof(pfxprint));
-		vty_out(vty, "\t\t\t%s Path info bitmap ", pfxprint);
-		vty_print_bitfield(vty, &bgp_dest_soo_entry->bgp_pi_bitmap);
+		vty_out(vty, "      %s", pfxprint);
+		if (CHECK_FLAG(bgp_dest_soo_entry->flags,
+			       DEST_PRESENT_IN_NHGID_USE_LIST)) {
+			vty_out(vty, "uses SoO NHG");
+		}
+
+		vty_print_bitfield(vty, " Selected path info bitmap",
+				   &bgp_dest_soo_entry->bgp_pi_bitmap);
 	}
 }
 
-DEFUN(show_bgp_soo_routes, show_bgp_soo_routes_cmd, "show bgp soo routes",
+static void show_bgp_soo_hashtbl_walk_cb(struct hash_bucket *bucket, void *arg)
+{
+	struct vty *vty = arg;
+	struct bgp_per_src_nhg_hash_entry *soo_entry = bucket->data;
+	show_bgp_soo_entry(soo_entry, vty);
+}
+
+DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
+      "show bgp soo route [<A.B.C.D>]",
       SHOW_STR BGP_STR
       "Site-of-Origin\n"
-      "Display information about per source NHG soo routes\n")
+      "Display information about per source NHG soo route\n"
+      "SoO IPv4 address")
 {
 	struct list *instances = bm->bgp;
 	struct listnode *node;
-	struct bgp *bgp;
+	struct bgp *bgp = NULL;
+	struct prefix_ipv4 p;
+	int idx = 4; // Index of the IP address argument in argv
+	bool filter_by_soo = false;
 
-	for (ALL_LIST_ELEMENTS_RO(instances, node, bgp)) {
-		vty_out(vty, "BGP: %s\n", bgp->name_pretty);
-		hash_iterate(bgp->per_src_nhg_table, show_bgp_soo_entry, vty);
+	if (argc > idx) {
+		/* Parse the IPv4 address */
+		if (str2prefix_ipv4(argv[idx]->arg, &p) <= 0) {
+			vty_out(vty, "%% Invalid IPv4 address\n");
+			return CMD_WARNING;
+		}
+		filter_by_soo = true;
+	}
+
+	if (filter_by_soo) {
+		struct bgp_per_src_nhg_hash_entry *soo_entry = NULL;
+		struct ipaddr ip;
+
+		memset(&ip, 0, sizeof(ip));
+		SET_IPADDR_V4(&ip);
+		memcpy(&ip.ipaddr_v4, &p.prefix, sizeof(ip.ipaddr_v4));
+
+		/*
+		 * Per src NHG feature is enabled only for default VRF
+		 * TODO: If it is later supported for non-default VRFs
+		 * extend this CLI to take VRF as input
+		 */
+		bgp = bgp_get_default();
+		soo_entry = bgp_per_src_nhg_find(bgp, &ip);
+		vty_out(vty, "BGP: %s\n\n", bgp->name_pretty);
+		show_bgp_soo_entry(soo_entry, vty);
+	} else {
+		for (ALL_LIST_ELEMENTS_RO(instances, node, bgp)) {
+			vty_out(vty, "BGP: %s\n\n", bgp->name_pretty);
+			hash_iterate(bgp->per_src_nhg_table,
+				     show_bgp_soo_hashtbl_walk_cb, vty);
+		}
 	}
 
 	return CMD_SUCCESS;
@@ -22037,7 +22112,7 @@ void bgp_vty_init(void)
 	bgp_vty_if_init();
 
 	/* per source nhg commands */
-	install_element(VIEW_NODE, &show_bgp_soo_routes_cmd);
+	install_element(VIEW_NODE, &show_bgp_soo_route_cmd);
 }
 
 #include "memory.h"

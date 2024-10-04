@@ -160,4 +160,6 @@ void bgp_process_route_install_result_for_soo(struct bgp *bgp,
 					      struct bgp_path_info *pi);
 extern void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp);
 extern void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp);
+struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_find(struct bgp *bgp,
+							struct ipaddr *ip);
 #endif /* _BGP_PER_SRC_NHG_H */
