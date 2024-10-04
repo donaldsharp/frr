@@ -60,8 +60,6 @@ DEFINE_MTYPE_STATIC(BGPD, BGP_SOO_NHG_NEXTHOP_CACHE,
 extern int make_prefix(int afi, struct bgp_path_info *pi, struct prefix *p);
 extern struct in6_addr *
 bgp_path_info_to_ipv6_nexthop(struct bgp_path_info *path, ifindex_t *ifindex);
-static struct bgp_per_src_nhg_hash_entry *
-bgp_per_src_nhg_find(struct bgp *bgp, struct ipaddr *ip);
 
 static unsigned int bgp_per_src_nhg_hash_keymake(const void *p);
 static bool bgp_per_src_nhg_cmp(const void *p1, const void *p2);
@@ -835,8 +833,8 @@ static void *bgp_per_src_nhg_alloc(void *p)
 	return ((void *)nhe);
 }
 
-static struct bgp_per_src_nhg_hash_entry *
-bgp_per_src_nhg_find(struct bgp *bgp, struct ipaddr *ip)
+struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_find(struct bgp *bgp,
+							struct ipaddr *ip)
 {
 	struct bgp_per_src_nhg_hash_entry tmp;
 	struct bgp_per_src_nhg_hash_entry *nhe;
