@@ -5372,9 +5372,8 @@ bool route_matches_soo(struct bgp_path_info *pi, struct ecommunity *soo)
 	return soo_in_ecom(ecom, soo);
 }
 
-bool route_has_soo_attr(struct bgp_path_info *pi)
+bool is_soo_attr(struct attr *attr)
 {
-	struct attr *attr = pi->attr;
 	struct ecommunity *ecom;
 
 	if (!CHECK_FLAG(attr->flag, ATTR_FLAG_BIT(BGP_ATTR_EXT_COMMUNITIES)))
@@ -5392,8 +5391,13 @@ bool route_has_soo_attr(struct bgp_path_info *pi)
 			      ECOMMUNITY_SITE_ORIGIN)) {
 		return true;
 	}
-
 	return false;
+}
+
+bool route_has_soo_attr(struct bgp_path_info *pi)
+{
+	struct attr *attr = pi->attr;
+	return is_soo_attr(attr);
 }
 
 /*call this api only after validating the soo attr*/

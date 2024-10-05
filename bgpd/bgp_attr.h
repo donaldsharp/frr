@@ -660,5 +660,7 @@ extern bool route_matches_soo(struct bgp_path_info *pi, struct ecommunity *soo);
 
 extern bool route_has_soo_attr(struct bgp_path_info *pi);
 
+extern bool is_soo_attr(struct attr *attr);
+
 extern bool route_get_ip_from_soo_attr(struct bgp_path_info *pi, struct in_addr *ip);
 #endif /* _QUAGGA_BGP_ATTR_H */
