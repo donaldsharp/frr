@@ -5111,6 +5111,17 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 									 pi);
 				}
 			}
+		} else {
+			if(!same_attr) {
+				if (CHECK_FLAG(
+					    bgp->per_src_nhg_flags[afi][safi],
+					    BGP_FLAG_NHG_PER_ORIGIN)) {
+					bgp_process_route_soo_attr_change(
+						bgp, afi, dest, pi,
+						attr_new);
+				}
+
+			}
 		}
 
 		/* Update to new attribute.  */
@@ -5300,7 +5311,20 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		/* Process change. */
 		bgp_aggregate_increment(bgp, p, pi, afi, safi);
 
-		bgp_process(bgp, dest, pi, afi, safi);
+		zlog_debug("%pVL:same path BP rcvd UPDATE w/ attr: %s", peer,
+			   peer->rcvd_attr_str);
+
+		if ((CHECK_FLAG(
+			    bgp->per_src_nhg_flags[afi][safi],
+			    BGP_FLAG_NHG_PER_ORIGIN)) &&
+		    (safi != SAFI_EVPN) &&
+		    bgp_check_is_soo_route(bgp,afi,dest,pi)) {
+			bgp_process_early(bgp, dest, pi, afi, safi);
+			zlog_debug("%pVL:early add same BP rcvd UPDATE w/ attr: %s", peer,
+			   peer->rcvd_attr_str);
+		}
+		else
+			bgp_process(bgp, dest, pi, afi, safi);
 		bgp_dest_unlock_node(dest);
 
 		if (SAFI_UNICAST == safi
@@ -5458,7 +5482,18 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	hook_call(bgp_process, bgp, afi, safi, dest, peer, false);
 
 	/* Process change. */
-	bgp_process(bgp, dest, new, afi, safi);
+
+	if ((CHECK_FLAG(
+		    bgp->per_src_nhg_flags[afi][safi],
+		    BGP_FLAG_NHG_PER_ORIGIN)) &&
+	    (safi != SAFI_EVPN) &&
+	    bgp_check_is_soo_route(bgp,afi,dest,new)) {
+		bgp_process_early(bgp, dest, new, afi, safi);
+		zlog_debug("%pVL:early BP rcvd UPDATE w/ attr: %s", peer,
+			   peer->rcvd_attr_str);
+	}
+	else
+		bgp_process(bgp, dest, new, afi, safi);
 
 	if (SAFI_UNICAST == safi
 	    && (bgp->inst_type == BGP_INSTANCE_TYPE_VRF

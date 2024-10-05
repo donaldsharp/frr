@@ -1296,7 +1296,7 @@ static bool update_ipv6nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 	return true;
 }
 
-static bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
+bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
 					uint32_t *nh_weight)
 {
 	/* zero link-bandwidth and link-bandwidth not present are treated
@@ -1349,6 +1349,7 @@ enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
 	uint32_t exp = 0;
 	struct bgp_table *table = bgp_dest_table(dest);
 	const struct prefix *p = bgp_dest_get_prefix(dest);
+	enum zclient_send_status ret;
 
 	if (table->safi == SAFI_FLOWSPEC) {
 		bgp_pbr_update_entry(bgp, p, info, table->afi, table->safi,
@@ -1734,8 +1735,11 @@ enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
 		zlog_debug("%s: %pFX: announcing to zebra (recursion %sset)",
 			   __func__, p, (recursion_flag ? "" : "NOT "));
 	}
-	return zclient_route_send(is_add ? ZEBRA_ROUTE_ADD : ZEBRA_ROUTE_DELETE,
+	ret = zclient_route_send(is_add ? ZEBRA_ROUTE_ADD : ZEBRA_ROUTE_DELETE,
 				  zclient, &api);
+	bgp_process_route_transition_between_nhid(bgp, dest, info);
+
+	return ret;
 }
 
 
@@ -2869,8 +2873,8 @@ static int bgp_zebra_route_notify_owner(int command, struct zclient *zclient,
 		/* Advertise the route */
 		if (new_select) {
 			group_announce_route(bgp, afi, safi, dest, new_select);
-			bgp_process_route_install_result_for_soo(bgp, dest,
-								 new_select);
+			/*bgp_process_route_install_result_for_soo(bgp, dest,
+								 new_select);*/
 		} else {
 			flog_err(EC_BGP_INVALID_ROUTE,
 				 "selected route %pRN not found", dest);

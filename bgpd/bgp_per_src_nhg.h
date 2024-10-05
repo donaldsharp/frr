@@ -23,9 +23,6 @@
 #ifndef _BGP_PER_SRC_NHG_H
 #define _BGP_PER_SRC_NHG_H
 
-// TODO, karthik to give valid range
-#define IS_VALID_SOO_NHGID(nhg_id) (nhg_id != 0)
-
 PREDECL_RBTREE_UNIQ(bgp_nhg_nexthop_cache);
 
 struct bgp_nhg_nexthop_cache {
@@ -69,9 +66,11 @@ struct bgp_dest_soo_hash_entry {
 
 	//TODO, need to store the bitmaps of NH for soo
 	bitfield_t bgp_pi_bitmap;
+	uint32_t refcnt;
 
 	uint32_t flags;
 #define DEST_PRESENT_IN_NHGID_USE_LIST (1 << 0)
+#define DEST_SOO_DEL_PENDING (1 << 1)
 };
 
 DECLARE_DLIST(bgp_dest_soo_qlist, struct bgp_dest_soo_hash_entry, item);
@@ -104,7 +103,7 @@ struct bgp_per_src_nhg_hash_entry {
 	struct bgp_dest_soo_qlist_head dest_soo_list;
 
 	struct bgp_dest_soo_use_soo_nhgid_qlist_head dest_soo_use_nhid_list;
-	//TODO, need to store the bitmaps of NH for soo
+
 	bitfield_t bgp_soo_route_pi_bitmap;
 	bitfield_t bgp_selected_soo_route_pi_bitmap;
 
@@ -140,6 +139,8 @@ struct bgp_per_src_nhg_hash_entry {
 	struct thread *t_select_nh_eval;
 #define PER_SRC_NHG_UPDATE_TIMER 200
 #define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL (1 << 4)
+#define PER_SRC_NEXTHOP_GROUP_DEL_PENDING (1 << 5)
+#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED (1 << 6)
 };
 
 #define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS 10
@@ -162,4 +163,11 @@ extern void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp);
 extern void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp);
 struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_find(struct bgp *bgp,
 							struct ipaddr *ip);
+void bgp_process_route_soo_attr_change(struct bgp *bgp, afi_t afi,
+				struct bgp_dest *dest, struct bgp_path_info *pi,
+				struct attr *new_attr);
+bool bgp_check_is_soo_route(struct bgp *bgp, afi_t afi,
+                                struct bgp_dest *dest, struct bgp_path_info *pi);
+void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest *dest,
+                               struct bgp_path_info *pi);
 #endif /* _BGP_PER_SRC_NHG_H */
