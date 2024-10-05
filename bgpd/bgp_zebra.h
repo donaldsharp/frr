@@ -134,4 +134,6 @@ enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
 
 struct in6_addr *bgp_path_info_to_ipv6_nexthop(struct bgp_path_info *path,
 					       ifindex_t *ifindex);
+bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, struct attr *attr,
+					uint32_t *nh_weight);
 #endif /* _QUAGGA_BGP_ZEBRA_H */
