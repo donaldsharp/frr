@@ -51,7 +51,7 @@ struct bgp_nexthop_cache {
 	uint32_t metric;
 
 	/* Nexthop number and nexthop linked list.*/
-	uint8_t nexthop_num;
+	uint16_t nexthop_num;
 	struct nexthop *nexthop;
 	time_t last_update;
 	uint16_t flags;
