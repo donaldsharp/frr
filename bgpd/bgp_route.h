@@ -72,9 +72,9 @@ enum bgp_show_adj_route_type {
 };
 
 
-#define BGP_SHOW_SCODE_HEADER                                                  \
-	"Status codes:  s suppressed, d damped, "                              \
-	"h history, u unsorted, * valid, > best, = multipath,\n"               \
+#define BGP_SHOW_SCODE_HEADER                                                     \
+	"Status codes:  s suppressed, d damped, "                                 \
+	"h history, u unsorted, * valid, > best, = multipath, + multipath nhg,\n" \
 	"               i internal, r RIB-failure, S Stale, R Removed\n"
 #define BGP_SHOW_OCODE_HEADER                                                  \
 	"Origin codes:  i - IGP, e - EGP, ? - incomplete\n"
