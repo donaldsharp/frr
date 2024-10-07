@@ -531,9 +531,13 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 			}
 		} else {
 			dest_he = bgp_dest_soo_find(nhe, &dest->p);
+			char buf[INET6_ADDRSTRLEN];
+			char pfxprint[PREFIX2STR_BUFFER];
 			if (!dest_he)
 				return false;
 
+			ipaddr2str(&nhe->ip, buf, sizeof(buf));
+			prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
 			if (!is_soo_rt_pi_subset_of_rt_with_selected_soo_pi(
 				    dest_he) || (!CHECK_FLAG(nhe->flags,
                                  PER_SRC_NEXTHOP_GROUP_VALID))) {
@@ -542,6 +546,9 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 					bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
 								     dest_he);
 					UNSET_FLAG(dest_he->flags, DEST_PRESENT_IN_NHGID_USE_LIST);
+					zlog_debug("bgp vrf %s per src nhg %s dest soo %s "
+							"del from soo nhid use list",
+						   nhe->bgp->name_pretty, buf, pfxprint);
 				}
 				return false;
 			}
@@ -552,6 +559,11 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 						&nhe->dest_soo_use_nhid_list, dest_he);
 				SET_FLAG(dest_he->flags,
 				DEST_PRESENT_IN_NHGID_USE_LIST);
+				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+					zlog_debug("bgp vrf %s per src nhg %s dest soo %s "
+							"add to soo nhid use list",
+						   nhe->bgp->name_pretty, buf, pfxprint);
+				}
 			}
 			*nhg_id = nhe->nhg_id;
 			return true;
@@ -645,7 +657,7 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 	struct prefix p;
 	struct bgp_nhg_nexthop_cache *bnc;
 	uint32_t nh_weight;
-	bool do_wt_ecmp;
+	bool do_wt_ecmp = false;
 
 	if (make_prefix(afi, pi, &p) < 0)
 		return NULL;
@@ -654,9 +666,9 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 	/* Determine if we're doing weighted ECMP or not */
 	do_wt_ecmp = bgp_path_info_mpath_chkwtd(nhe->bgp, pi);
 	if (do_wt_ecmp) {
-		bgp_zebra_use_nhop_weighted(
-			    nhe->bgp, pi->attr->link_bw, &nh_weight);
-		//nh_weight = pi->attr->link_bw;
+		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_DO_WECMP);
+	} else if (CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_DO_WECMP)) {
+		do_wt_ecmp = true;
 	}
 
 	bnc = bnc_nhg_find(&nhe->nhg_nexthop_cache_table, &p, ifindex);
@@ -681,6 +693,10 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 
 		bnc->nh.vrf_id = nhe->bgp->vrf_id;
 		bnc->nh.flags = NEXTHOP_FLAG_RECURSIVE;
+		if (do_wt_ecmp) {
+			bgp_zebra_use_nhop_weighted(
+				    nhe->bgp, pi->attr->link_bw, &nh_weight);
+		}
 		bnc->nh.weight = nh_weight;
 		SET_FLAG(bnc->nh.flags, BGP_NEXTHOP_VALID);
 		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
@@ -727,6 +743,7 @@ void bgp_per_src_nhg_nc_del(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 			   pi->peer, bnc->refcnt);
 	bnc->refcnt--;
 	if (!bnc->refcnt) {
+		UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_DO_WECMP);
 		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 			zlog_debug("Free bnc nhg %pFX(%d)(%s) peer %p",
@@ -1415,9 +1432,16 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
 		if(soo_attr_del) {
 			if (CHECK_FLAG(dest_he->flags,
 				 DEST_PRESENT_IN_NHGID_USE_LIST)) {
+				char buf[INET6_ADDRSTRLEN];
+				char pfxprint[PREFIX2STR_BUFFER];
+				ipaddr2str(&nhe->ip, buf, sizeof(buf));
+				prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
 				bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
 							     dest_he);
 				UNSET_FLAG(dest_he->flags, DEST_PRESENT_IN_NHGID_USE_LIST);
+				zlog_debug("bgp vrf %s per src nhg %s dest soo %s "
+						"del from soo nhid use list",
+					   nhe->bgp->name_pretty, buf, pfxprint);
 			}
 		}
 
@@ -1588,3 +1612,15 @@ bool bgp_check_is_soo_route(struct bgp *bgp, afi_t afi,
 	else
 		return false;
 }
+
+void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi,
+				struct bgp_dest *dest, struct bgp_path_info *mpinfo,
+				bool is_add)
+{
+	for (; mpinfo;
+	     mpinfo = bgp_path_info_mpath_next(mpinfo)) {
+		bgp_process_route_soo_attr(bgp, afi, dest, mpinfo, is_add);
+	}
+}
+
+

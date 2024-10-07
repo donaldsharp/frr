@@ -39,6 +39,7 @@
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_lcommunity.h"
 #include "bgpd/bgp_mpath.h"
+#include "bgpd/bgp_per_src_nhg.h"
 
 /*
  * bgp_maximum_paths_set
@@ -536,6 +537,19 @@ void bgp_path_info_mpath_update(struct bgp *bgp, struct bgp_dest *dest,
 	int mpath_changed, debug;
 	bool all_paths_lb;
 	char path_buf[PATH_ADDPATH_STR_BUFFER];
+	bool is_evpn = false;
+	struct bgp_table *table = NULL;
+	bool eval_soo_per_nhg = false;
+
+	table = bgp_dest_table(dest);
+	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
+		is_evpn = true;
+
+	if (CHECK_FLAG(
+		    bgp->per_src_nhg_flags[table->afi][table->safi],
+		    BGP_FLAG_NHG_PER_ORIGIN) &&
+	    !is_evpn)
+	       eval_soo_per_nhg = true;
 
 	mpath_changed = 0;
 	maxpaths = multipath_num;
@@ -761,7 +775,12 @@ void bgp_path_info_mpath_update(struct bgp *bgp, struct bgp_dest *dest,
 		if ((mpath_count - 1) != old_mpath_count ||
 		    old_cum_bw != cum_bw)
 			SET_FLAG(new_best->flags, BGP_PATH_LINK_BW_CHG);
+
+		if ((mpath_count > 1) && eval_soo_per_nhg)
+			bgp_process_mpath_route_soo_attr(
+				bgp, table->afi, dest, new_best, true);
 	}
+
 }
 
 /*

@@ -141,6 +141,7 @@ struct bgp_per_src_nhg_hash_entry {
 #define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL (1 << 4)
 #define PER_SRC_NEXTHOP_GROUP_DEL_PENDING (1 << 5)
 #define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED (1 << 6)
+#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_DO_WECMP (1 << 7)
 };
 
 #define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS 10
@@ -170,4 +171,7 @@ bool bgp_check_is_soo_route(struct bgp *bgp, afi_t afi,
                                 struct bgp_dest *dest, struct bgp_path_info *pi);
 void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest *dest,
                                struct bgp_path_info *pi);
+void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi,
+				struct bgp_dest *dest, struct bgp_path_info *new_best,
+				bool is_add);
 #endif /* _BGP_PER_SRC_NHG_H */
