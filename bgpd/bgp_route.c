@@ -2927,12 +2927,6 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 	enum bgp_path_selection_reason reason = bgp_path_selection_none;
 	bool unsorted_items = true;
 	uint32_t num_candidates = 0;
-	bool is_evpn = false;
-	struct bgp_table *table = NULL;
-
-	table = bgp_dest_table(dest);
-	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
-		is_evpn = true;
 
 	do_mpath =
 		(mpath_cfg->maxpaths_ebgp > 1 || mpath_cfg->maxpaths_ibgp > 1);
@@ -3346,14 +3340,6 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 						path_buf);
 				SET_FLAG(pi->flags, BGP_PATH_MULTIPATH_NEW);
 				num_candidates++;
-				if (CHECK_FLAG(
-					    bgp->per_src_nhg_flags[afi][safi],
-					    BGP_FLAG_NHG_PER_ORIGIN) &&
-				    !is_evpn) {
-					bgp_process_route_soo_attr(
-						bgp, afi, dest, pi, true);
-				}
-
 				continue;
 			}
 
@@ -3387,13 +3373,6 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 						path_buf);
 				SET_FLAG(pi->flags, BGP_PATH_MULTIPATH_NEW);
 				num_candidates++;
-				if (CHECK_FLAG(
-					    bgp->per_src_nhg_flags[afi][safi],
-					    BGP_FLAG_NHG_PER_ORIGIN) &&
-				    !is_evpn) {
-					bgp_process_route_soo_attr(
-						bgp, afi, dest, pi, true);
-				}
 			}
 		}
 	}
@@ -5696,8 +5675,6 @@ void bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		/* Process change. */
 		bgp_aggregate_increment(bgp, p, pi, afi, safi);
 
-		zlog_debug("%pVL:same path BP rcvd UPDATE w/ attr: %s", peer,
-			   peer->rcvd_attr_str);
 
 		if ((CHECK_FLAG(
 			    bgp->per_src_nhg_flags[afi][safi],
@@ -5705,8 +5682,6 @@ void bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		    (safi != SAFI_EVPN) &&
 		    bgp_check_is_soo_route(bgp,afi,dest,pi)) {
 			bgp_process_early(bgp, dest, pi, afi, safi);
-			zlog_debug("%pVL:early add same BP rcvd UPDATE w/ attr: %s", peer,
-			   peer->rcvd_attr_str);
 		}
 		else
 			bgp_process(bgp, dest, pi, afi, safi);
@@ -5861,8 +5836,6 @@ void bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	    (safi != SAFI_EVPN) &&
 	    bgp_check_is_soo_route(bgp,afi,dest,new)) {
 		bgp_process_early(bgp, dest, new, afi, safi);
-		zlog_debug("%pVL:early BP rcvd UPDATE w/ attr: %s", peer,
-			   peer->rcvd_attr_str);
 	}
 	else
 		bgp_process(bgp, dest, new, afi, safi);
