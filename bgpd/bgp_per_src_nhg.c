@@ -623,6 +623,12 @@ static void bgp_per_src_nhg_add_send(struct bgp_per_src_nhg_hash_entry *nhe)
 	zclient_nhg_send(zclient, ZEBRA_NHG_ADD, &api_nhg);
 	SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
+	if (bf_words_size(nhe->bgp_soo_route_pi_bitmap) !=
+	    bf_words_size(nhe->bgp_selected_soo_route_pi_bitmap)) {
+		bf_free(nhe->bgp_selected_soo_route_pi_bitmap);
+		bf_init(nhe->bgp_selected_soo_route_pi_bitmap,
+			bf_words_size(nhe->bgp_soo_route_pi_bitmap));
+	}
 	bf_copy(&nhe->bgp_soo_route_pi_bitmap,
 		&nhe->bgp_selected_soo_route_pi_bitmap);
 }
@@ -646,6 +652,12 @@ static void bgp_per_src_nhg_del_send(struct bgp_per_src_nhg_hash_entry *nhe)
 	zclient_nhg_send(zclient, ZEBRA_NHG_DEL, &api_nhg);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
+	if (bf_words_size(nhe->bgp_soo_route_pi_bitmap) !=
+	    bf_words_size(nhe->bgp_selected_soo_route_pi_bitmap)) {
+		bf_free(nhe->bgp_selected_soo_route_pi_bitmap);
+		bf_init(nhe->bgp_selected_soo_route_pi_bitmap,
+			bf_words_size(nhe->bgp_soo_route_pi_bitmap));
+	}
 	bf_copy(&nhe->bgp_soo_route_pi_bitmap,
 		&nhe->bgp_selected_soo_route_pi_bitmap);
 }

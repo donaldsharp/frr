@@ -277,14 +277,18 @@ static inline bool bf_is_subset(bitfield_t *bitfield1, bitfield_t *bitfield2)
 	return true; // bitfield1 is a subset of bitfield2
 }
 
-static inline void bf_copy(bitfield_t *bitfield1, bitfield_t *bitfield2)
+static inline void bf_copy(bitfield_t *src, bitfield_t *dst)
 {
-	memcpy((bitfield2)->data, (bitfield1)->data,
-	       ((bitfield1)->m * sizeof(word_t)));
+	if (src->m == dst->m) {
+		memcpy((dst)->data, (src)->data, ((src)->m * sizeof(word_t)));
+		dst->n = src->n;
+	}
 }
 
+#define bf_words_size(bf) (bf.m)
+
 // approximate upper limit for the index of the last set bit
-#define bf_approx_last_set_bit_index(v) ((bf->n + 1) * WORD_SIZE)
+#define bf_approx_last_set_bit_index(bf) ((bf->n + 1) * WORD_SIZE)
 
 /*
  * Free the allocated memory for data
