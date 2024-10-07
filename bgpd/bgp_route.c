@@ -9784,6 +9784,8 @@ static void route_vty_short_status_out(struct vty *vty,
 				       json_object *json_path)
 {
 	enum rpki_states rpki_state = RPKI_NOT_BEING_USED;
+	uint32_t soo_nhg = 0;
+	struct in_addr soo_ip;
 
 	if (json_path) {
 
@@ -9868,9 +9870,13 @@ static void route_vty_short_status_out(struct vty *vty,
 		vty_out(vty, "d");
 	else if (CHECK_FLAG(path->flags, BGP_PATH_SELECTED))
 		vty_out(vty, ">");
-	else if (CHECK_FLAG(path->flags, BGP_PATH_MULTIPATH))
-		vty_out(vty, "=");
-	else
+	else if (CHECK_FLAG(path->flags, BGP_PATH_MULTIPATH)) {
+		if (is_path_using_soo_nhg(p, path, &soo_nhg, &soo_ip)) {
+			vty_out(vty, "+");
+		} else {
+			vty_out(vty, "=");
+		}
+	} else
 		vty_out(vty, " ");
 
 	/* Internal route. */
@@ -11004,6 +11010,8 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 	char time_buf[64];
 	struct bgp_path_info *bpi_ultimate =
 		bgp_get_imported_bpi_ultimate(path);
+	uint32_t soo_nhg = 0;
+	struct in_addr soo_ip;
 
 	if (json_paths) {
 		json_path = json_object_new_object();
@@ -11596,8 +11604,13 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 	    (CHECK_FLAG(path->flags, BGP_PATH_SELECTED) && bgp_path_info_mpath_count(path) > 1)) {
 		if (json_paths)
 			json_object_boolean_true_add(json_path, "multipath");
-		else
-			vty_out(vty, ", multipath");
+		else {
+			if (is_path_using_soo_nhg(p, path, &soo_nhg, &soo_ip)) {
+				vty_out(vty, ", multipath soo nhg");
+			} else {
+				vty_out(vty, ", multipath");
+			}
+		}
 	}
 
 	// Mark the bestpath(s)
@@ -12719,6 +12732,9 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 	uint32_t ttl = 0;
 	uint32_t bos = 0;
 	uint32_t exp = 0;
+	uint32_t soo_nhg = 0;
+	struct in_addr soo;
+	bool path_using_soo_nhg = false;
 
 	mpls_lse_decode(dest->local_label, &label, &ttl, &exp, &bos);
 
@@ -12745,10 +12761,16 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 			bgp_evpn_route2json((struct prefix_evpn *)p, json);
 		}
 	} else {
+		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+			if (is_path_using_soo_nhg(p, pi, &soo_nhg, &soo)) {
+				path_using_soo_nhg = true;
+				break;
+			}
+		}
+
 		if (!json) {
 			vty_out(vty,
-				"BGP routing table entry for %s%s%pFX, version %" PRIu64
-				"\n",
+				"BGP routing table entry for %s%s%pFX, version %" PRIu64,
 				(((safi == SAFI_MPLS_VPN ||
 				   safi == SAFI_ENCAP) &&
 				  prd)
@@ -12758,6 +12780,18 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 					 : ""),
 				safi == SAFI_MPLS_VPN && prd ? ":" : "", p,
 				dest->version);
+			if (path_using_soo_nhg) {
+				struct ipaddr ip;
+				memset(&ip, 0, sizeof(ip));
+				SET_IPADDR_V4(&ip);
+				memcpy(&ip.ipaddr_v4, &soo,
+				       sizeof(ip.ipaddr_v4));
+				vty_out(vty,
+					" SoO:%pIA, multipath soo nhg:%d\n",
+					&ip, soo_nhg);
+			} else {
+				vty_out(vty, "\n");
+			}
 
 		} else {
 			if (incremental_print) {
