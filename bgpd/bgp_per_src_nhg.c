@@ -980,6 +980,10 @@ struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_find(struct bgp *bgp,
 	struct bgp_per_src_nhg_hash_entry tmp;
 	struct bgp_per_src_nhg_hash_entry *nhe;
 
+	if(!bgp->per_src_nhg_table){
+	   return NULL;
+	}
+
 	memset(&tmp, 0, sizeof(tmp));
 	memcpy(&tmp.ip, ip, sizeof(struct ipaddr));
 	nhe = hash_lookup(bgp->per_src_nhg_table, &tmp);
