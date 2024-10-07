@@ -266,8 +266,10 @@ static inline bool bf_is_subset(bitfield_t *bitfield1, bitfield_t *bitfield2)
 	return true; // bitfield1 is a subset of bitfield2
 }
 
+#define bf_words_size(bf) (bf.m)
+
 // approximate upper limit for the index of the last set bit
-#define bf_approx_last_set_bit_index(v) ((bf->n + 1) * WORD_SIZE)
+#define bf_approx_last_set_bit_index(bf) ((bf->n + 1) * WORD_SIZE)
 
 /*
  * Free the allocated memory for data
