@@ -135,9 +135,6 @@ struct bgp_per_src_nhg_hash_entry {
  * Is this a nexthop group timer on?
  */
 #define PER_SRC_NEXTHOP_GROUP_TIMER_ON (1 << 3)
-	/*temp timer, will be removed after timer wheel is ut*/
-	struct event *t_select_nh_eval;
-#define PER_SRC_NHG_UPDATE_TIMER 200
 #define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL (1 << 4)
 #define PER_SRC_NEXTHOP_GROUP_DEL_PENDING (1 << 5)
 #define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED (1 << 6)
@@ -157,9 +154,6 @@ void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi,
 				bool is_add);
 bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 			       struct bgp_path_info *pi, uint32_t *nhg_id);
-void bgp_process_route_install_result_for_soo(struct bgp *bgp,
-					      struct bgp_dest *dest,
-					      struct bgp_path_info *pi);
 extern void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp);
 extern void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp);
 struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_find(struct bgp *bgp,
