@@ -94,9 +94,6 @@ static struct bgp_dest_soo_hash_entry *
 bgp_dest_soo_find(struct bgp_per_src_nhg_hash_entry *nhe,
 		  const struct prefix *p);
 
-/*temp code, will be deleted after timer wheel test*/
-void bgp_soo_route_select_nh_eval(struct thread *thread);
-
 void bgp_process_soo_route(struct bgp *bgp, afi_t afi, struct bgp_dest *dest,
 			   struct bgp_path_info *pi, struct in_addr *ipaddr,
 			   bool is_add, bool soo_attr_del);
@@ -368,69 +365,6 @@ bnc_nhg_find(struct bgp_nhg_nexthop_cache_head *tree, struct prefix *prefix,
 	return bgp_nhg_nexthop_cache_find(tree, &bnc);
 }
 
-void bgp_process_route_install_result_for_soo(struct bgp *bgp,
-					      struct bgp_dest *dest,
-					      struct bgp_path_info *pi)
-{
-	struct in_addr in;
-	struct bgp_dest_soo_hash_entry *dest_he;
-	struct bgp_per_src_nhg_hash_entry *nhe;
-	bool is_evpn = false;
-	struct bgp_table *table = NULL;
-	struct ipaddr ip;
-	bool is_soo_route = false;
-
-	memset(&ip, 0, sizeof(ip));
-
-	table = bgp_dest_table(dest);
-	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
-		is_evpn = true;
-
-	if (!CHECK_FLAG(bgp->per_src_nhg_flags[table->afi][table->safi],
-			BGP_FLAG_NHG_PER_ORIGIN) ||
-	    is_evpn) {
-		return;
-	}
-
-	if (route_has_soo_attr(pi)) {
-		is_soo_route = bgp_is_soo_route(dest, pi, &in);
-		SET_IPADDR_V4(&ip);
-		memcpy(&ip.ipaddr_v4, &in, sizeof(ip.ipaddr_v4));
-
-		nhe = bgp_per_src_nhg_find(bgp, &ip);
-		if (!nhe)
-			return;
-
-		if (!is_soo_route) {
-			/*TODO, check with Donald to see if nhid need to stored
-			 * in dest for sanity check in install_result cb*/
-#if 0
-			if (IS_VALID_SOO_NHGID(nhg_id) &&
-					(nhe->nhg_id != nhg_id)) {
-				char buf[INET6_ADDRSTRLEN];
-				char pfxprint[PREFIX2STR_BUFFER];
-				prefix2str(&dest->p, pfxprint, sizeof(pfxprint));
-				ipaddr2str(&nhe->ip, buf, sizeof(buf));
-				zlog_debug("error bgp vrf %s per src nhg %s id %d does not match dest soo %s nhg id %d",
-					   bgp->name_pretty, buf, nhe->nhg_id, pfxprint, nhg_id);
-				return
-			}
-#endif
-			dest_he = bgp_dest_soo_find(nhe, &dest->p);
-			if (!dest_he ||
-			    (CHECK_FLAG(dest_he->flags,
-					DEST_PRESENT_IN_NHGID_USE_LIST)))
-				return;
-
-			bgp_dest_soo_use_soo_nhgid_qlist_add_tail(
-				&nhe->dest_soo_use_nhid_list, dest_he);
-			SET_FLAG(dest_he->flags,
-				 DEST_PRESENT_IN_NHGID_USE_LIST);
-		}
-	}
-
-	return;
-}
 
 void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest *dest,
                                struct bgp_path_info *pi)
@@ -1308,64 +1242,6 @@ static void bgp_soo_zebra_route_install(struct bgp_per_src_nhg_hash_entry *nhe,
 	return;
 }
 
-
-/*temp code, will be deleted after timer wheel test*/
-void bgp_soo_route_select_nh_eval(struct thread *thread)
-{
-	// struct bgp_per_src_nhg_hash_entry *nhe;
-	// struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
-	// struct bgp_dest *dest;
-	// struct bgp_path_info *pi;
-
-	// nhe = THREAD_ARG(thread);
-
-	// THREAD_OFF(nhe->t_select_nh_eval);
-
-	// if (nhe->refcnt) {
-	// 	if (CHECK_FLAG(nhe->flags,
-	// 		       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
-	// 		bgp_per_src_nhg_add_send(nhe);
-	// } else {
-	// 	if (CHECK_FLAG(nhe->flags,
-	// 		       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
-	// 		bgp_per_src_nhg_del_send(nhe);
-	// 	bgp_per_src_nhg_del(nhe);
-	// }
-
-	// dest = nhe->dest;
-	// // 'SOO route' dest
-	// if (!CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL))
-	// { 	bgp_soo_zebra_route_install(nhe, dest);
-	// SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL);
-	// }
-
-	// // check for expansion case and then install the soo route with soo
-	// // NHGID if it satisfies
-
-	// // Walk all the 'routes with SoO' and move from zebra nhid to soo
-	// nhid frr_each (bgp_dest_soo_qlist, &nhe->dest_soo_list,
-	// 	  bgp_dest_soo_entry) {
-	// 	dest = bgp_dest_soo_entry->dest;
-
-	// 	/*move dest soo to soo NHIG if its superset of soo NHG*/
-	// 	for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
-	// 		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
-	// 		    (pi->type == ZEBRA_ROUTE_BGP &&
-	// 		     pi->sub_type == BGP_ROUTE_NORMAL)) {
-	// 			//call the below install  code if decide to
-	// change nh-id of dest
-	// 			if(is_soo_rt_pi_subset_of_rt_with_soo_pi(bgp_dest_soo_entry))
-	// { 				bgp_zebra_route_install(dest, pi, nhe->bgp,
-	// true, 						NULL, false);
-	// 			}
-
-	// 		}
-
-	// 	}
-	// }
-}
-
-
 void bgp_process_route_with_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
 				     struct bgp_path_info *pi,
 				     struct in_addr *ipaddr, bool is_add,
@@ -1540,13 +1416,6 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, struct bgp_dest *dest,
 	}
 
 	bgp_start_soo_timer(bgp, nhe);
-
-	/*temp code, will be deleted after timer wheel test*/
-	if (!nhe->t_select_nh_eval) {
-		thread_add_timer_msec(bm->master, bgp_soo_route_select_nh_eval,
-				      nhe, PER_SRC_NHG_UPDATE_TIMER,
-				      &nhe->t_select_nh_eval);
-	}
 }
 
 
