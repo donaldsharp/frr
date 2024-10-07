@@ -218,7 +218,7 @@ struct attr {
 	as_t aggregator_as;
 
 	/* MP Nexthop length */
-	uint8_t mp_nexthop_len;
+	uint16_t mp_nexthop_len;
 
 	/* MP Nexthop preference */
 	uint8_t mp_nexthop_prefer_global;
