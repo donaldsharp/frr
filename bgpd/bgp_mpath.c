@@ -433,7 +433,7 @@ void bgp_path_info_mpath_update(struct bgp *bgp, struct bgp_dest *dest,
 	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
 		is_evpn = true;
 
-	if (CHECK_FLAG(
+	if (bgp && CHECK_FLAG(
 		    bgp->per_src_nhg_flags[table->afi][table->safi],
 		    BGP_FLAG_NHG_PER_ORIGIN) &&
 	    !is_evpn)
