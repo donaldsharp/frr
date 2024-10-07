@@ -20434,7 +20434,7 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 		vty_out(vty, "      %s", pfxprint);
 		if (CHECK_FLAG(bgp_dest_soo_entry->flags,
 			       DEST_PRESENT_IN_NHGID_USE_LIST)) {
-			vty_out(vty, "uses SoO NHG");
+			vty_out(vty, " uses SoO NHG");
 		}
 
 		vty_print_bitfield(vty, " Selected path info bitmap",

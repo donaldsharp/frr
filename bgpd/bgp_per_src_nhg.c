@@ -91,7 +91,8 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, struct bgp_dest *dest,
 				     struct in_addr *ipaddr, bool is_add,
 				     bool soo_attr_del);
 static struct bgp_dest_soo_hash_entry *
-bgp_dest_soo_find(struct bgp_per_src_nhg_hash_entry *nhe, struct prefix *p);
+bgp_dest_soo_find(struct bgp_per_src_nhg_hash_entry *nhe,
+		  const struct prefix *p);
 
 /*temp code, will be deleted after timer wheel test*/
 void bgp_soo_route_select_nh_eval(struct event *event);
@@ -772,7 +773,8 @@ static void *bgp_dest_soo_alloc(void *p)
 }
 
 static struct bgp_dest_soo_hash_entry *
-bgp_dest_soo_find(struct bgp_per_src_nhg_hash_entry *nhe, struct prefix *p)
+bgp_dest_soo_find(struct bgp_per_src_nhg_hash_entry *nhe,
+		  const struct prefix *p)
 {
 	struct bgp_dest_soo_hash_entry tmp;
 	struct bgp_dest_soo_hash_entry *dest_he;
@@ -1627,4 +1629,61 @@ void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi,
 	}
 }
 
+static bool is_nhg_per_origin_configured(struct bgp *bgp)
+{
+	afi_t afi;
+	safi_t safi;
+	bool nhg_per_origin = false;
+	FOREACH_AFI_SAFI (afi, safi) {
+		if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+			       BGP_FLAG_NHG_PER_ORIGIN)) {
+			nhg_per_origin = true;
+		}
+	}
 
+	return nhg_per_origin;
+}
+
+bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
+			   uint32_t *soo_nhg, struct in_addr *soo)
+{
+	bool using_soo_nhg = false;
+	if (is_nhg_per_origin_configured(path->peer->bgp) &&
+	    route_has_soo_attr(path)) {
+		struct in_addr in;
+		bool is_soo_route = bgp_is_soo_route(path->net, path, &in);
+		struct bgp_per_src_nhg_hash_entry *nhe = NULL;
+		struct ipaddr ip;
+
+		memset(&ip, 0, sizeof(struct ipaddr));
+		SET_IPADDR_V4(&ip);
+		memcpy(&ip.ipaddr_v4, &in, sizeof(ip.ipaddr_v4));
+		nhe = bgp_per_src_nhg_find(path->peer->bgp, &ip);
+
+		if (nhe) {
+			if (is_soo_route) {
+				if (bf_test_index(
+					    nhe->bgp_selected_soo_route_pi_bitmap,
+					    path->peer->bit_index)) {
+					using_soo_nhg = true;
+					*soo_nhg = nhe->nhg_id;
+					memcpy(soo, &in,
+					       sizeof(struct in_addr));
+				}
+			} else {
+				struct bgp_dest_soo_hash_entry *dest_he;
+				dest_he = bgp_dest_soo_find(nhe, p);
+				if (CHECK_FLAG(
+					    dest_he->flags,
+					    DEST_PRESENT_IN_NHGID_USE_LIST)) {
+					using_soo_nhg = true;
+					*soo_nhg = nhe->nhg_id;
+					memcpy(soo, &in,
+					       sizeof(struct in_addr));
+				}
+			}
+		}
+	}
+
+	return using_soo_nhg;
+}
