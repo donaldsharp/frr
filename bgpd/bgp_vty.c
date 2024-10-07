@@ -3940,7 +3940,6 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 		bgp_per_src_nhg_init(bgp);
 		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			 BGP_FLAG_NHG_PER_ORIGIN);
-
 	}
 	/* TODO: This is WRONG: Passing BGP_CLEAR_SOFT_NONE will flap the
 	   sessions We should pass BGP_CLEAR_SOFT_IN. Debug why this is not
@@ -20492,8 +20491,9 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 	} else {
 		for (ALL_LIST_ELEMENTS_RO(instances, node, bgp)) {
 			vty_out(vty, "BGP: %s\n\n", bgp->name_pretty);
-			hash_iterate(bgp->per_src_nhg_table,
-				     show_bgp_soo_hashtbl_walk_cb, vty);
+			if (bgp->per_src_nhg_table)
+				hash_iterate(bgp->per_src_nhg_table,
+					     show_bgp_soo_hashtbl_walk_cb, vty);
 		}
 	}
 
