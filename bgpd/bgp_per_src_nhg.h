@@ -161,6 +161,8 @@ struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_find(struct bgp *bgp,
 void bgp_process_route_soo_attr_change(struct bgp *bgp, afi_t afi,
 				struct bgp_dest *dest, struct bgp_path_info *pi,
 				struct attr *new_attr);
+bool bgp_is_soo_route(struct bgp_dest *dest, struct bgp_path_info *pi,
+		      struct in_addr *ip);
 bool bgp_check_is_soo_route(struct bgp *bgp, afi_t afi,
                                 struct bgp_dest *dest, struct bgp_path_info *pi);
 void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest *dest,

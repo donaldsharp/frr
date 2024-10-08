@@ -4950,6 +4950,19 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 						dest, pi, BGP_PATH_STALE);
 					bgp_dest_set_defer_flag(dest, false);
 					bgp_process(bgp, dest, pi, afi, safi);
+				} else if ((CHECK_FLAG(
+						   bgp->per_src_nhg_flags[afi]
+									 [safi],
+						   BGP_FLAG_NHG_PER_ORIGIN)) &&
+					   (safi != SAFI_EVPN) &&
+					   route_has_soo_attr(pi)) {
+					struct in_addr ip;
+					if (bgp_is_soo_route(dest, pi, &ip))
+						bgp_process_early(bgp, dest, pi,
+								  afi, safi);
+					else
+						bgp_process(bgp, dest, pi, afi,
+							    safi);
 				}
 			}
 
