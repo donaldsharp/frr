@@ -994,7 +994,7 @@ void _event_add_read_write(const struct xref_eventsched *xref,
 		 * if we already have a pollfd for our file descriptor, find and
 		 * use it
 		 */
-		for (nfds_t i = 0; i < m->handler.pfdcount; i++)
+		for (nfds_t i = 0; i < m->handler.pfdcount; i++) {
 			if (m->handler.pfds[i].fd == fd) {
 				queuepos = i;
 
@@ -1008,6 +1008,15 @@ void _event_add_read_write(const struct xref_eventsched *xref,
 #endif
 				break;
 			}
+			/*
+			 * We are setting the fd = -1 for the
+			 * case when a read/write event is going
+			 * away.  if we find a -1 we can stuff it
+			 * into that spot, so note it
+			 */
+			if (m->handler.pfds[i].fd == -1 && queuepos == m->handler.pfdcount)
+				queuepos = i;
+		}
 
 		/* make sure we have room for this fd + pipe poker fd */
 		assert(queuepos + 1 < m->handler.pfdsize);
@@ -1283,6 +1292,14 @@ static void cancel_arg_helper(struct event_loop *master,
 	/* Check the io tasks */
 	for (i = 0; i < master->handler.pfdcount;) {
 		pfd = master->handler.pfds + i;
+
+		/*
+		 * Skip this spot, nothing here to see
+		 */
+		if (pfd->fd == -1) {
+			i++;
+			continue;
+		}
 
 		if (pfd->events & POLLIN)
 			t = master->read[pfd->fd];
@@ -1605,6 +1622,12 @@ static int thread_process_io_helper(struct event_loop *m, struct event *thread,
 	 * we should.
 	 */
 	m->handler.pfds[pos].events &= ~(state);
+	/*
+	 * ppoll man page says that a fd of -1 causes the particular
+	 * array item to be skipped.  So let's skip it
+	 */
+	if (m->handler.pfds[pos].events == 0)
+		m->handler.pfds[pos].fd = -1;
 
 	if (!thread) {
 		if ((actual_state & (POLLHUP|POLLIN)) != POLLHUP)
