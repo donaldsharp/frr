@@ -3945,7 +3945,7 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 	   sessions We should pass BGP_CLEAR_SOFT_IN. Debug why this is not
 	   working
 	 */
-	bgp_clear_vty(vty, bgp->name, afi, safi, clear_all, BGP_CLEAR_SOFT_NONE,
+	bgp_clear_vty(vty, bgp->name, afi, safi, clear_all, BGP_CLEAR_SOFT_IN,
 		      NULL);
 	return CMD_SUCCESS;
 }
