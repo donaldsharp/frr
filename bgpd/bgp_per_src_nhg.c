@@ -1545,7 +1545,7 @@ bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 			} else {
 				struct bgp_dest_soo_hash_entry *dest_he;
 				dest_he = bgp_dest_soo_find(nhe, p);
-				if (CHECK_FLAG(
+				if (dest_he && CHECK_FLAG(
 					    dest_he->flags,
 					    DEST_PRESENT_IN_NHGID_USE_LIST)) {
 					using_soo_nhg = true;
