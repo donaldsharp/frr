@@ -2700,8 +2700,26 @@ static void peer_group2peer_config_copy(struct peer_group *group,
 	if (conf->ttl != BGP_DEFAULT_TTL)
 		peer->ttl = conf->ttl;
 
-	/* GTSM hops */
-	peer->gtsm_hops = conf->gtsm_hops;
+	/*
+	 * Note: Consider the case where peer-group PG has A,B,C,D configs and
+	 * a Nbr is configured to use the peer-group PG.
+	 * Now for this Nbr,
+	 *   - config A,B are valid and applied.
+	 *   - However config C(ttl-security hops in this case) is to be
+	 * rejected. Ideal way to fix this is to reject the config i.e. rollback
+	 * A and B as well. However we DO NOT have such an infra today.
+	 *
+	 * Hence warning issued when a user configures a peer-group with
+	 * ttl-security hops > 1 which a directly connected neighbor inherits.
+	 */
+	if (peer->conf_if && (conf->gtsm_hops > BGP_GTSM_HOPS_CONNECTED))
+		zlog_warn("%s is directly connected peer, hops cannot exceed 1",
+			  peer->conf_if);
+
+	/* GTSM hops - Set # of hops between us and BGP peer */
+	if (peer_ttl_security_hops_set(peer, conf->gtsm_hops))
+		zlog_warn(
+			"ebgp-multihop and ttl-security cannot be configured together");
 
 	/* peer flags apply */
 	flags_tmp = conf->flags & ~peer->flags_override;
@@ -7831,8 +7849,9 @@ int peer_ttl_security_hops_set(struct peer *peer, int gtsm_hops)
 	struct listnode *node, *nnode;
 	int ret;
 
-	zlog_debug("%s: set gtsm_hops to %d for %s", __func__, gtsm_hops,
-		   peer->host);
+	if (bgp_debug_neighbor_events(peer))
+		zlog_debug("%s: set gtsm_hops to %d for %s", __func__,
+			   gtsm_hops, peer->host);
 
 	/* We cannot configure ttl-security hops when ebgp-multihop is already
 	   set.  For non peer-groups, the check is simple.  For peer-groups,
@@ -7937,7 +7956,9 @@ int peer_ttl_security_hops_unset(struct peer *peer)
 	struct listnode *node, *nnode;
 	int ret = 0;
 
-	zlog_debug("%s: set gtsm_hops to zero for %s", __func__, peer->host);
+	if (bgp_debug_neighbor_events(peer))
+		zlog_debug("%s: set gtsm_hops to zero for %s", __func__,
+			   peer->host);
 
 	/* if a peer-group member, then reset to peer-group default rather than
 	 * 0 */
