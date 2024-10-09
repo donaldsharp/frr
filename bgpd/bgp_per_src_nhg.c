@@ -193,6 +193,24 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 	// remove the timer from the timer wheel since processing is done
 	bgp_stop_soo_timer(nhe->bgp, nhe);
 
+	if (!nhe->refcnt) {
+		zlog_debug("bgp vrf %s per src nhg soo %pIA timer slot run delete cnt:%d and flags %d",
+			   nhe->bgp->name_pretty, &nhe->ip, bgp_dest_soo_use_soo_nhgid_qlist_count(&nhe->dest_soo_use_nhid_list), nhe->flags);
+		//cant delete soo NHID till all routes with soo and soo route is  moved to zebra nhid
+		if (!bgp_dest_soo_use_soo_nhgid_qlist_count(&nhe->dest_soo_use_nhid_list) &&
+				!CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED)) {
+			if (CHECK_FLAG(nhe->flags,
+				PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+				bgp_per_src_nhg_del_send(nhe);
+			bgp_per_src_nhg_del(nhe);
+		} else {
+			UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
+			SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_DEL_PENDING);
+			//bgp_start_soo_timer(nhe->bgp, nhe);
+		}
+		return;
+	}
+
 	if (is_soo_rt_pi_subset_of_all_rts_with_soo_pi(nhe)) {
 		// program the running ecmp and do NHG replace
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -203,21 +221,6 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 			if (CHECK_FLAG(nhe->flags,
 				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
 				bgp_per_src_nhg_add_send(nhe);
-		} else {
-			//cant delete soo NHID till all routes with soo and soo route is  moved to zebra nhid
-			if (!bgp_dest_soo_use_soo_nhgid_qlist_count(&nhe->dest_soo_use_nhid_list) &&
-					!CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED)) {
-				if (CHECK_FLAG(nhe->flags,
-					PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
-					bgp_per_src_nhg_del_send(nhe);
-				bgp_per_src_nhg_del(nhe);
-			} else {
-				UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
-				SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_DEL_PENDING);
-				//bgp_start_soo_timer(nhe->bgp, nhe);
-			}
-
-			return;
 		}
 	}
 
@@ -367,7 +370,7 @@ bnc_nhg_find(struct bgp_nhg_nexthop_cache_head *tree, struct prefix *prefix,
 
 
 void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest *dest,
-                               struct bgp_path_info *pi)
+                               struct bgp_path_info *pi, bool withdraw)
 {
 	struct in_addr in;
 	struct bgp_dest_soo_hash_entry *dest_he;
@@ -399,6 +402,8 @@ void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest 
 			return;
 
 		if (is_soo_route) {
+			if (withdraw)
+				UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED);
 			if (CHECK_FLAG(nhe->flags,
 				 PER_SRC_NEXTHOP_GROUP_DEL_PENDING) &&
 					!CHECK_FLAG(nhe->flags,
@@ -1126,6 +1131,8 @@ static void bgp_per_src_nhg_flush_entry(struct bgp_per_src_nhg_hash_entry *nhe)
 	bgp_dest_soo_finish(nhe);
 	bgp_dest_soo_qlist_fini(&nhe->dest_soo_list);
 	bgp_dest_soo_use_soo_nhgid_qlist_fini(&nhe->dest_soo_use_nhid_list);
+	if (CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID))
+		bgp_per_src_nhg_del_send(nhe);
 	//TODO, flush processing pending
 	bgp_l3nhg_id_free(PER_SRC_NHG, nhe->nhg_id);
 	bgp_stop_soo_timer(nhe->bgp, nhe);
@@ -1507,6 +1514,16 @@ void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi,
 	for (; mpinfo;
 	     mpinfo = bgp_path_info_mpath_next(mpinfo)) {
 		bgp_process_route_soo_attr(bgp, afi, dest, mpinfo, is_add);
+	}
+}
+
+void bgp_process_path_route_soo_attr(struct bgp *bgp, afi_t afi,
+				struct bgp_dest *dest, struct bgp_path_info *info,
+				bool is_add)
+{
+	for (; info;
+	     info = info->next) {
+		bgp_process_route_soo_attr(bgp, afi, dest, info, is_add);
 	}
 }
 

@@ -1737,7 +1737,7 @@ enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
 	}
 	ret = zclient_route_send(is_add ? ZEBRA_ROUTE_ADD : ZEBRA_ROUTE_DELETE,
 				  zclient, &api);
-	bgp_process_route_transition_between_nhid(bgp, dest, info);
+	bgp_process_route_transition_between_nhid(bgp, dest, info, false);
 
 	return ret;
 }
@@ -1801,6 +1801,7 @@ enum zclient_send_status bgp_zebra_withdraw_actual(struct bgp_dest *dest,
 	struct peer *peer;
 	struct bgp_table *table = bgp_dest_table(dest);
 	const struct prefix *p = bgp_dest_get_prefix(dest);
+	enum zclient_send_status ret;
 
 	if (table->safi == SAFI_FLOWSPEC) {
 		peer = info->peer;
@@ -1830,7 +1831,10 @@ enum zclient_send_status bgp_zebra_withdraw_actual(struct bgp_dest *dest,
 		zlog_debug("Tx route delete VRF %s %pFX", bgp->name_pretty,
 			   &api.prefix);
 
-	return zclient_route_send(ZEBRA_ROUTE_DELETE, zclient, &api);
+	ret = zclient_route_send(ZEBRA_ROUTE_DELETE, zclient, &api);
+	bgp_process_route_transition_between_nhid(bgp, dest, info, true);
+
+	return ret;
 }
 
 /*

@@ -3725,18 +3725,20 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 		bgp_per_src_nhg_finish(bgp);
 		UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			   BGP_FLAG_NHG_PER_ORIGIN);
+		bgp_clear_vty(vty, bgp->name, afi, safi, clear_all, BGP_CLEAR_SOFT_NONE,
+		      NULL);
 	}
 	else {
 		bgp_per_src_nhg_init(bgp);
 		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			 BGP_FLAG_NHG_PER_ORIGIN);
+		bgp_clear_vty(vty, bgp->name, afi, safi, clear_all, BGP_CLEAR_SOFT_IN,
+			      NULL);
 	}
 	/* TODO: This is WRONG: Passing BGP_CLEAR_SOFT_NONE will flap the
 	   sessions We should pass BGP_CLEAR_SOFT_IN. Debug why this is not
 	   working
 	 */
-	bgp_clear_vty(vty, bgp->name, afi, safi, clear_all, BGP_CLEAR_SOFT_IN,
-		      NULL);
 	return CMD_SUCCESS;
 }
 
