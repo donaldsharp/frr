@@ -129,7 +129,7 @@ struct route_table {
 	struct route_node *table_rdonly(link[2]);                              \
                                                                                \
 	/* Lock of this radix */                                               \
-	unsigned int table_rdonly(lock);                                       \
+	_Atomic unsigned int table_rdonly(lock);			       \
                                                                                \
 	struct rn_hash_node_item nodehash;                                     \
 	/* Each node of route. */                                              \
@@ -244,7 +244,7 @@ extern void route_table_iter_cleanup(route_table_iter_t *iter);
 /* Lock node. */
 static inline struct route_node *route_lock_node(struct route_node *node)
 {
-	(*(unsigned *)&node->lock)++;
+	atomic_fetch_add_explicit(&node->lock, 1, memory_order_relaxed);
 	return node;
 }
 
@@ -252,7 +252,7 @@ static inline struct route_node *route_lock_node(struct route_node *node)
 static inline void route_unlock_node(struct route_node *node)
 {
 	assert(node->lock > 0);
-	(*(unsigned *)&node->lock)--;
+	atomic_fetch_sub_explicit(&node->lock, 1, memory_order_relaxed);
 
 	if (node->lock == 0)
 		route_node_delete(node);
