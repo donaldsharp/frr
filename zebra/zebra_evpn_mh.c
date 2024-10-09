@@ -93,7 +93,7 @@ static int zebra_program_using_fork_exec(char *cmd, int debug)
 		perror(#x " failed"); /* abort(); */                           \
 	}
 	pid_t pid;
-	int exitstat;
+	int exitstat, rc;
 	/* Block SIGINT */
 	sigset_t sigs, prevsigs;
 
@@ -117,7 +117,10 @@ static int zebra_program_using_fork_exec(char *cmd, int debug)
 		if (setpgid(0, 0) < 0)
 			zlog_warn("%s FAILED setpgid for child: %s cmd %s",
 				  __func__, safe_strerror(errno), cmd);
-		execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+		rc = execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+		if (debug)
+			zlog_debug("%s tc rule rc %u errno %s for cmd %s",
+				   __func__, rc, safe_strerror(errno), cmd);
 		exit(0);
 	}
 
@@ -1926,8 +1929,10 @@ zebra_evpn_es_vtep_sph_egress_tc_setup(struct zebra_evpn_es_vtep *es_vtep,
 			return;
 		es_vtep->flags |= ZEBRA_EVPNES_VTEP_SPH_SET;
 		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-			zlog_debug("es %s vtep %pI4 egress sph add",
-				   es_vtep->es->esi_str, &es_vtep->vtep_ip);
+			zlog_debug(
+				"es %s vtep %pI4 egress sph add intf %s oper %u",
+				es_vtep->es->esi_str, &es_vtep->vtep_ip,
+				zif->ifp->name, if_is_operative(zif->ifp));
 
 		/* If this is the first attempt to add a TC filter on an ED
 		 * we need to init the egress clsact
@@ -1992,7 +1997,11 @@ static void zebra_evpn_es_vtep_local_set(struct zebra_evpn_es_vtep *es_vtep)
 	listnode_init(&es_vtep->vtep_listnode, es_vtep);
 	listnode_add_sort(mh_vtep->es_vtep_list, &es_vtep->vtep_listnode);
 
-	if (!(es_vtep->es->flags & ZEBRA_EVPNES_BYPASS))
+	/* Skip egress tc rule on hostbond if in bypass mode or
+	 * ESI is not operational up.
+	 */
+	if (!CHECK_FLAG(es_vtep->es->flags, ZEBRA_EVPNES_BYPASS) &&
+	    !!CHECK_FLAG(es_vtep->es->flags, ZEBRA_EVPNES_OPER_UP))
 		zebra_evpn_es_vtep_sph_egress_tc_setup(es_vtep, true);
 }
 
@@ -3590,6 +3599,8 @@ void zebra_evpn_es_if_oper_state_change(struct zebra_if *zif, bool up)
 {
 	struct zebra_evpn_es *es = zif->es_info.es;
 	bool old_up = !!(es->flags & ZEBRA_EVPNES_OPER_UP);
+	struct zebra_evpn_es_vtep *zvtep;
+	struct listnode *node;
 
 	if (old_up == up)
 		return;
@@ -3609,6 +3620,13 @@ void zebra_evpn_es_if_oper_state_change(struct zebra_if *zif, bool up)
 	/* inform BGP of the ES oper state change */
 	if (es->flags & ZEBRA_EVPNES_READY_FOR_BGP)
 		zebra_evpn_es_send_add_to_client(es);
+
+	/* Upon ES oper up pogram egress tc rule */
+	for (ALL_LIST_ELEMENTS_RO(es->es_vtep_list, node, zvtep)) {
+		if (!CHECK_FLAG(es->flags, ZEBRA_EVPNES_BYPASS))
+			/* setup SPH-TH filters */
+			zebra_evpn_es_vtep_sph_egress_tc_setup(zvtep, true);
+	}
 }
 
 static char *zebra_evpn_es_vtep_str(char *vtep_str, struct zebra_evpn_es *es,
