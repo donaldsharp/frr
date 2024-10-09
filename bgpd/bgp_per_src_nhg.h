@@ -166,8 +166,11 @@ bool bgp_is_soo_route(struct bgp_dest *dest, struct bgp_path_info *pi,
 bool bgp_check_is_soo_route(struct bgp *bgp, afi_t afi,
                                 struct bgp_dest *dest, struct bgp_path_info *pi);
 void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest *dest,
-                               struct bgp_path_info *pi);
+                               struct bgp_path_info *pi, bool withdraw);
 void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi,
+				struct bgp_dest *dest, struct bgp_path_info *new_best,
+				bool is_add);
+void bgp_process_path_route_soo_attr(struct bgp *bgp, afi_t afi,
 				struct bgp_dest *dest, struct bgp_path_info *new_best,
 				bool is_add);
 bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
