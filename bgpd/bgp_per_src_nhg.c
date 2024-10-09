@@ -552,7 +552,7 @@ static void bgp_per_src_nhg_add_send(struct bgp_per_src_nhg_hash_entry *nhe)
 		/* convert to zapi format */
 		api_nh = &api_nhg.nexthops[api_nhg.nexthop_num];
 		zapi_nexthop_from_nexthop(api_nh, &bnc_iter->nh);
-
+		api_nh->weight = bnc_iter->nh_weight;
 		++api_nhg.nexthop_num;
 	}
 
@@ -645,25 +645,34 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 
 		bnc->nh.vrf_id = nhe->bgp->vrf_id;
 		bnc->nh.flags = NEXTHOP_FLAG_RECURSIVE;
-		if (do_wt_ecmp) {
+		if (do_wt_ecmp && pi->attr) {
 			bgp_zebra_use_nhop_weighted(
 				    nhe->bgp, pi->attr->link_bw, &nh_weight);
 		}
-		bnc->nh.weight = nh_weight;
+		bnc->nh_weight = nh_weight;
 		SET_FLAG(bnc->nh.flags, BGP_NEXTHOP_VALID);
 		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 			zlog_debug(
-				"Allocated bnc nhg %pFX(%d)(%s) peer %p refcnt:%d wei::%d afi:%d",
+				"Allocated bnc nhg %pFX(%d)(%s) peer %p refcnt:%d wei::%d attr wei:%d afi:%d ecmp:%d",
 				&bnc->prefix, bnc->ifindex,
 				nhe->bgp->name_pretty, pi->peer, nhe->refcnt,
-				bnc->nh.weight, afi);
+				bnc->nh_weight, pi->attr->link_bw, afi, do_wt_ecmp);
 	} else {
+		if (do_wt_ecmp) {
+			bgp_zebra_use_nhop_weighted(
+				    nhe->bgp, pi->attr->link_bw, &nh_weight);
+			if (bnc->nh_weight != nh_weight) {
+				bnc->nh_weight = nh_weight;
+				SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
+
+			}
+		}
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 			zlog_debug(
-				"Found existing bnc nhg %pFX(%d)(%s) peer %p refcnt:%d wei:%d",
+				"Found existing bnc nhg %pFX(%d)(%s) peer %p refcnt:%d wei:%d attr wei:%d ecmp:%d",
 				&bnc->prefix, bnc->ifindex,
-				nhe->bgp->name_pretty, pi->peer, nhe->refcnt,bnc->nh.weight);
+				nhe->bgp->name_pretty, pi->peer, nhe->refcnt,bnc->nh_weight, pi->attr->link_bw, do_wt_ecmp);
 	}
 
 	bnc->refcnt++;
