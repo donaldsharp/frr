@@ -4059,12 +4059,18 @@ DEFPY (clear_evpn_dup_addr,
 			 *yang_dup_mac = NULL;
 	struct zebra_l3vni *zl3vni = NULL;
 	struct zebra_evpn *zevpn = NULL;
+	struct zebra_vrf *zvrf;
 
 	if (!is_evpn_enabled()) {
 		vty_out(vty, "%% EVPN not enabled\n");
 		return CMD_SUCCESS;
 	}
 
+	if (vni_all) {
+		zvrf = zebra_vrf_get_evpn();
+		zebra_vxlan_clear_dup_detect_vni_all(zvrf);
+		return CMD_SUCCESS;
+	}
 	zl3vni = zl3vni_lookup(vni);
 	if (!zl3vni) {
 		zevpn = zebra_evpn_lookup(vni);
