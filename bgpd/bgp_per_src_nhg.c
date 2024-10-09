@@ -1035,6 +1035,9 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 			if (CHECK_FLAG(nhe->flags,
 				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
 				bgp_per_src_nhg_add_send(nhe);
+		} else {
+			//we cannot delete right away, wait for route with soo to move to zebra nhid
+			bgp_start_soo_timer(nhe->bgp, nhe);
 		}
 	}
 
@@ -1397,7 +1400,7 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, struct bgp_dest *dest,
 					bgp_dest_get_prefix_str(dest), &pi->peer->connection->su,
 					pi->peer->bit_index, is_add ? "upd" : "del");
 			}
-			bgp_per_src_nhg_update(nhe);
+			//bgp_per_src_nhg_update(nhe);
 		}
 	}
 
@@ -1422,7 +1425,9 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, struct bgp_dest *dest,
 		bgp_per_src_nhg_nc_del(afi, nhe, pi);
 	}
 
-	bgp_start_soo_timer(bgp, nhe);
+	bgp_per_src_nhg_update(nhe);
+	//karthik to double confirm timer start not needed
+	//bgp_start_soo_timer(bgp, nhe);
 }
 
 
