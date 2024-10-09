@@ -9750,8 +9750,15 @@ static void route_vty_short_status_out(struct vty *vty,
 						       path->net->reason));
 		}
 
-		if (CHECK_FLAG(path->flags, BGP_PATH_MULTIPATH))
-			json_object_boolean_true_add(json_path, "multipath");
+		if (CHECK_FLAG(path->flags, BGP_PATH_MULTIPATH)) {
+			if (is_path_using_soo_nhg(p, path, &soo_nhg, &soo_ip)) {
+				json_object_boolean_true_add(json_path,
+							     "multipathNhg");
+			} else {
+				json_object_boolean_true_add(json_path,
+							     "multipath");
+			}
+		}
 
 		/* Internal route. */
 		if ((path->peer->as)
@@ -11515,10 +11522,18 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 	if (CHECK_FLAG(path->flags, BGP_PATH_MULTIPATH)
 	    || (CHECK_FLAG(path->flags, BGP_PATH_SELECTED)
 		&& bgp_path_info_mpath_count(path))) {
-		if (json_paths)
-			json_object_boolean_true_add(json_path, "multipath");
-		else {
-			if (is_path_using_soo_nhg(p, path, &soo_nhg, &soo_ip)) {
+		bool is_multipath_nhg =
+			is_path_using_soo_nhg(p, path, &soo_nhg, &soo_ip);
+		if (json_paths) {
+			if (is_multipath_nhg) {
+				json_object_boolean_true_add(json_path,
+							     "multipathSoONhg");
+			} else {
+				json_object_boolean_true_add(json_path,
+							     "multipath");
+			}
+		} else {
+			if (is_multipath_nhg) {
 				vty_out(vty, ", multipath soo nhg");
 			} else {
 				vty_out(vty, ", multipath");
@@ -12727,6 +12742,7 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 	uint32_t soo_nhg = 0;
 	struct in_addr soo;
 	bool path_using_soo_nhg = false;
+	struct ipaddr ip;
 
 	mpls_lse_decode(dest->local_label, &label, &ttl, &exp, &bos);
 
@@ -12758,6 +12774,12 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 			}
 		}
 
+		if (path_using_soo_nhg) {
+			memset(&ip, 0, sizeof(ip));
+			SET_IPADDR_V4(&ip);
+			memcpy(&ip.ipaddr_v4, &soo, sizeof(ip.ipaddr_v4));
+		}
+
 		if (!json) {
 			vty_out(vty,
 				"BGP routing table entry for %s%s%pFX, version %" PRIu64,
@@ -12770,11 +12792,6 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 				safi == SAFI_MPLS_VPN && prd ? ":" : "", p,
 				dest->version);
 			if (path_using_soo_nhg) {
-				struct ipaddr ip;
-				memset(&ip, 0, sizeof(ip));
-				SET_IPADDR_V4(&ip);
-				memcpy(&ip.ipaddr_v4, &soo,
-				       sizeof(ip.ipaddr_v4));
 				vty_out(vty,
 					" SoO:%pIA, multipath soo nhg:%d\n",
 					&ip, soo_nhg);
@@ -12792,6 +12809,13 @@ void route_vty_out_detail_header(struct vty *vty, struct bgp *bgp,
 							p);
 				json_object_int_add(json, "version",
 						    dest->version);
+				if (path_using_soo_nhg) {
+					json_object_string_addf(json, "soO",
+								"%pIA", &ip);
+					json_object_int_add(json,
+							    "multipathSoONhgId",
+							    soo_nhg);
+				}
 			}
 		}
 	}
@@ -15524,6 +15548,7 @@ static int peer_adj_routes(struct vty *vty, struct peer *peer, afi_t afi,
 		json_object_string_add(json_scode, "valid", "*");
 		json_object_string_add(json_scode, "best", ">");
 		json_object_string_add(json_scode, "multipath", "=");
+		json_object_string_add(json_scode, "multipathNhg", "+");
 		json_object_string_add(json_scode, "internal", "i");
 		json_object_string_add(json_scode, "ribFailure", "r");
 		json_object_string_add(json_scode, "stale", "S");

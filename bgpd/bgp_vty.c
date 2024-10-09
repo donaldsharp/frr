@@ -18966,16 +18966,12 @@ static void vty_print_bitfield(struct vty *vty, const char *str,
 	if (json) {
 		if (strstr(str, "Selected path info bitmap"))
 			json_object_string_add(json, "selectedPathBitmap",
-					       (bitvalue == "") ? "none"
-								: bitvalue);
+					       bitvalue);
 		else if (strstr(str, "Installed path info bitmap"))
 			json_object_string_add(json, "installedPathBitmap",
-					       (bitvalue == "") ? "none"
-								: bitvalue);
+					       bitvalue);
 		else
-			json_object_string_add(json, "unknown",
-					       (bitvalue == "") ? "none"
-								: bitvalue);
+			json_object_string_add(json, "unknown", bitvalue);
 	} else {
 		vty_out(vty, "%s:%s\n", bitstring, bitvalue);
 	}
@@ -19013,6 +19009,18 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 			json, "numRoutesWithSoOUsingSoONHG",
 			bgp_dest_soo_use_soo_nhgid_qlist_count(
 				&soo_entry->dest_soo_use_nhid_list));
+		json_object_boolean_add(
+			json, "nhgValid",
+			CHECK_FLAG(soo_entry->flags,
+				   PER_SRC_NEXTHOP_GROUP_VALID));
+		json_object_boolean_add(
+			json, "nhgInstallPending",
+			CHECK_FLAG(soo_entry->flags,
+				   PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING));
+		json_object_boolean_add(
+			json, "nhgDeletePending",
+			CHECK_FLAG(soo_entry->flags,
+				   PER_SRC_NEXTHOP_GROUP_DEL_PENDING));
 	} else {
 		vty_out(vty, "SoO: %pIA\n", &soo_entry->ip);
 		vty_out(vty, "  NHG:\n");
@@ -19021,46 +19029,22 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 	}
 
 	if (CHECK_FLAG(soo_entry->flags, PER_SRC_NEXTHOP_GROUP_VALID)) {
-		if (json) {
-			json_object_string_add(json, "nhgFlag", "Valid");
-		} else {
-			vty_out(vty, "Valid");
-		}
+		vty_out(vty, "Valid");
 		if (CHECK_FLAG(soo_entry->flags,
 			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
-			if (json) {
-				json_object_string_add(json, "nhgFlag",
-						       "Install pending");
-			} else {
-				vty_out(vty, ", Install pending");
-			}
+			vty_out(vty, ", Install pending");
 		} else {
-			if (json) {
-				json_object_string_add(json, "nhgFlag",
-						       "Installed");
-			} else {
-				vty_out(vty, ", Installed");
-			}
+			vty_out(vty, ", Installed");
 		}
 	} else {
 		if (CHECK_FLAG(soo_entry->flags,
 			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
-			if (json) {
-				json_object_string_add(json, "nhgFlag",
-						       "Install pending");
-			} else {
-				vty_out(vty, "Install pending");
-			}
+			vty_out(vty, "Install pending");
 		}
 	}
 
 	if (CHECK_FLAG(soo_entry->flags, PER_SRC_NEXTHOP_GROUP_DEL_PENDING)) {
-		if (json) {
-			json_object_string_add(json, "nhgFlag",
-					       "Delete pending");
-		} else {
-			vty_out(vty, ", Delete pending");
-		}
+		vty_out(vty, ", Delete pending");
 	}
 
 	vty_out(vty, "\n");
@@ -19142,6 +19126,10 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 		if (json_routes) {
 			json_route = json_object_new_object();
 			json_object_string_add(json_route, "prefix", pfxprint);
+			json_object_boolean_add(
+				json_route, "usesSoONhg",
+				CHECK_FLAG(bgp_dest_soo_entry->flags,
+					   DEST_PRESENT_IN_NHGID_USE_LIST));
 		} else {
 			vty_out(vty, "      %s", pfxprint);
 			if (CHECK_FLAG(bgp_dest_soo_entry->flags,
