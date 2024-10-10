@@ -64,10 +64,10 @@ bgp_path_info_to_ipv6_nexthop(struct bgp_path_info *path, ifindex_t *ifindex);
 static unsigned int bgp_per_src_nhg_hash_keymake(const void *p);
 static bool bgp_per_src_nhg_cmp(const void *p1, const void *p2);
 
-static bool is_soo_rt_pi_subset_of_rt_with_soo_pi(
+static bool is_soo_rt_selected_pi_subset_of_rt_with_soo_pi(
 	struct bgp_dest_soo_hash_entry *bgp_dest_with_soo_entry);
 
-static bool is_soo_rt_pi_subset_of_all_rts_with_soo_pi(
+static bool is_soo_rt_selected_pi_subset_of_all_rts_with_soo_using_soo_nhg_pi(
 	struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_entry);
 
 
@@ -100,7 +100,7 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, struct bgp_dest *dest,
 void bgp_per_src_nhg_nc_del(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 			    struct bgp_path_info *pi);
 
-static bool is_soo_rt_pi_subset_of_rt_with_selected_soo_pi(
+static bool is_soo_rt_installed_pi_subset_of_rt_with_soo_pi(
 	struct bgp_dest_soo_hash_entry *bgp_dest_with_soo_entry);
 
 static void bgp_per_src_nhg_add_send(struct bgp_per_src_nhg_hash_entry *nhe);
@@ -177,7 +177,7 @@ bgp_per_src_nhg_zebra_route_install(struct bgp_dest *dest,
 		    !BGP_PATH_HOLDDOWN(pi)) {
 			// call the below install  code if decide to
 			// change nh-id of dest
-			if (is_soo_rt_pi_subset_of_rt_with_soo_pi(
+			if (is_soo_rt_installed_pi_subset_of_rt_with_soo_pi(
 				    bgp_dest_soo_entry)) {
 				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 					zlog_debug(
@@ -249,7 +249,8 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 		return;
 	}
 
-	if (is_soo_rt_pi_subset_of_all_rts_with_soo_pi(nhe)) {
+	if (is_soo_rt_selected_pi_subset_of_all_rts_with_soo_using_soo_nhg_pi(
+		    nhe)) {
 		// program the running ecmp and do NHG replace
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 			zlog_debug(
@@ -489,9 +490,10 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 
 			ipaddr2str(&nhe->ip, buf, sizeof(buf));
 			prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
-			if (!is_soo_rt_pi_subset_of_rt_with_selected_soo_pi(
-				    dest_he) || (!CHECK_FLAG(nhe->flags,
-                                 PER_SRC_NEXTHOP_GROUP_VALID))) {
+			if (!is_soo_rt_installed_pi_subset_of_rt_with_soo_pi(
+				    dest_he) ||
+			    (!CHECK_FLAG(nhe->flags,
+					 PER_SRC_NEXTHOP_GROUP_VALID))) {
 				if (CHECK_FLAG(dest_he->flags,
 					 DEST_PRESENT_IN_NHGID_USE_LIST)) {
 					bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
@@ -573,10 +575,10 @@ static void bgp_per_src_nhg_add_send(struct bgp_per_src_nhg_hash_entry *nhe)
 	zclient_nhg_send(zclient, ZEBRA_NHG_ADD, &api_nhg);
 	SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
-	assert(bf_is_inited(nhe->bgp_soo_route_pi_bitmap));
-	if (bf_is_inited(nhe->bgp_selected_soo_route_pi_bitmap))
-		bf_free(nhe->bgp_selected_soo_route_pi_bitmap);
-	nhe->bgp_selected_soo_route_pi_bitmap = bf_copy(nhe->bgp_soo_route_pi_bitmap);
+	assert(bf_is_inited(nhe->bgp_soo_route_selected_pi_bitmap));
+	if (bf_is_inited(nhe->bgp_soo_route_installed_pi_bitmap))
+		bf_free(nhe->bgp_soo_route_installed_pi_bitmap);
+	nhe->bgp_soo_route_installed_pi_bitmap = bf_copy(nhe->bgp_soo_route_selected_pi_bitmap);
 }
 
 static void bgp_per_src_nhg_del_send(struct bgp_per_src_nhg_hash_entry *nhe)
@@ -598,10 +600,10 @@ static void bgp_per_src_nhg_del_send(struct bgp_per_src_nhg_hash_entry *nhe)
 	zclient_nhg_send(zclient, ZEBRA_NHG_DEL, &api_nhg);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
-	assert(bf_is_inited(nhe->bgp_soo_route_pi_bitmap));
-	if (bf_is_inited(nhe->bgp_selected_soo_route_pi_bitmap))
-		bf_free(nhe->bgp_selected_soo_route_pi_bitmap);
-	nhe->bgp_selected_soo_route_pi_bitmap = bf_copy(nhe->bgp_soo_route_pi_bitmap);
+        assert(bf_is_inited(nhe->bgp_soo_route_selected_pi_bitmap));
+        if (bf_is_inited(nhe->bgp_soo_route_installed_pi_bitmap))
+                bf_free(nhe->bgp_soo_route_installed_pi_bitmap);
+        nhe->bgp_soo_route_installed_pi_bitmap = bf_copy(nhe->bgp_soo_route_selected_pi_bitmap);
 }
 
 static struct bgp_nhg_nexthop_cache *
@@ -973,11 +975,12 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 	bgp_dest_soo_qlist_init(&nhe->dest_soo_list);
 	bgp_dest_soo_use_soo_nhgid_qlist_init(&nhe->dest_soo_use_nhid_list);
 
-	bf_init(nhe->bgp_soo_route_pi_bitmap, BGP_PEER_INIT_BITMAP_SIZE);
-	bf_assign_zero_index(nhe->bgp_soo_route_pi_bitmap);
-	bf_init(nhe->bgp_selected_soo_route_pi_bitmap,
+	bf_init(nhe->bgp_soo_route_selected_pi_bitmap,
 		BGP_PEER_INIT_BITMAP_SIZE);
-	bf_assign_zero_index(nhe->bgp_selected_soo_route_pi_bitmap);
+	bf_assign_zero_index(nhe->bgp_soo_route_selected_pi_bitmap);
+	bf_init(nhe->bgp_soo_route_installed_pi_bitmap,
+		BGP_PEER_INIT_BITMAP_SIZE);
+	bf_assign_zero_index(nhe->bgp_soo_route_installed_pi_bitmap);
 
 	// TODO, check with Donald if table needs to be per afi
 	bgp_nhg_nexthop_cache_init(&nhe->nhg_nexthop_cache_table);
@@ -999,23 +1002,23 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 		return;
 	}
 	/*
-	bgp_selected_soo_route_pi_bitmap -> what is installed in the kernel
+	bgp_soo_route_installed_pi_bitmap -> what is installed in the kernel
 	(old/existing)
-	bgp_soo_route_pi_bitmap 		 -> what is received from BGP
-	update (new)
+	bgp_soo_route_selected_pi_bitmap 		 -> what is received
+	from BGP update (new)
 
-	We can have 4 cases between bgp_soo_route_pi_bitmap and
-	bgp_selected_soo_route_pi_bitmap
-	Case 1: bgp_soo_route_pi_bitmap and bgp_selected_soo_route_pi_bitmap are
-	'DISJOINT'
+	We can have 4 cases between bgp_soo_route_selected_pi_bitmap and
+	bgp_soo_route_installed_pi_bitmap
+	Case 1: bgp_soo_route_selected_pi_bitmap and
+	bgp_soo_route_installed_pi_bitmap are 'DISJOINT'
 	TODO: What to do?
 
-	Case 2: bgp_soo_route_pi_bitmap and bgp_selected_soo_route_pi_bitmap are
-	'OVERLAPPING'
+	Case 2: bgp_soo_route_selected_pi_bitmap and
+	bgp_soo_route_installed_pi_bitmap are 'OVERLAPPING'
 	TODO: What to do?
 
-	Case 3: bgp_soo_route_pi_bitmap is 'SUBSET' of
-	bgp_selected_soo_route_pi_bitmap
+	Case 3: bgp_soo_route_selected_pi_bitmap is 'SUBSET' of
+	bgp_soo_route_installed_pi_bitmap
 		Case a:
 			ECMP Case (3).(a).(i): ECMP Shrink
 				Example 1: old = NH1 NH2 NH3
@@ -1026,19 +1029,18 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 						   new = NH1,255/NH2,255/NH3,255
 				Example 2: old = NH1,255/NH2,255/NH3,255
 						   new = NH1,255/NH2,85/NH3,127
-			case (3).(b).(ii):ECMP Shrink with weights increase or decrease
-				Example 1: old = NH1,255/NH2,255/NH3,166
-						new = NH1,255/NH3,85
+			case (3).(b).(ii):ECMP Shrink with weights increase or
+	decrease Example 1: old = NH1,255/NH2,255/NH3,166 new = NH1,255/NH3,85
 				Example 2: old = NH1,255/NH2,255/NH3,166
 						new = NH1,255/NH3,255
 
-	Case 4: bgp_soo_route_pi_bitmap is 'SUPERSET' of
-	bgp_selected_soo_route_pi_bitmap
+	Case 4: bgp_soo_route_selected_pi_bitmap is 'SUPERSET' of
+	bgp_soo_route_installed_pi_bitmap
 	*/
 
 	// running is subset of installed - shrink case - immediate nhg replace
-	if (bf_is_subset(&nhe->bgp_soo_route_pi_bitmap,
-			 &nhe->bgp_selected_soo_route_pi_bitmap)) {
+	if (bf_is_subset(&nhe->bgp_soo_route_selected_pi_bitmap,
+			 &nhe->bgp_soo_route_installed_pi_bitmap)) {
 		// Case 3: NHG replace can be done immediately without waiting
 		// for any timer
 		// TODO: Call code to do NHG replace
@@ -1055,8 +1057,8 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 	}
 
 	// installed is subset of running - expansion case - start timer
-	if (bf_is_subset(&nhe->bgp_selected_soo_route_pi_bitmap,
-			 &nhe->bgp_soo_route_pi_bitmap)) {
+	if (bf_is_subset(&nhe->bgp_soo_route_installed_pi_bitmap,
+			 &nhe->bgp_soo_route_selected_pi_bitmap)) {
 		// Case 4: This is ECMP expansion case, this can be done after
 		// the soo timer expiry
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -1181,7 +1183,25 @@ void bgp_per_src_nhg_finish(struct bgp *bgp)
 	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
 }
 
-static bool is_soo_rt_pi_subset_of_rt_with_selected_soo_pi(
+static bool is_soo_rt_installed_pi_subset_of_rt_with_soo_pi(
+	struct bgp_dest_soo_hash_entry *bgp_dest_with_soo_entry)
+{
+	if (!bgp_dest_with_soo_entry) {
+		return false;
+	}
+
+	bitfield_t rt_with_soo_pi_bitmap =
+		bgp_dest_with_soo_entry->bgp_pi_bitmap;
+	bitfield_t soo_rt_installed_pi_bitmap =
+		bgp_dest_with_soo_entry->nhe->bgp_soo_route_installed_pi_bitmap;
+
+	return bf_is_subset(&soo_rt_installed_pi_bitmap,
+			    &rt_with_soo_pi_bitmap);
+}
+
+// Check if 'SoO route' selected pi bitmap is a subset of 'route with SoO' pi
+// bitmap
+static bool is_soo_rt_selected_pi_subset_of_rt_with_soo_pi(
 	struct bgp_dest_soo_hash_entry *bgp_dest_with_soo_entry)
 {
 	if (!bgp_dest_with_soo_entry) {
@@ -1191,25 +1211,9 @@ static bool is_soo_rt_pi_subset_of_rt_with_selected_soo_pi(
 	bitfield_t rt_with_soo_pi_bitmap =
 		bgp_dest_with_soo_entry->bgp_pi_bitmap;
 	bitfield_t soo_rt_selected_pi_bitmap =
-		bgp_dest_with_soo_entry->nhe->bgp_selected_soo_route_pi_bitmap;
+		bgp_dest_with_soo_entry->nhe->bgp_soo_route_selected_pi_bitmap;
 
 	return bf_is_subset(&soo_rt_selected_pi_bitmap, &rt_with_soo_pi_bitmap);
-}
-
-// Check if 'SoO route' pi(path info) bitmap is a subset of 'route with SoO'
-static bool is_soo_rt_pi_subset_of_rt_with_soo_pi(
-	struct bgp_dest_soo_hash_entry *bgp_dest_with_soo_entry)
-{
-	if (!bgp_dest_with_soo_entry) {
-		return false;
-	}
-
-	bitfield_t rt_with_soo_pi_bitmap =
-		bgp_dest_with_soo_entry->bgp_pi_bitmap;
-	bitfield_t soo_rt_pi_bitmap =
-		bgp_dest_with_soo_entry->nhe->bgp_soo_route_pi_bitmap;
-
-	return bf_is_subset(&soo_rt_pi_bitmap, &rt_with_soo_pi_bitmap);
 }
 
 /* Check if SOO route path info bitmap is subset of path info bitmap of "all"
@@ -1219,18 +1223,19 @@ static bool is_soo_rt_pi_subset_of_rt_with_soo_pi(
  * TODO: Implement a more efficient way using 'count' array which checks if 'SoO
  * route' pi bitmap is subset of ALL 'route with SoO'
  */
-static bool is_soo_rt_pi_subset_of_all_rts_with_soo_pi(
+static bool is_soo_rt_selected_pi_subset_of_all_rts_with_soo_using_soo_nhg_pi(
 	struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_entry)
 {
 	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
 	bool is_subset_of_all_routes = true;
 
-	// Walk all the 'routes with SoO'
+	// Walk only the 'routes with SoO' that use SoO NHG, not ALL 'route with
+	// SoO'
 	frr_each (bgp_dest_soo_use_soo_nhgid_qlist,
 		  &bgp_per_src_nhg_entry->dest_soo_use_nhid_list,
 		  bgp_dest_soo_entry) {
 		// Check if 'SoO route' pi bitmap a subset of 'route with SoO'
-		if (!is_soo_rt_pi_subset_of_rt_with_soo_pi(
+		if (!is_soo_rt_selected_pi_subset_of_rt_with_soo_pi(
 			    bgp_dest_soo_entry)) {
 			is_subset_of_all_routes = false;
 		}
@@ -1418,17 +1423,17 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, struct bgp_dest *dest,
 	}
 
 	if (is_add) {
-		if (!bf_test_index(nhe->bgp_soo_route_pi_bitmap,
+		if (!bf_test_index(nhe->bgp_soo_route_selected_pi_bitmap,
 				   pi->peer->bit_index)) {
-			bf_set_bit(nhe->bgp_soo_route_pi_bitmap,
+			bf_set_bit(nhe->bgp_soo_route_selected_pi_bitmap,
 				   pi->peer->bit_index);
 			nhe->refcnt++;
 		}
 		bgp_per_src_nhg_nc_add(afi, nhe, pi);
 	} else {
-		if (bf_test_index(nhe->bgp_soo_route_pi_bitmap,
+		if (bf_test_index(nhe->bgp_soo_route_selected_pi_bitmap,
 				  pi->peer->bit_index)) {
-			bf_release_index(nhe->bgp_soo_route_pi_bitmap,
+			bf_release_index(nhe->bgp_soo_route_selected_pi_bitmap,
 					 pi->peer->bit_index);
 			nhe->refcnt--;
 		}
@@ -1577,7 +1582,7 @@ bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 		if (nhe) {
 			if (is_soo_route) {
 				if (bf_test_index(
-					    nhe->bgp_selected_soo_route_pi_bitmap,
+					    nhe->bgp_soo_route_installed_pi_bitmap,
 					    path->peer->bit_index)) {
 					using_soo_nhg = true;
 					*soo_nhg = nhe->nhg_id;

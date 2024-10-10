@@ -105,8 +105,8 @@ struct bgp_per_src_nhg_hash_entry {
 
 	struct bgp_dest_soo_use_soo_nhgid_qlist_head dest_soo_use_nhid_list;
 
-	bitfield_t bgp_soo_route_pi_bitmap;
-	bitfield_t bgp_selected_soo_route_pi_bitmap;
+	bitfield_t bgp_soo_route_selected_pi_bitmap;
+	bitfield_t bgp_soo_route_installed_pi_bitmap;
 
 	uint32_t refcnt;
 
