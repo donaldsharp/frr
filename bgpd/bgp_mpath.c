@@ -577,7 +577,7 @@ void bgp_path_info_mpath_update(struct bgp *bgp, struct bgp_dest *dest,
 		if ((mpath_count) != old_mpath_count || old_cum_bw != cum_bw)
 			SET_FLAG(new_best->flags, BGP_PATH_LINK_BW_CHG);
 
-		if ((mpath_count > 1) && eval_soo_per_nhg)
+		if (eval_soo_per_nhg)
 			bgp_process_mpath_route_soo_attr(
 				bgp, table->afi, dest, new_best, true);
 	}
