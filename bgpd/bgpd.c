@@ -2700,22 +2700,6 @@ static void peer_group2peer_config_copy(struct peer_group *group,
 	if (conf->ttl != BGP_DEFAULT_TTL)
 		peer->ttl = conf->ttl;
 
-	/*
-	 * Note: Consider the case where peer-group PG has A,B,C,D configs and
-	 * a Nbr is configured to use the peer-group PG.
-	 * Now for this Nbr,
-	 *   - config A,B are valid and applied.
-	 *   - However config C(ttl-security hops in this case) is to be
-	 * rejected. Ideal way to fix this is to reject the config i.e. rollback
-	 * A and B as well. However we DO NOT have such an infra today.
-	 *
-	 * Hence warning issued when a user configures a peer-group with
-	 * ttl-security hops > 1 which a directly connected neighbor inherits.
-	 */
-	if (peer->conf_if && (conf->gtsm_hops > BGP_GTSM_HOPS_CONNECTED))
-		zlog_warn("%s is directly connected peer, hops cannot exceed 1",
-			  peer->conf_if);
-
 	/* GTSM hops - Set # of hops between us and BGP peer */
 	if (peer_ttl_security_hops_set(peer, conf->gtsm_hops))
 		zlog_warn(
