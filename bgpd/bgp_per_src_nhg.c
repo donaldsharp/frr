@@ -164,12 +164,11 @@ static void bgp_stop_soo_timer(struct bgp *bgp,
 }
 
 static void
-bgp_per_src_nhg_zebra_route_install(struct bgp_dest *dest,
+bgp_per_src_nhg_zebra_route_install(struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry,
 				    struct bgp_per_src_nhg_hash_entry *nhe)
 {
 	struct bgp_path_info *pi;
-	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
-
+	struct bgp_dest *dest = bgp_dest_soo_entry->dest;
 	for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
 		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
 		    (pi->type == ZEBRA_ROUTE_BGP &&
@@ -241,8 +240,7 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 			frr_each (bgp_dest_soo_use_soo_nhgid_qlist,
 				  &nhe->dest_soo_use_nhid_list,
 				  bgp_dest_soo_entry) {
-				dest = bgp_dest_soo_entry->dest;
-				bgp_per_src_nhg_zebra_route_install(dest, nhe);
+				bgp_per_src_nhg_zebra_route_install(bgp_dest_soo_entry, nhe);
 			}
 			//bgp_start_soo_timer(nhe->bgp, nhe);
 		}
@@ -275,8 +273,7 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 
 	// Walk all the 'routes with SoO' and move from zebra nhid to soo nhid
 	frr_each (bgp_dest_soo_qlist, &nhe->dest_soo_list, bgp_dest_soo_entry) {
-		dest = bgp_dest_soo_entry->dest;
-		bgp_per_src_nhg_zebra_route_install(dest, nhe);
+		bgp_per_src_nhg_zebra_route_install(bgp_dest_soo_entry, nhe);
 	}
 }
 
