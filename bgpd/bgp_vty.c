@@ -19103,10 +19103,10 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 	}
 
 	vty_print_bitfield(vty, "    Selected path info bitmap ",
-			   &soo_entry->bgp_soo_route_pi_bitmap,
+			   &soo_entry->bgp_soo_route_selected_pi_bitmap,
 			   json_bitmap_object);
 	vty_print_bitfield(vty, "    Installed path info bitmap",
-			   &soo_entry->bgp_selected_soo_route_pi_bitmap,
+			   &soo_entry->bgp_soo_route_installed_pi_bitmap,
 			   json_bitmap_object);
 
 	if (json) {
