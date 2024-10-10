@@ -2700,10 +2700,8 @@ static void peer_group2peer_config_copy(struct peer_group *group,
 	if (conf->ttl != BGP_DEFAULT_TTL)
 		peer->ttl = conf->ttl;
 
-	/* GTSM hops - Set # of hops between us and BGP peer */
-	if (peer_ttl_security_hops_set(peer, conf->gtsm_hops))
-		zlog_warn(
-			"ebgp-multihop and ttl-security cannot be configured together");
+	/* GTSM hops */
+	peer->gtsm_hops = conf->gtsm_hops;
 
 	/* peer flags apply */
 	flags_tmp = conf->flags & ~peer->flags_override;
