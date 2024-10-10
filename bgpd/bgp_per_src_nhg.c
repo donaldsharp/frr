@@ -163,6 +163,38 @@ static void bgp_stop_soo_timer(struct bgp *bgp,
 	}
 }
 
+static void
+bgp_per_src_nhg_zebra_route_install(struct bgp_dest *dest,
+				    struct bgp_per_src_nhg_hash_entry *nhe)
+{
+	struct bgp_path_info *pi;
+	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
+
+	for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
+		    (pi->type == ZEBRA_ROUTE_BGP &&
+		     pi->sub_type == BGP_ROUTE_NORMAL) &&
+		    !BGP_PATH_HOLDDOWN(pi)) {
+			// call the below install  code if decide to
+			// change nh-id of dest
+			if (is_soo_rt_pi_subset_of_rt_with_soo_pi(
+				    bgp_dest_soo_entry)) {
+				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+					zlog_debug(
+						"bgp vrf %s per src nhg soo route %pIA pi is "
+						"subset of route with soo %s "
+						"(program it in zebra to use soo nhg %u)",
+						nhe->bgp->name_pretty, &nhe->ip,
+						bgp_dest_get_prefix_str(dest),
+						nhe->nhg_id);
+
+				bgp_zebra_route_install(dest, pi, nhe->bgp,
+							true, NULL, false);
+			}
+		}
+	}
+}
+
 // SOO timer expiry
 static void bgp_per_src_nhg_timer_slot_run(void *item)
 {
@@ -206,6 +238,12 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 		} else {
 			UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 			SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_DEL_PENDING);
+			frr_each (bgp_dest_soo_use_soo_nhgid_qlist,
+				  &nhe->dest_soo_use_nhid_list,
+				  bgp_dest_soo_entry) {
+				dest = bgp_dest_soo_entry->dest;
+				bgp_per_src_nhg_zebra_route_install(dest, nhe);
+			}
 			//bgp_start_soo_timer(nhe->bgp, nhe);
 		}
 		return;
@@ -237,33 +275,7 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 	// Walk all the 'routes with SoO' and move from zebra nhid to soo nhid
 	frr_each (bgp_dest_soo_qlist, &nhe->dest_soo_list, bgp_dest_soo_entry) {
 		dest = bgp_dest_soo_entry->dest;
-
-		/*move dest soo to soo NHIG if its superset of soo NHG*/
-		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
-			if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
-			    (pi->type == ZEBRA_ROUTE_BGP &&
-			     pi->sub_type == BGP_ROUTE_NORMAL)) {
-				// call the below install  code if decide to
-				// change nh-id of dest
-				if (is_soo_rt_pi_subset_of_rt_with_soo_pi(
-					    bgp_dest_soo_entry)) {
-					if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
-						zlog_debug(
-							"bgp vrf %s per src nhg soo route %pIA pi is "
-							"subset of route with soo %s "
-							"(program it in zebra to use soo nhg %u)",
-							nhe->bgp->name_pretty,
-							&nhe->ip,
-							bgp_dest_get_prefix_str(
-								dest),
-							nhe->nhg_id);
-
-					bgp_zebra_route_install(dest, pi,
-								nhe->bgp, true,
-								NULL, false);
-				}
-			}
-		}
+		bgp_per_src_nhg_zebra_route_install(dest, nhe);
 	}
 }
 
@@ -991,6 +1003,10 @@ static struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_add(struct bgp *bgp,
 
 static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 {
+	if (!nhe->refcnt) {
+		bgp_start_soo_timer(nhe->bgp, nhe);
+		return;
+	}
 	/*
 	bgp_selected_soo_route_pi_bitmap -> what is installed in the kernel
 	(old/existing)
@@ -1044,9 +1060,6 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 			if (CHECK_FLAG(nhe->flags,
 				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
 				bgp_per_src_nhg_add_send(nhe);
-		} else {
-			//we cannot delete right away, wait for route with soo to move to zebra nhid
-			bgp_start_soo_timer(nhe->bgp, nhe);
 		}
 	}
 
@@ -1435,8 +1448,6 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, struct bgp_dest *dest,
 	}
 
 	bgp_per_src_nhg_update(nhe);
-	//karthik to double confirm timer start not needed
-	//bgp_start_soo_timer(bgp, nhe);
 }
 
 
