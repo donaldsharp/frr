@@ -244,7 +244,8 @@ extern void route_table_iter_cleanup(route_table_iter_t *iter);
 /* Lock node. */
 static inline struct route_node *route_lock_node(struct route_node *node)
 {
-	atomic_fetch_add_explicit(&node->lock, 1, memory_order_relaxed);
+	atomic_fetch_add_explicit((_Atomic unsigned *)&node->lock, 1,
+				  memory_order_relaxed);
 	return node;
 }
 
@@ -252,7 +253,8 @@ static inline struct route_node *route_lock_node(struct route_node *node)
 static inline void route_unlock_node(struct route_node *node)
 {
 	assert(node->lock > 0);
-	atomic_fetch_sub_explicit(&node->lock, 1, memory_order_relaxed);
+	atomic_fetch_sub_explicit((_Atomic unsigned *)&node->lock, 1,
+				  memory_order_relaxed);
 
 	if (node->lock == 0)
 		route_node_delete(node);
