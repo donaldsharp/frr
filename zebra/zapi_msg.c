@@ -661,7 +661,7 @@ static int zsend_nexthop_lookup_mrib(struct zserv *client, struct ipaddr *addr,
 {
 	struct stream *s;
 	unsigned long nump;
-	uint8_t num;
+	uint16_t num;
 	struct nexthop *nexthop;
 
 	/* Get output stream. */
@@ -681,7 +681,7 @@ static int zsend_nexthop_lookup_mrib(struct zserv *client, struct ipaddr *addr,
 		/* remember position for nexthop_num */
 		nump = stream_get_endp(s);
 		/* reserve room for nexthop_num */
-		stream_putc(s, 0);
+		stream_putw(s, 0);
 		nhg = rib_get_fib_nhg(re);
 		for (ALL_NEXTHOPS_PTR(nhg, nexthop)) {
 			if (rnh_nexthop_valid(re, nexthop))
@@ -689,11 +689,11 @@ static int zsend_nexthop_lookup_mrib(struct zserv *client, struct ipaddr *addr,
 		}
 
 		/* store nexthop_num */
-		stream_putc_at(s, nump, num);
+		stream_putw_at(s, nump, num);
 	} else {
 		stream_putc(s, 0); /* distance */
 		stream_putl(s, 0); /* metric */
-		stream_putc(s, 0); /* nexthop_num */
+		stream_putw(s, 0); /* nexthop_num */
 	}
 
 	stream_putw_at(s, 0, stream_get_endp(s));
