@@ -176,4 +176,5 @@ void bgp_process_path_route_soo_attr(struct bgp *bgp, afi_t afi,
 				bool is_add);
 bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 			   uint32_t *soo_nhg, struct in_addr *soo);
+bool is_nhg_per_origin_configured(struct bgp *bgp);
 #endif /* _BGP_PER_SRC_NHG_H */

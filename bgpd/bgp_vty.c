@@ -3937,6 +3937,15 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 	safi_t safi = bgp_node_safi(vty);
 
 	if (no) {
+		if (!is_nhg_per_origin_configured(bgp))
+			return CMD_SUCCESS;
+		else if (bgp->per_src_nhg_convergence_timer !=
+			 BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD) {
+			vty_out(vty,
+				"%%  Disable per-source-nhg convergence-timer cli first\n");
+			return CMD_WARNING;
+		}
+
 		bgp_per_src_nhg_finish(bgp);
 		UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			   BGP_FLAG_NHG_PER_ORIGIN);
@@ -8555,13 +8564,17 @@ DEFPY(bgp_per_src_nhg_convergence_timer, bgp_per_src_nhg_convergence_timer_cmd,
       "bgp per-source-nhg convergence-timer (5-1000)$period",
       BGP_STR
       "Per Source NHG settings\n"
-      "Time in milli secs to wait before processing SOO for per source\n"
-      "nexthop group; Default is 50 msec\n")
+      "Time in milli secs to wait before processing SOO for per source nexthop group\n"
+      "Default is 50 msec\n")
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 
 	if (period == bgp->per_src_nhg_convergence_timer)
 		return CMD_SUCCESS;
+	else if (!is_nhg_per_origin_configured(bgp)) {
+		vty_out(vty, "%% nhg-per-origin not enabled\n");
+		return CMD_WARNING;
+	}
 
 	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
 
@@ -8578,15 +8591,17 @@ DEFPY(bgp_per_src_nhg_convergence_timer, bgp_per_src_nhg_convergence_timer_cmd,
 
 DEFPY(no_bgp_per_src_nhg_convergence_timer,
       no_bgp_per_src_nhg_convergence_timer_cmd,
-      "no bgp per-source-nhg convergence-timer",
+      "no bgp per-source-nhg convergence-timer [(5-1000)]",
       NO_STR BGP_STR
       "Per Source NHG settings\n"
-      "Time in milli secs to wait before processing SOO for per source nexthop group\n")
+      "Time in milli secs to wait before processing SOO for per source nexthop group\n"
+      "Default is 50 msec\n")
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
 
-	if (bgp->per_src_nhg_convergence_timer ==
-	    BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD)
+	if (!is_nhg_per_origin_configured(bgp) ||
+	    bgp->per_src_nhg_convergence_timer ==
+		    BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD)
 		return CMD_SUCCESS;
 
 	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
@@ -19508,8 +19523,9 @@ int bgp_config_write(struct vty *vty)
 				&bgp->router_id_static);
 
 		/* BGP Per Source NHG Convergence time setting */
-		if (bgp->per_src_nhg_convergence_timer !=
-		    BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD)
+		if (is_nhg_per_origin_configured(bgp) &&
+		    bgp->per_src_nhg_convergence_timer !=
+			    BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD)
 			vty_out(vty,
 				" bgp per-source-nhg convergence-timer %d\n",
 				bgp->per_src_nhg_convergence_timer);
