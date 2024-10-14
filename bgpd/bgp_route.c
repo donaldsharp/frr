@@ -11526,8 +11526,8 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 			is_path_using_soo_nhg(p, path, &soo_nhg, &soo_ip);
 		if (json_paths) {
 			if (is_multipath_nhg) {
-				json_object_boolean_true_add(json_path,
-							     "multipathSoONhg");
+				json_object_boolean_true_add(
+					json_path, "multipathSooNhgFlag");
 			} else {
 				json_object_boolean_true_add(json_path,
 							     "multipath");
