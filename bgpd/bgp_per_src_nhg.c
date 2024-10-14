@@ -1559,7 +1559,7 @@ void bgp_process_path_route_soo_attr(struct bgp *bgp, afi_t afi,
 	}
 }
 
-static bool is_nhg_per_origin_configured(struct bgp *bgp)
+bool is_nhg_per_origin_configured(struct bgp *bgp)
 {
 	afi_t afi;
 	safi_t safi;
@@ -1568,6 +1568,7 @@ static bool is_nhg_per_origin_configured(struct bgp *bgp)
 		if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			       BGP_FLAG_NHG_PER_ORIGIN)) {
 			nhg_per_origin = true;
+			break;
 		}
 	}
 
