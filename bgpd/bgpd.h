@@ -858,7 +858,7 @@ struct bgp {
 
 #define BGP_FLAG_ADVERTISE_ORIGIN (1ULL << 0)
 #define BGP_FLAG_NHG_PER_ORIGIN (1ULL << 1)
-
+#define BGP_FLAG_CONFIG_DEL_PENDING (1ULL << 2)
 	/* BGP per source NHG flags */
 	uint8_t per_src_nhg_flags[AFI_MAX][SAFI_MAX];
 	/* local administrator value used for soo creation used for per source
@@ -869,8 +869,10 @@ struct bgp {
 	/* SOO value derived from BGP router-id*/
 	struct ecommunity *per_source_nhg_soo;
 
-	/* Hash table of per source NHG based on soo*/
-	struct hash *per_src_nhg_table;
+	/* Hash table of per source NHG based on soo.
+	   SAFI ignored as we only deal with unicast.
+	  */
+	struct hash *per_src_nhg_table[AFI_MAX][SAFI_MAX];
 	/* Timer wheel for per source NHG SoO*/
 	struct timer_wheel *per_src_nhg_soo_timer_wheel;
 	bool per_src_nhg_soo_timer_wheel_created;

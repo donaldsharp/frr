@@ -722,7 +722,8 @@ extern void bgp_static_delete(struct bgp *);
 extern void bgp_static_redo_import_check(struct bgp *);
 extern void bgp_purge_static_redist_routes(struct bgp *bgp);
 extern void bgp_static_update(struct bgp *bgp, const struct prefix *p,
-			      struct bgp_static *s, afi_t afi, safi_t safi);
+			      struct bgp_static *s, afi_t afi, safi_t safi,
+			      bool skip_import_check);
 extern void bgp_static_withdraw(struct bgp *bgp, const struct prefix *p,
 				afi_t afi, safi_t safi);
 
@@ -886,4 +887,8 @@ extern bool bgp_path_suppressed(struct bgp_path_info *pi);
 extern int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete);
 extern void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest,
 				 afi_t afi, safi_t safi);
+extern int bgp_static_set(struct vty *vty, const char *negate,
+			  const char *ip_str, afi_t afi, safi_t safi,
+			  const char *rmap, int backdoor, uint32_t label_index,
+			  bool skip_import_check);
 #endif /* _QUAGGA_BGP_ROUTE_H */

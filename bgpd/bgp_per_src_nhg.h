@@ -58,7 +58,6 @@ struct bgp_dest_soo_hash_entry {
 	struct bgp_per_src_nhg_hash_entry *nhe;
 
 	struct prefix p;
-
 	/* Time since last update */
 	uint64_t uptime;
 
@@ -88,6 +87,8 @@ struct bgp_per_src_nhg_hash_entry {
 
 	/* SOO Attr */
 	struct ipaddr ip;
+	afi_t afi;
+	safi_t safi;
 
 	// we need to back pointer for dest
 	struct bgp_dest *dest;
@@ -148,9 +149,10 @@ struct bgp_per_src_nhg_hash_entry {
 
 void bgp_dest_soo_init(struct bgp_per_src_nhg_hash_entry *nhe);
 void bgp_dest_soo_finish(struct bgp_per_src_nhg_hash_entry *nhe);
-void bgp_per_src_nhg_init(struct bgp *bgp);
-void bgp_per_src_nhg_finish(struct bgp *bgp);
-void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi,
+void bgp_per_src_nhg_init(struct bgp *bgp, afi_t afi, safi_t safi);
+void bgp_per_src_nhg_finish(struct bgp *bgp, afi_t afi, safi_t safi);
+void bgp_per_src_nhg_stop(struct bgp *bgp);
+void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 				struct bgp_dest *dest, struct bgp_path_info *pi,
 				bool is_add);
 bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
@@ -158,23 +160,24 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 extern void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp);
 extern void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp);
 struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_find(struct bgp *bgp,
-							struct ipaddr *ip);
-void bgp_process_route_soo_attr_change(struct bgp *bgp, afi_t afi,
-				struct bgp_dest *dest, struct bgp_path_info *pi,
-				struct attr *new_attr);
+							struct ipaddr *ip,
+							afi_t afi, safi_t safi);
+void bgp_process_route_soo_attr_change(struct bgp *bgp, afi_t afi, safi_t safi,
+				       struct bgp_dest *dest,
+				       struct bgp_path_info *pi,
+				       struct attr *new_attr);
 bool bgp_is_soo_route(struct bgp_dest *dest, struct bgp_path_info *pi,
 		      struct in_addr *ip);
-bool bgp_check_is_soo_route(struct bgp *bgp, afi_t afi,
-                                struct bgp_dest *dest, struct bgp_path_info *pi);
+bool bgp_check_is_soo_route(struct bgp *bgp, struct bgp_dest *dest,
+			    struct bgp_path_info *pi);
 void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest *dest,
                                struct bgp_path_info *pi, bool withdraw);
-void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi,
-				struct bgp_dest *dest, struct bgp_path_info *new_best,
-				bool is_add);
-void bgp_process_path_route_soo_attr(struct bgp *bgp, afi_t afi,
-				struct bgp_dest *dest, struct bgp_path_info *new_best,
-				bool is_add);
+void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
+				      struct bgp_dest *dest,
+				      struct bgp_path_info *new_best,
+				      bool is_add);
 bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 			   uint32_t *soo_nhg, struct in_addr *soo);
 bool is_nhg_per_origin_configured(struct bgp *bgp);
+
 #endif /* _BGP_PER_SRC_NHG_H */

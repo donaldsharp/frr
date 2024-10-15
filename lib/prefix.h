@@ -467,6 +467,8 @@ extern void apply_mask(union prefixptr pu);
 #define prefix_copy(a, b) ({ memset(a, 0, sizeof(*a)); prefix_copy(a, b); })
 #endif
 
+extern struct prefix *in6addr2hostprefix(struct in6_addr *in6_addr,
+					 struct prefix *prefix);
 extern struct prefix *sockunion2hostprefix(const union sockunion *,
 					   struct prefix *p);
 extern void prefix2sockunion(const struct prefix *, union sockunion *);
