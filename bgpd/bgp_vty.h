@@ -185,4 +185,17 @@ extern bool peergroup_af_flag_check(struct peer *peer, afi_t afi, safi_t safi,
 extern void bgp_initiate_graceful_shut_unshut(struct vty *vty,
 					      struct bgp *bgp);
 
+
+/* BGP clear sort. */
+enum clear_sort {
+	clear_all,
+	clear_peer,
+	clear_group,
+	clear_external,
+	clear_as
+};
+
+extern int bgp_clear(struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
+		     enum clear_sort sort, enum bgp_clear_type stype,
+		     const char *arg);
 #endif /* _QUAGGA_BGP_VTY_H */

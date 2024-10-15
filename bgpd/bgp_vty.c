@@ -988,15 +988,6 @@ int bgp_vty_return(struct vty *vty, enum bgp_create_error_code ret)
 	return CMD_SUCCESS;
 }
 
-/* BGP clear sort. */
-enum clear_sort {
-	clear_all,
-	clear_peer,
-	clear_group,
-	clear_external,
-	clear_as
-};
-
 static void bgp_clear_vty_error(struct vty *vty, struct peer *peer, afi_t afi,
 				safi_t safi, int error)
 {
@@ -1099,9 +1090,8 @@ static int bgp_peer_clear(struct peer *peer, afi_t afi, safi_t safi,
 
 /* `clear ip bgp' functions. */
 /* Allow this to be invoked in non-vty context also. */
-static int bgp_clear(struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
-		     enum clear_sort sort, enum bgp_clear_type stype,
-		     const char *arg)
+int bgp_clear(struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
+	      enum clear_sort sort, enum bgp_clear_type stype, const char *arg)
 {
 	int ret = 0;
 	bool found = false;
@@ -3916,13 +3906,33 @@ DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
 	safi_t safi = bgp_node_safi(vty);
 	struct peer *tmp_peer;
 	struct listnode *node, *nnode;
+	struct prefix p;
+	char prefix_str[PREFIX2STR_BUFFER];
+
+	if (safi != SAFI_UNICAST)
+		return CMD_SUCCESS;
 
 	if (no)
 		UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			   BGP_FLAG_ADVERTISE_ORIGIN);
-	else
+	else {
 		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			 BGP_FLAG_ADVERTISE_ORIGIN);
+	}
+
+	/*need to originate ipv6 route for per src nhg*/
+	if (afi == AFI_IP6) {
+		struct in6_addr v6addr;
+		char addrbuf[BUFSIZ];
+
+		ipv4_to_ipv4_mapped_ipv6(&v6addr, bgp->router_id);
+		inet_ntop(AF_INET6, &v6addr, addrbuf, BUFSIZ);
+		in6addr2hostprefix(&v6addr, &p);
+		prefix2str(&p, prefix_str, sizeof(prefix_str));
+		zlog_debug("%s: prefix_str:%s", __func__, prefix_str);
+		bgp_static_set(vty, no, prefix_str, NULL, NULL, AFI_IP6, bgp_node_safi(vty),
+			       NULL, 0, BGP_INVALID_LABEL_INDEX, 0, NULL, NULL, NULL, NULL, true);
+	}
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, tmp_peer))
 		bgp_announce_route(tmp_peer, afi, safi, true);
 
@@ -3936,6 +3946,9 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 	afi_t afi = bgp_node_afi(vty);
 	safi_t safi = bgp_node_safi(vty);
 
+	if (safi != SAFI_UNICAST)
+		return CMD_SUCCESS;
+
 	if (no) {
 		if (!is_nhg_per_origin_configured(bgp))
 			return CMD_SUCCESS;
@@ -3946,14 +3959,19 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 			return CMD_WARNING;
 		}
 
-		bgp_per_src_nhg_finish(bgp);
-		UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
-			   BGP_FLAG_NHG_PER_ORIGIN);
-		bgp_clear_vty(vty, bgp->name, afi, safi, clear_all, BGP_CLEAR_SOFT_NONE,
-		      NULL);
+		bgp_per_src_nhg_finish(bgp, afi, safi);
+		if (!bgp->per_src_nhg_table[afi][safi]->count) {
+			UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
+				   BGP_FLAG_NHG_PER_ORIGIN);
+			bgp_clear_vty(vty, bgp->name, afi, safi, clear_all,
+				      BGP_CLEAR_SOFT_IN, NULL);
+		} else {
+			SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
+				 BGP_FLAG_CONFIG_DEL_PENDING);
+		}
 	}
 	else {
-		bgp_per_src_nhg_init(bgp);
+		bgp_per_src_nhg_init(bgp, afi, safi);
 		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			 BGP_FLAG_NHG_PER_ORIGIN);
 		bgp_clear_vty(vty, bgp->name, afi, safi, clear_all, BGP_CLEAR_SOFT_IN,
@@ -20468,7 +20486,10 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 			CHECK_FLAG(soo_entry->flags,
 				   PER_SRC_NEXTHOP_GROUP_DEL_PENDING));
 	} else {
-		vty_out(vty, "SoO: %pIA\n", &soo_entry->ip);
+		if (soo_entry->afi == AFI_IP)
+			vty_out(vty, "SoO: %pIA IPv4\n", &soo_entry->ip);
+		else
+			vty_out(vty, "SoO: %pIA IPv6\n", &soo_entry->ip);
 		vty_out(vty, "  NHG:\n");
 		vty_out(vty, "    NHG ID: %d\n", soo_entry->nhg_id);
 		vty_out(vty, "    NHG flags: ");
@@ -20648,7 +20669,9 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 		 * extend this CLI to take VRF as input
 		 */
 		bgp = bgp_get_default();
-		soo_entry = bgp_per_src_nhg_find(bgp, &ip);
+		// TODO, need to check for both afis, just a temp code
+		soo_entry =
+			bgp_per_src_nhg_find(bgp, &ip, AF_INET, SAFI_UNICAST);
 		if (uj) {
 			json_object_object_add(json, bgp->name_pretty,
 					       json_vrf_array);
@@ -20659,16 +20682,23 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 
 	} else {
 		for (ALL_LIST_ELEMENTS_RO(instances, node, bgp)) {
+			afi_t afi;
+			safi_t safi;
+
 			if (uj) {
 				json_object_object_add(json, bgp->name_pretty,
 						       json_vrf_array);
 			} else {
 				vty_out(vty, "BGP: %s\n\n", bgp->name_pretty);
 			}
-			if (bgp->per_src_nhg_table)
-				hash_iterate(bgp->per_src_nhg_table,
-					     show_bgp_soo_hashtbl_walk_cb,
-					     &ctx);
+			FOREACH_AFI_SAFI (afi, safi) {
+				if (bgp->per_src_nhg_table[afi][safi])
+					hash_iterate(
+						bgp->per_src_nhg_table[afi]
+								      [safi],
+						show_bgp_soo_hashtbl_walk_cb,
+						&ctx);
+			}
 		}
 	}
 

@@ -2082,7 +2082,7 @@ DEFUN(evpnrt5_network,
 			      argv[idx_label]->arg, AFI_L2VPN, SAFI_EVPN, NULL,
 			      0, 0, BGP_EVPN_IP_PREFIX_ROUTE,
 			      argv[idx_esi]->arg, argv[idx_gwip]->arg,
-			      argv[idx_ethtag]->arg, argv[idx_routermac]->arg);
+			      argv[idx_ethtag]->arg, argv[idx_routermac]->arg, false);
 }
 
 /* For testing purpose, static route of EVPN RT-5. */
@@ -2114,7 +2114,7 @@ DEFUN(no_evpnrt5_network,
 			      argv[idx_ext_community]->arg,
 			      argv[idx_label]->arg, AFI_L2VPN, SAFI_EVPN, NULL,
 			      0, 0, BGP_EVPN_IP_PREFIX_ROUTE, argv[idx_esi]->arg,
-			      argv[idx_gwip]->arg, argv[idx_ethtag]->arg, NULL);
+			      argv[idx_gwip]->arg, argv[idx_ethtag]->arg, NULL, false);
 }
 
 static void evpn_import_rt_delete_auto(struct bgp *bgp, struct bgpevpn *vpn)
