@@ -3621,14 +3621,6 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest,
 			|| new_select->sub_type == BGP_ROUTE_AGGREGATE
 			|| new_select->sub_type == BGP_ROUTE_IMPORTED)) {
 
-			/* if this is an evpn imported type-5 prefix,
-			 * we need to withdraw the route first to clear
-			 * the nh neigh and the RMAC entry.
-			 */
-			if (old_select &&
-			    is_route_parent_evpn(old_select))
-				bgp_zebra_withdraw_actual(dest, old_select, bgp);
-
 			/* For EVPN imported route skip putting route add
 			 * to pending queue rather send directly to zebra.
 			 * else case covers the non EVPN impoted routes.
