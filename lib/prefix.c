@@ -881,6 +881,19 @@ void apply_mask(union prefixptr pu)
 }
 
 /* Utility function of convert between struct prefix <=> union sockunion. */
+struct prefix *in6addr2hostprefix(struct in6_addr *in6_addr,
+				  struct prefix *prefix)
+{
+	struct prefix_ipv6 *p;
+
+	p = prefix ? (struct prefix_ipv6 *)prefix : prefix_ipv6_new();
+	p->family = AF_INET6;
+	p->prefixlen = IPV6_MAX_BITLEN;
+	memcpy(&p->prefix, in6_addr, sizeof(struct in6_addr));
+	return (struct prefix *)p;
+}
+
+/* Utility function of convert between struct prefix <=> union sockunion. */
 struct prefix *sockunion2hostprefix(const union sockunion *su,
 				    struct prefix *prefix)
 {

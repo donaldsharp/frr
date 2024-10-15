@@ -3149,7 +3149,7 @@ DEFUN (vpnv4_network,
 	return bgp_static_set(vty, false, argv[idx_ipv4_prefixlen]->arg,
 			      argv[idx_ext_community]->arg,
 			      argv[idx_label]->arg, AFI_IP, SAFI_MPLS_VPN, NULL,
-			      0, 0, 0, NULL, NULL, NULL, NULL);
+			      0, 0, 0, NULL, NULL, NULL, NULL, false);
 }
 
 DEFUN (vpnv4_network_route_map,
@@ -3173,7 +3173,7 @@ DEFUN (vpnv4_network_route_map,
 	return bgp_static_set(vty, false, argv[idx_ipv4_prefixlen]->arg,
 			      argv[idx_ext_community]->arg, argv[idx_label]->arg,
 			      AFI_IP, SAFI_MPLS_VPN, argv[idx_rmap]->arg, 0, 0,
-			      0, NULL, NULL, NULL, NULL);
+			      0, NULL, NULL, NULL, NULL, false);
 }
 
 /* For testing purpose, static route of MPLS-VPN. */
@@ -3196,7 +3196,7 @@ DEFUN (no_vpnv4_network,
 	return bgp_static_set(vty, true, argv[idx_ipv4_prefixlen]->arg,
 			      argv[idx_ext_community]->arg,
 			      argv[idx_label]->arg, AFI_IP, SAFI_MPLS_VPN, NULL,
-			      0, 0, 0, NULL, NULL, NULL, NULL);
+			      0, 0, 0, NULL, NULL, NULL, NULL, false);
 }
 
 DEFUN (vpnv6_network,
@@ -3222,13 +3222,13 @@ DEFUN (vpnv6_network,
 				      argv[idx_ext_community]->arg,
 				      argv[idx_label]->arg, AFI_IP6,
 				      SAFI_MPLS_VPN, argv[idx_rmap]->arg, 0, 0,
-				      0, NULL, NULL, NULL, NULL);
+				      0, NULL, NULL, NULL, NULL, false);
 	else
 		return bgp_static_set(vty, false, argv[idx_ipv6_prefix]->arg,
 				      argv[idx_ext_community]->arg,
 				      argv[idx_label]->arg, AFI_IP6,
 				      SAFI_MPLS_VPN, NULL, 0, 0, 0, NULL, NULL,
-				      NULL, NULL);
+				      NULL, NULL, false);
 }
 
 /* For testing purpose, static route of MPLS-VPN. */
@@ -3251,7 +3251,7 @@ DEFUN (no_vpnv6_network,
 	return bgp_static_set(vty, true, argv[idx_ipv6_prefix]->arg,
 			      argv[idx_ext_community]->arg,
 			      argv[idx_label]->arg, AFI_IP6, SAFI_MPLS_VPN,
-			      NULL, 0, 0, 0, NULL, NULL, NULL, NULL);
+			      NULL, 0, 0, 0, NULL, NULL, NULL, NULL, false);
 }
 
 int bgp_show_mpls_vpn(struct vty *vty, afi_t afi, struct prefix_rd *prd,

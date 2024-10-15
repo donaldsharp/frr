@@ -4574,7 +4574,7 @@ static void bgp_route_map_process_update(struct bgp *bgp, const char *rmap_name,
 							  &bn_p->u.prefix, buf,
 							  sizeof(buf)));
 				bgp_static_update(bgp, bn_p, bgp_static, afi,
-						  safi);
+						  safi, false);
 			}
 		}
 

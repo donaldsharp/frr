@@ -441,6 +441,8 @@ extern bool evpn_addr_same(const struct evpn_addr *e1, const struct evpn_addr *e
 #define prefix_copy(a, b) ({ memset(a, 0, sizeof(*a)); prefix_copy(a, b); })
 #endif
 
+extern struct prefix *in6addr2hostprefix(struct in6_addr *in6_addr,
+                                         struct prefix *prefix);
 extern struct prefix *sockunion2hostprefix(const union sockunion *su,
 					   struct prefix *p);
 extern void prefix2sockunion(const struct prefix *p, union sockunion *su);

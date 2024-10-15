@@ -3840,7 +3840,9 @@ int bgp_get(struct bgp **bgp_val, as_t *as, const char *name,
 	bgp_address_init(bgp);
 	bgp_tip_hash_init(bgp);
 	bgp_scan_init(bgp);
-	//bgp_per_src_nhg_init(bgp);
+	bgp->per_src_nhg_convergence_timer =
+		BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD;
+	bgp_per_src_nhg_soo_timer_wheel_init(bgp);
 	*bgp_val = bgp;
 
 	bgp->t_rmap_def_originate_eval = NULL;
@@ -4255,7 +4257,8 @@ void bgp_free(struct bgp *bgp)
 	bgp_scan_finish(bgp);
 	bgp_address_destroy(bgp);
 	bgp_tip_hash_destroy(bgp);
-	//bgp_per_src_nhg_finish(bgp);
+	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
+	bgp_per_src_nhg_stop(bgp);
 
 	/* release the auto RD id */
 	bf_release_index(bm->rd_idspace, bgp->vrf_rd_id);
