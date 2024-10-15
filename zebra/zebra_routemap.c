@@ -536,7 +536,7 @@ DEFPY_YANG(
 }
 
 DEFPY_YANG(
-	match_source_protocol, match_source_protocol_cmd,
+	match_source_protocol, match_src_protocol_cmd,
 	"match source-protocol " FRR_REDIST_STR_ZEBRA "$proto",
 	MATCH_STR
 	"Match protocol via which the route was learnt\n"
@@ -556,7 +556,7 @@ DEFPY_YANG(
 }
 
 DEFPY_YANG(
-	no_match_source_protocol, no_match_source_protocol_cmd,
+	no_match_source_protocol, no_match_src_protocol_cmd,
 	"no match source-protocol [" FRR_REDIST_STR_ZEBRA "]",
 	NO_STR
 	MATCH_STR
@@ -2054,8 +2054,8 @@ void zebra_route_map_init(void)
 	install_element(RMAP_NODE, &match_ipv6_address_prefix_len_cmd);
 	install_element(RMAP_NODE, &no_match_ipv6_address_prefix_len_cmd);
 	install_element(RMAP_NODE, &no_match_ip_address_prefix_len_cmd);
-	install_element(RMAP_NODE, &match_source_protocol_cmd);
-	install_element(RMAP_NODE, &no_match_source_protocol_cmd);
+	install_element(RMAP_NODE, &match_src_protocol_cmd);
+	install_element(RMAP_NODE, &no_match_src_protocol_cmd);
 	install_element(RMAP_NODE, &match_source_instance_cmd);
 	install_element(RMAP_NODE, &no_match_source_instance_cmd);
 
