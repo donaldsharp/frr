@@ -7669,8 +7669,8 @@ int bgp_static_set(struct vty *vty, bool negate, const char *ip_str,
 			}
 
 			/* Check previous routes are installed into BGP.  */
-			if (bgp_static->valid
-			    && bgp_static->backdoor != backdoor)
+			if (bgp_static->valid &&
+			    bgp_static->backdoor != backdoor)
 				need_update = 1;
 
 			bgp_static->backdoor = backdoor;
@@ -7756,6 +7756,7 @@ int bgp_static_set(struct vty *vty, bool negate, const char *ip_str,
 
 	return CMD_SUCCESS;
 }
+
 
 void bgp_static_add(struct bgp *bgp)
 {
@@ -7890,6 +7891,144 @@ void bgp_static_redo_import_check(struct bgp *bgp)
 		}
 	}
 	UNSET_FLAG(bgp->flags, BGP_FLAG_FORCE_STATIC_PROCESS);
+}
+
+/* Configure static BGP network.  When user don't run zebra, static
+   route should be installed as valid.
+   TODO: Modify bgp_static_set_non_vty to handle vty and non vty instead of
+   duplicating the code here*/
+int bgp_static_set_non_vty(struct bgp *bgp, bool negate, const char *ip_str,
+			   afi_t afi, safi_t safi, const char *rmap,
+			   int backdoor, uint32_t label_index,
+			   bool skip_import_check)
+{
+	int ret;
+	struct prefix p;
+	struct bgp_static *bgp_static;
+	struct bgp_dest *dest;
+	uint8_t need_update = 0;
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("afi: %s safi: %s, ip_str: %s, negate: %d",
+			   afi2str(afi), safi2str(safi), ip_str, negate);
+
+	/* Convert IP prefix string to struct prefix. */
+	ret = str2prefix(ip_str, &p);
+	if (!ret) {
+		return -1;
+	}
+	if (afi == AFI_IP6 && IN6_IS_ADDR_LINKLOCAL(&p.u.prefix6)) {
+		return -1;
+	}
+
+	apply_mask(&p);
+
+	if (negate) {
+
+		/* Set BGP static route configuration. */
+		dest = bgp_node_lookup(bgp->route[afi][safi], &p);
+
+		if (!dest) {
+			return -1;
+		}
+
+		bgp_static = bgp_dest_get_bgp_static_info(dest);
+
+		if ((label_index != BGP_INVALID_LABEL_INDEX) &&
+		    (label_index != bgp_static->label_index)) {
+			bgp_dest_unlock_node(dest);
+			return -1;
+		}
+
+		if ((rmap && bgp_static->rmap.name) &&
+		    strcmp(rmap, bgp_static->rmap.name)) {
+			bgp_dest_unlock_node(dest);
+			return -1;
+		}
+
+		/* Update BGP RIB. */
+		if (!bgp_static->backdoor)
+			bgp_static_withdraw(bgp, &p, afi, safi, NULL);
+
+		/* Clear configuration. */
+		bgp_static_free(bgp_static);
+		bgp_dest_set_bgp_static_info(dest, NULL);
+		bgp_dest_unlock_node(dest);
+		bgp_dest_unlock_node(dest);
+	} else {
+
+		/* Set BGP static route configuration. */
+		dest = bgp_node_get(bgp->route[afi][safi], &p);
+		bgp_static = bgp_dest_get_bgp_static_info(dest);
+		if (bgp_static) {
+			/* Configuration change. */
+			/* Label index cannot be changed. */
+			if (bgp_static->label_index != label_index) {
+				bgp_dest_unlock_node(dest);
+				return -1;
+			}
+
+			/* Check previous routes are installed into BGP.  */
+			if (bgp_static->valid &&
+			    bgp_static->backdoor != backdoor)
+				need_update = 1;
+
+			bgp_static->backdoor = backdoor;
+
+			if (rmap) {
+				XFREE(MTYPE_ROUTE_MAP_NAME,
+				      bgp_static->rmap.name);
+				route_map_counter_decrement(
+					bgp_static->rmap.map);
+				bgp_static->rmap.name =
+					XSTRDUP(MTYPE_ROUTE_MAP_NAME, rmap);
+				bgp_static->rmap.map =
+					route_map_lookup_by_name(rmap);
+				route_map_counter_increment(
+					bgp_static->rmap.map);
+			} else {
+				XFREE(MTYPE_ROUTE_MAP_NAME,
+				      bgp_static->rmap.name);
+				route_map_counter_decrement(
+					bgp_static->rmap.map);
+				bgp_static->rmap.map = NULL;
+				bgp_static->valid = 0;
+			}
+			bgp_dest_unlock_node(dest);
+		} else {
+			/* New configuration. */
+			bgp_static = bgp_static_new();
+			bgp_static->backdoor = backdoor;
+			bgp_static->valid = 0;
+			bgp_static->igpmetric = 0;
+			bgp_static->igpnexthop.s_addr = INADDR_ANY;
+			bgp_static->label_index = label_index;
+
+			if (rmap) {
+				XFREE(MTYPE_ROUTE_MAP_NAME,
+				      bgp_static->rmap.name);
+				route_map_counter_decrement(
+					bgp_static->rmap.map);
+				bgp_static->rmap.name =
+					XSTRDUP(MTYPE_ROUTE_MAP_NAME, rmap);
+				bgp_static->rmap.map =
+					route_map_lookup_by_name(rmap);
+				route_map_counter_increment(
+					bgp_static->rmap.map);
+			}
+			bgp_dest_set_bgp_static_info(dest, bgp_static);
+		}
+
+		bgp_static->valid = 1;
+		if (need_update)
+			bgp_static_withdraw(bgp, &p, afi, safi, NULL);
+
+		if (!bgp_static->backdoor)
+			bgp_static_update(bgp, &p, bgp_static, afi, safi,
+					  skip_import_check);
+	}
+
+	return CMD_SUCCESS;
 }
 
 static void bgp_purge_af_static_redist_routes(struct bgp *bgp, afi_t afi,

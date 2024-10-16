@@ -955,4 +955,8 @@ extern int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 #define bgp_path_info_free(B) bgp_path_info_free_with_caller(__func__, (B))
 extern int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete);
 extern void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, safi_t safi);
+int bgp_static_set_non_vty(struct bgp *bgp, bool negate, const char *ip_str,
+			   afi_t afi, safi_t safi, const char *rmap,
+			   int backdoor, uint32_t label_index,
+			   bool skip_import_check);
 #endif /* _QUAGGA_BGP_ROUTE_H */
