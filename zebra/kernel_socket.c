@@ -1636,6 +1636,7 @@ void kernel_update_multi(struct dplane_ctx_q *ctx_list)
 		case DPLANE_OP_INTF_ADDR_ADD:
 		case DPLANE_OP_INTF_ADDR_DEL:
 		case DPLANE_OP_STARTUP_STAGE:
+		case DPLANE_OP_VLAN_INSTALL:
 			zlog_err("Unhandled dplane data for %s",
 				 dplane_op2str(dplane_ctx_get_op(ctx)));
 			res = ZEBRA_DPLANE_REQUEST_FAILURE;

@@ -428,10 +428,6 @@ static int netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 		return netlink_nexthop_change(h, ns_id, startup);
 	case RTM_DELNEXTHOP:
 		return netlink_nexthop_change(h, ns_id, startup);
-	case RTM_NEWVLAN:
-		return netlink_vlan_change(h, ns_id, startup);
-	case RTM_DELVLAN:
-		return netlink_vlan_change(h, ns_id, startup);
 
 	/* Messages handled in the dplane thread */
 	case RTM_NEWADDR:
@@ -441,6 +437,8 @@ static int netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 	case RTM_NEWTUNNEL:
 	case RTM_DELTUNNEL:
 	case RTM_GETTUNNEL:
+	case RTM_NEWVLAN:
+	case RTM_DELVLAN:
 		return 0;
 	default:
 		/*
@@ -483,6 +481,10 @@ static int dplane_netlink_information_fetch(struct nlmsghdr *h, ns_id_t ns_id,
 	case RTM_NEWLINK:
 	case RTM_DELLINK:
 		return netlink_link_change(h, ns_id, startup);
+
+	case RTM_NEWVLAN:
+	case RTM_DELVLAN:
+		return netlink_vlan_change(h, ns_id, startup);
 
 	default:
 		break;
@@ -1667,6 +1669,7 @@ static enum netlink_msg_status nl_put_msg(struct nl_batch *bth,
 	case DPLANE_OP_IPSET_ENTRY_ADD:
 	case DPLANE_OP_IPSET_ENTRY_DELETE:
 	case DPLANE_OP_STARTUP_STAGE:
+	case DPLANE_OP_VLAN_INSTALL:
 		return FRR_NETLINK_ERROR;
 
 	case DPLANE_OP_GRE_SET:
@@ -1880,8 +1883,8 @@ void kernel_init(struct zebra_ns *zns)
 	 * setsockopt multicast group subscriptions that don't fit in nl_groups
 	 */
 	grp = RTNLGRP_BRVLAN;
-	ret = setsockopt(zns->netlink.sock, SOL_NETLINK, NETLINK_ADD_MEMBERSHIP,
-			 &grp, sizeof(grp));
+	ret = setsockopt(zns->netlink_dplane_in.sock, SOL_NETLINK,
+			 NETLINK_ADD_MEMBERSHIP, &grp, sizeof(grp));
 
 	/*
 	 * Let's tell the kernel that we want to receive extended
