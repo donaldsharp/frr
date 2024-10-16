@@ -65,10 +65,13 @@ static void zebra_evpn_arp_nd_pkt_dump(struct zebra_if *zif, uint16_t vlan,
 void zebra_evpn_arp_nd_print_summary(struct vty *vty, bool uj)
 {
 	json_object *json = NULL;
+	bool arprd_enable = !!CHECK_FLAG(zevpn_arp_nd_info.flags,
+					 ZEBRA_EVPN_ARP_ND_FAILOVER);
 
 	if (uj) {
 		json = json_object_new_object();
-		json_object_boolean_true_add(json, "arpRedirect");
+		json_object_boolean_add(json, "arpRedirect",
+					arprd_enable ? true : false);
 		json_object_int_add(json, "arpPkts",
 				    zevpn_arp_nd_info.stat.arp);
 		json_object_int_add(json, "ndPkts", zevpn_arp_nd_info.stat.na);
@@ -86,9 +89,7 @@ void zebra_evpn_arp_nd_print_summary(struct vty *vty, bool uj)
 				    zevpn_arp_nd_info.stat.es_up);
 	} else {
 		vty_out(vty, "EVPN ARP-reply/NA redirect: %s\n",
-			(zevpn_arp_nd_info.flags & ZEBRA_EVPN_ARP_ND_FAILOVER)
-				? "enabled"
-				: "disabled");
+			(arprd_enable) ? "enabled" : "disabled");
 		vty_out(vty, "Stats:\n");
 		vty_out(vty, "  IPv4 ARP: %u\n", zevpn_arp_nd_info.stat.arp);
 		vty_out(vty, "  IPv6 neighbor discovery: %u\n",
