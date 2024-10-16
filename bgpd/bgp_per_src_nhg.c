@@ -1818,3 +1818,74 @@ bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 
 	return using_soo_nhg;
 }
+
+static inline char *ipaddr_afi_to_str(const struct in_addr *id, char *buf,
+				      int size, afi_t afi)
+{
+	memset(buf, 0, size);
+	if (afi == AFI_IP) {
+		inet_ntop(AF_INET, id, buf, size);
+	} else if (afi == AFI_IP6) {
+		struct in6_addr v6addr;
+		char addrbuf[BUFSIZ];
+		struct prefix p;
+
+		ipv4_to_ipv4_mapped_ipv6(&v6addr, *id);
+		inet_ntop(AF_INET6, &v6addr, addrbuf, BUFSIZ);
+		in6addr2hostprefix(&v6addr, &p);
+		prefix2str(&p, buf, size);
+	}
+
+	return buf;
+}
+
+void bgp_per_src_nhg_handle_router_id_update(struct bgp *bgp,
+					     const struct in_addr *id)
+{
+	char soo[INET_ADDRSTRLEN + 6];
+	struct ecommunity *ecomm_soo;
+	char addrbuf[BUFSIZ];
+	afi_t afi;
+	safi_t safi;
+
+	if (id->s_addr != INADDR_ANY) {
+		snprintf(soo, sizeof(soo), "%s:%X", inet_ntoa(*id),
+			 SOO_LOCAL_ADMINISTRATOR_VALUE_PER_SOURCE_NHG);
+		ecomm_soo = ecommunity_str2com(soo, ECOMMUNITY_SITE_ORIGIN, 0);
+		bgp->per_source_nhg_soo = ecomm_soo;
+		ecommunity_str(bgp->per_source_nhg_soo);
+
+		FOREACH_AFI_SAFI (afi, safi) {
+			if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+				       BGP_FLAG_ADVERTISE_ORIGIN)) {
+				bgp_static_set_non_vty(
+					bgp, true,
+					ipaddr_afi_to_str(&bgp->router_id,
+							  addrbuf, BUFSIZ, afi),
+					afi, safi, NULL, 0,
+					BGP_INVALID_LABEL_INDEX, true);
+				bgp_static_set_non_vty(
+					bgp, false,
+					ipaddr_afi_to_str(id, addrbuf, BUFSIZ,
+							  afi),
+					afi, safi, NULL, 0,
+					BGP_INVALID_LABEL_INDEX, true);
+			}
+		}
+	} else {
+		ecommunity_free(&bgp->per_source_nhg_soo);
+		bgp->per_source_nhg_soo = NULL;
+
+		FOREACH_AFI_SAFI (afi, safi) {
+			if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+				       BGP_FLAG_ADVERTISE_ORIGIN)) {
+				bgp_static_set_non_vty(
+					bgp, true,
+					ipaddr_afi_to_str(&bgp->router_id,
+							  addrbuf, BUFSIZ, afi),
+					afi, safi, NULL, 0,
+					BGP_INVALID_LABEL_INDEX, true);
+			}
+		}
+	}
+}

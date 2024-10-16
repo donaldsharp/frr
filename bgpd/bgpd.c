@@ -291,22 +291,11 @@ static int bgp_router_id_set(struct bgp *bgp, const struct in_addr *id,
 {
 	struct peer *peer;
 	struct listnode *node, *nnode;
-	char soo[INET_ADDRSTRLEN + 6];
-	struct ecommunity *ecomm_soo;
 
 	if (IPV4_ADDR_SAME(&bgp->router_id, id))
 		return 0;
 
-	if (id->s_addr != INADDR_ANY) {
-		snprintf(soo, sizeof(soo), "%s:%X", inet_ntoa(*id),
-			 SOO_LOCAL_ADMINISTRATOR_VALUE_PER_SOURCE_NHG);
-		ecomm_soo = ecommunity_str2com(soo, ECOMMUNITY_SITE_ORIGIN, 0);
-		bgp->per_source_nhg_soo = ecomm_soo;
-		ecommunity_str(bgp->per_source_nhg_soo);
-	} else {
-		ecommunity_free(&bgp->per_source_nhg_soo);
-		bgp->per_source_nhg_soo = NULL;
-	}
+	bgp_per_src_nhg_handle_router_id_update(bgp, id);
 
 	/* EVPN uses router id in RD, withdraw them */
 	if (is_evpn_enabled())
