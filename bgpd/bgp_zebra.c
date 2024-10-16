@@ -1662,9 +1662,9 @@ enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
 		zlog_debug(
 			"Tx route %s VRF %s %pFX metric %u tag %" ROUTE_TAG_PRI
 			" count %d nhg %d",
-			valid_nh_count ? "add" : "delete", bgp->name_pretty,
-			&api.prefix, api.metric, api.tag, api.nexthop_num,
-			nhg_id);
+			(valid_nh_count || nhg_id) ? "add" : "delete",
+			bgp->name_pretty, &api.prefix, api.metric, api.tag,
+			api.nexthop_num, nhg_id);
 		for (i = 0; i < api.nexthop_num; i++) {
 			api_nh = &api.nexthops[i];
 
