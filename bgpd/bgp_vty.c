@@ -3706,7 +3706,7 @@ DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
 	}
 
 	/*need to originate ipv6 route for per src nhg*/
-	if (afi == AFI_IP6) {
+	if (afi == AFI_IP6 && safi == SAFI_UNICAST) {
 		struct in6_addr v6addr;
 		char addrbuf[BUFSIZ];
 
@@ -3714,9 +3714,16 @@ DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
 		inet_ntop(AF_INET6, &v6addr, addrbuf, BUFSIZ);
 		in6addr2hostprefix(&v6addr, &p);
 		prefix2str(&p, prefix_str, sizeof(prefix_str));
-		zlog_debug("%s: prefix_str:%s", __func__, prefix_str);
-		bgp_static_set(vty, no, prefix_str, AFI_IP6, bgp_node_safi(vty),
-			       NULL, 0, BGP_INVALID_LABEL_INDEX, true);
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug("BGP advertise-origin: prefix_str:%s",
+				   prefix_str);
+		bgp_static_set(vty, no, prefix_str, afi, safi, NULL, 0,
+			       BGP_INVALID_LABEL_INDEX, true);
+	} else if (afi == AFI_IP && safi == SAFI_UNICAST) {
+		char addr_buf[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &bgp->router_id, addr_buf, INET_ADDRSTRLEN);
+		bgp_static_set(vty, no, addr_buf, afi, safi, NULL, 0,
+			       BGP_INVALID_LABEL_INDEX, true);
 	}
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, tmp_peer))
 		bgp_announce_route(tmp_peer, afi, safi, true);
@@ -3733,6 +3740,11 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 
 	if (safi != SAFI_UNICAST)
 		return CMD_SUCCESS;
+
+	if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+		       BGP_FLAG_CONFIG_DEL_PENDING)) {
+		return CMD_WARNING;
+	}
 
 	if (no) {
 		if (!is_nhg_per_origin_configured(bgp))
