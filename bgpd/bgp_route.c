@@ -7660,6 +7660,7 @@ int bgp_static_set(struct vty *vty, bool negate, const char *ip_str,
 
 		bgp_static = bgp_dest_get_bgp_static_info(dest);
 		if (bgp_static) {
+			bgp_static->user_configured = true;
 			/* Configuration change. */
 			/* Label index cannot be changed. */
 			if (bgp_static->label_index != label_index) {
@@ -7703,6 +7704,7 @@ int bgp_static_set(struct vty *vty, bool negate, const char *ip_str,
 			bgp_static->igpmetric = 0;
 			bgp_static->igpnexthop.s_addr = INADDR_ANY;
 			bgp_static->label_index = label_index;
+                        bgp_static->user_configured = true;
 			bgp_static->label = label;
 			bgp_static->prd = prd;
 
@@ -17093,7 +17095,9 @@ void bgp_config_write_network(struct vty *vty, struct bgp *bgp, afi_t afi,
 
 		p = bgp_dest_get_prefix(dest);
 
-		vty_out(vty, "  network %pFX", p);
+		if (bgp_static->user_configured) {
+			vty_out(vty, "  network %pFX", p);
+		}
 
 		if (bgp_static->label_index != BGP_INVALID_LABEL_INDEX)
 			vty_out(vty, " label-index %u",

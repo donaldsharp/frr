@@ -181,5 +181,6 @@ bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 bool is_nhg_per_origin_configured(struct bgp *bgp);
 void bgp_per_src_nhg_handle_router_id_update(struct bgp *bgp,
 					     const struct in_addr *id);
-
+char *ipaddr_afi_to_str(const struct in_addr *id, char *buf, int size,
+			afi_t afi);
 #endif /* _BGP_PER_SRC_NHG_H */

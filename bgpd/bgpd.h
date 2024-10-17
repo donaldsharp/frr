@@ -900,10 +900,9 @@ struct bgp {
 	/* BGP per source NHG flags */
 	uint8_t per_src_nhg_flags[AFI_MAX][SAFI_MAX];
 	/* local administrator value used for soo creation used for per source
-	   NHG. There is no significance to the value 0x1234, it can be any
-	   arbitrary value. In the future, we may override this value if needed
+	   NHG. In the future, we may override this value if needed.
 	 */
-#define SOO_LOCAL_ADMINISTRATOR_VALUE_PER_SOURCE_NHG 0x1234
+#define SOO_LOCAL_ADMINISTRATOR_VALUE_PER_SOURCE_NHG 0x0
 	/* SOO value derived from BGP router-id*/
 	struct ecommunity *per_source_nhg_soo;
 
