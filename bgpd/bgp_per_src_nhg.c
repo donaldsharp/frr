@@ -211,7 +211,7 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 	struct bgp_per_src_nhg_hash_entry *nhe = item;
 	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
 	struct bgp_dest *dest;
-	/* TODO
+	/*
 	if SOO selected NHs match installed SOO NHG AND all routes w/ SOO point
 	to SOO NHG done
 
@@ -1296,22 +1296,6 @@ static void bgp_per_src_nhg_flush_cb(struct hash_bucket *bucket, void *arg)
 		bgp_soo_zebra_route_install(nhe, dest);
 		UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL);
 	}
-
-	/*bgp_nhg_nexthop_cache_reset(&nhe->nhg_nexthop_cache_table);
-	bgp_dest_soo_finish(nhe);
-	bgp_dest_soo_qlist_fini(&nhe->dest_soo_list);
-	bgp_dest_soo_use_soo_nhgid_qlist_fini(&nhe->dest_soo_use_nhid_list);
-	//TODO, flush processing pending
-	bgp_l3nhg_id_free(PER_SRC_NHG, nhe->nhg_id);
-	bgp_stop_soo_timer(nhe->bgp, nhe);
-
-	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-
-	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
-		zlog_debug("bgp vrf %s per src nhg %s flush",
-			   nhe->bgp->name_pretty, buf);
-	tmp_nhe = hash_release(nhe->bgp->per_src_nhg_table[nhe->afi][nhe->safi],
-	nhe); XFREE(MTYPE_BGP_PER_SRC_NHG, tmp_nhe);*/
 }
 
 void bgp_per_src_nhg_finish(struct bgp *bgp, afi_t afi, safi_t safi)
@@ -1423,16 +1407,6 @@ static void bgp_soo_zebra_route_install(struct bgp_per_src_nhg_hash_entry *nhe,
 		if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
 		    (pi->type == ZEBRA_ROUTE_BGP &&
 		     pi->sub_type == BGP_ROUTE_NORMAL)) {
-			/*if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
-				zlog_debug(
-					"bgp vrf %s per src nhg soo route zebra
-			install soo %pIA %s " "nhg %d dest %s peer %pSU idx %d",
-					nhe->bgp->name_pretty, &nhe->ip,
-			get_afi_safi_str(nhe->afi, nhe->safi, false),
-					nhe->nhg_id,
-					bgp_dest_get_prefix_str(dest),
-					&pi->peer->su, pi->peer->bit_index);
-			}*/
 			bgp_zebra_route_install(dest, pi, nhe->bgp, true, NULL,
 						false);
 		}
@@ -1478,7 +1452,7 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 	dest_he = bgp_dest_soo_find(nhe, &dest->p);
 	if (!dest_he) {
 		if (is_add) {
-			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 				zlog_debug(
 					"bgp vrf %s per src nhg route with soo %s %s dest %s "
 					"peer %pSU idx %d add",
@@ -1486,7 +1460,6 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 					get_afi_safi_str(afi, safi, false),
 					bgp_dest_get_prefix_str(dest),
 					&pi->peer->su, pi->peer->bit_index);
-			}
 			dest_he = bgp_dest_soo_add(nhe, dest);
 		} else {
 			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -1498,7 +1471,7 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 			return;
 		}
 	} else {
-		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 			zlog_debug(
 				"bgp vrf %s per src nhg route with soo %s %s dest %s "
 				"peer %pSU idx %d %s",
@@ -1506,7 +1479,6 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 				get_afi_safi_str(afi, safi, false),
 				bgp_dest_get_prefix_str(dest), &pi->peer->su,
 				pi->peer->bit_index, is_add ? "upd" : "del");
-		}
 	}
 
 	if (is_add) {
@@ -1521,14 +1493,16 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 			bf_release_index(dest_he->bgp_pi_bitmap,
 					 pi->peer->bit_index);
 			dest_he->refcnt--;
-			zlog_debug(
-				"bgp vrf %s per src nhg route with soo %s %s dest %s "
-				"peer %pSU idx %d %s refcnt:%d",
-				bgp->name_pretty, buf,
-				get_afi_safi_str(afi, safi, false),
-				bgp_dest_get_prefix_str(dest), &pi->peer->su,
-				pi->peer->bit_index, is_add ? "upd" : "del",
-				dest_he->refcnt);
+			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+				zlog_debug(
+					"bgp vrf %s per src nhg route with soo %s %s dest %s "
+					"peer %pSU idx %d %s refcnt:%d",
+					bgp->name_pretty, buf,
+					get_afi_safi_str(afi, safi, false),
+					bgp_dest_get_prefix_str(dest),
+					&pi->peer->su, pi->peer->bit_index,
+					is_add ? "upd" : "del",
+					dest_he->refcnt);
 		}
 
 		if(soo_attr_del) {
@@ -1541,12 +1515,14 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 				bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
 							     dest_he);
 				UNSET_FLAG(dest_he->flags, DEST_PRESENT_IN_NHGID_USE_LIST);
-				zlog_debug(
-					"bgp vrf %s per src nhg %s %s dest soo %s "
-					"del from soo nhid use list",
-					nhe->bgp->name_pretty, buf,
-					get_afi_safi_str(afi, safi, false),
-					pfxprint);
+				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+					zlog_debug(
+						"bgp vrf %s per src nhg %s %s dest soo %s "
+						"del from soo nhid use list",
+						nhe->bgp->name_pretty, buf,
+						get_afi_safi_str(afi, safi,
+								 false),
+						pfxprint);
 			}
 		}
 
@@ -1603,13 +1579,12 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, safi_t safi,
 					bgp_dest_get_prefix_str(dest),
 					&pi->peer->su, pi->peer->bit_index,
 					is_add ? "upd" : "del");
-				// Even though NHG is allocated here, it is
-				// programed in to zebra after soo timer expiry
-				if (!nhe->nhg_id) {
-					nhe->nhg_id =
-						bgp_l3nhg_id_alloc(PER_SRC_NHG);
-					bgp_start_soo_timer(bgp, nhe);
-				}
+			}
+			// Even though NHG is allocated here, it is
+			// programed in to zebra after soo timer expiry
+			if (!nhe->nhg_id) {
+				nhe->nhg_id = bgp_l3nhg_id_alloc(PER_SRC_NHG);
+				bgp_start_soo_timer(bgp, nhe);
 			}
 		}
 	}
@@ -1677,13 +1652,6 @@ void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 {
 	struct in_addr ip;
 
-	/* 	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
-			zlog_debug(
-				"bgp vrf %s per src nhg check if dest: %s has
-	   soo attr peer:%pSU", bgp->name_pretty, bgp_dest_get_prefix_str(dest),
-	   &pi->peer->su);
-		} */
-
 	if (route_has_soo_attr(pi)) {
 		if (bgp_is_soo_route(dest, pi, &ip)) {
 			/*processing of soo route*/
@@ -1695,13 +1663,6 @@ void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 			bgp_process_route_with_soo_attr(bgp, afi, safi, dest,
 							pi, &ip, is_add, false);
 		}
-	} else {
-		/* 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
-					zlog_debug(
-						"bgp vrf %s per src nhg dest: %s
-		   does not have soo attr", bgp->name_pretty,
-		   bgp_dest_get_prefix_str(dest));
-				} */
 	}
 }
 
@@ -1827,8 +1788,8 @@ bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 	return using_soo_nhg;
 }
 
-static inline char *ipaddr_afi_to_str(const struct in_addr *id, char *buf,
-				      int size, afi_t afi)
+char *ipaddr_afi_to_str(const struct in_addr *id, char *buf, int size,
+			afi_t afi)
 {
 	memset(buf, 0, size);
 	if (afi == AFI_IP) {

@@ -382,6 +382,7 @@ struct bgp_static {
 	struct ethaddr *router_mac;
 	uint16_t encap_tunneltype;
 	struct prefix gatewayIp;
+	bool user_configured;
 };
 
 /* Aggreagete address:
