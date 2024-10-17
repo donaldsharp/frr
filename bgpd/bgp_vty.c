@@ -3920,26 +3920,27 @@ DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
 			 BGP_FLAG_ADVERTISE_ORIGIN);
 	}
 
-	/*need to originate ipv6 route for per src nhg*/
+	bool negate = (no == NULL) ? false : true;
+
+	/*Originate IPv6 mapped IPv4 SoO route based on bgp router-id*/
 	if (afi == AFI_IP6 && safi == SAFI_UNICAST) {
 		struct in6_addr v6addr;
-		char addrbuf[BUFSIZ];
-
 		ipv4_to_ipv4_mapped_ipv6(&v6addr, bgp->router_id);
-		inet_ntop(AF_INET6, &v6addr, addrbuf, BUFSIZ);
 		in6addr2hostprefix(&v6addr, &p);
 		prefix2str(&p, prefix_str, sizeof(prefix_str));
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 			zlog_debug("BGP advertise-origin: prefix_str:%s",
 				   prefix_str);
-                bgp_static_set(vty, no, prefix_str, NULL, NULL, afi, safi,
-                               NULL, 0, BGP_INVALID_LABEL_INDEX, 0, NULL, NULL, NULL, NULL, true);
+		bgp_static_set_non_vty(bgp, negate, prefix_str, afi, safi, NULL,
+				       0, BGP_INVALID_LABEL_INDEX, true);
 	} else if (afi == AFI_IP && safi == SAFI_UNICAST) {
+		/*Originate IPv4 SoO route based on bgp router-id*/
 		char addr_buf[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &bgp->router_id, addr_buf, INET_ADDRSTRLEN);
-                bgp_static_set(vty, no, addr_buf, NULL, NULL, afi, safi,
-                               NULL, 0, BGP_INVALID_LABEL_INDEX, 0, NULL, NULL, NULL, NULL, true);
+		bgp_static_set_non_vty(bgp, negate, addr_buf, afi, safi, NULL,
+				       0, BGP_INVALID_LABEL_INDEX, true);
 	}
+
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, tmp_peer))
 		bgp_announce_route(tmp_peer, afi, safi, true);
 
@@ -20466,6 +20467,7 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 	json_object *json_peer_bitmap = NULL;
 	json_object *json_bitmap_array = NULL;
 	json_object *json_bitmap_object = NULL;
+	char addrbuf[BUFSIZ];
 
 	if (!soo_entry) {
 		return;
@@ -20474,8 +20476,10 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 	if (json_soo_array) {
 		json = json_object_new_object();
 		json_object_array_add(json_soo_array, json);
-		json_object_string_addf(json, "SoORoute", "%pIA",
-					&soo_entry->ip);
+		json_object_string_addf(
+			json, "SoORoute", "%s",
+			ipaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
+					  BUFSIZ, soo_entry->afi));
 		json_object_int_add(json, "numPaths", soo_entry->refcnt);
 		json_object_int_add(json, "nexthopgroupId", soo_entry->nhg_id);
 		json_object_int_add(
@@ -20498,43 +20502,44 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 			CHECK_FLAG(soo_entry->flags,
 				   PER_SRC_NEXTHOP_GROUP_DEL_PENDING));
 	} else {
-		if (soo_entry->afi == AFI_IP)
-			vty_out(vty, "SoO: %pIA IPv4\n", &soo_entry->ip);
-		else
-			vty_out(vty, "SoO: %pIA IPv6\n", &soo_entry->ip);
+		vty_out(vty, "SoO: %s\n",
+			ipaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
+					  BUFSIZ, soo_entry->afi));
 		vty_out(vty, "  NHG:\n");
 		vty_out(vty, "    NHG ID: %d\n", soo_entry->nhg_id);
 		vty_out(vty, "    NHG flags: ");
-	}
 
-	if (CHECK_FLAG(soo_entry->flags, PER_SRC_NEXTHOP_GROUP_VALID)) {
-		vty_out(vty, "Valid");
-		if (CHECK_FLAG(soo_entry->flags,
-			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
-			vty_out(vty, ", Install pending");
+		if (CHECK_FLAG(soo_entry->flags, PER_SRC_NEXTHOP_GROUP_VALID)) {
+			vty_out(vty, "Valid");
+			if (CHECK_FLAG(soo_entry->flags,
+				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
+				vty_out(vty, ", Install pending");
+			} else {
+				vty_out(vty, ", Installed");
+			}
 		} else {
-			vty_out(vty, ", Installed");
+			if (CHECK_FLAG(soo_entry->flags,
+				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
+				vty_out(vty, "Install pending");
+			}
 		}
-	} else {
+
 		if (CHECK_FLAG(soo_entry->flags,
-			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
-			vty_out(vty, "Install pending");
+			       PER_SRC_NEXTHOP_GROUP_DEL_PENDING)) {
+			vty_out(vty, ", Delete pending");
 		}
-	}
 
-	if (CHECK_FLAG(soo_entry->flags, PER_SRC_NEXTHOP_GROUP_DEL_PENDING)) {
-		vty_out(vty, ", Delete pending");
+		vty_out(vty, "\n");
+		vty_out(vty, "  SoO route:\n");
+		vty_out(vty, "    Number of paths: %u\n", soo_entry->refcnt);
+		vty_out(vty, "    Number of Routes with SoO: %ld\n",
+			bgp_dest_soo_qlist_count(&soo_entry->dest_soo_list));
+		vty_out(vty,
+			"    Number of Routes with SoO using SoO NHG: %ld\n",
+			bgp_dest_soo_use_soo_nhgid_qlist_count(
+				&soo_entry->dest_soo_use_nhid_list));
+		vty_out(vty, "    SoO route flags: ");
 	}
-
-	vty_out(vty, "\n");
-	vty_out(vty, "  SoO route:\n");
-	vty_out(vty, "    Number of paths: %u\n", soo_entry->refcnt);
-	vty_out(vty, "    Number of Routes with SoO: %ld\n",
-		bgp_dest_soo_qlist_count(&soo_entry->dest_soo_list));
-	vty_out(vty, "    Number of Routes with SoO using SoO NHG: %ld\n",
-		bgp_dest_soo_use_soo_nhgid_qlist_count(
-			&soo_entry->dest_soo_use_nhid_list));
-	vty_out(vty, "    SoO route flags: ");
 
 	if (CHECK_FLAG(soo_entry->flags,
 		       PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL)) {
@@ -20632,26 +20637,64 @@ static void show_bgp_soo_hashtbl_walk_cb(struct hash_bucket *bucket, void *ctx)
 }
 
 DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
-      "show bgp soo route [<A.B.C.D>] [json]",
-      SHOW_STR BGP_STR
+      "show bgp [<view|vrf> VIEWVRFNAME] " BGP_AFI_CMD_STR BGP_SAFI_CMD_STR
+      " soo route [<A.B.C.D>] [json]",
+      SHOW_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AFI_HELP_STR BGP_SAFI_HELP_STR
       "Site-of-Origin\n"
       "Display information about per source NHG soo route\n"
-      "SoO IPv4 address\n" JSON_STR)
+      "SoO IPv4 address or IPv4 mapped IPv6 SoO address\n" JSON_STR)
 {
-	struct list *instances = bm->bgp;
-	struct listnode *node;
 	struct bgp *bgp = NULL;
+	char *vrf = NULL;
+	afi_t afi = AFI_UNSPEC;
+	safi_t safi = SAFI_UNSPEC;
 	struct prefix_ipv4 p;
-	int idx = 4; // Index of the IP address argument in argv
 	bool filter_by_soo = false;
-
-	bool uj = use_json(argc, argv);
 	json_object *json = NULL;
 	json_object *json_vrf_array = NULL;
 	struct bgp_soo_route_walk ctx = {};
+	bool uj = use_json(argc, argv);
+	int idx = 0;
+
+	/* [<vrf> VIEWVRFNAME] */
+	if (argv_find(argv, argc, "vrf", &idx)) {
+		vrf = argv[idx + 1]->arg;
+		idx += 2;
+		if (vrf && strmatch(vrf, VRF_DEFAULT_NAME))
+			vrf = NULL;
+	} else if (argv_find(argv, argc, "view", &idx)) {
+		/* [<view> VIEWVRFNAME] */
+		vrf = argv[idx + 1]->arg;
+		idx += 2;
+	}
+
+	if (vrf)
+		bgp = bgp_lookup_by_name(vrf);
+	else
+		bgp = bgp_get_default();
+
+	if (!bgp) {
+		return CMD_WARNING;
+	}
+
+	argv_find_and_parse_afi(argv, argc, &idx, &afi);
+	idx++;
+	argv_find_and_parse_safi(argv, argc, &idx, &safi);
+	idx++;
+
+	if (!(afi == AFI_IP || afi == AFI_IP6)) {
+		vty_out(vty,
+			"%% Only ipv4 or ipv6 address families are supported\n");
+		return CMD_WARNING;
+	}
+
+	if (safi != SAFI_UNICAST) {
+		vty_out(vty,
+			"%% Only ipv4 unicast or ipv6 unicast are supported\n");
+		return CMD_WARNING;
+	}
 
 	ctx.vty = vty;
-
 	if (argv_find(argv, argc, "A.B.C.D", &idx)) {
 		/* Parse the IPv4 address */
 		if (str2prefix_ipv4(argv[idx]->arg, &p) <= 0) {
@@ -20675,15 +20718,7 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 		SET_IPADDR_V4(&ip);
 		memcpy(&ip.ipaddr_v4, &p.prefix, sizeof(ip.ipaddr_v4));
 
-		/*
-		 * Per src NHG feature is enabled only for default VRF
-		 * TODO: If it is later supported for non-default VRFs
-		 * extend this CLI to take VRF as input
-		 */
-		bgp = bgp_get_default();
-		// TODO, need to check for both afis, just a temp code
-		soo_entry =
-			bgp_per_src_nhg_find(bgp, &ip, AF_INET, SAFI_UNICAST);
+		soo_entry = bgp_per_src_nhg_find(bgp, &ip, afi, safi);
 		if (uj) {
 			json_object_object_add(json, bgp->name_pretty,
 					       json_vrf_array);
@@ -20693,25 +20728,16 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 		show_bgp_soo_entry(soo_entry, &ctx);
 
 	} else {
-		for (ALL_LIST_ELEMENTS_RO(instances, node, bgp)) {
-			afi_t afi;
-			safi_t safi;
-
-			if (uj) {
-				json_object_object_add(json, bgp->name_pretty,
-						       json_vrf_array);
-			} else {
-				vty_out(vty, "BGP: %s\n\n", bgp->name_pretty);
-			}
-			FOREACH_AFI_SAFI (afi, safi) {
-				if (bgp->per_src_nhg_table[afi][safi])
-					hash_iterate(
-						bgp->per_src_nhg_table[afi]
-								      [safi],
-						show_bgp_soo_hashtbl_walk_cb,
-						&ctx);
-			}
+		if (uj) {
+			json_object_object_add(json, bgp->name_pretty,
+					       json_vrf_array);
+		} else {
+			vty_out(vty, "BGP: %s\n\n", bgp->name_pretty);
 		}
+
+		if (bgp->per_src_nhg_table[afi][safi])
+			hash_iterate(bgp->per_src_nhg_table[afi][safi],
+				     show_bgp_soo_hashtbl_walk_cb, &ctx);
 	}
 
 	if (uj) {

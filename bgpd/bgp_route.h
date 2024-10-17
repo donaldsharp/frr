@@ -418,6 +418,7 @@ struct bgp_static {
 	esi_t *eth_s_id;
 	struct ethaddr *router_mac;
 	struct prefix gatewayIp;
+	bool user_configured;
 };
 
 /* Aggreagete address:
