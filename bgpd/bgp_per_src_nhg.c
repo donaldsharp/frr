@@ -404,7 +404,8 @@ void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest 
 			return;
 
 		if (is_soo_route) {
-			if (withdraw)
+			if (withdraw || CHECK_FLAG(nhe->flags,
+                                 PER_SRC_NEXTHOP_GROUP_DEL_PENDING))
 				UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED);
 			if (CHECK_FLAG(nhe->flags,
 				 PER_SRC_NEXTHOP_GROUP_DEL_PENDING) &&
@@ -494,7 +495,6 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 								 false));
 				return true;
 			} else {
-				UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED);
 				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 					zlog_debug(
 						"bgp vrf %s per src nhg %s %s "
