@@ -3793,12 +3793,6 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, saf
 	struct bgp_path_info *old_select;
 	struct bgp_path_info_pair old_and_new;
 	int debug = 0;
-	bool is_evpn = false;
-	struct bgp_table *table = NULL;
-
-	table = bgp_dest_table(dest);
-	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
-		is_evpn = true;
 
 	/*
 	 * For default bgp instance, which is deleted i.e. marked hidden
@@ -4071,8 +4065,10 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, saf
 	UNSET_FLAG(dest->flags, BGP_NODE_PROCESS_SCHEDULED);
 
 	/* Reap old select bgp_path_info, if it has been removed */
-	if (old_select && CHECK_FLAG(old_select->flags, BGP_PATH_REMOVED))
+	if (old_select && CHECK_FLAG(old_select->flags, BGP_PATH_REMOVED)) {
 		bgp_path_info_reap(dest, old_select);
+		bgp_per_src_nhg_upd_msg_check(bgp, afi, safi, dest);
+	}
 
 	return;
 }
