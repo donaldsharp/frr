@@ -19045,7 +19045,7 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 		json_object_array_add(json_soo_array, json);
 		json_object_string_addf(
 			json, "SoORoute", "%s",
-			ipaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
+			inaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
 					  BUFSIZ, soo_entry->afi));
 		json_object_int_add(json, "numPaths", soo_entry->refcnt);
 		json_object_int_add(json, "nexthopgroupId", soo_entry->nhg_id);
@@ -19070,7 +19070,7 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 				   PER_SRC_NEXTHOP_GROUP_DEL_PENDING));
 	} else {
 		vty_out(vty, "SoO: %s\n",
-			ipaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
+			inaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
 					  BUFSIZ, soo_entry->afi));
 		vty_out(vty, "  NHG:\n");
 		vty_out(vty, "    NHG ID: %d\n", soo_entry->nhg_id);

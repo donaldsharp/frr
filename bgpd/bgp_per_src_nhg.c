@@ -1827,6 +1827,21 @@ bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 	return using_soo_nhg;
 }
 
+char *inaddr_afi_to_str(const struct in_addr *id, char *buf, int size,
+			afi_t afi)
+{
+	memset(buf, 0, size);
+	if (afi == AFI_IP) {
+		inet_ntop(AF_INET, id, buf, size);
+	} else if (afi == AFI_IP6) {
+		struct in6_addr v6addr;
+		ipv4_to_ipv4_mapped_ipv6(&v6addr, *id);
+		inet_ntop(AF_INET6, &v6addr, buf, size);
+	}
+
+	return buf;
+}
+
 char *ipaddr_afi_to_str(const struct in_addr *id, char *buf, int size,
 			afi_t afi)
 {
