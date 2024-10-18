@@ -1706,6 +1706,14 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
 {
 	struct ipaddr ip;
 	struct bgp_per_src_nhg_hash_entry *nhe;
+	struct bgp_table *table = NULL;
+
+	table = bgp_dest_table(dest);
+	if (table && ((table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
+		|| !CHECK_FLAG(
+                    bgp->per_src_nhg_flags[table->afi][table->safi],
+                    BGP_FLAG_NHG_PER_ORIGIN)))
+		return;
 
 	/* find-create nh */
 	memset(&ip, 0, sizeof(ip));
