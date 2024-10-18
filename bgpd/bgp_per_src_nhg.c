@@ -1133,6 +1133,7 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 	bgp_soo_route_installed_pi_bitmap
 	*/
 
+#if 0
 	// running is subset of installed - shrink case - immediate nhg replace
 	if (bf_is_subset(&nhe->bgp_soo_route_selected_pi_bitmap,
 			 &nhe->bgp_soo_route_installed_pi_bitmap)) {
@@ -1151,6 +1152,7 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 				bgp_per_src_nhg_add_send(nhe);
 		}
 	}
+#endif
 
 	// installed is subset of running - expansion case - start timer
 	if (bf_is_subset(&nhe->bgp_soo_route_installed_pi_bitmap,
@@ -1689,6 +1691,43 @@ bool bgp_check_is_soo_route(struct bgp *bgp, struct bgp_dest *dest,
 		return true;
 	else
 		return false;
+}
+
+void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
+				   struct bgp_dest *dest)
+{
+	struct ipaddr ip;
+	struct bgp_per_src_nhg_hash_entry *nhe;
+
+	/* find-create nh */
+	memset(&ip, 0, sizeof(ip));
+	SET_IPADDR_V4(&ip);
+	memcpy(&ip.ipaddr_v4, &dest->rn->p.u.prefix4, sizeof(dest->rn->p.u.prefix4));
+
+	nhe = bgp_per_src_nhg_find(bgp, &ip, afi, safi);
+	if (nhe) {
+		// running is subset of installed - shrink case - immediate nhg
+		// replace
+		if (bf_is_subset(&nhe->bgp_soo_route_selected_pi_bitmap,
+				 &nhe->bgp_soo_route_installed_pi_bitmap)) {
+			// Case 3: NHG replace can be done immediately without
+			// waiting for any timer
+			// TODO: Call code to do NHG replace
+			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+				zlog_debug(
+					"bgp vrf %s per src nhg soo route upd: %pIA %s NHG replace",
+					nhe->bgp->name_pretty, &nhe->ip,
+					get_afi_safi_str(nhe->afi, nhe->safi,
+							 false));
+
+			if (nhe->refcnt) {
+				if (CHECK_FLAG(
+					    nhe->flags,
+					    PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
+					bgp_per_src_nhg_add_send(nhe);
+			}
+		}
+	}
 }
 
 void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
