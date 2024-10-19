@@ -19287,7 +19287,7 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 
 		soo_entry = bgp_per_src_nhg_find(bgp, &ip, afi, safi);
 		if (uj) {
-			json_object_object_add(json, bgp->name_pretty,
+			json_object_object_add(json, (vrf == NULL)? VRF_DEFAULT_NAME : vrf,
 					       json_vrf_array);
 		} else {
 			vty_out(vty, "BGP: %s\n\n", bgp->name_pretty);
@@ -19296,7 +19296,7 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 
 	} else {
 		if (uj) {
-			json_object_object_add(json, bgp->name_pretty,
+			json_object_object_add(json, (vrf == NULL)? VRF_DEFAULT_NAME : vrf,
 					       json_vrf_array);
 		} else {
 			vty_out(vty, "BGP: %s\n\n", bgp->name_pretty);
