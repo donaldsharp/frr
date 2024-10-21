@@ -3661,8 +3661,13 @@ static ssize_t netlink_neigh_update_msg_encode(
 			return 0;
 	}
 	if (lla && ip) {
-		frrtrace(7, frr_zebra, netlink_neigh_update_msg_encode, lla, ip,
-			 nhg_id, flags, state, family, type);
+		frrtrace(8, frr_zebra, netlink_neigh_update_msg_encode, lla, ip, nhg_id, flags,
+			 state, family, type, op);
+	} else if (lla) {
+		struct ipaddr tmp_ip = { .ipa_type = IPADDR_NONE };
+
+		frrtrace(8, frr_zebra, netlink_neigh_update_msg_encode, lla, &tmp_ip, nhg_id, flags,
+			 state, family, type, op);
 	}
 	if (op == DPLANE_OP_MAC_INSTALL || op == DPLANE_OP_MAC_DELETE) {
 		vlanid_t vid = dplane_ctx_mac_get_vlan(ctx);

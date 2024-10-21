@@ -464,7 +464,8 @@ TRACEPOINT_EVENT(
 		uint8_t, flags,
 		uint16_t, state,
 		uint8_t, family,
-		uint8_t, type),
+		uint8_t, type,
+		uint32_t, op),
 	TP_FIELDS(
 		ctf_array(unsigned char, mac, mac,
 			  sizeof(struct ethaddr))
@@ -475,6 +476,7 @@ TRACEPOINT_EVENT(
 		ctf_integer(uint16_t, state, state)
 		ctf_string(family, (family == AF_INET) ? "AF_INET" : "AF_INET6")
 		ctf_integer(uint8_t, type, type)
+		ctf_integer(uint8_t, op, op)
 		)
 	)
 
