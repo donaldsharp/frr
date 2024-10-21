@@ -72,9 +72,9 @@ enum bgp_show_adj_route_type {
 };
 
 
-#define BGP_SHOW_SCODE_HEADER                                                  \
-	"Status codes:  s suppressed, d damped, "                              \
-	"h history, u unsorted, * valid, > best, = multipath,\n"               \
+#define BGP_SHOW_SCODE_HEADER                                                     \
+	"Status codes:  s suppressed, d damped, "                                 \
+	"h history, u unsorted, * valid, > best, = multipath, + multipath nhg,\n" \
 	"               i internal, r RIB-failure, S Stale, R Removed\n"
 #define BGP_SHOW_OCODE_HEADER                                                  \
 	"Origin codes:  i - IGP, e - EGP, ? - incomplete\n"
@@ -382,6 +382,7 @@ struct bgp_static {
 	struct ethaddr *router_mac;
 	uint16_t encap_tunneltype;
 	struct prefix gatewayIp;
+	bool user_configured;
 };
 
 /* Aggreagete address:
@@ -722,7 +723,8 @@ extern void bgp_static_delete(struct bgp *);
 extern void bgp_static_redo_import_check(struct bgp *);
 extern void bgp_purge_static_redist_routes(struct bgp *bgp);
 extern void bgp_static_update(struct bgp *bgp, const struct prefix *p,
-			      struct bgp_static *s, afi_t afi, safi_t safi);
+			      struct bgp_static *s, afi_t afi, safi_t safi,
+			      bool skip_import_check);
 extern void bgp_static_withdraw(struct bgp *bgp, const struct prefix *p,
 				afi_t afi, safi_t safi);
 
@@ -748,9 +750,19 @@ extern int bgp_withdraw(struct peer *peer, const struct prefix *p,
 			struct prefix_rd *prd, mpls_label_t *label,
 			uint32_t num_labels, struct bgp_route_evpn *evpn);
 
-/* for bgp_nexthop and bgp_damp */
+/*
+ * Add a route to be processed for bgp bestpath through the bgp
+ * workqueue.  This route is added to the end of all other routes
+ * queued for processing
+ *
+ * bgp_process_early adds the route for processing at the beginning
+ * of the current queue for processing.
+ */
 extern void bgp_process(struct bgp *bgp, struct bgp_dest *dest,
 			struct bgp_path_info *pi, afi_t afi, safi_t safi);
+
+extern void bgp_process_early(struct bgp *bgp, struct bgp_dest *dest,
+			      struct bgp_path_info *pi, afi_t afi, safi_t safi);
 
 /*
  * Add an end-of-initial-update marker to the process queue. This is just a
@@ -832,6 +844,8 @@ extern int bgp_path_info_cmp_compatible(struct bgp *bgp,
 					enum bgp_path_selection_reason *reason);
 extern void bgp_attr_add_llgr_community(struct attr *attr);
 extern void bgp_attr_add_gshut_community(struct attr *attr);
+extern void bgp_attr_add_soo_community(struct ecommunity *soo,
+				       struct attr *attr);
 
 extern void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 			       struct bgp_maxpaths_cfg *mpath_cfg,
@@ -874,4 +888,12 @@ extern bool bgp_path_suppressed(struct bgp_path_info *pi);
 extern int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete);
 extern void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest,
 				 afi_t afi, safi_t safi);
+extern int bgp_static_set(struct vty *vty, const char *negate,
+			  const char *ip_str, afi_t afi, safi_t safi,
+			  const char *rmap, int backdoor, uint32_t label_index,
+			  bool skip_import_check);
+int bgp_static_set_non_vty(struct bgp *bgp, bool negate, const char *ip_str,
+			   afi_t afi, safi_t safi, const char *rmap,
+			   int backdoor, uint32_t label_index,
+			   bool skip_import_check);
 #endif /* _QUAGGA_BGP_ROUTE_H */

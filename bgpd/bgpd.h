@@ -52,6 +52,7 @@ PREDECL_LIST(zebra_announce);
 
 #define BGP_MAX_HOSTNAME 64	/* Linux max, is larger than most other sys */
 #define BGP_PEER_MAX_HASH_SIZE 16384
+#define BGP_PEER_INIT_BITMAP_SIZE 128
 
 /* Default interval for IPv6 RAs when triggered by BGP unnumbered neighbor. */
 #define BGP_UNNUM_DEFAULT_RA_INTERVAL 10
@@ -441,6 +442,7 @@ struct bgp {
 	/* BGP peer. */
 	struct list *peer;
 	struct hash *peerhash;
+	bitfield_t bgp_peer_id_bitmap;
 
 	/* BGP peer group.  */
 	struct list *group;
@@ -853,6 +855,28 @@ struct bgp {
 	struct work_queue *process_queue;
 
 	bool fast_convergence;
+
+#define BGP_FLAG_ADVERTISE_ORIGIN (1ULL << 0)
+#define BGP_FLAG_NHG_PER_ORIGIN (1ULL << 1)
+#define BGP_FLAG_CONFIG_DEL_PENDING (1ULL << 2)
+	/* BGP per source NHG flags */
+	uint8_t per_src_nhg_flags[AFI_MAX][SAFI_MAX];
+	/* local administrator value used for soo creation used for per source
+	   NHG. In the future, we may override this value if needed.
+	 */
+#define SOO_LOCAL_ADMINISTRATOR_VALUE_PER_SOURCE_NHG 0x0
+	/* SOO value derived from BGP router-id*/
+	struct ecommunity *per_source_nhg_soo;
+
+	/* Hash table of per source NHG based on soo.
+	   SAFI ignored as we only deal with unicast.
+	  */
+	struct hash *per_src_nhg_table[AFI_MAX][SAFI_MAX];
+	/* Timer wheel for per source NHG SoO*/
+	struct timer_wheel *per_src_nhg_soo_timer_wheel;
+	bool per_src_nhg_soo_timer_wheel_created;
+	/* per source nhg convergence wait timer*/
+	int per_src_nhg_convergence_timer;
 
 	/* BGP Conditional advertisement */
 	uint32_t condition_check_period;
@@ -1824,6 +1848,9 @@ struct peer {
 	struct llgr_info llgr[AFI_MAX][SAFI_MAX];
 
 	bool shut_during_cfg;
+
+	/* Assign a bit index for this peer, this is used for per source NHG*/
+	uint32_t bit_index;
 
 	QOBJ_FIELDS;
 };

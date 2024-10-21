@@ -95,6 +95,8 @@ struct nexthop_group_cmd {
 
 	struct nexthop_group nhg;
 
+	uint32_t flags;
+
 	struct list *nhg_list;
 
 	QOBJ_FIELDS;
@@ -105,13 +107,28 @@ RB_PROTOTYPE(nhgc_entry_head, nexthop_group_cmd, nhgc_entry,
 DECLARE_QOBJ_TYPE(nexthop_group_cmd);
 
 /*
+ * Flags values
+ */
+/* Request/allow recursive resolution for an NHG */
+#define NHG_CMD_FLAG_RECURSIVE (1 << 0)
+
+
+/*
  * Initialize nexthop_groups.  If you are interested in when
  * a nexthop_group is added/deleted/modified, then set the
  * appropriate callback functions to handle it in your
  * code
+ *
+ * create - The creation of the nexthop group
+ * modify - Modification of the nexthop group when not changing a nexthop
+ *          ( resilience as an example )
+ * add_nexthop - A nexthop is added to the NHG
+ * del_nexthop - A nexthop is deleted from the NHG
+ * destroy - The NHG is deleted
  */
 void nexthop_group_init(
 	void (*create)(const char *name),
+	void (*modify)(const struct nexthop_group_cmd *nhgc),
 	void (*add_nexthop)(const struct nexthop_group_cmd *nhgc,
 			    const struct nexthop *nhop),
 	void (*del_nexthop)(const struct nexthop_group_cmd *nhgc,

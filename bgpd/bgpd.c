@@ -93,6 +93,7 @@
 #include "bgpd/bgp_evpn_mh.h"
 #include "bgpd/bgp_mac.h"
 #include "bgpd/bgp_trace.h"
+#include "bgpd/bgp_per_src_nhg.h"
 
 DEFINE_MTYPE_STATIC(BGPD, PEER_TX_SHUTDOWN_MSG, "Peer shutdown message (TX)");
 DEFINE_QOBJ_TYPE(bgp_master);
@@ -307,6 +308,8 @@ static int bgp_router_id_set(struct bgp *bgp, const struct in_addr *id,
 
 	if (IPV4_ADDR_SAME(&bgp->router_id, id))
 		return 0;
+
+	bgp_per_src_nhg_handle_router_id_update(bgp, id);
 
 	/* EVPN uses router id in RD, withdraw them */
 	if (is_evpn_enabled())
@@ -1686,11 +1689,13 @@ void bgp_peer_conf_if_to_su_update(struct peer *peer)
 			peer->su = old_su;
 			hash_release(peer->bgp->peerhash, peer);
 			listnode_delete(peer->bgp->peer, peer);
+			bf_release_index(peer->bgp->bgp_peer_id_bitmap, peer->bit_index);
 
 			peer->su = new_su;
 			(void)hash_get(peer->bgp->peerhash, peer,
 				       hash_alloc_intern);
 			listnode_add_sort(peer->bgp->peer, peer);
+			bf_assign_index(peer->bgp->bgp_peer_id_bitmap, peer->bit_index);
 		}
 	}
 }
@@ -1795,6 +1800,7 @@ struct peer *peer_create(union sockunion *su, const char *conf_if,
 		SET_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE);
 
 	(void)hash_get(bgp->peerhash, peer, hash_alloc_intern);
+	bf_assign_index(bgp->bgp_peer_id_bitmap, peer->bit_index);
 
 	/* Adjust update-group coalesce timer heuristics for # peers. */
 	if (bgp->heuristic_coalesce) {
@@ -1858,6 +1864,7 @@ struct peer *peer_create_accept(struct bgp *bgp)
 	peer = peer_lock(peer); /* bgp peer list reference */
 	listnode_add_sort(bgp->peer, peer);
 	(void)hash_get(bgp->peerhash, peer, hash_alloc_intern);
+	bf_assign_index(bgp->bgp_peer_id_bitmap, peer->bit_index);
 
 	/* Initialize per peer bgp GR FSM */
 	bgp_peer_gr_init(peer);
@@ -2556,6 +2563,7 @@ int peer_delete(struct peer *peer)
 		 */
 		list_delete_node(bgp->peer, pn);
 		hash_release(bgp->peerhash, peer);
+		bf_release_index(bgp->bgp_peer_id_bitmap, peer->bit_index);
 		peer_unlock(peer); /* bgp peer list reference */
 	}
 
@@ -3315,6 +3323,9 @@ peer_init:
 	bgp->coalesce_time = BGP_DEFAULT_SUBGROUP_COALESCE_TIME;
 	bgp->default_af[AFI_IP][SAFI_UNICAST] = true;
 
+	bf_init(bgp->bgp_peer_id_bitmap, BGP_PEER_INIT_BITMAP_SIZE);
+	bf_assign_zero_index(bgp->bgp_peer_id_bitmap);
+
 	if (!hidden)
 		QOBJ_REG(bgp, bgp);
 
@@ -3550,6 +3561,9 @@ int bgp_get(struct bgp **bgp_val, as_t *as, const char *name,
 	bgp_address_init(bgp);
 	bgp_tip_hash_init(bgp);
 	bgp_scan_init(bgp);
+	bgp->per_src_nhg_convergence_timer =
+		BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD;
+	bgp_per_src_nhg_soo_timer_wheel_init(bgp);
 	*bgp_val = bgp;
 
 	bgp->t_rmap_def_originate_eval = NULL;
@@ -3941,6 +3955,8 @@ void bgp_free(struct bgp *bgp)
 	list_delete(&bgp->group);
 	list_delete(&bgp->peer);
 
+	bf_free(bgp->bgp_peer_id_bitmap);
+
 	if (bgp->peerhash) {
 		hash_free(bgp->peerhash);
 		bgp->peerhash = NULL;
@@ -3969,6 +3985,8 @@ void bgp_free(struct bgp *bgp)
 	bgp_scan_finish(bgp);
 	bgp_address_destroy(bgp);
 	bgp_tip_hash_destroy(bgp);
+	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
+	bgp_per_src_nhg_stop(bgp);
 
 	/* release the auto RD id */
 	bf_release_index(bm->rd_idspace, bgp->vrf_rd_id);

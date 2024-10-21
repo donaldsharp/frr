@@ -842,6 +842,19 @@ void apply_mask(union prefixptr pu)
 }
 
 /* Utility function of convert between struct prefix <=> union sockunion. */
+struct prefix *in6addr2hostprefix(struct in6_addr *in6_addr,
+				  struct prefix *prefix)
+{
+	struct prefix_ipv6 *p;
+
+	p = prefix ? (struct prefix_ipv6 *)prefix : prefix_ipv6_new();
+	p->family = AF_INET6;
+	p->prefixlen = IPV6_MAX_BITLEN;
+	memcpy(&p->prefix, in6_addr, sizeof(struct in6_addr));
+	return (struct prefix *)p;
+}
+
+/* Utility function of convert between struct prefix <=> union sockunion. */
 struct prefix *sockunion2hostprefix(const union sockunion *su,
 				    struct prefix *prefix)
 {
@@ -1402,6 +1415,16 @@ bool ipv4_unicast_valid(const struct in_addr *addr)
 	}
 
 	return true;
+}
+
+void inaddrv42prefix(const struct in_addr *ip, uint16_t prefixlen,
+		     struct prefix *p)
+{
+	p->family = AF_INET;
+	p->u.prefix4 = *ip;
+	p->prefixlen = prefixlen;
+
+	return;
 }
 
 static int ipaddr2prefix(const struct ipaddr *ip, uint16_t prefixlen,
