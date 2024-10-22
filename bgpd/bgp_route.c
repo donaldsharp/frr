@@ -3880,6 +3880,33 @@ static inline void bgp_evpn_handle_deferred_bestpath_for_vrfs(void)
 							 false));
 
 			/*
+			 * Below piece of code is to handle non default EVPN VRF
+			 * instances where the variables are to be set
+			 * appropriately.
+			 *
+			 * NOTE:
+			 * - Prior to this change, peer_unshut_after_cfg() sends
+			 *   UPD_PENDING + UPD_COMPLETE for non default VRFs
+			 *   prematurely.
+			 * - So, when default vrf deferral calculation is
+			 *   complete, it invokes this function to queue the
+			 *   deferral for non default vrfs.
+			 * - However it then ends up sending the UPDATE_COMPLETE
+			 *   and marks GR done for all instances since the below
+			 *   variables (especially gr_route_sync_pending) are
+			 *   not set for non default vrfs.
+			 *
+			 * Sending UPDATE_PENDING here makes sense to tell zebra
+			 * that the non default VRF is a work in progress and is
+			 * yet to go through the deferred path selection.
+			 */
+			bgp_vrf->gr_route_sync_pending = true;
+			bgp_vrf->gr_info[tmp_afi][tmp_safi].af_enabled = true;
+			bgp_zebra_update(bgp_vrf, tmp_afi, tmp_safi,
+					 ZEBRA_CLIENT_ROUTE_UPDATE_PENDING);
+			bgp_vrf->gr_info[tmp_afi][tmp_safi].select_defer_over = true;
+
+			/*
 			 * The reason why we are starting the timer and
 			 * not doing deferred BP calculation in place is
 			 * because, if this route table has more than
@@ -3892,7 +3919,20 @@ static inline void bgp_evpn_handle_deferred_bestpath_for_vrfs(void)
 	}
 }
 
-/* Process the routes with the flag BGP_NODE_SELECT_DEFER set */
+/*
+ * Process the routes with the flag BGP_NODE_SELECT_DEFER set
+ *
+ * NOTE: Few important places where bgp_do_deferred_path_selection() is
+ * invoked are as below
+ *  1) For default VRF when EORs are received.
+ *  2) Start of deferral time when config read is done and peers are not in
+ *     admin down in peer_unshut_after_cfg()
+ *  3) Via bgp_gr_start_route_select_timer() in 2 cases
+ *      a) When there are still routes to be processed at the end of this
+ *         function
+ *      b) For non default Vrfs if EVPN is enabled in default vrf via
+ *         bgp_evpn_handle_deferred_bestpath_for_vrfs()
+ */
 void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 {
 	struct afi_safi_info *thread_info;
@@ -3956,6 +3996,9 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 		 * is not GR enabled. In which case, none of the GR timers will
 		 * be started/running. So for such VRFs, this trigger will do
 		 * the deferred bestpath selection.
+		 *
+		 * This also handles the case where default BGP has EVPN enabled
+		 * and non default VRFs(Tenant VRFs) dont have any peer.
 		 */
 		bgp_evpn_handle_deferred_bestpath_for_vrfs();
 	} else if (safi == SAFI_UNICAST && (afi == AFI_IP || afi == AFI_IP6)) {
@@ -3987,7 +4030,7 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 			 * OR
 			 *
 			 * 2. GR is enabled for l2vpn evpn afi safi in EVPN
-			 * default VRF and GR is complete
+			 * default VRF and GR is complete for default VRF
 			 */
 			bgp_deferred_path_selection(bgp, afi, safi,
 						    bgp->rib[afi][safi], cnt,
@@ -4033,13 +4076,17 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 		    BGP_GR_SELECT_DEFER_DONE(bgp, afi, safi)) {
 			bgp_zebra_update(bgp, afi, safi,
 					 ZEBRA_CLIENT_ROUTE_UPDATE_COMPLETE);
+			/*
+			 * If bgp instance is default, setting this variable
+			 * will enable deferred path selection for non default
+			 * vrf
+			 */
 			bgp->gr_info[afi][safi].route_sync_tier2 = true;
 		}
 
 		bgp->gr_info[afi][safi].route_sync = true;
 		/*
-		 * If this instance is all done,
-		 * check for GR completion overall
+		 * If this instance is all done, check for overall GR completion
 		 */
 		FOREACH_AFI_SAFI (afi, safi) {
 			if (bgp->gr_info[afi][safi].af_enabled &&
@@ -4051,6 +4098,8 @@ void bgp_do_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi)
 
 		if (!route_sync_pending) {
 			bgp->gr_route_sync_pending = false;
+			/* Set bgp master GR COMPLETE flag */
+			frrtrace(3, frr_bgp, gr_update_complete, bgp->name_pretty, afi, safi);
 			bgp_update_gr_completion();
 		}
 
