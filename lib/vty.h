@@ -42,7 +42,7 @@ extern "C" {
 
 struct json_object;
 
-#define VTY_BUFSIZ 4096
+#define VTY_BUFSIZ 8192
 #define VTY_MAXHIST 20
 #define VTY_MAXDEPTH 8
 
