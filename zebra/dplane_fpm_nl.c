@@ -1361,6 +1361,7 @@ static void fpm_process_queue(struct thread *t)
 	struct fpm_nl_ctx *fnc = THREAD_ARG(t);
 	struct zebra_dplane_ctx *ctx;
 	bool no_bufs = false;
+	bool wrote_data = false;
 	uint64_t processed_contexts = 0;
 
 	while (true) {
@@ -1386,6 +1387,7 @@ static void fpm_process_queue(struct thread *t)
 		if (fnc->socket != -1)
 			(void)fpm_nl_enqueue(fnc, ctx);
 
+		wrote_data = true;
 		/* Account the processed entries. */
 		processed_contexts++;
 
@@ -1398,10 +1400,16 @@ static void fpm_process_queue(struct thread *t)
 				  processed_contexts, memory_order_relaxed);
 
 	/* Re-schedule if we ran out of buffer space */
-	if (no_bufs)
-		thread_add_timer(fnc->fthread->master, fpm_process_queue,
-				 fnc, 0, &fnc->t_dequeue);
-
+	if (no_bufs) {
+		if (wrote_data)
+			thread_add_event(fnc->fthread->master,
+					 fpm_process_queue, fnc, 0,
+					 &fnc->t_dequeue);
+		else
+			thread_add_timer_msec(fnc->fthread->master,
+					      fpm_process_queue, fnc, 10,
+					      &fnc->t_dequeue);
+	}
 	/*
 	 * Let the dataplane thread know if there are items in the
 	 * output queue to be processed. Otherwise they may sit
