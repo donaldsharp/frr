@@ -4542,9 +4542,10 @@ void bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		 * will not be interned. In which case, it is ok to update the
 		 * attr->evpn_overlay, so that, this can be stored in adj_in.
 		 */
-		if ((afi == AFI_L2VPN) && evpn) {
-			memcpy(&attr->evpn_overlay, evpn,
-			       sizeof(struct bgp_route_evpn));
+		if (evpn) {
+			if (afi == AFI_L2VPN)
+				memcpy(&attr->evpn_overlay, evpn,
+				       sizeof(struct bgp_route_evpn));
 		}
 		bgp_adj_in_set(dest, peer, attr, addpath_id);
 	}
@@ -4706,9 +4707,11 @@ void bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	 * attr->evpn_overlay with evpn directly. Instead memcpy
 	 * evpn to new_atr.evpn_overlay before it is interned.
 	 */
-	if (soft_reconfig && (afi == AFI_L2VPN) && evpn)
-		memcpy(&new_attr.evpn_overlay, evpn,
-		       sizeof(struct bgp_route_evpn));
+	if (soft_reconfig && evpn) {
+		if (afi == AFI_L2VPN)
+			memcpy(&new_attr.evpn_overlay, evpn,
+			       sizeof(struct bgp_route_evpn));
+	}
 
 	/* Apply incoming route-map.
 	 * NB: new_attr may now contain newly allocated values from route-map
