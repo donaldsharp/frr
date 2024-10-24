@@ -304,7 +304,12 @@ static struct assegment *assegment_normalise(struct assegment *head)
 
 static struct aspath *aspath_new(void)
 {
-	return XCALLOC(MTYPE_AS_PATH, sizeof(struct aspath));
+	struct aspath *as;
+
+	as = XCALLOC(MTYPE_AS_PATH, sizeof(struct aspath));
+	as->count = 0;
+
+	return as;
 }
 
 /* Free AS path structure. */
@@ -406,6 +411,11 @@ unsigned int aspath_count_confeds(struct aspath *aspath)
 }
 
 unsigned int aspath_count_hops(const struct aspath *aspath)
+{
+	return aspath->count;
+}
+
+static unsigned int aspath_count_hops_internal(const struct aspath *aspath)
 {
 	int count = 0;
 	struct assegment *seg = aspath->segments;
@@ -713,6 +723,7 @@ struct aspath *aspath_dup(struct aspath *aspath)
 	else
 		new->str[0] = '\0';
 
+	new->count = aspath->count;
 	return new;
 }
 
@@ -733,6 +744,7 @@ static void *aspath_hash_alloc(void *arg)
 	new->str = aspath->str;
 	new->str_len = aspath->str_len;
 	new->json = aspath->json;
+	new->count = aspath->count;
 
 	return new;
 }
@@ -857,6 +869,8 @@ struct aspath *aspath_parse(struct stream *s, size_t length, int use32bit)
 	memset(&as, 0, sizeof(as));
 	if (assegments_parse(s, length, &as.segments, use32bit) < 0)
 		return NULL;
+
+	as.count = aspath_count_hops_internal(&as);
 
 	/* If already same aspath exist then return it. */
 	find = hash_get(ashash, &as, aspath_hash_alloc);
@@ -1036,7 +1050,7 @@ static struct assegment *aspath_aggregate_as_set_add(struct aspath *aspath,
 		asset->as[asset->length - 1] = as;
 	}
 
-
+	aspath->count = aspath_count_hops_internal(aspath);
 	return asset;
 }
 
@@ -1117,6 +1131,8 @@ struct aspath *aspath_aggregate(struct aspath *as1, struct aspath *as2)
 
 	assegment_normalise(aspath->segments);
 	aspath_str_update(aspath, false);
+	aspath->count = aspath_count_hops_internal(aspath);
+
 	return aspath;
 }
 
@@ -1257,6 +1273,8 @@ struct aspath *aspath_replace_specific_asn(struct aspath *aspath,
 	}
 
 	aspath_str_update(new, false);
+	new->count = aspath_count_hops_internal(new);
+
 	return new;
 }
 
@@ -1279,6 +1297,8 @@ struct aspath *aspath_replace_all_asn(struct aspath *aspath, as_t our_asn)
 	}
 
 	aspath_str_update(new, false);
+	new->count = aspath_count_hops_internal(new);
+
 	return new;
 }
 
@@ -1305,6 +1325,8 @@ struct aspath *aspath_replace_private_asns(struct aspath *aspath, as_t asn,
 	}
 
 	aspath_str_update(new, false);
+	new->count = aspath_count_hops_internal(new);
+
 	return new;
 }
 
@@ -1376,6 +1398,7 @@ struct aspath *aspath_remove_private_asns(struct aspath *aspath, as_t peer_asn)
 	}
 
 	aspath_str_update(new, false);
+	new->count = aspath_count_hops_internal(new);
 	return new;
 }
 
@@ -1432,6 +1455,7 @@ static struct aspath *aspath_merge(struct aspath *as1, struct aspath *as2)
 		last->next = as2->segments;
 	as2->segments = new;
 	aspath_str_update(as2, false);
+	as2->count = aspath_count_hops_internal(as2);
 	return as2;
 }
 
@@ -1449,6 +1473,7 @@ struct aspath *aspath_prepend(struct aspath *as1, struct aspath *as2)
 	if (as2->segments == NULL) {
 		as2->segments = assegment_dup_all(as1->segments);
 		aspath_str_update(as2, false);
+		as2->count = aspath_count_hops_internal(as2);
 		return as2;
 	}
 
@@ -1469,6 +1494,7 @@ struct aspath *aspath_prepend(struct aspath *as1, struct aspath *as2)
 	if (!as2->segments) {
 		as2->segments = assegment_dup_all(as1->segments);
 		aspath_str_update(as2, false);
+		as2->count = aspath_count_hops_internal(as2);
 		return as2;
 	}
 
@@ -1514,6 +1540,7 @@ struct aspath *aspath_prepend(struct aspath *as1, struct aspath *as2)
 		 * the inbetween AS_SEQUENCE of seg2 in the process
 		 */
 		aspath_str_update(as2, false);
+		as2->count = aspath_count_hops_internal(as2);
 		return as2;
 	} else {
 		/* AS_SET merge code is needed at here. */
@@ -1593,6 +1620,7 @@ struct aspath *aspath_filter_exclude(struct aspath *source,
 		lastseg = newseg;
 	}
 	aspath_str_update(newpath, false);
+	newpath->count = aspath_count_hops_internal(newpath);
 	/* We are happy returning even an empty AS_PATH, because the
 	 * administrator
 	 * might expect this very behaviour. There's a mean to avoid this, if
@@ -1631,6 +1659,7 @@ static struct aspath *aspath_add_asns(struct aspath *aspath, as_t asno,
 	}
 
 	aspath_str_update(aspath, false);
+	aspath->count = aspath_count_hops_internal(aspath);
 	return aspath;
 }
 
@@ -1722,6 +1751,7 @@ struct aspath *aspath_reconcile_as4(struct aspath *aspath,
 	if (!hops) {
 		newpath = aspath_dup(as4path);
 		aspath_str_update(newpath, false);
+		/* dup sets the count properly */
 		return newpath;
 	}
 
@@ -1783,6 +1813,7 @@ struct aspath *aspath_reconcile_as4(struct aspath *aspath,
 	aspath_free(newpath);
 	mergedpath->segments = assegment_normalise(mergedpath->segments);
 	aspath_str_update(mergedpath, false);
+	mergedpath->count = aspath_count_hops_internal(mergedpath);
 
 	if (BGP_DEBUG(as4, AS4))
 		zlog_debug("[AS4] result of synthesizing is %s",
@@ -1853,8 +1884,10 @@ struct aspath *aspath_delete_confed_seq(struct aspath *aspath)
 		seg = next;
 	}
 
-	if (removed_confed_segment)
+	if (removed_confed_segment) {
 		aspath_str_update(aspath, false);
+		aspath->count = aspath_count_hops_internal(aspath);
+	}
 
 	return aspath;
 }
