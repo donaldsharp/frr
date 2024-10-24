@@ -223,6 +223,8 @@ static int if_zebra_delete_hook(struct interface *ifp)
 		if_nhg_dependents_release(ifp);
 		zebra_if_nhg_dependents_free(zebra_if);
 
+		zebra_ns_unlink_ifp(ifp);
+
 		XFREE(MTYPE_ZIF_DESC, zebra_if->desc);
 
 		EVENT_OFF(zebra_if->speed_update);
@@ -738,7 +740,6 @@ void if_delete_update(struct interface **pifp)
 	   for setting ifindex to IFINDEX_INTERNAL after processing the
 	   interface deletion message. */
 	if_set_index(ifp, IFINDEX_INTERNAL);
-	ifp->node = NULL;
 
 	UNSET_FLAG(ifp->status, ZEBRA_INTERFACE_VRF_LOOPBACK);
 
