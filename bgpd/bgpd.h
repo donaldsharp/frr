@@ -1521,6 +1521,7 @@ struct peer {
 	struct thread *t_generate_updgrp_packets;
 	struct thread *t_process_packet;
 	struct thread *t_process_packet_error;
+	struct thread *t_stop_with_notify;
 	struct thread *t_refresh_stalepath;
 
 	/* Thread flags. */
