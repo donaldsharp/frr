@@ -182,6 +182,7 @@ static struct peer *peer_xfer_conn(struct peer *from_peer)
 	EVENT_OFF(going_away->t_delayopen);
 	EVENT_OFF(going_away->t_connect_check_r);
 	EVENT_OFF(going_away->t_connect_check_w);
+	EVENT_OFF(going_away->t_stop_with_notify);
 	EVENT_OFF(keeper->t_routeadv);
 	EVENT_OFF(keeper->t_connect);
 	EVENT_OFF(keeper->t_delayopen);
@@ -2031,6 +2032,8 @@ enum bgp_fsm_state_progress bgp_stop(struct peer_connection *connection)
 	EVENT_OFF(connection->t_connect_check_r);
 	EVENT_OFF(connection->t_connect_check_w);
 
+	EVENT_OFF(connection->t_stop_with_notify);
+
 	/* Stop all timers. */
 	EVENT_OFF(connection->t_start);
 	EVENT_OFF(connection->t_connect);
@@ -3524,4 +3527,11 @@ void bgp_peer_gr_flags_update(struct peer *peer)
 			peer_nsf_stop(peer);
 		}
 	}
+}
+
+void bgp_event_stop_with_notify(struct event *event)
+{
+	struct peer_connection *connection = EVENT_ARG(event);
+
+	BGP_EVENT_ADD(connection, TCP_fatal_error);
 }

@@ -1266,6 +1266,7 @@ struct peer_connection {
 
 	struct event *t_connect_check_r;
 	struct event *t_connect_check_w;
+	struct event *t_stop_with_notify;
 
 	struct event *t_gr_restart;
 	struct event *t_gr_stale;

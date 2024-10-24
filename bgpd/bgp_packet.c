@@ -148,7 +148,8 @@ static void bgp_packet_add(struct peer_connection *connection,
 			EC_BGP_SENDQ_STUCK_PROPER,
 			"%pBP has not made any SendQ progress for 2 holdtimes (%jds), terminating session",
 			peer, sendholdtime);
-		BGP_EVENT_ADD(connection, TCP_fatal_error);
+		event_add_event(bm->master, bgp_event_stop_with_notify, connection, 0,
+				&connection->t_stop_with_notify);
 	} else if (delta > (intmax_t)holdtime &&
 		   monotime(NULL) - peer->last_sendq_warn > 5) {
 		flog_warn(
