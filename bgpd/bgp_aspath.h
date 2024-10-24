@@ -72,6 +72,8 @@ struct aspath {
 	   and AS path regular expression match.  */
 	char *str;
 	unsigned short str_len;
+	uint32_t count;
+
 };
 
 #define ASPATH_STR_DEFAULT_LEN 32
