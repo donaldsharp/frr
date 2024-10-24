@@ -160,7 +160,8 @@ static void bgp_packet_add(struct peer *peer, struct stream *s)
 		flog_err(EC_BGP_SENDQ_STUCK_PROPER,
 			 "%pBP has not made any SendQ progress for 2 holdtimes (%jds), terminating session",
 			 peer, sendholdtime);
-		BGP_EVENT_ADD(peer, TCP_fatal_error);
+		thread_add_event(bm->master, bgp_event_stop_with_notify, peer, 0,
+				&peer->t_stop_with_notify);
 	} else if (delta > (intmax_t)holdtime && monotime(NULL) - peer->last_sendq_warn > 5) {
 		flog_warn(EC_BGP_SENDQ_STUCK_WARN,
 			  "%pBP has not made any SendQ progress for 1 holdtime (%us), peer overloaded?",
