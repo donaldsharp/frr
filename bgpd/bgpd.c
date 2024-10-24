@@ -4006,6 +4006,9 @@ int bgp_delete(struct bgp *bgp)
 
 	bgp_vpn_leak_unimport(bgp);
 
+	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
+	bgp_per_src_nhg_stop(bgp);
+
 	hook_call(bgp_inst_delete, bgp);
 
 	FOREACH_AFI_SAFI (afi, safi)
@@ -4246,8 +4249,6 @@ void bgp_free(struct bgp *bgp)
 	bgp_scan_finish(bgp);
 	bgp_address_destroy(bgp);
 	bgp_tip_hash_destroy(bgp);
-	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
-	bgp_per_src_nhg_stop(bgp);
 
 	/* release the auto RD id */
 	bf_release_index(bm->rd_idspace, bgp->vrf_rd_id);
