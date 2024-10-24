@@ -103,7 +103,8 @@ static void bgp_evpn_path_nh_unlink(struct bgp_path_evpn_nh_info *nh_info);
  */
 static int bgp_evpn_es_route_select_install(struct bgp *bgp,
 					    struct bgp_evpn_es *es,
-					    struct bgp_dest *dest)
+					    struct bgp_dest *dest,
+					    struct bgp_path_info *pi)
 {
 	int ret = 0;
 	int zret = 0;
@@ -112,6 +113,8 @@ static int bgp_evpn_es_route_select_install(struct bgp *bgp,
 	struct bgp_path_info *old_select; /* old best */
 	struct bgp_path_info *new_select; /* new best */
 	struct bgp_path_info_pair old_and_new;
+
+	SET_FLAG(pi->flags, BGP_PATH_UNSORTED);
 
 	/* Compute the best path. */
 	bgp_best_selection(bgp, dest, &bgp->maxpaths[afi][safi], &old_and_new,
@@ -239,7 +242,7 @@ static int bgp_evpn_es_route_install(struct bgp *bgp,
 	}
 
 	/* Perform route selection and update zebra, if required. */
-	ret = bgp_evpn_es_route_select_install(bgp, es, dest);
+	ret = bgp_evpn_es_route_select_install(bgp, es, dest, pi);
 
 	bgp_dest_unlock_node(dest);
 
@@ -280,7 +283,7 @@ static int bgp_evpn_es_route_uninstall(struct bgp *bgp, struct bgp_evpn_es *es,
 	bgp_path_info_delete(dest, pi);
 
 	/* Perform route selection and update zebra, if required. */
-	ret = bgp_evpn_es_route_select_install(bgp, es, dest);
+	ret = bgp_evpn_es_route_select_install(bgp, es, dest, pi);
 
 	/* Unlock route node. */
 	bgp_dest_unlock_node(dest);
@@ -511,7 +514,7 @@ static int bgp_evpn_mh_route_delete(struct bgp *bgp, struct bgp_evpn_es *es,
 		 * this table.
 		 */
 		if (pi)
-			bgp_process(bgp, global_dest, afi, safi);
+			bgp_process(bgp, global_dest, pi, afi, safi);
 		bgp_dest_unlock_node(global_dest);
 	}
 
@@ -559,7 +562,7 @@ int delete_global_ead_evi_routes(struct bgp *bgp, struct bgpevpn *vpn)
 
 			delete_evpn_route_entry(bgp, afi, safi, rn, &pi);
 			if (pi)
-				bgp_process(bgp, rn, afi, safi);
+				bgp_process(bgp, rn, pi, afi, safi);
 		}
 	}
 
@@ -665,7 +668,7 @@ static int bgp_evpn_type4_route_update(struct bgp *bgp,
 	 * this is just to set the flags correctly
 	 * as local route in the ES always wins.
 	 */
-	bgp_evpn_es_route_select_install(bgp, es, dest);
+	bgp_evpn_es_route_select_install(bgp, es, dest, pi);
 	bgp_dest_unlock_node(dest);
 
 	/* If this is a new route or some attribute has changed, export the
@@ -683,7 +686,7 @@ static int bgp_evpn_type4_route_update(struct bgp *bgp,
 					 attr_new, &global_pi, &route_changed);
 
 		/* Schedule for processing and unlock node. */
-		bgp_process(bgp, dest, afi, safi);
+		bgp_process(bgp, dest, global_pi, afi, safi);
 		bgp_dest_unlock_node(dest);
 	}
 
@@ -1005,7 +1008,7 @@ static int bgp_evpn_type1_route_update(struct bgp *bgp, struct bgp_evpn_es *es,
 	 * this is just to set the flags correctly as local route in
 	 * the ES always wins.
 	 */
-	evpn_route_select_install(bgp, vpn, dest);
+	evpn_route_select_install(bgp, vpn, dest, pi);
 	bgp_dest_unlock_node(dest);
 
 	/* If this is a new route or some attribute has changed, export the
@@ -1022,7 +1025,7 @@ static int bgp_evpn_type1_route_update(struct bgp *bgp, struct bgp_evpn_es *es,
 					 attr_new, &global_pi, &route_changed);
 
 		/* Schedule for processing and unlock node. */
-		bgp_process(bgp, dest, afi, safi);
+		bgp_process(bgp, dest, global_pi, afi, safi);
 		bgp_dest_unlock_node(dest);
 	}
 

@@ -73,7 +73,7 @@ enum bgp_show_adj_route_type {
 
 #define BGP_SHOW_SCODE_HEADER                                                  \
 	"Status codes:  s suppressed, d damped, "                              \
-	"h history, * valid, > best, = multipath,\n"                           \
+	"h history, u unsorted, * valid, > best, = multipath,\n"               \
 	"               i internal, r RIB-failure, S Stale, R Removed\n"
 #define BGP_SHOW_OCODE_HEADER                                                  \
 	"Origin codes:  i - IGP, e - EGP, ? - incomplete\n"
@@ -306,12 +306,27 @@ struct bgp_path_info {
 #define BGP_PATH_STALE (1 << 8)
 #define BGP_PATH_REMOVED (1 << 9)
 #define BGP_PATH_COUNTED (1 << 10)
+/*
+ * A BGP_PATH_MULTIPATH flag is not set on the best path
+ * it is set on every other node that is part of ECMP
+ * for that particular dest
+ */
 #define BGP_PATH_MULTIPATH (1 << 11)
 #define BGP_PATH_MULTIPATH_CHG (1 << 12)
 #define BGP_PATH_RIB_ATTR_CHG (1 << 13)
 #define BGP_PATH_ANNC_NH_SELF (1 << 14)
 #define BGP_PATH_LINK_BW_CHG (1 << 15)
 #define BGP_PATH_ACCEPT_OWN (1 << 16)
+#define BGP_PATH_UNSORTED (1 << 19)
+/*
+ * BGP_PATH_MULTIPATH_NEW is set on those bgp_path_info
+ * nodes that we have decided should possibly be in the
+ * ecmp path for a particular dest.  This flag is
+ * removed when the bgp_path_info's are looked at to
+ * decide on whether or not a bgp_path_info is on
+ * the actual ecmp path.
+ */
+#define BGP_PATH_MULTIPATH_NEW (1 << 20)
 
 	/* BGP route type.  This can be static, RIP, OSPF, BGP etc.  */
 	uint8_t type;
@@ -329,6 +344,8 @@ struct bgp_path_info {
 #define BGP_ROUTE_IMPORTED     5        /* from another bgp instance/safi */
 
 	unsigned short instance;
+
+	enum bgp_path_selection_reason reason;
 
 	/* Addpath identifiers */
 	uint32_t addpath_rx_id;
@@ -764,7 +781,8 @@ extern void bgp_withdraw(struct peer *peer, const struct prefix *p,
 			 uint32_t num_labels, struct bgp_route_evpn *evpn);
 
 /* for bgp_nexthop and bgp_damp */
-extern void bgp_process(struct bgp *, struct bgp_dest *, afi_t, safi_t);
+extern void bgp_process(struct bgp *bgp, struct bgp_dest *dest,
+			struct bgp_path_info *pi, afi_t afi, safi_t safi);
 
 /*
  * Add an end-of-initial-update marker to the process queue. This is just a
