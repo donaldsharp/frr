@@ -1580,6 +1580,8 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, safi_t safi,
 				nhe->nhg_id = bgp_nhg_id_alloc(PER_SRC_NHG);
 				bgp_start_soo_timer(bgp, nhe);
 			}
+			if (!nhe->dest)
+				nhe->dest = dest;
 		}
 	}
 
@@ -1910,5 +1912,59 @@ void bgp_per_src_nhg_handle_router_id_update(struct bgp *bgp,
 					BGP_INVALID_LABEL_INDEX, true);
 			}
 		}
+	}
+}
+
+static void bgp_per_src_nhg_peer_clear_route_cb(struct hash_bucket *bucket,
+						void *ctx)
+{
+	struct peer *peer = ctx;
+	struct bgp_path_info *pi;
+	struct bgp_per_src_nhg_hash_entry *nhe =
+		(struct bgp_per_src_nhg_hash_entry *)bucket->data;
+
+	if (nhe && nhe->dest) {
+		struct bgp_dest *dest = nhe->dest;
+		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+			if ((pi->peer == peer) &&
+			    (pi->type == ZEBRA_ROUTE_BGP &&
+			     pi->sub_type == BGP_ROUTE_NORMAL)) {
+				if (bf_test_index(
+					    nhe->bgp_soo_route_selected_pi_bitmap,
+					    pi->peer->bit_index)) {
+					bf_release_index(
+						nhe->bgp_soo_route_selected_pi_bitmap,
+						pi->peer->bit_index);
+					nhe->refcnt--;
+				}
+
+				bgp_per_src_nhg_nc_del(nhe->afi, nhe, pi);
+			}
+		}
+		bgp_per_src_nhg_upd_msg_check(nhe->bgp, nhe->afi, nhe->safi,
+					      dest);
+	}
+}
+
+void bgp_peer_clear_soo_routes(struct peer *peer, afi_t afi, safi_t safi,
+			       struct bgp_table *table)
+{
+	if (table &&
+	    ((table->afi == AFI_L2VPN && table->safi == SAFI_EVPN) ||
+	     !(peer->bgp) ||
+	     !CHECK_FLAG(peer->bgp->per_src_nhg_flags[table->afi][table->safi],
+			 BGP_FLAG_NHG_PER_ORIGIN)))
+		return;
+
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug("bgp vrf %s per src nhg peer clear peer:%p",
+			   peer->bgp->name_pretty, peer);
+
+	if (peer->bgp->per_src_nhg_table[afi][safi]) {
+		hash_iterate(
+			peer->bgp->per_src_nhg_table[afi][safi],
+			(void (*)(struct hash_bucket *, void *))
+				bgp_per_src_nhg_peer_clear_route_cb,
+			peer);
 	}
 }
