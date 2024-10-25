@@ -19203,19 +19203,52 @@ static void show_bgp_soo_hashtbl_walk_cb(struct hash_bucket *bucket, void *ctx)
 	show_bgp_soo_entry(soo_entry, ctx);
 }
 
+static void prefix2ipaddr(const struct prefix *prefix, struct ipaddr *ip)
+{
+	switch (prefix->family) {
+	case AF_INET:
+		ip->ipa_type = IPADDR_V4;
+		ip->ipaddr_v4 = prefix->u.prefix4;
+		break;
+	case AF_INET6:
+		ip->ipa_type = IPADDR_V6;
+		ip->ipaddr_v6 = prefix->u.prefix6;
+		break;
+	default:
+		ip->ipa_type = IPADDR_NONE;
+		break;
+	}
+}
+
+static void ipaddr_to_v4_ipaddr(const struct ipaddr *ip,
+				struct ipaddr *ipv4_ipaddr)
+{
+	memset(ipv4_ipaddr, 0, sizeof(struct ipaddr));
+	ipv4_ipaddr->ipa_type = IPADDR_V4;
+	if (ip->ipa_type == IPADDR_V6)
+		ipv4_mapped_ipv6_to_ipv4(&ip->ipaddr_v6,
+					 &ipv4_ipaddr->ipaddr_v4);
+	else
+		memcpy(&ipv4_ipaddr->ipaddr_v4, &ip->ipaddr_v4,
+		       sizeof(struct in_addr));
+}
+
 DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
       "show bgp [<view|vrf> VIEWVRFNAME] " BGP_AFI_CMD_STR BGP_SAFI_CMD_STR
-      " soo route [<A.B.C.D>] [json]",
+      " soo route [<A.B.C.D|X:X::X:X>] [json]",
       SHOW_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AFI_HELP_STR BGP_SAFI_HELP_STR
       "Site-of-Origin\n"
       "Display information about per source NHG soo route\n"
-      "SoO IPv4 address or IPv4 mapped IPv6 SoO address\n" JSON_STR)
+      "IPv4 SoO address\n"
+      "IPv6 mapped IPv4 SoO address\n" JSON_STR)
 {
 	struct bgp *bgp = NULL;
 	char *vrf = NULL;
 	afi_t afi = AFI_UNSPEC;
 	safi_t safi = SAFI_UNSPEC;
-	struct prefix_ipv4 p;
+	struct prefix p;
+	struct ipaddr ip = {0};
+	struct ipaddr ipv4_ipaddr;
 	bool filter_by_soo = false;
 	json_object *json = NULL;
 	json_object *json_vrf_array = NULL;
@@ -19262,12 +19295,42 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 	}
 
 	ctx.vty = vty;
-	if (argv_find(argv, argc, "A.B.C.D", &idx)) {
-		/* Parse the IPv4 address */
-		if (str2prefix_ipv4(argv[idx]->arg, &p) <= 0) {
-			vty_out(vty, "%% Invalid IPv4 address\n");
+	if (afi == AFI_IP6 && argv_find(argv, argc, "A.B.C.D", &idx)) {
+		vty_out(vty, "%% Enter IPv6 mapped IPv4 SoO address\n");
+		return CMD_WARNING;
+	} else if (afi == AFI_IP && argv_find(argv, argc, "X:X::X:X", &idx)) {
+		vty_out(vty, "%% Enter IPv4 SoO Address\n");
+		return CMD_WARNING;
+	}
+
+	if (argv_find(argv, argc, "A.B.C.D", &idx) ||
+	    argv_find(argv, argc, "X:X::X:X", &idx)) {
+		if (str2prefix(argv[idx]->arg, &p) == 0) {
+			vty_out(vty, "Malformed prefix\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+	}
+
+	prefix2ipaddr(&p, &ip);
+
+	if (afi == AFI_IP6 && p.family == AF_INET) {
+		vty_out(vty, "%% Enter IPv6 mapped IPv4 SoO address\n");
+		return CMD_WARNING;
+	} else if (afi == AFI_IP && p.family == AF_INET6) {
+		vty_out(vty, "%% Enter IPv4 SoO Address\n");
+		return CMD_WARNING;
+	}
+
+	if (ip.ipa_type == IPADDR_V6) {
+		if (IS_MAPPED_IPV6(&ip.ipaddr_v6)) {
+			ipaddr_to_v4_ipaddr(&ip, &ipv4_ipaddr);
+			filter_by_soo = true;
+		} else {
+			vty_out(vty, "%% Enter IPv6 mapped IPv4 SoO address\n");
 			return CMD_WARNING;
 		}
+	} else if (ip.ipa_type == IPADDR_V4) {
+		ipaddr_to_v4_ipaddr(&ip, &ipv4_ipaddr);
 		filter_by_soo = true;
 	}
 
@@ -19279,13 +19342,7 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 
 	if (filter_by_soo) {
 		struct bgp_per_src_nhg_hash_entry *soo_entry = NULL;
-		struct ipaddr ip;
-
-		memset(&ip, 0, sizeof(ip));
-		SET_IPADDR_V4(&ip);
-		memcpy(&ip.ipaddr_v4, &p.prefix, sizeof(ip.ipaddr_v4));
-
-		soo_entry = bgp_per_src_nhg_find(bgp, &ip, afi, safi);
+		soo_entry = bgp_per_src_nhg_find(bgp, &ipv4_ipaddr, afi, safi);
 		if (uj) {
 			json_object_object_add(json, (vrf == NULL)? VRF_DEFAULT_NAME : vrf,
 					       json_vrf_array);
