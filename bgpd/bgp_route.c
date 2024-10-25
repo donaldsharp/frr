@@ -6549,6 +6549,7 @@ static void bgp_clear_route_table(struct peer *peer, afi_t afi, safi_t safi,
 	if (!table)
 		return;
 
+	bgp_peer_clear_soo_routes(peer, afi, safi, table);
 	for (dest = bgp_table_top(table); dest; dest = bgp_route_next(dest)) {
 		struct bgp_path_info *pi, *next;
 		struct bgp_adj_in *ain;
