@@ -188,4 +188,7 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
 				   struct bgp_dest *dest);
 char *inaddr_afi_to_str(const struct in_addr *id, char *buf, int size,
 			afi_t afi);
+
+void bgp_peer_clear_soo_routes(struct peer *peer, afi_t afi, safi_t safi,
+			       struct bgp_table *table);
 #endif /* _BGP_PER_SRC_NHG_H */
