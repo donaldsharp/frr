@@ -3563,7 +3563,6 @@ int bgp_get(struct bgp **bgp_val, as_t *as, const char *name,
 	bgp_scan_init(bgp);
 	bgp->per_src_nhg_convergence_timer =
 		BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD;
-	bgp_per_src_nhg_soo_timer_wheel_init(bgp);
 	*bgp_val = bgp;
 
 	bgp->t_rmap_def_originate_eval = NULL;

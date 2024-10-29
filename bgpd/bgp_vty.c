@@ -3766,6 +3766,9 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 		}
 	}
 	else {
+		// timer wheel created only once
+		bgp_per_src_nhg_soo_timer_wheel_init(bgp);
+
 		bgp_per_src_nhg_init(bgp, afi, safi);
 		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			 BGP_FLAG_NHG_PER_ORIGIN);

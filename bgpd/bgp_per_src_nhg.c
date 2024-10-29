@@ -268,7 +268,7 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 
 void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
 {
-	if (!bgp->per_src_nhg_soo_timer_wheel_created) {
+	if (!bgp->per_src_nhg_soo_timer_wheel) {
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 			zlog_debug(
 				"bgp vrf %s per src nhg soo timer wheel init total "
@@ -283,20 +283,19 @@ void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
 			bgp_per_src_nhg_slot_key,
 			bgp_per_src_nhg_timer_slot_run,
 			"BGP per src NHG SoO Timer Wheel");
-		bgp->per_src_nhg_soo_timer_wheel_created = true;
 	}
 }
 
 void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp)
 {
-	if (bgp->per_src_nhg_soo_timer_wheel_created) {
+	if (bgp->per_src_nhg_soo_timer_wheel) {
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 			zlog_debug(
 				"bgp vrf %s per src nhg soo timer wheel delete",
 				bgp->name_pretty);
 
 		wheel_delete(bgp->per_src_nhg_soo_timer_wheel);
-		bgp->per_src_nhg_soo_timer_wheel_created = false;
+		bgp->per_src_nhg_soo_timer_wheel = NULL;
 	}
 }
 
