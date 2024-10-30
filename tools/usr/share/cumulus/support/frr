@@ -58,6 +58,8 @@ func_frr()
     exec_cmd bgp.ipv6_vpn_all vtysh -c "show bgp ipv6 vpn all"
     exec_cmd bgp.ipv4_lu vtysh -c "show bgp ipv4 labeled-unicast"
     exec_cmd bgp.ipv6_lu vtysh -c "show bgp ipv6 labeled-unicast"
+    exec_cmd bgp.ipv4_soo vtysh -c "show bgp ipv4 unicast soo route"
+    exec_cmd bgp.ipv6_soo vtysh -c "show bgp ipv6 unicast soo route"
 
     exec_cmd frr.show_running vtysh -c "show running-config"
 
