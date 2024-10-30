@@ -3993,10 +3993,6 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 		bgp_clear_vty(vty, bgp->name, afi, safi, clear_all, BGP_CLEAR_SOFT_IN,
 			      NULL);
 	}
-	/* TODO: This is WRONG: Passing BGP_CLEAR_SOFT_NONE will flap the
-	   sessions We should pass BGP_CLEAR_SOFT_IN. Debug why this is not
-	   working
-	 */
 	return CMD_SUCCESS;
 }
 
@@ -20567,17 +20563,22 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 
 	for (pi = bgp_dest_get_bgp_path_info(soo_entry->dest); pi;
 	     pi = pi->next) {
-		if (json_peer_bitmap_array) {
-			json_peer_bitmap = json_object_new_object();
-			json_object_string_addf(json_peer_bitmap, "peerIp",
-						"%pSU", &pi->peer->connection->su);
-			json_object_int_add(json_peer_bitmap, "bitIndex",
-					    pi->peer->bit_index);
-			json_object_array_add(json_peer_bitmap_array,
-					      json_peer_bitmap);
-		} else {
-			vty_out(vty, "    %pSU: %u\n", &pi->peer->connection->su,
-				pi->peer->bit_index);
+		if (CHECK_FLAG(pi->flags, BGP_PATH_MULTIPATH) ||
+		    CHECK_FLAG(pi->flags, BGP_PATH_SELECTED)) {
+			if (json_peer_bitmap_array) {
+				json_peer_bitmap = json_object_new_object();
+				json_object_string_addf(json_peer_bitmap,
+							"peerIp", "%pSU",
+							&pi->peer->connection->su);
+				json_object_int_add(json_peer_bitmap,
+						    "bitIndex",
+						    pi->peer->bit_index);
+				json_object_array_add(json_peer_bitmap_array,
+						      json_peer_bitmap);
+			} else {
+				vty_out(vty, "    %pSU: %u\n", &pi->peer->connection->su,
+					pi->peer->bit_index);
+			}
 		}
 	}
 
@@ -20682,9 +20683,9 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 	char *vrf = NULL;
 	afi_t afi = AFI_UNSPEC;
 	safi_t safi = SAFI_UNSPEC;
-	struct prefix p;
+	struct prefix p = {0};
 	struct ipaddr ip = {0};
-	struct ipaddr ipv4_ipaddr;
+	struct ipaddr ipv4_ipaddr = {0};
 	bool filter_by_soo = false;
 	json_object *json = NULL;
 	json_object *json_vrf_array = NULL;

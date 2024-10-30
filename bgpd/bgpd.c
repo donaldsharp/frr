@@ -4005,6 +4005,11 @@ int bgp_delete(struct bgp *bgp)
 
 	bgp_vpn_leak_unimport(bgp);
 
+	if (bgp->per_source_nhg_soo) {
+		ecommunity_free(&bgp->per_source_nhg_soo);
+		bgp->per_source_nhg_soo = NULL;
+	}
+
 	bgp_per_src_nhg_soo_timer_wheel_delete(bgp);
 	bgp_per_src_nhg_stop(bgp);
 

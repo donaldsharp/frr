@@ -114,6 +114,10 @@ static void bgp_soo_zebra_route_install(struct bgp_per_src_nhg_hash_entry *nhe,
 static void bgp_per_src_nhg_del(struct bgp_per_src_nhg_hash_entry *nhe);
 static void bgp_dest_soo_del(struct bgp_dest_soo_hash_entry *dest_he,
 		struct bgp_per_src_nhg_hash_entry *nhe);
+static void bgp_dest_soo_flush_entry(struct bgp_dest_soo_hash_entry *dest_he);
+static void bgp_dest_soo_free(struct bgp_dest_soo_hash_entry *dest_he);
+static void bgp_per_src_nhg_flush_entry(struct bgp_per_src_nhg_hash_entry *nhe);
+static void bgp_per_src_nhe_free(struct bgp_per_src_nhg_hash_entry *nhe);
 
 static unsigned int bgp_per_src_nhg_slot_key(const void *item)
 {
@@ -649,7 +653,7 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 		       struct bgp_path_info *pi)
 {
 	ifindex_t ifindex = 0; // for ipv6 need to be taken from peer, refer nht
-	struct prefix p;
+	struct prefix p = {0};
 	struct bgp_nhg_nexthop_cache *bnc;
 	uint32_t nh_weight;
 	bool do_wt_ecmp = false;
@@ -731,7 +735,7 @@ void bgp_per_src_nhg_nc_del(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 			    struct bgp_path_info *pi)
 {
 	ifindex_t ifindex = 0; // for ipv6 need to be taken from peer, refer nht
-	struct prefix p;
+	struct prefix p = {0};
 	struct bgp_nhg_nexthop_cache *bnc;
 
 	if (make_prefix(afi, pi, &p) < 0)
@@ -825,27 +829,9 @@ static void bgp_dest_soo_del(struct bgp_dest_soo_hash_entry *dest_he,
 {
 	struct bgp_dest_soo_hash_entry *tmp_he;
 
-	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
-		char buf[INET6_ADDRSTRLEN];
-		char pfxprint[PREFIX2STR_BUFFER];
-		ipaddr2str(&nhe->ip, buf, sizeof(buf));
-		prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
-		zlog_debug("bgp vrf %s per src nhg %s %s dest soo %s del",
-			   nhe->bgp->name_pretty, buf,
-			   get_afi_safi_str(nhe->afi, nhe->safi, false),
-			   pfxprint);
-	}
-	bgp_dest_soo_qlist_del(&nhe->dest_soo_list, dest_he);
-
-	if (CHECK_FLAG(dest_he->flags,
-		 DEST_PRESENT_IN_NHGID_USE_LIST)) {
-		bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
-					     dest_he);
-		UNSET_FLAG(dest_he->flags, DEST_PRESENT_IN_NHGID_USE_LIST);
-	}
-
+	bgp_dest_soo_flush_entry(dest_he);
 	tmp_he = hash_release(nhe->dest_with_soo, dest_he);
-	XFREE(MTYPE_BGP_DEST_SOO_HE, tmp_he);
+	bgp_dest_soo_free(tmp_he);
 
 	//check if nhe del pending and process
 	if (CHECK_FLAG(nhe->flags,
@@ -922,16 +908,13 @@ void bgp_dest_soo_init(struct bgp_per_src_nhg_hash_entry *nhe)
 
 static void bgp_dest_soo_free(struct bgp_dest_soo_hash_entry *dest_he)
 {
+	bf_free(dest_he->bgp_pi_bitmap);
 	XFREE(MTYPE_BGP_DEST_SOO_HE, dest_he);
 }
 
 static void bgp_dest_soo_flush_entry(struct bgp_dest_soo_hash_entry *dest_he)
 {
 	struct bgp_per_src_nhg_hash_entry *nhe = dest_he->nhe;
-	char buf[INET6_ADDRSTRLEN];
-	char pfxprint[PREFIX2STR_BUFFER];
-
-	prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
 
 	bgp_dest_soo_qlist_del(&nhe->dest_soo_list, dest_he);
 	if (CHECK_FLAG(dest_he->flags,
@@ -940,15 +923,17 @@ static void bgp_dest_soo_flush_entry(struct bgp_dest_soo_hash_entry *dest_he)
 					     dest_he);
 		UNSET_FLAG(dest_he->flags, DEST_PRESENT_IN_NHGID_USE_LIST);
 	}
-	// TODO: flush processing pending
 
-	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-
-	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+		char buf[INET6_ADDRSTRLEN];
+		char pfxprint[PREFIX2STR_BUFFER];
+		ipaddr2str(&nhe->ip, buf, sizeof(buf));
+		prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
 		zlog_debug("bgp vrf %s per src nhg %s %s dest soo %s flush",
 			   nhe->bgp->name_pretty, buf,
 			   get_afi_safi_str(nhe->afi, nhe->safi, false),
 			   pfxprint);
+	}
 }
 
 static void bgp_dest_soo_flush_cb(struct hash_bucket *bucket, void *ctxt)
@@ -991,14 +976,13 @@ static void *bgp_per_src_nhg_alloc(void *p)
 struct bgp_per_src_nhg_hash_entry *
 bgp_per_src_nhg_find(struct bgp *bgp, struct ipaddr *ip, afi_t afi, safi_t safi)
 {
-	struct bgp_per_src_nhg_hash_entry tmp;
+	struct bgp_per_src_nhg_hash_entry tmp = {0};
 	struct bgp_per_src_nhg_hash_entry *nhe;
 
 	if (!bgp->per_src_nhg_table[afi][safi]) {
 		return NULL;
 	}
 
-	memset(&tmp, 0, sizeof(tmp));
 	memcpy(&tmp.ip, ip, sizeof(struct ipaddr));
 	nhe = hash_lookup(bgp->per_src_nhg_table[afi][safi], &tmp);
 
@@ -1172,30 +1156,28 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 static void bgp_per_src_nhg_del(struct bgp_per_src_nhg_hash_entry *nhe)
 {
 	struct bgp_per_src_nhg_hash_entry *tmp_nhe;
-	char buf[INET6_ADDRSTRLEN];
 	struct bgp *bgp = nhe->bgp;
 	afi_t afi = nhe->afi;
 	safi_t safi = nhe->safi;
 
-	// TODO Del Processing pending, also make sure to do NHG replace or
-	// install blackhole route
 	bgp_nhg_id_free(PER_SRC_NHG, nhe->nhg_id);
 	bgp_stop_soo_timer(nhe->bgp, nhe);
 
 	bgp_nhg_nexthop_cache_reset(&nhe->nhg_nexthop_cache_table);
 
-	ipaddr2str(&nhe->ip, buf, sizeof(buf));
-
-	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+		char buf[INET6_ADDRSTRLEN];
+		ipaddr2str(&nhe->ip, buf, sizeof(buf));
 		zlog_debug("bgp vrf %s per src nhg %s %s del",
 			   nhe->bgp->name_pretty, buf,
 			   get_afi_safi_str(nhe->afi, nhe->safi, false));
+	}
 
+	bgp_dest_soo_finish(nhe);
 	bgp_dest_soo_qlist_fini(&nhe->dest_soo_list);
 	bgp_dest_soo_use_soo_nhgid_qlist_fini(&nhe->dest_soo_use_nhid_list);
-	bgp_dest_soo_finish(nhe);
 	tmp_nhe = hash_release(nhe->bgp->per_src_nhg_table[afi][safi], nhe);
-	XFREE(MTYPE_BGP_PER_SRC_NHG, tmp_nhe);
+	bgp_per_src_nhe_free(tmp_nhe);
 	if (!bgp->per_src_nhg_table[afi][safi]->count &&
 	    CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
 		       BGP_FLAG_CONFIG_DEL_PENDING)) {
@@ -1243,29 +1225,31 @@ void bgp_per_src_nhg_init(struct bgp *bgp, afi_t afi, safi_t safi)
 
 static void bgp_per_src_nhe_free(struct bgp_per_src_nhg_hash_entry *nhe)
 {
+	bf_free(nhe->bgp_soo_route_installed_pi_bitmap);
+	bf_free(nhe->bgp_soo_route_selected_pi_bitmap);
 	XFREE(MTYPE_BGP_PER_SRC_NHG, nhe);
 }
 
 static void bgp_per_src_nhg_flush_entry(struct bgp_per_src_nhg_hash_entry *nhe)
 {
-	char buf[INET6_ADDRSTRLEN];
 
 	bgp_nhg_nexthop_cache_reset(&nhe->nhg_nexthop_cache_table);
 	bgp_dest_soo_finish(nhe);
 	bgp_dest_soo_qlist_fini(&nhe->dest_soo_list);
 	bgp_dest_soo_use_soo_nhgid_qlist_fini(&nhe->dest_soo_use_nhid_list);
-	//TODO, flush processing pending
-	bgp_nhg_id_free(PER_SRC_NHG, nhe->nhg_id);
 	bgp_stop_soo_timer(nhe->bgp, nhe);
 	if (CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID))
 		bgp_per_src_nhg_del_send(nhe);
 
-	ipaddr2str(&nhe->ip, buf, sizeof(buf));
+	bgp_nhg_id_free(PER_SRC_NHG, nhe->nhg_id);
 
-	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+		char buf[INET6_ADDRSTRLEN];
+		ipaddr2str(&nhe->ip, buf, sizeof(buf));
 		zlog_debug("bgp vrf %s per src nhg %s %s flush",
 			   nhe->bgp->name_pretty, buf,
 			   get_afi_safi_str(nhe->afi, nhe->safi, false));
+	}
 }
 
 static void bgp_per_src_nhg_flush_cb(struct hash_bucket *bucket, void *arg)
@@ -1852,7 +1836,7 @@ char *ipaddr_afi_to_str(const struct in_addr *id, char *buf, int size,
 	} else if (afi == AFI_IP6) {
 		struct in6_addr v6addr;
 		char addrbuf[BUFSIZ];
-		struct prefix p;
+		struct prefix p = {0};
 
 		ipv4_to_ipv4_mapped_ipv6(&v6addr, *id);
 		inet_ntop(AF_INET6, &v6addr, addrbuf, BUFSIZ);
@@ -1876,6 +1860,9 @@ void bgp_per_src_nhg_handle_router_id_update(struct bgp *bgp,
 		snprintf(soo, sizeof(soo), "%s:%X", inet_ntoa(*id),
 			 SOO_LOCAL_ADMINISTRATOR_VALUE_PER_SOURCE_NHG);
 		ecomm_soo = ecommunity_str2com(soo, ECOMMUNITY_SITE_ORIGIN, 0);
+		if (bgp->per_source_nhg_soo) {
+			ecommunity_free(&bgp->per_source_nhg_soo);
+		}
 		bgp->per_source_nhg_soo = ecomm_soo;
 		ecommunity_str(bgp->per_source_nhg_soo);
 
@@ -1897,8 +1884,10 @@ void bgp_per_src_nhg_handle_router_id_update(struct bgp *bgp,
 			}
 		}
 	} else {
-		ecommunity_free(&bgp->per_source_nhg_soo);
-		bgp->per_source_nhg_soo = NULL;
+		if (bgp->per_source_nhg_soo) {
+			ecommunity_free(&bgp->per_source_nhg_soo);
+			bgp->per_source_nhg_soo = NULL;
+		}
 
 		FOREACH_AFI_SAFI (afi, safi) {
 			if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],

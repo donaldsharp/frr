@@ -64,7 +64,6 @@ struct bgp_dest_soo_hash_entry {
 	// we need to back pointer for dest
 	struct bgp_dest *dest;
 
-	//TODO, need to store the bitmaps of NH for soo
 	bitfield_t bgp_pi_bitmap;
 	uint32_t refcnt;
 
