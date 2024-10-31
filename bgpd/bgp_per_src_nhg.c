@@ -236,15 +236,15 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 			   nhe->bgp->name_pretty, &nhe->ip,
 			   get_afi_safi_str(nhe->afi, nhe->safi, false));
 
-	// remove the timer from the timer wheel since processing is done
-	bgp_stop_soo_timer(nhe->bgp, nhe);
-
+	//all routes with soo converged to soo route
 	if (is_soo_rt_selected_pi_subset_of_all_rts_with_soo_using_soo_nhg_pi(
 		    nhe)) {
 		// program the running ecmp and do NHG replace
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 			zlog_debug(
-				"bgp vrf %s per src nhg soo route %pIA %s pi is subset of all route with soo using soo nhg",
+				"bgp vrf %s per src nhg soo route %pIA %s pi is subset of "
+				"all route with soo using soo nhg "
+				"remove soo entry from timer wheel",
 				nhe->bgp->name_pretty, &nhe->ip,
 				get_afi_safi_str(nhe->afi, nhe->safi, false));
 		if (nhe->refcnt) {
@@ -252,6 +252,15 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
 				bgp_per_src_nhg_add_send(nhe);
 		}
+		// remove the timer from the timer wheel since processing is done
+		bgp_stop_soo_timer(nhe->bgp, nhe);
+	} else {
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			zlog_debug(
+				"bgp vrf %s per src nhg soo route %pIA %s not all route "
+				"with soo converged",
+				nhe->bgp->name_pretty, &nhe->ip,
+				get_afi_safi_str(nhe->afi, nhe->safi, false));
 	}
 
 	dest = nhe->dest;
@@ -266,7 +275,10 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 
 	// Walk all the 'routes with SoO' and move from zebra nhid to soo nhid
 	frr_each (bgp_dest_soo_qlist, &nhe->dest_soo_list, bgp_dest_soo_entry) {
-		bgp_per_src_nhg_zebra_route_install(bgp_dest_soo_entry, nhe);
+		//only move those which are not using soo nhid yet
+		if (!CHECK_FLAG(bgp_dest_soo_entry->flags,
+			DEST_PRESENT_IN_NHGID_USE_LIST))
+			bgp_per_src_nhg_zebra_route_install(bgp_dest_soo_entry, nhe);
 	}
 }
 
