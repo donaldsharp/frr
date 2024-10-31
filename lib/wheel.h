@@ -25,7 +25,6 @@ extern "C" {
 #endif
 
 struct timer_wheel {
-	char *name;
 	struct thread_master *master;
 	int slots;
 	long long curr_slot;

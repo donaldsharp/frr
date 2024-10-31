@@ -31,7 +31,7 @@ static int debug_timer_wheel = 0;
 
 static void wheel_timer_thread(struct thread *t);
 
-static void wheel_timer_thread_helper(struct thread *t)
+static void wheel_timer_thread(struct thread *t)
 {
 	struct listnode *node, *nextnode;
 	unsigned long long curr_slot;
@@ -64,15 +64,6 @@ static void wheel_timer_thread_helper(struct thread *t)
 			      wheel->nexttime * slots_to_skip, &wheel->timer);
 }
 
-static void wheel_timer_thread(struct thread *t)
-{
-	struct timer_wheel *wheel;
-
-	wheel = THREAD_ARG(t);
-
-	thread_execute(wheel->master, wheel_timer_thread_helper, wheel, 0);
-}
-
 struct timer_wheel *wheel_init(struct thread_master *master, int period,
 			       size_t slots, unsigned int (*slot_key)(const void *),
 			       void (*slot_run)(void *),
@@ -83,7 +74,6 @@ struct timer_wheel *wheel_init(struct thread_master *master, int period,
 
 	wheel = XCALLOC(MTYPE_TIMER_WHEEL, sizeof(struct timer_wheel));
 
-	wheel->name = XSTRDUP(MTYPE_TIMER_WHEEL, run_name);
 	wheel->slot_key = slot_key;
 	wheel->slot_run = slot_run;
 
@@ -114,7 +104,6 @@ void wheel_delete(struct timer_wheel *wheel)
 
 	THREAD_OFF(wheel->timer);
 	XFREE(MTYPE_TIMER_WHEEL_LIST, wheel->wheel_slot_lists);
-	XFREE(MTYPE_TIMER_WHEEL, wheel->name);
 	XFREE(MTYPE_TIMER_WHEEL, wheel);
 }
 
