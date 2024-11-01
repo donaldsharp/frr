@@ -68,7 +68,6 @@ override_dh_auto_configure:
 		--disable-protobuf \
 		--disable-zeromq \
 		--enable-ospfapi \
-		--enable-bgp-vnc \
 		--enable-multipath=514 \
 		\
 		--enable-user=frr \
