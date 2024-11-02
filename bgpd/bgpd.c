@@ -1884,13 +1884,11 @@ void bgp_peer_conf_if_to_su_update(struct peer_connection *connection)
 			connection->su = old_su;
 			hash_release(peer->bgp->peerhash, peer);
 			listnode_delete(peer->bgp->peer, peer);
-			bf_release_index(peer->bgp->bgp_peer_id_bitmap, peer->bit_index);
 
 			connection->su = new_su;
 			(void)hash_get(peer->bgp->peerhash, peer,
 				       hash_alloc_intern);
 			listnode_add_sort(peer->bgp->peer, peer);
-			bf_assign_index(peer->bgp->bgp_peer_id_bitmap, peer->bit_index);
 		}
 	}
 }
@@ -2062,7 +2060,6 @@ struct peer *peer_create_accept(struct bgp *bgp)
 	peer = peer_lock(peer); /* bgp peer list reference */
 	listnode_add_sort(bgp->peer, peer);
 	(void)hash_get(bgp->peerhash, peer, hash_alloc_intern);
-	bf_assign_index(bgp->bgp_peer_id_bitmap, peer->bit_index);
 
 	/* Initialize per peer bgp GR FSM */
 	bgp_peer_gr_init(peer);
