@@ -678,8 +678,7 @@ static void bgp_per_src_nhg_del_send(struct bgp_per_src_nhg_hash_entry *nhe)
 		&nhe->bgp_soo_route_installed_pi_bitmap);
 }
 
-static struct bgp_nhg_nexthop_cache *
-bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
+static void bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 		       struct bgp_path_info *pi)
 {
 	ifindex_t ifindex = 0; // for ipv6 need to be taken from peer, refer nht
@@ -689,7 +688,7 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 	bool do_wt_ecmp = false;
 
 	if (make_prefix(afi, pi, &p) < 0)
-		return NULL;
+		return;
 
 	nh_weight = 0;
 	/* Determine if we're doing weighted ECMP or not */
@@ -711,13 +710,29 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 				bnc->nh.type = NEXTHOP_TYPE_IPV4;
 			} else if (afi == AFI_IP6) {
 				ifindex_t ifindex = IFINDEX_INTERNAL;
-				struct in6_addr *nexthop;
+				struct in6_addr *nexthop = NULL;
 				nexthop = bgp_path_info_to_ipv6_nexthop(
 					pi, &ifindex);
+				if(!nexthop){
+					zlog_err(
+						"Unable to get ipv6 nexthop for bnc nhg %pFX(%d)(%s) peer %p afi:%d",
+						&bnc->prefix, bnc->ifindex,
+						nhe->bgp->name_pretty, pi->peer,
+						afi);
+					bnc_nhg_free(bnc);
+					return;
+				}
 				bnc->nh.ifindex = ifindex;
 				bnc->nh.gate.ipv6 = *nexthop;
 				bnc->nh.type = NEXTHOP_TYPE_IPV6;
 			}
+		} else {
+			zlog_err(
+				"pi attr is NULL for bnc nhg %pFX(%d)(%s) peer %p afi:%d",
+				&bnc->prefix, bnc->ifindex,
+				nhe->bgp->name_pretty, pi->peer, afi);
+			bnc_nhg_free(bnc);
+			return;
 		}
 
 		bnc->nh.vrf_id = nhe->bgp->vrf_id;
@@ -754,11 +769,9 @@ bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 	}
 
 	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
-		zlog_debug(
-			"Link pi to  bnc nhg %pFX(%d)(%s) peer %p refcnt(%d)",
-			&bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty,
-			pi->peer, bnc->refcnt);
-	return bnc;
+		zlog_debug("Link pi to bnc nhg %pFX(%d)(%s) peer %p refcnt(%d)",
+			   &bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty,
+			   pi->peer, bnc->refcnt);
 }
 
 void bgp_per_src_nhg_nc_del(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
