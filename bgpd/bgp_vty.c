@@ -17029,8 +17029,8 @@ static int bgp_show_one_peer_group(struct vty *vty, struct peer_group *group,
 			member_count++;
 		}
 		if (json) {
-			json_object_int_add(json_peer_group_members,
-					    "memberCount", member_count);
+			json_object_int_add(json_peer_group, "memberCount",
+					    member_count);
 			json_object_object_add(json_peer_group, "members",
 					       json_peer_group_members);
 		}
