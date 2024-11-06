@@ -2750,8 +2750,7 @@ static void bgp_gr_update_mode_of_all_peers(struct bgp *bgp,
 		 * configs that require the session to be re-setup.
 		 */
 		if (BGP_IS_VALID_STATE_FOR_NOTIF(peer->connection->status))
-			bgp_notify_send(peer->connection, BGP_NOTIFY_CEASE,
-					BGP_NOTIFY_CEASE_CONFIG_CHANGE);
+			peer_notify_config_change(peer->connection);
 		else
 			bgp_session_reset_safe(peer, &nnode);
 	}
@@ -2952,8 +2951,7 @@ unsigned int bgp_peer_gr_action(struct peer *peer, enum peer_mode old_state,
 		 * configs that require the session to be re-setup.
 		 */
 		if (BGP_IS_VALID_STATE_FOR_NOTIF(peer->connection->status))
-			bgp_notify_send(peer->connection, BGP_NOTIFY_CEASE,
-					BGP_NOTIFY_CEASE_CONFIG_CHANGE);
+			peer_notify_config_change(peer->connection);
 		else
 			bgp_session_reset(peer);
 	}
