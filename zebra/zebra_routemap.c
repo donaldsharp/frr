@@ -137,11 +137,6 @@ static void show_vrf_proto_rm(struct vty *vty, struct zebra_vrf *zvrf,
 			vty_out(vty, "%-24s  : none\n", zebra_route_string(i));
 	}
 
-	if (PROTO_RM_NAME(zvrf, af_type, i))
-		vty_out(vty, "%-24s  : %-10s\n", "any",
-			PROTO_RM_NAME(zvrf, af_type, i));
-	else
-		vty_out(vty, "%-24s  : none\n", "any");
 }
 
 static void show_vrf_nht_rm(struct vty *vty, struct zebra_vrf *zvrf,
@@ -708,10 +703,7 @@ DEFPY_YANG (ip_protocol,
 	if (!zvrf)
 		return CMD_WARNING;
 
-	if (strcasecmp(proto, "any") == 0)
-		rtype = ZEBRA_ROUTE_MAX;
-	else
-		rtype = proto_name2num(proto);
+	rtype = proto_name2num(proto);
 	if (rtype < 0) {
 		vty_out(vty, "invalid protocol name \"%s\"\n", proto);
 		return CMD_WARNING_CONFIG_FAILED;
@@ -742,10 +734,7 @@ DEFPY_YANG (no_ip_protocol,
 	if (!zvrf)
 		return CMD_WARNING;
 
-	if (strcasecmp(proto, "any") == 0)
-		rtype = ZEBRA_ROUTE_MAX;
-	else
-		rtype = proto_name2num(proto);
+	rtype = proto_name2num(proto);
 	if (rtype < 0) {
 		vty_out(vty, "invalid protocol name \"%s\"\n", proto);
 		return CMD_WARNING_CONFIG_FAILED;
@@ -789,10 +778,7 @@ DEFPY_YANG (ipv6_protocol,
 	if (!zvrf)
 		return CMD_WARNING;
 
-	if (strcasecmp(proto, "any") == 0)
-		rtype = ZEBRA_ROUTE_MAX;
-	else
-		rtype = proto_name2num(proto);
+    rtype = proto_name2num(proto);
 	if (rtype < 0) {
 		vty_out(vty, "invalid protocol name \"%s\"\n", proto);
 		return CMD_WARNING_CONFIG_FAILED;
@@ -823,10 +809,7 @@ DEFPY_YANG (no_ipv6_protocol,
 	if (!zvrf)
 		return CMD_WARNING;
 
-	if (strcasecmp(proto, "any") == 0)
-		rtype = ZEBRA_ROUTE_MAX;
-	else
-		rtype = proto_name2num(proto);
+	rtype = proto_name2num(proto);
 	if (rtype < 0) {
 		vty_out(vty, "invalid protocol name \"%s\"\n", proto);
 		return CMD_WARNING_CONFIG_FAILED;
@@ -1777,8 +1760,8 @@ zebra_route_map_check(afi_t family, int rib_type, uint8_t instance,
 			return RMAP_DENYMATCH;
 	}
 	if (!rmap) {
-		rm_name = PROTO_RM_NAME(zvrf, family, ZEBRA_ROUTE_MAX);
-		rmap = PROTO_RM_MAP(zvrf, family, ZEBRA_ROUTE_MAX);
+		rm_name = PROTO_RM_NAME(zvrf, family, ZEBRA_ROUTE_ALL);
+		rmap = PROTO_RM_MAP(zvrf, family, ZEBRA_ROUTE_ALL);
 
 		if (rm_name && !rmap)
 			return RMAP_DENYMATCH;
@@ -1945,14 +1928,6 @@ void zebra_routemap_config_write_protocol(struct vty *vty,
 				zebra_route_string(i),
 				NHT_RM_NAME(zvrf, AFI_IP6, i));
 	}
-
-	if (PROTO_RM_NAME(zvrf, AFI_IP, ZEBRA_ROUTE_MAX))
-		vty_out(vty, "%sip protocol %s route-map %s\n", space, "any",
-			PROTO_RM_NAME(zvrf, AFI_IP, ZEBRA_ROUTE_MAX));
-
-	if (PROTO_RM_NAME(zvrf, AFI_IP6, ZEBRA_ROUTE_MAX))
-		vty_out(vty, "%sipv6 protocol %s route-map %s\n", space, "any",
-			PROTO_RM_NAME(zvrf, AFI_IP6, ZEBRA_ROUTE_MAX));
 
 	if (NHT_RM_NAME(zvrf, AFI_IP, ZEBRA_ROUTE_MAX))
 		vty_out(vty, "%sip nht %s route-map %s\n", space, "any",
