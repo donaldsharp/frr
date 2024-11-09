@@ -1085,6 +1085,7 @@ static void bgp_per_src_nhg_delete(struct bgp_per_src_nhg_hash_entry *nhe)
 			UNSET_FLAG(nhe->flags,
 				   PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL);
 		}
+		nhe->dest = NULL;
 	}
 	return;
 }
@@ -1494,7 +1495,7 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 					dest_he->refcnt);
 		}
 
-		if(soo_attr_del) {
+		if (soo_attr_del && !dest_he->refcnt) {
 			if (CHECK_FLAG(dest_he->flags,
 				 DEST_PRESENT_IN_NHGID_USE_LIST)) {
 				char buf[INET6_ADDRSTRLEN];
@@ -1596,7 +1597,7 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, safi_t safi,
 			nhe->refcnt--;
 		}
 
-		if (soo_attr_del)
+		if (soo_attr_del && !nhe->refcnt)
 			UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED);
 		bgp_per_src_nhg_nc_del(afi, nhe, pi);
 	}
@@ -1710,7 +1711,8 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
 	memcpy(&ip.ipaddr_v4, &dest->rn->p.u.prefix4, sizeof(dest->rn->p.u.prefix4));
 
 	nhe = bgp_per_src_nhg_find(bgp, &ip, afi, safi);
-	if (nhe) {
+	if (nhe && nhe->refcnt &&
+	    CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
 		// running is subset of installed - shrink case - immediate nhg
 		// replace
 		if (bf_is_subset(&nhe->bgp_soo_route_selected_pi_bitmap,
@@ -1725,12 +1727,7 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
 					get_afi_safi_str(nhe->afi, nhe->safi,
 							 false));
 
-			if (nhe->refcnt) {
-				if (CHECK_FLAG(
-					    nhe->flags,
-					    PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
-					bgp_per_src_nhg_add_send(nhe);
-			}
+			bgp_per_src_nhg_add_send(nhe);
 		}
 	}
 }
