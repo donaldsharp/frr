@@ -577,10 +577,23 @@ void bgp_path_info_mpath_update(struct bgp *bgp, struct bgp_dest *dest,
 		if ((mpath_count) != old_mpath_count || old_cum_bw != cum_bw)
 			SET_FLAG(new_best->flags, BGP_PATH_LINK_BW_CHG);
 
-		if (eval_soo_per_nhg)
-			bgp_process_mpath_route_soo_attr(bgp, table->afi,
-							 table->safi, dest,
-							 new_best, true);
+		if (eval_soo_per_nhg) {
+			if (route_has_soo_attr(new_best)) {
+				bgp_process_mpath_route_soo_attr(
+					bgp, table->afi, table->safi, dest,
+					new_best, true);
+			} else if (old_best && (old_best != new_best) &&
+				   route_has_soo_attr(old_best)) {
+				/*old best had soo, and new best doesn't have
+				it, so we need to remove from nhes use-nhid list
+				now and not wait for route install to complete
+				for removing form nhe-list.
+				*/
+				bgp_process_route_soo_attr_change(
+					table->bgp, table->afi, table->safi,
+					dest, old_best, new_best->attr);
+			}
+		}
 	}
 
 }
