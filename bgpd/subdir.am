@@ -105,6 +105,7 @@ bgpd_libbgp_a_SOURCES = \
 	bgpd/bgp_zebra.c \
 	bgpd/bgpd.c \
 	bgpd/bgp_trace.c \
+        bgpd/bgp_peer_nb.c \
 	# end
 
 if ENABLE_BGP_VNC
@@ -184,6 +185,7 @@ noinst_HEADERS += \
 	bgpd/bgp_vpn.h \
 	bgpd/bgp_vty.h \
 	bgpd/bgp_zebra.h \
+        bgpd/bgp_peer_nb.h \
 	bgpd/bgpd.h \
 	bgpd/bgp_trace.h \
 	\
