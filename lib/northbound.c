@@ -1728,6 +1728,7 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 	const struct lysc_node *snode = nb_node->snode;
 	const void *list_entry = NULL;
 	uint32_t position = 1;
+	bool iterate_child = true;
 
 	if (CHECK_FLAG(nb_node->flags, F_NB_NODE_CONFIG_ONLY))
 		return NB_OK;
@@ -1762,10 +1763,21 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 			unsigned int i = 0;
 			LY_FOR_KEYS (snode, skey) {
 				assert(i < list_keys.num);
-				snprintf(xpath + strlen(xpath),
-					 sizeof(xpath) - strlen(xpath),
-					 "[%s='%s']", skey->name,
-					 list_keys.key[i]);
+				char *p = strstr(xpath, list_keys.key[i]);
+				if (p && strstr(xpath, skey->name))
+					iterate_child = true;
+				else if (!p && strstr(xpath, skey->name)) {
+					flog_warn(EC_LIB_NB_CB_STATE,
+						  "setting to false");
+					iterate_child = false;
+					i++;
+					continue;
+				} else {
+					snprintf(xpath + strlen(xpath),
+						 sizeof(xpath) - strlen(xpath),
+						 "[%s='%s']", skey->name,
+						 list_keys.key[i]);
+				}
 				i++;
 			}
 			assert(i == list_keys.num);
@@ -1779,11 +1791,13 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 		}
 
 		/* Iterate over the child nodes. */
-		ret = nb_oper_data_iter_children(
-			nb_node->snode, xpath, list_entry, &list_keys,
-			translator, false, flags, cb, arg);
-		if (ret != NB_OK)
-			return ret;
+		if (iterate_child) {
+			ret = nb_oper_data_iter_children(
+				nb_node->snode, xpath, list_entry, &list_keys,
+				translator, false, flags, cb, arg);
+			if (ret != NB_OK)
+				return ret;
+		}
 	} while (list_entry);
 
 	return NB_OK;
