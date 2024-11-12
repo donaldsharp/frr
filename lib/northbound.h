@@ -1309,6 +1309,11 @@ extern void nb_init(struct thread_master *tm,
  */
 extern void nb_terminate(void);
 
+/*
+ * Notify subscribed xpaths
+ */
+extern void nb_notify_subscriptions(void);
+
 #ifdef __cplusplus
 }
 #endif

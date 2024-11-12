@@ -2164,7 +2164,7 @@ int nb_notification_send(const char *xpath, struct list *arguments)
 
 	ret = hook_call(nb_notification_send, xpath, arguments);
 	if (arguments)
-		list_delete(&arguments);
+	    list_delete(&arguments);
 
 	return ret;
 }
@@ -2320,6 +2320,27 @@ void *nb_running_get_entry_non_rec(const struct lyd_node *dnode,
 	return nb_running_get_entry_worker(dnode, xpath, abort_if_not_found,
 					   false);
 }
+
+
+void nb_notify_subscriptions(void)
+{
+    const char xpath1[100] = "/frr-bgp-peer:lib";
+    struct list *arguments;
+    struct yang_data *data;
+    arguments = yang_data_list_new();
+    char xpath_arg[XPATH_MAXLEN];
+    data = yang_data_new_string(xpath_arg, "TEST");
+    listnode_add(arguments, data);
+    nb_notification_send(xpath1, arguments);
+    arguments = yang_data_list_new();
+    data = yang_data_new_string(xpath_arg, "TEST");
+    listnode_add(arguments, data);
+    const char xpath2[100] = "/frr-bgp-peer:lib/peer[name='uplink_1']";
+    nb_notification_send(xpath2, arguments);
+    return;
+}
+
+
 
 /* Logging functions. */
 const char *nb_event_name(enum nb_event event)

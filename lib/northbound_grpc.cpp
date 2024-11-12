@@ -585,6 +585,47 @@ grpc::Status HandleUnaryGetCapabilities(
 // Define the context variable type for this streaming handler
 typedef std::list<std::string> GetContextType;
 
+typedef std::list<std::string> SubscriptionCacheContextType;
+
+bool HandleStreamingSubscriptionCache(
+	StreamRpcState<frr::SubscriptionCacheRequest, frr::SubscriptionCacheResponse, SubscriptionCacheContextType> *tag)
+{
+	zlog_err("Processing SendData");
+        auto mypathps = &tag->context;
+        if (tag->is_initial_process()) {
+                // Fill our context container first time through
+                auto paths = tag->request.path();
+		auto dt = tag->request.data();
+                for (const std::string &path : paths) {
+                        mypathps->push_back(std::string(path));
+			const char* xpath_str = path.c_str();
+			const char* dt_str = dt.data().c_str();
+			flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", xpath_str);
+			flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", dt_str);
+			grpc_debug("%s path string", xpath_str);
+                        grpc_debug("%s data string", dt_str);
+                }
+        }
+        if (mypathps->empty()) {
+                tag->async_responder.Finish(grpc::Status::OK, tag);
+                return false;
+        }
+
+        frr::SubscriptionCacheResponse response;
+        grpc::Status status;
+
+        mypathps->pop_back();
+        if (mypathps->empty()) {
+                tag->async_responder.WriteAndFinish(
+                        response, grpc::WriteOptions(), grpc::Status::OK, tag);
+                return false;
+        } else {
+                tag->async_responder.Write(response, tag);
+                return true;
+        }
+	return true;
+}
+
 bool HandleStreamingGet(
 	StreamRpcState<frr::GetRequest, frr::GetResponse, GetContextType> *tag)
 {
@@ -1173,6 +1214,7 @@ static void *grpc_pthread_start(void *arg)
 	/* Schedule streaming RPC handlers */
 	REQUEST_NEWRPC_STREAMING(Get);
 	REQUEST_NEWRPC_STREAMING(ListTransactions);
+	REQUEST_NEWRPC_STREAMING(SubscriptionCache);
 
 	zlog_notice("gRPC server listening on %s",
 		    server_address.str().c_str());
@@ -1226,6 +1268,40 @@ static void *grpc_pthread_start(void *arg)
 	return NULL;
 }
 
+/* Establish grpc channel and send message */
+static int  frr_grpc_notification_send(const char *xpath,
+				  struct list *arguments)
+{
+       struct nb_node *nb_node = NULL;
+       struct yang_data *data;
+       struct listnode *node;
+       int ret;
+
+       zlog_err("Test GRPC notification checking data tree");
+       nb_node = nb_node_find(xpath);
+       if (!nb_node) {
+	       flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH,
+			 "%s: unknown data path: %s", __func__, xpath);
+	       return -1;
+       }
+
+       /* Creating grpc channel to send the data */
+       grpc::Status status;
+       grpc::ClientContext context;
+
+       auto channel = grpc::CreateChannel("localhost:5551", grpc::InsecureChannelCredentials());
+       auto stub = frr::Northbound::NewStub(channel);
+       frr::SubscriptionCacheRequest cache;
+       std::ostringstream ss;
+       cache.add_path(nb_node->xpath);
+       auto *dt = cache.mutable_data();
+       dt->set_encoding(frr::JSON);
+       status = get_path(dt, xpath, frr::GetRequest_DataType_STATE,
+                         LYD_JSON, false);
+       auto stream = stub->SubscriptionCache(&context, cache);
+       return 0;
+}
+
 
 static int frr_grpc_init(uint port)
 {
@@ -1245,7 +1321,7 @@ static int frr_grpc_init(uint port)
 			 __func__, safe_strerror(errno));
 		return -1;
 	}
-
+        hook_register(nb_notification_send, frr_grpc_notification_send);
 	return 0;
 }
 
