@@ -3750,30 +3750,34 @@ DEFPY(bgp_advertise_origin, bgp_advertise_origin_cmd,
 	if (safi != SAFI_UNICAST)
 		return CMD_SUCCESS;
 
-	if (no)
+	if (no) {
+		if (!CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+				BGP_FLAG_ADVERTISE_ORIGIN)) {
+			return CMD_SUCCESS;
+		}
 		UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			   BGP_FLAG_ADVERTISE_ORIGIN);
-	else {
+	} else {
 		SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 			 BGP_FLAG_ADVERTISE_ORIGIN);
 	}
 
 	bool negate = (no == NULL) ? false : true;
 
-	/*Originate IPv6 mapped IPv4 SoO route based on bgp router-id*/
+	/* Originate IPv6 mapped IPv4 SoO route based on bgp router-id */
 	if (afi == AFI_IP6 && safi == SAFI_UNICAST) {
 		struct in6_addr v6addr;
 		ipv4_to_ipv4_mapped_ipv6(&v6addr, bgp->router_id);
 		in6addr2hostprefix(&v6addr, &p);
 		prefix2str(&p, prefix_str, sizeof(prefix_str));
-		bgp_static_set_non_vty(bgp, negate, prefix_str, afi, safi, NULL,
-				       0, BGP_INVALID_LABEL_INDEX, true);
+		bgp_static_set(vty, bgp, negate, prefix_str, afi, safi, NULL, 0,
+			       BGP_INVALID_LABEL_INDEX, true, false);
 	} else if (afi == AFI_IP && safi == SAFI_UNICAST) {
-		/*Originate IPv4 SoO route based on bgp router-id*/
+		/* Originate IPv4 SoO route based on bgp router-id */
 		char addr_buf[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &bgp->router_id, addr_buf, INET_ADDRSTRLEN);
-		bgp_static_set_non_vty(bgp, negate, addr_buf, afi, safi, NULL,
-				       0, BGP_INVALID_LABEL_INDEX, true);
+		bgp_static_set(vty, bgp, negate, addr_buf, afi, safi, NULL, 0,
+			       BGP_INVALID_LABEL_INDEX, true, false);
 	}
 
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, tmp_peer))
@@ -3819,7 +3823,7 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 		}
 	}
 	else {
-		// timer wheel created only once
+		/* timer wheel created only once */
 		bgp_per_src_nhg_soo_timer_wheel_init(bgp);
 
 		bgp_per_src_nhg_init(bgp, afi, safi);
@@ -8128,7 +8132,7 @@ DEFPY (bgp_condadv_period,
 }
 
 DEFPY(bgp_per_src_nhg_convergence_timer, bgp_per_src_nhg_convergence_timer_cmd,
-      "bgp per-source-nhg convergence-timer (5-1000)$period",
+      "bgp per-source-nhg convergence-timer (5-30000)$period",
       BGP_STR
       "Per Source NHG settings\n"
       "Time in milli secs to wait before processing SOO for per source nexthop group\n"
@@ -8158,7 +8162,7 @@ DEFPY(bgp_per_src_nhg_convergence_timer, bgp_per_src_nhg_convergence_timer_cmd,
 
 DEFPY(no_bgp_per_src_nhg_convergence_timer,
       no_bgp_per_src_nhg_convergence_timer_cmd,
-      "no bgp per-source-nhg convergence-timer [(5-1000)]",
+      "no bgp per-source-nhg convergence-timer [(5-30000)]",
       NO_STR BGP_STR
       "Per Source NHG settings\n"
       "Time in milli secs to wait before processing SOO for per source nexthop group\n"

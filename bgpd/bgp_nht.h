@@ -21,13 +21,17 @@
 #ifndef _BGP_NHT_H
 #define _BGP_NHT_H
 
-typedef enum { EVPN_MH = 0, PER_SRC_NHG = 1, APP_MAX } bgp_nhg_app_t;
+enum bgp_nhg_app {
+	EVPN_MH = 0,
+	PER_SRC_NHG = 1,
+	APP_MAX,
+};
 
-typedef struct {
+struct bgp_nhg_app_info {
 	bitfield_t bitmap;
 	uint32_t start_id;
 	uint32_t id_max;
-} bgp_nhg_app_info_t;
+};
 
 #define EVPN_MH_NH_ID_SPACE (16 * 1024)
 #define PER_SRC_NH_ID_SPACE (16 * 1024)
@@ -106,8 +110,8 @@ extern void bgp_nht_dereg_enhe_cap_intfs(struct peer *peer);
 extern void evaluate_paths(struct bgp_nexthop_cache *bnc);
 
 /* APIs for setting up and allocating L3 nexthop group ids */
-extern uint32_t bgp_l3nhg_id_alloc(bgp_nhg_app_t app);
-extern void bgp_l3nhg_id_free(bgp_nhg_app_t app, uint32_t nhg_id);
+extern uint32_t bgp_l3nhg_id_alloc(enum bgp_nhg_app app);
+extern void bgp_l3nhg_id_free(enum bgp_nhg_app app, uint32_t nhg_id);
 extern void bgp_l3nhg_init(void);
 void bgp_l3nhg_finish(void);
 

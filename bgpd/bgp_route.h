@@ -914,14 +914,10 @@ extern bool bgp_path_suppressed(struct bgp_path_info *pi);
 extern int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete);
 extern void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest,
 				 afi_t afi, safi_t safi);
-extern int bgp_static_set(struct vty *vty, const char *negate,
+extern int bgp_static_set(struct vty *vty, struct bgp *bgp, bool negate,
 			  const char *ip_str, afi_t afi, safi_t safi,
 			  const char *rmap, int backdoor, uint32_t label_index,
-			  bool skip_import_check);
-int bgp_static_set_non_vty(struct bgp *bgp, bool negate, const char *ip_str,
-			   afi_t afi, safi_t safi, const char *rmap,
-			   int backdoor, uint32_t label_index,
-			   bool skip_import_check);
+			  bool skip_import_check, bool user_configured);
 extern void bgp_meta_queue_free(struct meta_queue *mq);
 extern int early_route_process(struct bgp *bgp, struct bgp_dest *dest);
 extern int other_route_process(struct bgp* bgp, struct bgp_dest *dest);
