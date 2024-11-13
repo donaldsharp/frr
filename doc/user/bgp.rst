@@ -2018,7 +2018,7 @@ Configuring Peers
    This command processes the Site of Origin (SOO) attribute, facilitating the creation
    of nexthop groups based on the value of SOO.
 
-.. clicmd:: bgp per-source-nhg convergence-timer (5-240)
+.. clicmd:: bgp per-source-nhg convergence-timer (5-30000)
 
    This command sets the time in milli secs to wait before processing SOO for per source
    nexthop group
