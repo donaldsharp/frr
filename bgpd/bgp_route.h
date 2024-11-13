@@ -821,12 +821,12 @@ extern void bgp_static_update(struct bgp *bgp, const struct prefix *p,
 extern void bgp_static_withdraw(struct bgp *bgp, const struct prefix *p,
 				afi_t afi, safi_t safi, struct prefix_rd *prd);
 
-extern int bgp_static_set(struct vty *vty, bool negate, const char *ip_str,
+extern int bgp_static_set(struct vty *vty, struct bgp *bgp, bool negate, const char *ip_str,
 			  const char *rd_str, const char *label_str, afi_t afi,
 			  safi_t safi, const char *rmap, int backdoor,
 			  uint32_t label_index, int evpn_type, const char *esi,
 			  const char *gwip, const char *ethtag,
-			  const char *routermac, bool skip_import_check);
+			  const char *routermac, bool skip_import_check, bool user_configured);
 
 /* this is primarily for MPLS-VPN */
 extern void bgp_update(struct peer *peer, const struct prefix *p,
@@ -990,11 +990,8 @@ extern int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 	bgp_path_info_add_with_caller(__func__, (A), (B))
 #define bgp_path_info_free(B) bgp_path_info_free_with_caller(__func__, (B))
 extern int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete);
-extern void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, safi_t safi);
-int bgp_static_set_non_vty(struct bgp *bgp, bool negate, const char *ip_str,
-			   afi_t afi, safi_t safi, const char *rmap,
-			   int backdoor, uint32_t label_index,
-			   bool skip_import_check);
+extern void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest,
+				 afi_t afi, safi_t safi);
 extern void bgp_meta_queue_free(struct meta_queue *mq);
 extern int early_route_process(struct bgp *bgp, struct bgp_dest *dest);
 extern int other_route_process(struct bgp *bgp, struct bgp_dest *dest);
