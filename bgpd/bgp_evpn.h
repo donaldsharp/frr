@@ -194,4 +194,5 @@ extern enum zclient_send_status
 evpn_zebra_uninstall(struct bgp *bgp, struct bgpevpn *vpn,
 		     const struct prefix_evpn *p, struct bgp_path_info *pi,
 		     bool is_sync);
+extern void bgp_zebra_evpn_pop_items_from_announce_fifo(struct bgpevpn *vpn);
 #endif /* _QUAGGA_BGP_EVPN_H */
