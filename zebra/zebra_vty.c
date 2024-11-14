@@ -3809,6 +3809,8 @@ static int config_write_protocol(struct vty *vty)
 
 	zebra_pbr_config_write(vty);
 
+	zebra_vrf_config_write(vty);
+
 	if (!zebra_vxlan_get_accept_bgp_seq())
 		vty_out(vty, "no evpn accept-bgp-seq\n");
 

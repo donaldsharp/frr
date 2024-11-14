@@ -541,6 +541,40 @@ int zebra_vrf_netns_handler_create(struct vty *vty, struct vrf *vrf,
 	return CMD_SUCCESS;
 }
 
+void zebra_vrf_config_write(struct vty *vty)
+{
+	struct vrf *vrf;
+	struct zebra_vrf *zvrf;
+
+	RB_FOREACH (vrf, vrf_name_head, &vrfs_by_name) {
+		zvrf = vrf->info;
+
+		if (!zvrf)
+			continue;
+
+		if (zvrf_id(zvrf) == VRF_DEFAULT) {
+			if (zvrf->zebra_rnh_ip_default_route)
+				vty_out(vty, "ip nht resolve-via-default\n");
+
+			if (zvrf->zebra_rnh_ipv6_default_route)
+				vty_out(vty, "ipv6 nht resolve-via-default\n");
+		} else {
+			vty_frame(vty, "vrf %s\n", zvrf_name(zvrf));
+			if (zvrf->zebra_rnh_ip_default_route)
+				vty_out(vty, " ip nht resolve-via-default\n");
+
+			if (zvrf->zebra_rnh_ipv6_default_route)
+				vty_out(vty, " ipv6 nht resolve-via-default\n");
+		}
+		if (zvrf_id(zvrf) != VRF_DEFAULT)
+			vty_endframe(vty, "exit-vrf\n!\n");
+		else
+			vty_out(vty, "!\n");
+	}
+	return 0;
+
+}
+
 /* Zebra VRF initialization. */
 void zebra_vrf_init(void)
 {
