@@ -626,6 +626,19 @@ bool HandleStreamingSubscriptionCache(
 	return true;
 }
 
+
+grpc::Status HandleUnarySubscribe(
+			UnaryRpcState<frr::SubscribeRequest, frr::SubscribeResponse> *tag)
+{
+        const char *xpath_str;
+        xpath_str = tag->request.path().c_str();
+	zlog_err("Subscribe %s(path: \"%s\")", __func__, xpath_str);
+        //Update subscription cache
+	nb_cache_subscriptions(main_master, xpath_str);
+	return grpc::Status::OK;
+}
+
+
 bool HandleStreamingGet(
 	StreamRpcState<frr::GetRequest, frr::GetResponse, GetContextType> *tag)
 {
@@ -1210,6 +1223,7 @@ static void *grpc_pthread_start(void *arg)
 	REQUEST_NEWRPC(LockConfig, NULL);
 	REQUEST_NEWRPC(UnlockConfig, NULL);
 	REQUEST_NEWRPC(Execute, NULL);
+	REQUEST_NEWRPC(Subscribe, NULL);
 
 	/* Schedule streaming RPC handlers */
 	REQUEST_NEWRPC_STREAMING(Get);

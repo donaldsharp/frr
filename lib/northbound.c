@@ -31,6 +31,8 @@
 #include "northbound_cli.h"
 #include "northbound_db.h"
 #include "frrstr.h"
+#include "lib/wheel.h"
+
 
 DEFINE_MTYPE_STATIC(LIB, NB_NODE, "Northbound Node");
 DEFINE_MTYPE_STATIC(LIB, NB_CONFIG, "Northbound Configuration");
@@ -39,8 +41,21 @@ DEFINE_MTYPE_STATIC(LIB, NB_CONFIG_ENTRY, "Northbound Configuration Entry");
 /* Running configuration - shouldn't be modified directly. */
 struct nb_config *running_config;
 
+struct timer_wheel *timer_wheel;
+
+unsigned int nb_xpath_hash_key(const char* str);
+unsigned int running_config_entry_key_make(const void *value);
+
 /* Hash table of user pointers associated with configuration entries. */
 static struct hash *running_config_entries;
+
+/* Hash table of subscription cache entries */
+static struct hash *subscr_cache_entries;
+
+/* Subscription Cache entry */
+struct subscr_cache_entry {
+    char xpath[XPATH_MAXLEN];
+} subscr_cache_entry;
 
 /* Management lock for the running configuration. */
 static struct {
@@ -827,6 +842,7 @@ int nb_candidate_validate(struct nb_context *context,
 			  struct nb_config *candidate, char *errmsg,
 			  size_t errmsg_len)
 {
+	zlog_err("nb_candidate_validate");
 	struct nb_config_cbs changes;
 	int ret;
 
@@ -1758,6 +1774,7 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 				return NB_ERR;
 			}
 
+
 			/* Build XPath of the list entry. */
 			strlcpy(xpath, xpath_list, sizeof(xpath));
 			unsigned int i = 0;
@@ -1778,6 +1795,7 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 						 "[%s='%s']", skey->name,
 						 list_keys.key[i]);
 				}
+				iterate_child = true;
 				i++;
 			}
 			assert(i == list_keys.num);
@@ -1789,7 +1807,6 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 				 position);
 			position++;
 		}
-
 		/* Iterate over the child nodes. */
 		if (iterate_child) {
 			ret = nb_oper_data_iter_children(
@@ -1816,9 +1833,9 @@ static int nb_oper_data_iter_node(const struct lysc_node *snode,
 	int ret = NB_OK;
 
 	if (!first && CHECK_FLAG(flags, NB_OPER_DATA_ITER_NORECURSE)
-	    && CHECK_FLAG(snode->nodetype, LYS_CONTAINER | LYS_LIST))
+	    && CHECK_FLAG(snode->nodetype, LYS_CONTAINER | LYS_LIST)) 
 		return NB_OK;
-
+       
 	/* Update XPath. */
 	strlcpy(xpath, xpath_parent, sizeof(xpath));
 	if (!first && snode->nodetype != LYS_USES) {
@@ -1922,8 +1939,8 @@ int nb_oper_data_iterate(const char *xpath, struct yang_translator *translator,
 	 */
 	list_dnodes = list_new();
 	for (dn = dnode; dn; dn = lyd_parent(dn)) {
-		if (dn->schema->nodetype != LYS_LIST || !lyd_child(dn))
-			continue;
+	        if (dn->schema->nodetype != LYS_LIST || !lyd_child(dn))
+		    continue;
 		listnode_add_head(list_dnodes, dn);
 	}
 	/*
@@ -1974,14 +1991,16 @@ int nb_oper_data_iterate(const char *xpath, struct yang_translator *translator,
 	}
 
 	/* If a list entry was given, iterate over that list entry only. */
-	if (dnode->schema->nodetype == LYS_LIST && lyd_child(dnode))
+	if (dnode->schema->nodetype == LYS_LIST && lyd_child(dnode)){
 		ret = nb_oper_data_iter_children(
 			nb_node->snode, xpath, list_entry, &list_keys,
 			translator, true, flags, cb, arg);
-	else
+	}
+	else {
 		ret = nb_oper_data_iter_node(nb_node->snode, xpath, list_entry,
 					     &list_keys, translator, true,
 					     flags, cb, arg);
+	}
 
 	list_delete(&list_dnodes);
 	yang_dnode_free(dnode);
@@ -2183,7 +2202,7 @@ static bool running_config_entry_cmp(const void *value1, const void *value2)
 	return strmatch(c1->xpath, c2->xpath);
 }
 
-static unsigned int running_config_entry_key_make(const void *value)
+unsigned int running_config_entry_key_make(const void *value)
 {
 	return string_hash_make(value);
 }
@@ -2322,25 +2341,54 @@ void *nb_running_get_entry_non_rec(const struct lyd_node *dnode,
 }
 
 
-void nb_notify_subscriptions(void)
+unsigned int nb_xpath_hash_key(const char* str)
 {
-    const char xpath1[100] = "/frr-bgp-peer:lib";
+    return 1;
+}
+
+static void *subsc_cache_entry_alloc(void *p)
+{
+    struct subscr_cache_entry *new, *key = p;
+    new = XCALLOC(MTYPE_NB_CONFIG_ENTRY, sizeof(*new));
+    strlcpy(new->xpath, key->xpath, sizeof(new->xpath));
+    return new;
+}
+void nb_cache_subscriptions(struct thread_master *master, const char* xpath)
+{   
+    zlog_err("Updating cache with xpath %s", xpath);
+    /* Adding to Hash table */
+    struct subscr_cache_entry *cache, s;
+    strcpy(s.xpath, xpath);
+    cache = hash_get(subscr_cache_entries, &s, subsc_cache_entry_alloc);
+    if (cache)
+        zlog_err("Added to Cache XPATH %s", cache->xpath);
+    /* Start timer wheel for sampling subscriptions */
+    zlog_err("Start timer wheel");
+    nb_wheel_init(master, xpath);
+}
+
+void hash_walk_dump(struct hash_bucket *bucket, void *arg)
+{
+    struct subscr_cache_entry *entry = bucket->data;
     struct list *arguments;
     struct yang_data *data;
     arguments = yang_data_list_new();
     char xpath_arg[XPATH_MAXLEN];
     data = yang_data_new_string(xpath_arg, "TEST");
     listnode_add(arguments, data);
-    nb_notification_send(xpath1, arguments);
-    arguments = yang_data_list_new();
-    data = yang_data_new_string(xpath_arg, "TEST");
-    listnode_add(arguments, data);
-    const char xpath2[100] = "/frr-bgp-peer:lib/peer[name='uplink_1']";
-    nb_notification_send(xpath2, arguments);
+    zlog_err("Sending notification for  %s HASH WALK", entry->xpath);
+    nb_notification_send(entry->xpath, arguments);
     return;
 }
 
-
+void nb_notify_subscriptions()
+{
+    zlog_err("Walk the hash 5000");
+    struct subscr_cache_entry entry;
+    /* Walk the subscription cache */
+    hash_walk(subscr_cache_entries, hash_walk_dump, &entry);
+    return;
+}
 
 /* Logging functions. */
 const char *nb_event_name(enum nb_event event)
@@ -2471,6 +2519,23 @@ void nb_validate_callbacks(void)
 	}
 }
 
+void nb_wheel_init(struct thread_master *master, const char* xpath)
+{
+	if (!master) {
+            zlog_err("master NULL");
+	    return;
+	}
+	zlog_err("Creating timer wheel");
+        timer_wheel = wheel_init(master, 5000, 1, running_config_entry_key_make, nb_notify_subscriptions, "subscription thread");
+        zlog_err("Timer wheel created");
+	if (timer_wheel){
+	    zlog_err("Timer adding entry");
+	    xpath = XCALLOC(MTYPE_NB_CONFIG_ENTRY, 100);
+            wheel_add_item(timer_wheel, xpath);
+	}
+	return;
+}
+
 
 void nb_init(struct thread_master *tm,
 	     const struct frr_yang_module_info *const modules[],
@@ -2516,6 +2581,10 @@ void nb_init(struct thread_master *tm,
 	running_config_entries = hash_create(running_config_entry_key_make,
 					     running_config_entry_cmp,
 					     "Running Configuration Entries");
+	subscr_cache_entries = hash_create(running_config_entry_key_make,
+			                   running_config_entry_cmp,
+					   "Subscription Cache Entries");
+			                     
 	pthread_mutex_init(&running_config_mgmt_lock.mtx, NULL);
 
 	/* Initialize the northbound CLI. */

@@ -2,6 +2,15 @@ module frr-bgp-peer {
   yang-version 1.1;
   namespace "http://frrouting.org/yang/bgp-peer";
   prefix frr-bgp-peer;
+ 
+  import ietf-inet-types {
+    prefix inet;
+  }
+
+  import frr-routing {
+    prefix frr-rt;
+  }
+
   organization
     "Free Range Routing";
   contact
@@ -16,7 +25,8 @@ module frr-bgp-peer {
   }
 
   container lib {
-      list peer {
+       list peer {
+          config false;
           key "name";
           description
             "Peer.";
@@ -61,6 +71,37 @@ module frr-bgp-peer {
             description
                "Messages Recieved";
           }
+          leaf ipv4UniRcvdCount {
+            config false;
+            type uint32;
+            description
+               "IPV4 unicast prefix count after post policy";
+          }
+          leaf ipv6UniRcvdCount {
+            config false;
+            type uint32;
+            description
+               "IPV6 unicast prefix count after post policy";
+          }  
+          list count {
+             config false;
+             key "afi-safi";
+             leaf afi-safi {
+               type identityref {
+                 base frr-rt:afi-safi-type;
+               }
+               description
+                 "AFI, SAFI name.";
+             }
+             leaf received {
+               config false;
+               type uint32;
+               description
+                  "This count is the
+                   number of prefixes present in the post-policy Adj-RIB-In
+                   for the neighbor";
+             }
+         }
       }
   }
 }
