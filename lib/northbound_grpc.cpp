@@ -590,7 +590,7 @@ typedef std::list<std::string> SubscriptionCacheContextType;
 bool HandleStreamingSubscriptionCache(
 	StreamRpcState<frr::SubscriptionCacheRequest, frr::SubscriptionCacheResponse, SubscriptionCacheContextType> *tag)
 {
-	zlog_err("Processing SendData");
+	zlog_err("Processing SubscriptionData");
         auto mypathps = &tag->context;
         if (tag->is_initial_process()) {
                 // Fill our context container first time through
@@ -601,9 +601,9 @@ bool HandleStreamingSubscriptionCache(
 			const char* xpath_str = path.c_str();
 			const char* dt_str = dt.data().c_str();
 			flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", xpath_str);
-			flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", dt_str);
+			//flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", dt_str);
 			grpc_debug("%s path string", xpath_str);
-                        grpc_debug("%s data string", dt_str);
+                        //grpc_debug("%s data string", dt_str);
                 }
         }
         if (mypathps->empty()) {
@@ -631,10 +631,11 @@ grpc::Status HandleUnarySubscribe(
 			UnaryRpcState<frr::SubscribeRequest, frr::SubscribeResponse> *tag)
 {
         const char *xpath_str;
+	bool add = true; /* To be updated based on proto oper variable */
         xpath_str = tag->request.path().c_str();
 	zlog_err("Subscribe %s(path: \"%s\")", __func__, xpath_str);
         //Update subscription cache
-	nb_cache_subscriptions(main_master, xpath_str);
+	nb_cache_subscriptions(main_master, xpath_str, add);
 	return grpc::Status::OK;
 }
 

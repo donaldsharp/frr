@@ -38,6 +38,8 @@ DEFINE_MTYPE_STATIC(LIB, NB_NODE, "Northbound Node");
 DEFINE_MTYPE_STATIC(LIB, NB_CONFIG, "Northbound Configuration");
 DEFINE_MTYPE_STATIC(LIB, NB_CONFIG_ENTRY, "Northbound Configuration Entry");
 
+#define SUBSCRIPTION_SAMPLE_TIMER 30000
+
 /* Running configuration - shouldn't be modified directly. */
 struct nb_config *running_config;
 
@@ -2353,18 +2355,29 @@ static void *subsc_cache_entry_alloc(void *p)
     strlcpy(new->xpath, key->xpath, sizeof(new->xpath));
     return new;
 }
-void nb_cache_subscriptions(struct thread_master *master, const char* xpath)
+void nb_cache_subscriptions(struct thread_master *master, const char* xpath, bool add)
 {   
     zlog_err("Updating cache with xpath %s", xpath);
     /* Adding to Hash table */
     struct subscr_cache_entry *cache, s;
     strcpy(s.xpath, xpath);
-    cache = hash_get(subscr_cache_entries, &s, subsc_cache_entry_alloc);
-    if (cache)
-        zlog_err("Added to Cache XPATH %s", cache->xpath);
-    /* Start timer wheel for sampling subscriptions */
-    zlog_err("Start timer wheel");
-    nb_wheel_init(master, xpath);
+    if (add) {
+        cache = hash_get(subscr_cache_entries, &s, subsc_cache_entry_alloc);
+	/* Start timer wheel for sampling subscriptions */
+	if (!timer_wheel && hashcount(subscr_cache_entries) == 1) {
+	    nb_wheel_init(master, xpath);
+	}
+    } else {
+	zlog_err("Deleting from hash XPATH %s count %d", s.xpath, hashcount(subscr_cache_entries));
+	cache = hash_lookup(subscr_cache_entries, &s);
+	if (cache) 
+	    hash_release(subscr_cache_entries, cache);
+	zlog_err("Hash count %d", hashcount(subscr_cache_entries));
+	if (hashcount(subscr_cache_entries) == 0 && timer_wheel)
+	    wheel_stop(timer_wheel);
+    }
+    nb_notify_subscriptions();
+    return;
 }
 
 void hash_walk_dump(struct hash_bucket *bucket, void *arg)
@@ -2374,16 +2387,15 @@ void hash_walk_dump(struct hash_bucket *bucket, void *arg)
     struct yang_data *data;
     arguments = yang_data_list_new();
     char xpath_arg[XPATH_MAXLEN];
-    data = yang_data_new_string(xpath_arg, "TEST");
+    /* TODO: Check if this arg is needed as nb walk will give the data */
+    data = yang_data_new_string(xpath_arg, entry->xpath);
     listnode_add(arguments, data);
-    zlog_err("Sending notification for  %s HASH WALK", entry->xpath);
     nb_notification_send(entry->xpath, arguments);
     return;
 }
 
 void nb_notify_subscriptions()
 {
-    zlog_err("Walk the hash 5000");
     struct subscr_cache_entry entry;
     /* Walk the subscription cache */
     hash_walk(subscr_cache_entries, hash_walk_dump, &entry);
@@ -2526,7 +2538,7 @@ void nb_wheel_init(struct thread_master *master, const char* xpath)
 	    return;
 	}
 	zlog_err("Creating timer wheel");
-        timer_wheel = wheel_init(master, 5000, 1, running_config_entry_key_make, nb_notify_subscriptions, "subscription thread");
+        timer_wheel = wheel_init(master, SUBSCRIPTION_SAMPLE_TIMER, 1, running_config_entry_key_make, nb_notify_subscriptions, "subscription thread");
         zlog_err("Timer wheel created");
 	if (timer_wheel){
 	    zlog_err("Timer adding entry");
