@@ -518,6 +518,10 @@ struct bgp_aggregate {
 	struct route_map *suppress_map;
 };
 
+struct bgp_clear_node_queue {
+	struct bgp_dest *dest;
+};
+
 #define BGP_NEXTHOP_AFI_FROM_NHLEN(nhlen)                                      \
 	((nhlen) < IPV4_MAX_BYTELEN                                            \
 		 ? 0                                                           \

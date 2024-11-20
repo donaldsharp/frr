@@ -6644,10 +6644,6 @@ bool bgp_soft_reconfig_in(struct peer *peer, afi_t afi, safi_t safi)
 }
 
 
-struct bgp_clear_node_queue {
-	struct bgp_dest *dest;
-};
-
 static wq_item_status bgp_clear_route_node(struct work_queue *wq, void *data)
 {
 	struct bgp_clear_node_queue *cnq = data;
