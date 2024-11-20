@@ -451,6 +451,26 @@ def print_kernel_cmd(field_val):
     return cmd_str
 
 
+def print_family_str(field_val):
+    """
+    pretty print kernel family to string
+    """
+    if field_val == socket.AF_INET:
+        cmd_str = "ipv4"
+    elif field_val == socket.AF_INET6:
+        cmd_str = "ipv6"
+    elif field_val == socket.AF_BRIDGE:
+        cmd_str = "bridge"
+    elif field_val == 128: # RTNL_FAMILY_IPMR:
+        cmd_str = "ipv4MR"
+    elif field_val == 129: # RTNL_FAMILY_IP6MR:
+        cmd_str = "ipv6MR"
+    else:
+        cmd_str = "Invalid family"
+
+    return cmd_str
+
+
 def print_operation_ug_create_delete(field_val):
     if field_val == 1:
         return "BGP update-group create"
@@ -739,7 +759,8 @@ def parse_frr_zebra_netlink_neigh_update_msg_encode(event):
     ctf_array(unsigned char, mac, mac, sizeof(struct ethaddr))
     """
     field_parsers = {"ip": print_ip_addr,
-                     "mac": print_mac}
+                     "mac": print_mac,
+                     "family": print_family_str}
 
     parse_event(event, field_parsers)
 
