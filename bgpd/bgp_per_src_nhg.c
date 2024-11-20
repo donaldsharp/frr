@@ -1948,6 +1948,7 @@ static void bgp_per_src_nhg_peer_clear_route_cb(struct hash_bucket *bucket,
 	struct bgp_path_info *pi;
 	struct bgp_per_src_nhg_hash_entry *nhe =
 		(struct bgp_per_src_nhg_hash_entry *)bucket->data;
+	int force = peer->bgp->process_queue ? 0 : 1;
 
 	if (nhe && nhe->dest) {
 		struct bgp_dest *dest = nhe->dest;
@@ -1955,20 +1956,29 @@ static void bgp_per_src_nhg_peer_clear_route_cb(struct hash_bucket *bucket,
 			if ((pi->peer == peer) &&
 			    (pi->type == ZEBRA_ROUTE_BGP &&
 			     pi->sub_type == BGP_ROUTE_NORMAL)) {
-				if (bf_test_index(
-					    nhe->bgp_soo_route_selected_pi_bitmap,
-					    pi->peer->bit_index)) {
-					bf_release_index(
-						nhe->bgp_soo_route_selected_pi_bitmap,
-						pi->peer->bit_index);
-					nhe->refcnt--;
-				}
+				SET_FLAG(
+					nhe->flags,
+					PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_CLEAR_ONLY);
+				if (force)
+					bgp_path_info_reap(dest, pi);
+				else {
+					struct bgp_clear_node_queue *cnq;
 
-				bgp_per_src_nhg_nc_del(nhe->afi, nhe, pi);
+					/* both unlocked in
+					 * bgp_clear_node_queue_del */
+					bgp_table_lock(bgp_dest_table(dest));
+					bgp_dest_lock_node(dest);
+					cnq = XCALLOC(
+						MTYPE_BGP_CLEAR_NODE_QUEUE,
+						sizeof(struct
+						       bgp_clear_node_queue));
+					cnq->dest = dest;
+					work_queue_add(peer->clear_node_queue,
+						       cnq);
+					break;
+				}
 			}
 		}
-		bgp_per_src_nhg_upd_msg_check(nhe->bgp, nhe->afi, nhe->safi,
-					      dest);
 	}
 }
 
