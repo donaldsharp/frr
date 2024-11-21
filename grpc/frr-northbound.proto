@@ -29,6 +29,8 @@ syntax = "proto3";
 
 package frr;
 
+option go_package =".";
+
 // Service specification for the FRR northbound interface.
 service Northbound {
   // Retrieve the capabilities supported by the target.
