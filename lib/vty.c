@@ -2654,7 +2654,9 @@ void vty_read_file_finish(struct vty *vty, struct nb_config *config)
 		nl = strchr(ve->error_buf, '\n');
 		if (nl)
 			*nl = '\0';
-		flog_err(EC_LIB_VTY, "%s on config line %u: %s", message,
+		/* When the file is config replayed, we cannot handle the errors in command execution.
+			We would let all commands in the file to complete, irrespective of some of them failing. */
+		flog_warn(EC_LIB_VTY, "%s on config line %u: %s", message,
 			 ve->line_num, ve->error_buf);
 	}
 
@@ -2773,7 +2775,11 @@ FILE *vty_open_config(const char *config_file, char *config_default_dir)
 				flog_warn(EC_LIB_BACKUP_CONFIG,
 					  "using backup configuration file!");
 			else {
-				flog_err(
+				/* There are few protocols e.g. RIP, RIPng, which are ununsed in SONIC.
+				   So, there will not be any config file for them.
+				   Flagging error, will be considered a breakage by loganalyzer, whereas
+				   it is valid for these protocol config file to be not present. */
+				flog_warn(
 					EC_LIB_VTY,
 					"%s: can't open configuration file [%s]",
 					__func__, config_file);
@@ -2822,7 +2828,11 @@ FILE *vty_open_config(const char *config_file, char *config_default_dir)
 					  "using backup configuration file!");
 				fullpath = config_default_dir;
 			} else {
-				flog_err(EC_LIB_VTY,
+				/* There are few protocols e.g. RIP, RIPng, which are ununsed in SONIC.
+				   So, there will not be any config file for them.
+				   Flagging error, will be considered a breakage by loganalyzer, whereas
+				   it is valid for these protocol config file to be not present. */
+				flog_warn(EC_LIB_VTY,
 					 "can't open configuration file [%s]",
 					 config_default_dir);
 				goto tmp_free_and_out;

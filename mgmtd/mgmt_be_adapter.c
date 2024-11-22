@@ -732,7 +732,7 @@ static void mgmt_be_adapter_conn_init(struct event *thread)
 	 * transaction in progress.
 	 */
 	if (mgmt_txn_notify_be_adapter_conn(adapter, true) != 0) {
-		zlog_err("XXX txn in progress, retry init");
+		zlog_warn("XXX txn in progress, retry init");
 		mgmt_be_adapter_sched_init_event(adapter);
 		return;
 	}
