@@ -1714,6 +1714,55 @@ static int nd_dump_vty(struct vty *vty, struct interface *ifp)
 	return 0;
 }
 
+/* Dump interface ND information to vty. */
+int nd_dump_vty_json(struct vty *vty, json_object *json, struct interface *ifp)
+{
+	struct zebra_if *zif;
+	struct rtadvconf *rtadv;
+	int interval;
+
+	zif = (struct zebra_if *)ifp->info;
+	rtadv = &zif->rtadv;
+
+	if (rtadv->AdvSendAdvertisements) {
+		json_object *json_nd;
+
+		json_nd = json_object_new_object();
+		json_object_object_add(json, "nd", json_nd);
+
+		json_object_int_add(json_nd, "advReachableTime", rtadv->AdvReachableTime);
+		json_object_int_add(json_nd, "advRetransTimer", rtadv->AdvRetransTimer);
+		json_object_int_add(json_nd, "advCurHopLimit", rtadv->AdvCurHopLimit);
+		json_object_int_add(json_nd, "raSent", zif->ra_sent);
+		json_object_int_add(json_nd, "raRcvd", zif->ra_rcvd);
+		interval = rtadv->MaxRtrAdvInterval;
+		if (interval % 1000)
+			json_object_int_add(json_nd, "raSentIntervalMsec", interval);
+		else
+			json_object_int_add(json_nd, "raSentIntervalSec", interval / 1000);
+		json_object_boolean_add(json_nd, "useFastRexmit", rtadv->UseFastRexmit);
+		if (rtadv->AdvDefaultLifetime != -1)
+			json_object_int_add(json_nd, "advDefaultLifetime",
+					    rtadv->AdvDefaultLifetime);
+		json_object_string_add(json_nd, "defaultPreference",
+				       rtadv_pref_strs[rtadv->DefaultPreference]);
+		json_object_boolean_add(json_nd, "advManagedFlag", rtadv->AdvManagedFlag);
+		json_object_boolean_add(json_nd, "advIntervalOption", rtadv->AdvIntervalOption);
+		if (rtadv->AdvHomeAgentFlag) {
+			json_object *json_homeagent;
+
+			json_homeagent = json_object_new_object();
+			json_object_object_add(json_nd, "homeAgent", json_homeagent);
+			if (rtadv->HomeAgentLifetime != -1)
+				json_object_int_add(json_homeagent, "homeAgentLifetime",
+						    rtadv->HomeAgentLifetime);
+			json_object_int_add(json_homeagent, "homeAgentPreference",
+					    rtadv->HomeAgentPreference);
+		}
+	}
+	return 0;
+}
+
 static void rtadv_event(struct zebra_vrf *zvrf, enum rtadv_event event, int val)
 {
 	struct rtadv *rtadv;
@@ -1859,6 +1908,7 @@ void rtadv_cmd_init(void)
 	interfaces_configured_for_ra_from_bgp = 0;
 
 	hook_register(zebra_if_extra_info, nd_dump_vty);
+	hook_register(zebra_if_extra_info_json, nd_dump_vty_json);
 
 	install_element(VIEW_NODE, &show_ipv6_nd_ra_if_cmd);
 }
