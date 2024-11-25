@@ -1941,10 +1941,14 @@ int nb_oper_data_iterate(const char *xpath, struct yang_translator *translator,
 	 */
 	list_dnodes = list_new();
 	for (dn = dnode; dn; dn = lyd_parent(dn)) {
-	        if (dn->schema->nodetype != LYS_LIST || !lyd_child(dn))
-		    continue;
-		listnode_add_head(list_dnodes, dn);
+		if (!CHECK_FLAG(dn->schema->nodetype,
+				LYS_CONTAINER | LYS_LIST) ||
+		    !lyd_child_no_keys(dn))
+			continue;
+		listnode_add_head(list_dnodes, lyd_child_no_keys(dn));
 	}
+	zlog_err("Adding child node");
+
 	/*
 	 * Use the northbound callbacks to find list entry pointer corresponding
 	 * to the given XPath.
@@ -2394,7 +2398,7 @@ void hash_walk_dump(struct hash_bucket *bucket, void *arg)
     return;
 }
 
-void nb_notify_subscriptions()
+void nb_notify_subscriptions(void)
 {
     struct subscr_cache_entry entry;
     /* Walk the subscription cache */

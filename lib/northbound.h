@@ -1312,7 +1312,7 @@ extern void nb_terminate(void);
 /*
  * Notify subscribed xpaths
  */
-extern void nb_notify_subscriptions();
+extern void nb_notify_subscriptions(void);
 
 /*
  * Update subscription cache

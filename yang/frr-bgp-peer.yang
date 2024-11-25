@@ -2,7 +2,7 @@ module frr-bgp-peer {
   yang-version 1.1;
   namespace "http://frrouting.org/yang/bgp-peer";
   prefix frr-bgp-peer;
- 
+
   import ietf-inet-types {
     prefix inet;
   }
@@ -25,6 +25,15 @@ module frr-bgp-peer {
   }
 
   container lib {
+     list vrf {
+       config false;
+       key "id";                                                                                                                                  description
+         "Vrf.";
+       leaf id {
+         type string;
+         description
+           "VRF Id";
+       }
        list peer {
           config false;
           key "name";
@@ -82,7 +91,7 @@ module frr-bgp-peer {
             type uint32;
             description
                "IPV6 unicast prefix count after post policy";
-          }  
+          }
           list count {
              config false;
              key "afi-safi";
@@ -103,5 +112,6 @@ module frr-bgp-peer {
              }
          }
       }
+    }
   }
 }
