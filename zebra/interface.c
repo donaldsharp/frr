@@ -60,6 +60,9 @@ DEFINE_MTYPE_STATIC(ZEBRA, ZINFO, "Zebra Interface Information");
 
 DEFINE_HOOK(zebra_if_extra_info, (struct vty * vty, struct interface *ifp),
 	    (vty, ifp));
+DEFINE_HOOK(zebra_if_extra_info_json,
+	    (struct vty * vty, json_object *json, struct interface *ifp),
+	    (vty, json, ifp));
 DEFINE_HOOK(zebra_if_config_wr, (struct vty * vty, struct interface *ifp),
 	    (vty, ifp));
 
@@ -3641,6 +3644,7 @@ static void if_dump_vty_json(struct vty *vty, struct interface *ifp,
 	json_object_int_add(json_if, "outputErrors", ifp->stats.ifi_oerrors);
 	json_object_int_add(json_if, "collisions", ifp->stats.ifi_collisions);
 #endif /* HAVE_NET_RT_IFLIST */
+	hook_call(zebra_if_extra_info_json, vty, json_if, ifp);
 }
 
 static void interface_update_stats(void)
