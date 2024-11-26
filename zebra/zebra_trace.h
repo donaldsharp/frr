@@ -513,7 +513,7 @@ TRACEPOINT_EVENT(
 		ctf_integer(uint32_t, nhg, nhg_id)
 		ctf_integer(uint8_t, flags, flags)
 		ctf_integer(uint16_t, state, state)
-		ctf_string(family, (family == AF_INET) ? "AF_INET" : "AF_INET6")
+		ctf_integer(uint8_t, family, family)
 		ctf_integer(uint8_t, type, type)
 		ctf_integer(uint8_t, op, op)
 		)
