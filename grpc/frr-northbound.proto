@@ -160,9 +160,19 @@ message CreateCandidateRequest {
   // Empty.
 }
 
-// RPC: Subscribe()
 message SubscribeRequest {
-  // Path requested by the client.
+  oneof request {
+    SubscriptionList subscribe = 1;
+   // Poll poll = 3;
+  }
+}
+
+message SubscriptionList {
+  repeated Subscription subscriptions = 1;
+  //SamplingParams sampling_params = 2;
+}
+
+message Subscription {
   string path = 1;
 }
 
