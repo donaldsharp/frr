@@ -101,7 +101,7 @@ struct nhg_hash_entry {
 	 * nhg(1)->nhg_dependents is 3 in the tree
 	 *
 	 * nhg(2)->nhg_depends is empty
-	 * nhg(3)->nhg_dependents is 3 in the tree
+	 * nhg(2)->nhg_dependents is 3 in the tree
 	 */
 	struct nhg_connected_tree_head nhg_depends, nhg_dependents;
 	struct list *rejected_rn;
@@ -150,6 +150,14 @@ struct nhg_hash_entry {
  * Track FPM installation status..
  */
 #define NEXTHOP_GROUP_FPM (1 << 6)
+
+/*
+ * When an interface comes up install the
+ * singleton's and schedule the NHG's that
+ * are using this nhg to be reinstalled
+ * when installation is successful.
+ */
+#define NEXTHOP_GROUP_REINSTALL (1 << 8)
 
 /*
  * Connected routes and kernel routes received
@@ -243,6 +251,8 @@ struct nhg_ctx {
 
 	enum nhg_ctx_op_e op;
 	enum nhg_ctx_status status;
+
+	bool startup;
 };
 
 /* Global control to disable use of kernel nexthops, if available. We can't
@@ -403,7 +413,8 @@ extern void zebra_nhg_mark_keep(void);
 
 /* Nexthop resolution processing */
 struct route_entry; /* Forward ref to avoid circular includes */
-extern int nexthop_active_update(struct route_node *rn, struct route_entry *re);
+extern int nexthop_active_update(struct route_node *rn, struct route_entry *re,
+				 struct route_entry *old_re);
 
 /* Determine nhg address-family, with special rules for singletons */
 afi_t zebra_nhg_get_afi(const struct nexthop_group *nhg, afi_t route_afi);

@@ -222,7 +222,7 @@ static char re_status_output_char(const struct route_entry *re,
 			if (is_fib) {
 				star_p = !!CHECK_FLAG(nhop->flags,
 						      NEXTHOP_FLAG_FIB);
-			} else
+			} else if (CHECK_FLAG(nhop->flags, NEXTHOP_FLAG_ACTIVE))
 				star_p = true;
 		}
 
@@ -1269,7 +1269,12 @@ static void show_nexthop_group_out(struct vty *vty, struct nhg_hash_entry *nhe,
 			json_object_boolean_true_add(json, "valid");
 		else
 			vty_out(vty, "     Valid");
-
+		if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_REINSTALL)) {
+			if (json)
+				json_object_boolean_true_add(json, "reInstall");
+			else
+				vty_out(vty, ", Reinstall");
+		}
 		if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED)) {
 			if (json)
 				json_object_boolean_true_add(json, "installed");
@@ -1538,18 +1543,18 @@ static void if_nexthop_group_dump_vty(struct vty *vty, struct interface *ifp)
 {
 	struct zebra_if *zebra_if = NULL;
 	struct nhg_connected *rb_node_dep = NULL;
+	bool first = true;
 
 	zebra_if = ifp->info;
 
-	if (!if_nhg_dependents_is_empty(ifp)) {
-		vty_out(vty, "Interface %s:\n", ifp->name);
-
-		frr_each (nhg_connected_tree, &zebra_if->nhg_dependents,
-			  rb_node_dep) {
-			vty_out(vty, "   ");
-			show_nexthop_group_out(vty, rb_node_dep->nhe, NULL,
-					       false);
+	frr_each (nhg_connected_tree, &zebra_if->nhg_dependents, rb_node_dep) {
+		if (first) {
+			vty_out(vty, "Interface %s:\n", ifp->name);
+			first = false;
 		}
+
+		vty_out(vty, "   ");
+		show_nexthop_group_out(vty, rb_node_dep->nhe, NULL, false);
 	}
 }
 

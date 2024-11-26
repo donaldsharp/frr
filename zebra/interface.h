@@ -354,11 +354,6 @@ extern int if_linkdetect(struct interface *ifp, bool detect);
 extern void if_addr_wakeup(struct interface *ifp);
 
 /* Nexthop group connected functions */
-extern void if_nhg_dependents_add(struct interface *ifp,
-				  struct nhg_hash_entry *nhe);
-extern void if_nhg_dependents_del(struct interface *ifp,
-				  struct nhg_hash_entry *nhe);
-extern unsigned int if_nhg_dependents_count(const struct interface *ifp);
 extern bool if_nhg_dependents_is_empty(const struct interface *ifp);
 
 extern void vrf_add_update(struct vrf *vrfp);
