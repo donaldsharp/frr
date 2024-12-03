@@ -892,6 +892,9 @@ struct bgp {
 	/* Process Queue for handling routes */
 	struct work_queue *process_queue;
 
+	/* Meta Queue Information */
+	struct meta_queue *mq;
+
 	bool fast_convergence;
 
 #define BGP_FLAG_ADVERTISE_ORIGIN (1ULL << 0)
