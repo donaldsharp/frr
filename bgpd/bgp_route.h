@@ -550,6 +550,33 @@ enum bgp_path_type {
 	BGP_PATH_SHOW_MULTIPATH
 };
 
+/* meta-queue structure:
+ * sub-queue 0: soo routes
+ * sub-queue 1: other routes
+ */
+#define MQ_SIZE 3
+
+/* For checking that an object has already queued in some sub-queue */
+#define MQ_BIT_MASK ((1 << MQ_SIZE) - 1)
+
+struct meta_queue {
+	STAILQ_HEAD(bgp_dest_queue, bgp_dest) * subq[MQ_SIZE];
+	uint32_t size; /* sum of lengths of all subqueues */
+};
+
+struct bgp_eoiu_info {
+	struct bgp *bgp;
+};
+
+/*
+ * Meta Q's specific names
+ */
+enum meta_queue_indexes {
+	META_QUEUE_EARLY_ROUTE,
+	META_QUEUE_OTHER_ROUTE,
+	META_QUEUE_EOIU_MARKER,
+};
+
 static inline void bgp_bump_version(struct bgp_dest *dest)
 {
 	dest->version = bgp_table_next_version(bgp_dest_table(dest));
@@ -896,4 +923,8 @@ int bgp_static_set_non_vty(struct bgp *bgp, bool negate, const char *ip_str,
 			   afi_t afi, safi_t safi, const char *rmap,
 			   int backdoor, uint32_t label_index,
 			   bool skip_import_check);
+extern void bgp_meta_queue_free(struct meta_queue *mq);
+extern int early_route_process(struct bgp *bgp, struct bgp_dest *dest);
+extern int other_route_process(struct bgp* bgp, struct bgp_dest *dest);
+extern int eoiu_marker_process(struct bgp* bgp, struct bgp_dest *dest);
 #endif /* _QUAGGA_BGP_ROUTE_H */

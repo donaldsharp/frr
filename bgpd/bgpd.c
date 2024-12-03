@@ -4013,6 +4013,8 @@ void bgp_free(struct bgp *bgp)
 			ecommunity_free(&bgp->vpn_policy[afi].rtlist[dir]);
 	}
 
+	bgp_meta_queue_free(bgp->mq);
+
 	XFREE(MTYPE_BGP, bgp->name);
 	XFREE(MTYPE_BGP, bgp->name_pretty);
 	XFREE(MTYPE_BGP, bgp->snmp_stats);

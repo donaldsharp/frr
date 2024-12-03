@@ -121,6 +121,7 @@ static struct bgp *bgp_create_fake(as_t *as, const char *name)
 	bgp->restart_time = BGP_DEFAULT_RESTART_TIME;
 	bgp->stalepath_time = BGP_DEFAULT_STALEPATH_TIME;
 
+	bgp_process_queue_init(bgp);
 	bgp->as = *as;
 
 	if (name)
