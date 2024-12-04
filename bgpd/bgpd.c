@@ -7917,6 +7917,9 @@ int peer_maximum_prefix_unset(struct peer *peer, afi_t afi, safi_t safi)
 		PEER_ATTR_INHERIT(peer, peer->group, pmax_threshold[afi][safi]);
 		PEER_ATTR_INHERIT(peer, peer->group, pmax_restart[afi][safi]);
 
+		/* Trigger peer FSM to form neighborship using updated config */
+		peer_maximum_prefix_clear_overflow(peer);
+
 		return 0;
 	}
 
