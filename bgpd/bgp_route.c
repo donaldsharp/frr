@@ -11403,6 +11403,7 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 	tag_buf[0] = '\0';
 	uint32_t soo_nhg = 0;
 	struct in_addr soo_ip;
+	char time_buf[64];
 
 	if (json_paths) {
 		json_path = json_object_new_object();
@@ -12252,6 +12253,9 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 
 	/* Line 9 display Uptime */
 	tbuf = time(NULL) - (monotime(NULL) - path->uptime);
+	/* Calculate uptime and convert it into dd:hh:mm:ss display format */
+	time_to_date_string(path->uptime, time_buf, sizeof(time_buf));
+
 	if (json_paths) {
 		json_last_update = json_object_new_object();
 		json_object_int_add(json_last_update, "epoch", tbuf);
@@ -12259,6 +12263,9 @@ void route_vty_out_detail(struct vty *vty, struct bgp *bgp, struct bgp_dest *bn,
 				       ctime(&tbuf));
 		json_object_object_add(json_path, "lastUpdate",
 				       json_last_update);
+		json_object_string_add(json_path, "lastUpdateTimerMsecs",
+				       time_buf);
+
 	} else
 		vty_out(vty, "      Last update: %s", ctime(&tbuf));
 
