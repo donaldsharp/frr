@@ -223,33 +223,6 @@ const char *bfd_get_status_str(int status)
 }
 
 /*
- * bfd_last_update - Calculate the last BFD update time and convert it
- *                   into a dd:hh:mm:ss display format.
- */
-static void bfd_last_update(time_t last_update, char *buf, size_t len)
-{
-	time_t curr;
-	time_t diff;
-	struct tm tm;
-	struct timeval tv;
-
-	/* If no BFD status update has ever been received, print `never'. */
-	if (last_update == 0) {
-		snprintf(buf, len, "never");
-		return;
-	}
-
-	/* Get current time. */
-	monotime(&tv);
-	curr = tv.tv_sec;
-	diff = curr - last_update;
-	gmtime_r(&diff, &tm);
-
-	snprintf(buf, len, "%d:%02d:%02d:%02d", tm.tm_yday, tm.tm_hour,
-		 tm.tm_min, tm.tm_sec);
-}
-
-/*
  * bfd_client_sendmsg - Format and send a client register
  *                    command to Zebra to be forwarded to BFD
  */
@@ -840,8 +813,10 @@ void bfd_sess_show(struct vty *vty, struct json_object *json,
 			bsp->args.min_tx);
 	}
 
-	bfd_last_update(bsp->bss.last_event, time_buf, sizeof(time_buf));
-	epoch_tbuf = time(NULL) - (monotime(NULL) - bsp->bss.last_event);
+	/* Calculate the last BFD update time and convert it into a dd:hh:mm:ss
+	 * display format */
+	time_to_date_string(bsp->bss.last_event, time_buf, sizeof(time_buf));
+	epoch_tbuf = time_to_epoch(bsp->bss.last_event);
 	if (json) {
 		json_object_string_add(json_bfd, "status",
 				       bfd_get_status_str(bsp->bss.state));
