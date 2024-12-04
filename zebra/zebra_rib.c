@@ -3168,10 +3168,15 @@ static void process_subq_early_route_add(struct zebra_early_route *ere)
 
 	SET_FLAG(re->status, ROUTE_ENTRY_CHANGED);
 	rib_addnode(rn, re, 1);
+        struct rib_table_info *info = srcdest_rnode_table_info(rn);
+	info->route_count[re->type]++;
 
 	/* Free implicit route.*/
-	if (same)
+	if (same) {
 		rib_delnode(rn, same);
+		struct rib_table_info *info = srcdest_rnode_table_info(rn);
+		info->route_count[re->type]--;
+	}
 
 	/* See if we can remove some RE entries that are queued for
 	 * removal, but won't be considered in rib processing.
@@ -3416,6 +3421,8 @@ static void process_subq_early_route_delete(struct zebra_early_route *ere)
 			dplane_sys_route_del(rn, same);
 
 		rib_delnode(rn, same);
+		struct rib_table_info *info = srcdest_rnode_table_info(rn);
+		info->route_count[re->type]--;
 	}
 
 	route_unlock_node(rn);
@@ -4978,6 +4985,8 @@ void rib_sweep_table(struct route_table *table)
 
 			rib_uninstall_kernel(rn, re);
 			rib_delnode(rn, re);
+			struct rib_table_info *info = srcdest_rnode_table_info(rn);
+			info->route_count[re->type]--;
 		}
 	}
 
@@ -5076,6 +5085,8 @@ unsigned long rib_score_proto_table(uint8_t proto, unsigned short instance,
 				if (re->type == proto
 				    && re->instance == instance) {
 					rib_delnode(rn, re);
+					struct rib_table_info *info = srcdest_rnode_table_info(rn);
+					info->route_count[re->type]--;
 					n++;
 				}
 			}
