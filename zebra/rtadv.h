@@ -444,6 +444,7 @@ extern void zebra_interface_radv_enable(ZAPI_HANDLER_ARGS);
 extern uint32_t rtadv_get_interfaces_configured_from_bgp(void);
 extern bool rtadv_compiled_in(void);
 
+int nd_dump_vty_json(struct vty *vty, json_object *json, struct interface *ifp);
 #ifdef __cplusplus
 }
 #endif

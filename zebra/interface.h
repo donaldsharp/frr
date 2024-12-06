@@ -262,6 +262,9 @@ struct zebra_if {
 
 DECLARE_HOOK(zebra_if_extra_info, (struct vty * vty, struct interface *ifp),
 	     (vty, ifp));
+DECLARE_HOOK(zebra_if_extra_info_json,
+	     (struct vty * vty, json_object *json, struct interface *ifp),
+	     (vty, json, ifp));
 DECLARE_HOOK(zebra_if_config_wr, (struct vty * vty, struct interface *ifp),
 	     (vty, ifp));
 
