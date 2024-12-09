@@ -590,20 +590,17 @@ typedef std::list<std::string> SubscriptionCacheContextType;
 bool HandleStreamingSubscriptionCache(
 	StreamRpcState<frr::SubscriptionCacheRequest, frr::SubscriptionCacheResponse, SubscriptionCacheContextType> *tag)
 {
-	zlog_err("Processing SubscriptionData");
         auto mypathps = &tag->context;
         if (tag->is_initial_process()) {
-                // Fill our context container first time through
+		// Parse the data in subscription
                 auto paths = tag->request.path();
 		auto dt = tag->request.data();
                 for (const std::string &path : paths) {
-                        mypathps->push_back(std::string(path));
-			const char* xpath_str = path.c_str();
-			const char* dt_str = dt.data().c_str();
-			flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", xpath_str);
-			flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", dt_str);
-			grpc_debug("%s path string", xpath_str);
-                        //grpc_debug("%s data string", dt_str);
+                    mypathps->push_back(std::string(path));
+		    const char* xpath_str = path.c_str();
+		    const char* dt_str = dt.data().c_str();
+		    flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", xpath_str);
+		    flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", dt_str);
                 }
         }
         if (mypathps->empty()) {
@@ -1294,7 +1291,6 @@ static int  frr_grpc_notification_send(const char *xpath,
        struct listnode *node;
        int ret;
 
-       zlog_err("Test GRPC notification checking data tree");
        nb_node = nb_node_find(xpath);
        if (!nb_node) {
 	       flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH,
@@ -1306,7 +1302,7 @@ static int  frr_grpc_notification_send(const char *xpath,
        grpc::Status status;
        grpc::ClientContext context;
 
-       auto channel = grpc::CreateChannel("localhost:5551", grpc::InsecureChannelCredentials());
+       auto channel = grpc::CreateChannel("localhost:4221", grpc::InsecureChannelCredentials());
        auto stub = frr::Northbound::NewStub(channel);
        frr::SubscriptionCacheRequest cache;
        std::ostringstream ss;

@@ -35,6 +35,8 @@ extern "C" {
 struct vty;
 struct debug;
 
+extern struct hash *subscr_cache_entries;
+
 /* Northbound events. */
 enum nb_event {
 	/*
@@ -1312,7 +1314,7 @@ extern void nb_terminate(void);
 /*
  * Notify subscribed xpaths
  */
-extern void nb_notify_subscriptions(void);
+extern int nb_notify_subscriptions(void);
 
 /*
  * Update subscription cache

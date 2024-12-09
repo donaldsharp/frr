@@ -27,7 +27,8 @@ module frr-bgp-peer {
   container lib {
      list vrf {
        config false;
-       key "id";                                                                                                                                  description
+       key "id";
+       description
          "Vrf.";
        leaf id {
          type string;
@@ -92,25 +93,6 @@ module frr-bgp-peer {
             description
                "IPV6 unicast prefix count after post policy";
           }
-          list count {
-             config false;
-             key "afi-safi";
-             leaf afi-safi {
-               type identityref {
-                 base frr-rt:afi-safi-type;
-               }
-               description
-                 "AFI, SAFI name.";
-             }
-             leaf received {
-               config false;
-               type uint32;
-               description
-                  "This count is the
-                   number of prefixes present in the post-policy Adj-RIB-In
-                   for the neighbor";
-             }
-         }
       }
     }
   }

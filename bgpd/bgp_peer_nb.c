@@ -61,7 +61,6 @@ const void *lib_vrf_lookup_entry(struct nb_cb_lookup_entry_args *args)
 {
 	const char *vrfname = args->keys->key[0];
 	struct vrf *vrf = vrf_lookup_by_name(vrfname);
-	zlog_err("lib_vrf_lookup_entry name %s", vrfname);
 	return vrf;
 }
 
@@ -84,10 +83,9 @@ const void *lib_vrf_peer_get_next(struct nb_cb_get_next_args *args)
         struct listnode *node, *nnode;
         struct nb_config_entry *config;
 	struct vrf *vrfp = (struct vrf *)args->parent_list_entry;
+
 	if (!vrfp)
 		return NULL;
-	else
-		zlog_err("VRF %s VRF id %d", vrfp->name, vrfp->vrf_id);
 	if (!vrfp->vrf_id)
 	    bgp = bgp_get_default();
 	else
@@ -111,10 +109,8 @@ const void *lib_vrf_peer_get_next(struct nb_cb_get_next_args *args)
 					next = true;
 				else if (next == true)
 					return iter;
-			} else if (peer->hostname) {
-				zlog_err("Hostname %s iter hostname %s",
-					 peer->hostname, iter->hostname);
-				if (strcmp(peer->hostname, iter->hostname) == 0)
+			} else if (peer->host) {
+				if (strcmp(peer->host, iter->host) == 0)
 					next = true;
 				else if (next == true)
 					return iter;
@@ -133,8 +129,8 @@ int lib_vrf_peer_get_keys(struct nb_cb_get_keys_args *args)
 			if (peer->conf_if)
 				strlcpy(args->keys->key[0], peer->conf_if,
 					sizeof(args->keys->key[0]));
-			else if (peer->hostname)
-				strlcpy(args->keys->key[0], peer->hostname,
+			else if (peer->host)
+				strlcpy(args->keys->key[0], peer->host,
 					sizeof(args->keys->key[0]));
 			else
 				strlcpy(args->keys->key[0], &peer->su,
