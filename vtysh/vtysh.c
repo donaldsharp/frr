@@ -2955,28 +2955,27 @@ DEFUN_HIDDEN (show_config_running,
 	return show_one_daemon(vty, argv, argc - 1, argv[argc - 1]->text);
 }
 
-DEFUN (show_yang_operational_data,
-       show_yang_operational_data_cmd,
-       "show yang operational-data XPATH\
+DEFUN(show_yang_operational_data, show_yang_operational_data_cmd,
+      "show yang operational-data [XPATH]\
          [{\
 	   format <json|xml>\
 	   |translate WORD\
 	   |with-config\
 	 }]" DAEMONS_LIST,
-       SHOW_STR
-       "YANG information\n"
-       "Show YANG operational data\n"
-       "XPath expression specifying the YANG data path\n"
-       "Set the output format\n"
-       "JavaScript Object Notation\n"
-       "Extensible Markup Language\n"
-       "Translate operational data\n"
-       "YANG module translator\n"
-       "Merge configuration data\n"
-       DAEMONS_STR)
+      SHOW_STR
+      "YANG information\n"
+      "Show YANG operational data\n"
+      "XPath expression specifying the YANG data path\n"
+      "Set the output format\n"
+      "JavaScript Object Notation\n"
+      "Extensible Markup Language\n"
+      "Translate operational data\n"
+      "YANG module translator\n"
+      "Merge configuration data\n" DAEMONS_STR)
 {
 	return show_one_daemon(vty, argv, argc - 1, argv[argc - 1]->text);
 }
+
 
 DEFUN(show_yang_module, show_yang_module_cmd,
       "show yang module [module-translator WORD] " DAEMONS_LIST,
@@ -3858,7 +3857,6 @@ DEFPY (no_vtysh_terminal_monitor,
 	}
 	return ret_all;
 }
-
 
 /* Execute command in child process. */
 static void execute_command(const char *command, int argc, const char *arg1,

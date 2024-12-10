@@ -2414,6 +2414,23 @@ int nb_notify_subscriptions(void)
     return;
 }
 
+void show_subscriptions(struct hash_bucket *bucket, void *arg)
+{
+	struct subscr_cache_entry *entry = bucket->data;
+	struct vty *vtyp = (struct vty *)arg;
+	vty_out(vtyp, "%s \n", entry->xpath);
+	return;
+}
+
+void nb_show_subscription_cache(struct vty *vty)
+{
+	vty_out(vty, "-------  Subscriptions ------ \n");
+	if (subscr_cache_entries) {
+		/* Walk the subscription cache */
+		hash_walk(subscr_cache_entries, show_subscriptions, vty);
+	}
+}
+
 /* Logging functions. */
 const char *nb_event_name(enum nb_event event)
 {
