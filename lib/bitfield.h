@@ -266,6 +266,34 @@ static inline bool bf_is_subset(bitfield_t *bitfield1, bitfield_t *bitfield2)
 	return true; // bitfield1 is a subset of bitfield2
 }
 
+/* Check if bitfield1 is a strict superset of bitfield2 */
+static inline bool bf_is_strict_superset(bitfield_t *bitfield1,
+					 bitfield_t *bitfield2)
+{
+	size_t i;
+	size_t max_words = bitfield1->m;
+	bool has_extra_bits = false;
+
+	for (i = 0; i < max_words; i++) {
+		word_t w1 = bitfield1->data[i];
+		word_t w2 = (i < bitfield2->m) ? bitfield2->data[i] : 0;
+
+		/* Check if any bits in w2 are not in w1 (not a superset) */
+		if ((w2 & ~w1) != 0) {
+			return false;
+		}
+
+		/* Check if any extra bits exist in w1 */
+		if ((w1 & ~w2) != 0) {
+			has_extra_bits = true;
+		}
+	}
+
+	/* true if bitfield1 has extra bits set in bitfield1 but not in
+	 * bitfield2*/
+	return has_extra_bits;
+}
+
 #define bf_words_size(bf) (bf.m)
 
 // approximate upper limit for the index of the last set bit

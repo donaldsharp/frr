@@ -1051,13 +1051,14 @@ static void bgp_per_src_nhg_delete(struct bgp_per_src_nhg_hash_entry *nhe)
 	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
 	struct bgp_dest *dest;
 
-	zlog_debug(
-		"bgp vrf %s per src nhg soo %pIA %s timer slot run delete cnt:%ld and flags %d",
-		nhe->bgp->name_pretty, &nhe->ip,
-		get_afi_safi_str(nhe->afi, nhe->safi, false),
-		bgp_dest_soo_use_soo_nhgid_qlist_count(
-			&nhe->dest_soo_use_nhid_list),
-		nhe->flags);
+	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		zlog_debug(
+			"bgp vrf %s per src nhg soo %pIA %s nhg delete cnt:%ld and flags %d",
+			nhe->bgp->name_pretty, &nhe->ip,
+			get_afi_safi_str(nhe->afi, nhe->safi, false),
+			bgp_dest_soo_use_soo_nhgid_qlist_count(
+				&nhe->dest_soo_use_nhid_list),
+			nhe->flags);
 	// cant delete soo NHID till all routes with soo and soo route is  moved
 	// to zebra nhid
 	if (!bgp_dest_soo_use_soo_nhgid_qlist_count(
@@ -1088,6 +1089,31 @@ static void bgp_per_src_nhg_delete(struct bgp_per_src_nhg_hash_entry *nhe)
 		nhe->dest = NULL;
 	}
 	return;
+}
+
+static char *print_bitfield(const bitfield_t *bf, char *out)
+{
+	if (!bf || !out) {
+		return NULL;
+	}
+
+	unsigned int bit = 0;
+	unsigned int approx_last_set_bit_index =
+		bf_approx_last_set_bit_index(bf);
+	int offset = 0;
+
+	bf_for_each_set_bit((*bf), bit, approx_last_set_bit_index)
+	{
+		if (bit != 0) {
+			offset += sprintf(out + offset, "%u ", bit);
+		}
+	}
+
+	if (offset == 0) {
+		sprintf(out, "(empty)");
+	}
+
+	return out;
 }
 
 static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
@@ -1129,38 +1155,26 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 	bgp_soo_route_installed_pi_bitmap
 	*/
 
-#if 0
-	// running is subset of installed - shrink case - immediate nhg replace
-	if (bf_is_subset(&nhe->bgp_soo_route_selected_pi_bitmap,
-			 &nhe->bgp_soo_route_installed_pi_bitmap)) {
-		// Case 3: NHG replace can be done immediately without waiting
-		// for any timer
-		// TODO: Call code to do NHG replace
-		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
-			zlog_debug(
-				"bgp vrf %s per src nhg soo route upd: %pIA %s NHG replace",
-				nhe->bgp->name_pretty, &nhe->ip,
-				get_afi_safi_str(nhe->afi, nhe->safi, false));
-
-		if (nhe->refcnt) {
-			if (CHECK_FLAG(nhe->flags,
-				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
-				bgp_per_src_nhg_add_send(nhe);
-		}
-	}
-#endif
-
-	// installed is subset of running - expansion case - start timer
-	if (bf_is_subset(&nhe->bgp_soo_route_installed_pi_bitmap,
-			 &nhe->bgp_soo_route_selected_pi_bitmap)) {
+	// selected path is strict superset of installed path - expansion case - start timer
+	if (bf_is_strict_superset(&nhe->bgp_soo_route_selected_pi_bitmap,
+				  &nhe->bgp_soo_route_installed_pi_bitmap)) {
 		// Case 4: This is ECMP expansion case, this can be done after
 		// the soo timer expiry
-		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+			char buf1[BUFSIZ] = {0};
+			char buf2[BUFSIZ] = {0};
 			zlog_debug(
 				"bgp vrf %s per src nhg soo route upd: %pIA %s NHG expansion "
-				"(add to timer wheel if not done yet)",
+				"selected pi %s is superset of installed pi %s",
 				nhe->bgp->name_pretty, &nhe->ip,
-				get_afi_safi_str(nhe->afi, nhe->safi, false));
+				get_afi_safi_str(nhe->afi, nhe->safi, false),
+				print_bitfield(
+					&nhe->bgp_soo_route_selected_pi_bitmap,
+					buf1),
+				print_bitfield(
+					&nhe->bgp_soo_route_installed_pi_bitmap,
+					buf2));
+		}
 		bgp_start_soo_timer(nhe->bgp, nhe);
 	}
 }
@@ -1536,18 +1550,18 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, safi_t safi,
 
 	nhe = bgp_per_src_nhg_find(bgp, &ip, afi, safi);
 	if (!nhe) {
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+			char buf[INET6_ADDRSTRLEN];
+			ipaddr2str(&ip, buf, sizeof(buf));
+			zlog_debug(
+				"bgp vrf %s per src nhg soo route soo %s %s dest %s "
+				"peer %pSU idx %d add",
+				bgp->name_pretty, buf,
+				get_afi_safi_str(afi, safi, false),
+				bgp_dest_get_prefix_str(dest), &pi->peer->connection->su,
+				pi->peer->bit_index);
+		}
 		if (is_add) {
-			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
-				char buf[INET6_ADDRSTRLEN];
-				ipaddr2str(&ip, buf, sizeof(buf));
-				zlog_debug(
-					"bgp vrf %s per src nhg soo route soo %s %s dest %s "
-					"peer %pSU idx %d add",
-					bgp->name_pretty, buf,
-					get_afi_safi_str(afi, safi, false),
-					bgp_dest_get_prefix_str(dest),
-					&pi->peer->connection->su, pi->peer->bit_index);
-			}
 			nhe = bgp_per_src_nhg_add(bgp, &ip, afi, safi);
 			nhe->dest = dest;
 			// Even though NHG is allocated here, it is programed
@@ -1557,19 +1571,18 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, safi_t safi,
 		} else
 			return;
 	} else {
+		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+			char buf[INET6_ADDRSTRLEN];
+			ipaddr2str(&ip, buf, sizeof(buf));
+			zlog_debug(
+				"bgp vrf %s per src nhg soo route soo %s %s dest %s "
+				"peer %pSU idx %d %s",
+				bgp->name_pretty, buf,
+				get_afi_safi_str(afi, safi, false),
+				bgp_dest_get_prefix_str(dest), &pi->peer->connection->su,
+				pi->peer->bit_index, is_add ? "upd" : "del");
+		}
 		if (is_add) {
-			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
-				char buf[INET6_ADDRSTRLEN];
-				ipaddr2str(&ip, buf, sizeof(buf));
-				zlog_debug(
-					"bgp vrf %s per src nhg soo route soo %s %s dest %s "
-					"peer %pSU idx %d %s",
-					bgp->name_pretty, buf,
-					get_afi_safi_str(afi, safi, false),
-					bgp_dest_get_prefix_str(dest),
-					&pi->peer->connection->su, pi->peer->bit_index,
-					is_add ? "upd" : "del");
-			}
 			// Even though NHG is allocated here, it is
 			// programed in to zebra after soo timer expiry
 			if (!nhe->nhg_id) {
@@ -1719,14 +1732,22 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
 				 &nhe->bgp_soo_route_installed_pi_bitmap)) {
 			// Case 3: NHG replace can be done immediately without
 			// waiting for any timer
-			// TODO: Call code to do NHG replace
-			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
+				char buf1[BUFSIZ] = {0};
+				char buf2[BUFSIZ] = {0};
 				zlog_debug(
-					"bgp vrf %s per src nhg soo route upd: %pIA %s NHG replace",
+					"bgp vrf %s per src nhg soo route upd: %pIA %s NHG replace"
+					"(shrink or weight change) selected pi %s, installed pi %s",
 					nhe->bgp->name_pretty, &nhe->ip,
 					get_afi_safi_str(nhe->afi, nhe->safi,
-							 false));
-
+							 false),
+					print_bitfield(
+						&nhe->bgp_soo_route_selected_pi_bitmap,
+						buf1),
+					print_bitfield(
+						&nhe->bgp_soo_route_installed_pi_bitmap,
+						buf2));
+			}
 			bgp_per_src_nhg_add_send(nhe);
 		}
 	}
