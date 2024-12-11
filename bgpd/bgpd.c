@@ -4014,6 +4014,7 @@ void bgp_free(struct bgp *bgp)
 	}
 
 	bgp_meta_queue_free(bgp->mq);
+	bgp->mq = NULL;
 
 	XFREE(MTYPE_BGP, bgp->name);
 	XFREE(MTYPE_BGP, bgp->name_pretty);
