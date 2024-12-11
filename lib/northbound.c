@@ -38,7 +38,7 @@ DEFINE_MTYPE_STATIC(LIB, NB_NODE, "Northbound Node");
 DEFINE_MTYPE_STATIC(LIB, NB_CONFIG, "Northbound Configuration");
 DEFINE_MTYPE_STATIC(LIB, NB_CONFIG_ENTRY, "Northbound Configuration Entry");
 
-#define SUBSCRIPTION_SAMPLE_TIMER 10000
+#define SUBSCRIPTION_SAMPLE_TIMER 30000
 
 /* Running configuration - shouldn't be modified directly. */
 struct nb_config *running_config;
@@ -2368,6 +2368,7 @@ static void *subsc_cache_entry_alloc(void *p)
 /* Add or Delete the subscriprions of xpath to the cache */
 void nb_cache_subscriptions(struct thread_master *master, const char* xpath, bool add)
 {
+    zlog_debug("Updating cache with xpath %s", xpath);
     /* Adding to Hash table */
     struct subscr_cache_entry *cache, s;
     strcpy(s.xpath, xpath);

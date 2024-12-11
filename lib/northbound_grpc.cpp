@@ -1286,33 +1286,59 @@ static void *grpc_pthread_start(void *arg)
 static int  frr_grpc_notification_send(const char *xpath,
 				  struct list *arguments)
 {
-       struct nb_node *nb_node = NULL;
-       struct yang_data *data;
-       struct listnode *node;
-       int ret;
+    struct nb_node *nb_node = NULL;
+    grpc::Status status;
+    grpc::ClientContext context;
+    grpc::ChannelArguments args;
+    args.SetString(GRPC_ARG_PRIMARY_USER_AGENT_STRING, "frr_grpc_client");
+    args.SetString("grpc.lb_policy_name", "pick_first");
+    args.SetString("grpc.service_config_disable_resolution", "true");
 
-       nb_node = nb_node_find(xpath);
-       if (!nb_node) {
-	       flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH,
-			 "%s: unknown data path: %s", __func__, xpath);
-	       return -1;
-       }
+    std::string vrf_address = "127.0.0.1:4221";
+    args.SetString("grpc.target", vrf_address);
 
-       /* Creating grpc channel to send the data */
-       grpc::Status status;
-       grpc::ClientContext context;
+    // Log message for debugging
+    zlog_err("Test GRPC notification checking data tree");
 
-       auto channel = grpc::CreateChannel("localhost:4221", grpc::InsecureChannelCredentials());
-       auto stub = frr::Northbound::NewStub(channel);
-       frr::SubscriptionCacheRequest cache;
-       std::ostringstream ss;
-       cache.add_path(nb_node->xpath);
-       auto *dt = cache.mutable_data();
-       dt->set_encoding(frr::JSON);
-       status = get_path(dt, xpath, frr::GetRequest_DataType_STATE,
-                         LYD_JSON, false);
-       auto stream = stub->SubscriptionCache(&context, cache);
-       return 0;
+    // Find the node in the data tree using the provided XPath
+    nb_node = nb_node_find(xpath);
+    if (!nb_node) {
+      zlog_err("%s: unknown data path: %s", __func__, xpath);
+        return -1;
+    }
+
+    // Create a gRPC channel to send telemetry data to the routing application
+   zlog_debug("Attempting to connect to gRPC service at %s", vrf_address.c_str());
+   auto channel = grpc::CreateCustomChannel(vrf_address, grpc::InsecureChannelCredentials(), args);
+   auto stub = frr::Northbound::NewStub(channel);
+   if (!channel) {
+     zlog_err("Failed to create gRPC channel to %s", vrf_address.c_str());
+   }
+   if (!stub) {
+     zlog_err("Failed to create gRPC stub for %s", vrf_address.c_str());
+   }
+    frr::SubscriptionCacheRequest cache;
+    cache.add_path(nb_node->xpath); // Add the XPath to the request
+
+    auto *dt = cache.mutable_data();
+    dt->set_encoding(frr::JSON);
+
+    status = get_path(dt, xpath, frr::GetRequest_DataType_STATE, LYD_JSON, false);
+    if (!status.ok()) {
+        zlog_err("%s: failed to populate DataTree for path: %s", __func__, xpath);
+        return -1;
+    }
+
+    std::unique_ptr<grpc::ClientReader<frr::SubscriptionCacheResponse>> stream(
+        stub->SubscriptionCache(&context, cache)); // Pass both arguments
+
+    if (!stream) {
+        zlog_err("Failed to open gRPC stream for SubscriptionCache");
+        return -1;
+    }
+
+    zlog_debug("Telemetry data successfully sent via gRPC");
+    return 0;
 }
 
 
