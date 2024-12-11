@@ -51,43 +51,43 @@ module frr-bgp-peer {
             description
               "Peer status";
           }
-          leaf established_transitions {
+          leaf established-transitions {
             config false;
             type uint32;
             description
                "Transitions";
           }
-          leaf inQ {
+          leaf in-queue {
             config false;
             type uint32;
             description
                "Input buffer queue";
           }
-          leaf outQ {
+          leaf out-queue {
             config false;
             type uint32;
             description
                "Output buffer queue";
           }
-          leaf txUpdates {
+          leaf tx-updates {
             config false;
             type uint32;
             description
                "Messages Sent";
           }
-          leaf rxUpdates {
+          leaf rx-updates {
             config false;
             type uint32;
             description
                "Messages Recieved";
           }
-          leaf ipv4UniRcvdCount {
+          leaf ipv4-unicast-rcvd {
             config false;
             type uint32;
             description
                "IPV4 unicast prefix count after post policy";
           }
-          leaf ipv6UniRcvdCount {
+          leaf ipv6-unicast-rcvd {
             config false;
             type uint32;
             description

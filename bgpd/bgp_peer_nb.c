@@ -3,38 +3,6 @@
 #include "bgpd/bgp_debug.h"
 #include "lib/vrf.h"
 
-/* prototypes */
-const void *lib_vrf_get_next(struct nb_cb_get_next_args *args);
-int lib_vrf_get_keys(struct nb_cb_get_keys_args *args);
-const void *lib_vrf_lookup_entry(struct nb_cb_lookup_entry_args *args);
-struct yang_data *lib_vrf_id_get_elem(struct nb_cb_get_elem_args *args);
-const void *lib_vrf_peer_get_next(struct nb_cb_get_next_args *args);
-int lib_vrf_peer_get_keys(struct nb_cb_get_keys_args *args);
-const void *lib_vrf_peer_lookup_entry(struct nb_cb_lookup_entry_args *args);
-struct yang_data *lib_vrf_peer_name_get_elem(struct nb_cb_get_elem_args *args);
-struct yang_data *
-lib_vrf_peer_status_get_elem(struct nb_cb_get_elem_args *args);
-struct yang_data *
-lib_vrf_peer_established_transitions_get_elem(struct nb_cb_get_elem_args *args);
-struct yang_data *lib_vrf_peer_inQ_get_elem(struct nb_cb_get_elem_args *args);
-struct yang_data *lib_vrf_peer_outQ_get_elem(struct nb_cb_get_elem_args *args);
-struct yang_data *
-lib_vrf_peer_txUpdates_get_elem(struct nb_cb_get_elem_args *args);
-struct yang_data *
-lib_vrf_peer_rxUpdates_get_elem(struct nb_cb_get_elem_args *args);
-struct yang_data *
-lib_vrf_peer_ipv4UniRcvdCount_get_elem(struct nb_cb_get_elem_args *args);
-struct yang_data *
-lib_vrf_peer_ipv6UniRcvdCount_get_elem(struct nb_cb_get_elem_args *args);
-const void *lib_vrf_peer_count_get_next(struct nb_cb_get_next_args *args);
-int lib_vrf_peer_count_get_keys(struct nb_cb_get_keys_args *args);
-const void *
-lib_vrf_peer_count_lookup_entry(struct nb_cb_lookup_entry_args *args);
-struct yang_data *
-lib_vrf_peer_count_afi_safi_get_elem(struct nb_cb_get_elem_args *args);
-struct yang_data *
-lib_vrf_peer_count_received_get_elem(struct nb_cb_get_elem_args *args);
-
 /*
  * XPath: /frr-bgp-peer:lib/vrf
  */
@@ -170,7 +138,7 @@ struct yang_data *lib_vrf_peer_status_get_elem(struct nb_cb_get_elem_args *args)
 }
 
 /*
- * XPath: /frr-bgp-peer:lib/vrf/peer/established_transitions
+ * XPath: /frr-bgp-peer:lib/vrf/peer/established-transitions
  */
 struct yang_data *
 lib_vrf_peer_established_transitions_get_elem(struct nb_cb_get_elem_args *args)
@@ -183,9 +151,10 @@ lib_vrf_peer_established_transitions_get_elem(struct nb_cb_get_elem_args *args)
 }
 
 /*
- * XPath: /frr-bgp-peer:lib/vrf/peer/inQ
+ * XPath: /frr-bgp-peer:lib/vrf/peer/in-queue
  */
-struct yang_data *lib_vrf_peer_inQ_get_elem(struct nb_cb_get_elem_args *args)
+struct yang_data *
+lib_vrf_peer_in_queue_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct peer *peer;
 	peer = (struct peer *)args->list_entry;
@@ -195,9 +164,10 @@ struct yang_data *lib_vrf_peer_inQ_get_elem(struct nb_cb_get_elem_args *args)
 }
 
 /*
- * XPath: /frr-bgp-peer:lib/vrf/peer/outQ
+ * XPath: /frr-bgp-peer:lib/vrf/peer/out-queue
  */
-struct yang_data *lib_vrf_peer_outQ_get_elem(struct nb_cb_get_elem_args *args)
+struct yang_data *
+lib_vrf_peer_out_queue_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct peer *peer;
 	peer = (struct peer *)args->list_entry;
@@ -207,10 +177,10 @@ struct yang_data *lib_vrf_peer_outQ_get_elem(struct nb_cb_get_elem_args *args)
 }
 
 /*
- * XPath: /frr-bgp-peer:lib/vrf/peer/txUpdates
+ * XPath: /frr-bgp-peer:lib/vrf/peer/tx-updates
  */
 struct yang_data *
-lib_vrf_peer_txUpdates_get_elem(struct nb_cb_get_elem_args *args)
+lib_vrf_peer_tx_updates_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct peer *peer;
 	peer = (struct peer *)args->list_entry;
@@ -220,10 +190,10 @@ lib_vrf_peer_txUpdates_get_elem(struct nb_cb_get_elem_args *args)
 }
 
 /*
- * XPath: /frr-bgp-peer:lib/vrf/peer/rxUpdates
+ * XPath: /frr-bgp-peer:lib/vrf/peer/rx-updates
  */
 struct yang_data *
-lib_vrf_peer_rxUpdates_get_elem(struct nb_cb_get_elem_args *args)
+lib_vrf_peer_rx_updates_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct peer *peer;
 	peer = (struct peer *)args->list_entry;
@@ -233,10 +203,10 @@ lib_vrf_peer_rxUpdates_get_elem(struct nb_cb_get_elem_args *args)
 }
 
 /*
- * XPath: /frr-bgp-peer:lib/vrf/peer/ipv4UniRcvdCount
+ * XPath: /frr-bgp-peer:lib/vrf/peer/ipv4-unicast-rcvd
  */
 struct yang_data *
-lib_vrf_peer_ipv4UniRcvdCount_get_elem(struct nb_cb_get_elem_args *args)
+lib_vrf_peer_ipv4_unicast_rcvd_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct peer *peer;
 	peer = (struct peer *)args->list_entry;
@@ -247,58 +217,16 @@ lib_vrf_peer_ipv4UniRcvdCount_get_elem(struct nb_cb_get_elem_args *args)
 }
 
 /*
- * XPath: /frr-bgp-peer:lib/vrf/peer/ipv6UniRcvdCount
+ * XPath: /frr-bgp-peer:lib/vrf/peer/ipv6-unicast-rcvd
  */
 struct yang_data *
-lib_vrf_peer_ipv6UniRcvdCount_get_elem(struct nb_cb_get_elem_args *args)
+lib_vrf_peer_ipv6_unicast_rcvd_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct peer *peer;
 	peer = (struct peer *)args->list_entry;
 	if (peer)
 		return yang_data_new_uint32(
 			args->xpath, peer->pcount[AFI_IP6][SAFI_UNICAST]);
-	return NULL;
-}
-
-/*
- * XPath: /frr-bgp-peer:lib/vrf/peer/count
- */
-const void *lib_vrf_peer_count_get_next(struct nb_cb_get_next_args *args)
-{
-	/* TODO: implement me. */
-	return NULL;
-}
-
-int lib_vrf_peer_count_get_keys(struct nb_cb_get_keys_args *args)
-{
-	/* TODO: implement me. */
-	return NB_OK;
-}
-
-const void *
-lib_vrf_peer_count_lookup_entry(struct nb_cb_lookup_entry_args *args)
-{
-	/* TODO: implement me. */
-	return NULL;
-}
-
-/*
- * XPath: /frr-bgp-peer:lib/vrf/peer/count/afi-safi
- */
-struct yang_data *
-lib_vrf_peer_count_afi_safi_get_elem(struct nb_cb_get_elem_args *args)
-{
-	/* TODO: implement me. */
-	return NULL;
-}
-
-/*
- * XPath: /frr-bgp-peer:lib/vrf/peer/count/received
- */
-struct yang_data *
-lib_vrf_peer_count_received_get_elem(struct nb_cb_get_elem_args *args)
-{
-	/* TODO: implement me. */
 	return NULL;
 }
 
@@ -341,65 +269,45 @@ const struct frr_yang_module_info frr_bgp_peer_info = {
 			}
 		},
 		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/established_transitions",
+			.xpath = "/frr-bgp-peer:lib/vrf/peer/established-transitions",
 			.cbs = {
 				.get_elem = lib_vrf_peer_established_transitions_get_elem,
 			}
 		},
 		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/inQ",
+			.xpath = "/frr-bgp-peer:lib/vrf/peer/in-queue",
 			.cbs = {
-				.get_elem = lib_vrf_peer_inQ_get_elem,
+				.get_elem = lib_vrf_peer_in_queue_get_elem,
 			}
 		},
 		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/outQ",
+			.xpath = "/frr-bgp-peer:lib/vrf/peer/out-queue",
 			.cbs = {
-				.get_elem = lib_vrf_peer_outQ_get_elem,
+				.get_elem = lib_vrf_peer_out_queue_get_elem,
 			}
 		},
 		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/txUpdates",
+			.xpath = "/frr-bgp-peer:lib/vrf/peer/tx-updates",
 			.cbs = {
-				.get_elem = lib_vrf_peer_txUpdates_get_elem,
+				.get_elem = lib_vrf_peer_tx_updates_get_elem,
 			}
 		},
 		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/rxUpdates",
+			.xpath = "/frr-bgp-peer:lib/vrf/peer/rx-updates",
 			.cbs = {
-				.get_elem = lib_vrf_peer_rxUpdates_get_elem,
+				.get_elem = lib_vrf_peer_rx_updates_get_elem,
 			}
 		},
 		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/ipv4UniRcvdCount",
+			.xpath = "/frr-bgp-peer:lib/vrf/peer/ipv4-unicast-rcvd",
 			.cbs = {
-				.get_elem = lib_vrf_peer_ipv4UniRcvdCount_get_elem,
+				.get_elem = lib_vrf_peer_ipv4_unicast_rcvd_get_elem,
 			}
 		},
 		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/ipv6UniRcvdCount",
+			.xpath = "/frr-bgp-peer:lib/vrf/peer/ipv6-unicast-rcvd",
 			.cbs = {
-				.get_elem = lib_vrf_peer_ipv6UniRcvdCount_get_elem,
-			}
-		},
-		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/count",
-			.cbs = {
-				.get_next = lib_vrf_peer_count_get_next,
-				.get_keys = lib_vrf_peer_count_get_keys,
-				.lookup_entry = lib_vrf_peer_count_lookup_entry,
-			}
-		},
-		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/count/afi-safi",
-			.cbs = {
-				.get_elem = lib_vrf_peer_count_afi_safi_get_elem,
-			}
-		},
-		{
-			.xpath = "/frr-bgp-peer:lib/vrf/peer/count/received",
-			.cbs = {
-				.get_elem = lib_vrf_peer_count_received_get_elem,
+				.get_elem = lib_vrf_peer_ipv6_unicast_rcvd_get_elem,
 			}
 		},
 		{
