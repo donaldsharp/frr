@@ -96,6 +96,7 @@
 #endif
 
 DEFINE_MTYPE_STATIC(BGPD, BGP_EOIU_MARKER_INFO, "BGP EOIU Marker info");
+DEFINE_MTYPE_STATIC(BGPD, BGP_METAQ, "BGP MetaQ");
 
 DEFINE_HOOK(bgp_snmp_update_stats,
 	    (struct bgp_node *rn, struct bgp_path_info *pi, bool added),
@@ -4327,10 +4328,11 @@ static struct meta_queue *meta_queue_new(void)
 	struct meta_queue *new;
 	unsigned i;
 
-	new = XCALLOC(MTYPE_WORK_QUEUE, sizeof(struct meta_queue));
+	new = XCALLOC(MTYPE_BGP_METAQ, sizeof(struct meta_queue));
 
 	for (i = 0; i < MQ_SIZE; i++) {
-		new->subq[i] = malloc(sizeof(*(new->subq[i])));
+		new->subq[i] =
+			XCALLOC(MTYPE_BGP_METAQ, sizeof(*(new->subq[i])));
 		assert(new->subq[i]);
 		STAILQ_INIT(new->subq[i]);
 	}
@@ -4397,7 +4399,9 @@ void bgp_meta_queue_free(struct meta_queue *mq)
 			eoiu_marker_queue_free(mq, mq->subq[i]);
 			break;
 		}
+		XFREE(MTYPE_BGP_METAQ, mq->subq[i]);
 	}
+	XFREE(MTYPE_BGP_METAQ, mq);
 }
 
 void bgp_process_queue_init(struct bgp *bgp)
@@ -4415,11 +4419,7 @@ void bgp_process_queue_init(struct bgp *bgp)
 	/* Use a higher yield value of 50ms for main queue processing */
 	bgp->process_queue->spec.yield = 50 * 1000L;
 
-	if (!(bgp->mq = meta_queue_new())) {
-		flog_err(EC_BGP_WQ_NONEXISTENT,
-			 "%s: could not initialise meta queue!", __func__);
-		return;
-	}
+	bgp->mq = meta_queue_new();
 }
 
 static void bgp_process_internal(struct bgp *bgp, struct bgp_dest *dest,
