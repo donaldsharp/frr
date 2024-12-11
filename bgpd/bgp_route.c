@@ -4688,7 +4688,12 @@ void bgp_rib_remove(struct bgp_dest *dest, struct bgp_path_info *pi,
 	}
 
 	hook_call(bgp_process, peer->bgp, afi, safi, dest, peer, true);
-	bgp_process(peer->bgp, dest, pi, afi, safi);
+	if ((CHECK_FLAG(peer->bgp->per_src_nhg_flags[afi][safi],
+			BGP_FLAG_NHG_PER_ORIGIN)) &&
+	    (safi != SAFI_EVPN) && bgp_check_is_soo_route(peer->bgp, dest, pi))
+		bgp_process_early(peer->bgp, dest, pi, afi, safi);
+	else
+		bgp_process(peer->bgp, dest, pi, afi, safi);
 }
 
 static void bgp_rib_withdraw(struct bgp_dest *dest, struct bgp_path_info *pi,
