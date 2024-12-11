@@ -497,7 +497,9 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 		ipaddr2str(&nhe->ip, buf, sizeof(buf));
 		if (is_soo_route) {
 			if (CHECK_FLAG(nhe->flags,
-                                 PER_SRC_NEXTHOP_GROUP_VALID)) {
+				       PER_SRC_NEXTHOP_GROUP_VALID) ||
+			    CHECK_FLAG(nhe->flags,
+				       PER_SRC_NEXTHOP_GROUP_DEL_PENDING)) {
 				SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED);
 				*nhg_id = nhe->nhg_id;
 				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -527,10 +529,18 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 				return false;
 
 			prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
-			if (!is_soo_rt_installed_pi_subset_of_rt_with_soo_pi(
-				    dest_he) ||
-			    (!CHECK_FLAG(nhe->flags,
-					 PER_SRC_NEXTHOP_GROUP_VALID))) {
+			if ((!is_soo_rt_installed_pi_subset_of_rt_with_soo_pi(
+				     dest_he) &&
+			     (CHECK_FLAG(nhe->flags,
+					 PER_SRC_NEXTHOP_GROUP_VALID))) ||
+			    ((!CHECK_FLAG(nhe->flags,
+					  PER_SRC_NEXTHOP_GROUP_VALID)) &&
+			     (!CHECK_FLAG(
+				     nhe->flags,
+				     PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_CLEAR_ONLY)) &&
+			     (!CHECK_FLAG(
+				     nhe->flags,
+				     PER_SRC_NEXTHOP_GROUP_DEL_PENDING)))) {
 				if (CHECK_FLAG(dest_he->flags,
 					 DEST_PRESENT_IN_NHGID_USE_LIST)) {
 					bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
@@ -1056,9 +1066,6 @@ bgp_per_src_nhg_add(struct bgp *bgp, struct ipaddr *ip, afi_t afi, safi_t safi)
 
 static void bgp_per_src_nhg_delete(struct bgp_per_src_nhg_hash_entry *nhe)
 {
-	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
-	struct bgp_dest *dest;
-
 	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 		zlog_debug(
 			"bgp vrf %s per src nhg soo %pIA %s nhg delete cnt:%ld and flags %d",
@@ -1080,20 +1087,6 @@ static void bgp_per_src_nhg_delete(struct bgp_per_src_nhg_hash_entry *nhe)
 	} else {
 		UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_DEL_PENDING);
-		frr_each (bgp_dest_soo_use_soo_nhgid_qlist,
-			  &nhe->dest_soo_use_nhid_list, bgp_dest_soo_entry) {
-			bgp_per_src_nhg_zebra_route_install(bgp_dest_soo_entry,
-							    nhe);
-		}
-		// 'SOO route' dest
-		dest = nhe->dest;
-		if (dest &&
-		    CHECK_FLAG(nhe->flags,
-			       PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL)) {
-			bgp_soo_zebra_route_install(nhe, dest);
-			UNSET_FLAG(nhe->flags,
-				   PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL);
-		}
 		nhe->dest = NULL;
 	}
 	return;
