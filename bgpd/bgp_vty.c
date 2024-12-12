@@ -14394,8 +14394,10 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags,
 	struct peer_af *paf;
 	const char *afi_safi = NULL;
 	uint32_t peer_pcount = 0, peer_scount = 0;
-	bool show_brief = CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO);
 	bool is_first_afi_safi = true;
+	bool show_brief = ((CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO) ||
+			    CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_STATE_FAILED_INFO) ||
+			    CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO)));
 
 	bgp = p->bgp;
 
@@ -16087,6 +16089,29 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags,
 	}
 }
 
+static bool match_peer_state(struct peer *bpeer, uint32_t sh_flags)
+{
+	bool show_estab = CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO);
+	bool show_not_estab = CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_STATE_FAILED_INFO);
+
+	/* show flags for bgp state is not enabled */
+	if (!(show_estab || show_not_estab))
+		return true;
+	/* show flag for bgp state established is enabled and
+	 * bgp state is established
+	 */
+	else if (show_estab && bpeer->connection && peer_established(bpeer->connection))
+		return true;
+	/* show flag for bgp state failed (not-established)
+	 * is enabled and bgp state is not established
+	 */
+	else if (show_not_estab && bpeer->connection && !peer_established(bpeer->connection))
+		return true;
+
+	/* peer state does not match with show flag */
+	return false;
+}
+
 static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp,
 			     enum show_type type, union sockunion *su,
 			     const char *conf_if, uint16_t sh_flags,
@@ -16099,7 +16124,9 @@ static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp,
 	afi_t afi = AFI_MAX;
 	safi_t safi = SAFI_MAX;
 	bool is_first = true;
-	bool show_brief = CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO);
+	bool show_brief = ((CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO) ||
+			    CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_STATE_FAILED_INFO) ||
+			    CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO)));
 
 	if (type == show_ipv4_peer || type == show_ipv4_all) {
 		afi = AFI_IP;
@@ -16109,6 +16136,8 @@ static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp,
 
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
 		if (!CHECK_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE))
+			continue;
+		else if (!match_peer_state(peer, sh_flags))
 			continue;
 		else if (show_brief && is_first && !use_json) {
 			vty_out(vty, BGP_SHOW_NEIGHBORS_BRIEF_HEADER);
@@ -16355,12 +16384,14 @@ static int bgp_show_neighbor_vty(struct vty *vty, const char *name,
 DEFUN(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
       "show [ip] bgp [<view|vrf> VIEWVRFNAME]"
       " [<ipv4|ipv6>] neighbors [<A.B.C.D|X:X::X:X|WORD>]"
-      " [brief|graceful-restart] [json] ",
+      " [established|failed|brief|graceful-restart] [json] ",
       SHOW_STR IP_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AF_STR BGP_AF_STR
       "Detailed information on TCP and BGP neighbor connections\n"
       "Neighbor to display information about\n"
       "Neighbor to display information about\n"
       "Neighbor on BGP configured interface\n"
+      "Display BGP neighbors in Established state\n"
+      "Display BGP neighbors not in Established state\n"
       "Shorten the information on BGP neighbors\n"
       "Neighbor graceful restart information\n" JSON_STR)
 {
@@ -16424,6 +16455,11 @@ DEFUN(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
 		peer_show_flags |= VTY_BGP_PEER_SHOW_GR_INFO;
 	else if (argv_find(argv, argc, "brief", &idx))
 		SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO);
+	else if (argv_find(argv, argc, "established", &idx))
+		SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO);
+	else if (argv_find(argv, argc, "failed", &idx))
+		SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_STATE_FAILED_INFO);
+
 	return bgp_show_neighbor_vty(vty, vrf, sh_type, sh_arg, peer_show_flags,
 				     uj);
 }
