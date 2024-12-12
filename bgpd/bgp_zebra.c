@@ -2840,8 +2840,6 @@ static int bgp_zebra_route_notify_owner(int command, struct zclient *zclient,
 		/* Advertise the route */
 		if (new_select) {
 			group_announce_route(bgp, afi, safi, dest, new_select);
-			/*bgp_process_route_install_result_for_soo(bgp, dest,
-								 new_select);*/
 		} else {
 			flog_err(EC_BGP_INVALID_ROUTE,
 				 "selected route %pBD not found", dest);

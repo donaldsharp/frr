@@ -20453,14 +20453,34 @@ static void vty_print_bitfield(struct vty *vty, const char *str,
 	}
 }
 
-static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
-			       void *ctx)
+static void show_bgp_route_with_soo_hashtbl_json_walk_cb(struct hash_bucket *bucket, void *ctx)
 {
-	struct bgp_soo_route_walk *args = ctx;
-	struct vty *vty = args->vty;
-	json_object *json_soo_array = args->json;
-	json_object *json = NULL;
+	json_object *json_routes = ctx;
 	json_object *json_route = NULL;
+	struct bgp_dest_soo_hash_entry *route_with_soo_entry = bucket->data;
+	char pfxprint[PREFIX2STR_BUFFER];
+
+	if (!route_with_soo_entry)
+		return;
+
+	prefix2str(&route_with_soo_entry->p, pfxprint, sizeof(pfxprint));
+	json_route = json_object_new_object();
+	json_object_string_add(json_route, "prefix", pfxprint);
+	json_object_boolean_add(
+		json_route, "usesSoONhg",
+		CHECK_FLAG(route_with_soo_entry->flags,
+			   DEST_USING_SOO_NHGID));
+
+	vty_print_bitfield(NULL, " Selected path info bitmap",
+			   &route_with_soo_entry->bgp_pi_bitmap,
+			   json_route);
+	json_object_array_add(json_routes, json_route);
+}
+
+static void show_bgp_soo_entry_json(struct bgp_per_src_nhg_hash_entry *soo_entry,
+					json_object *json_soo_array)
+{
+	json_object *json = NULL;
 	json_object *json_routes = NULL;
 	json_object *json_peer_bitmap_array = NULL;
 	json_object *json_peer_bitmap = NULL;
@@ -20468,96 +20488,42 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 	json_object *json_bitmap_object = NULL;
 	char addrbuf[BUFSIZ];
 
-	if (!soo_entry) {
-		return;
-	}
-
-	if (json_soo_array) {
-		json = json_object_new_object();
-		json_object_array_add(json_soo_array, json);
-		json_object_string_addf(
-			json, "SoORoute", "%s",
-			inaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
-					  BUFSIZ, soo_entry->afi));
-		json_object_int_add(json, "numPaths", soo_entry->refcnt);
-		json_object_int_add(json, "nexthopgroupId", soo_entry->nhg_id);
-		json_object_int_add(
-			json, "numRoutesWithSoO",
-			bgp_dest_soo_qlist_count(&soo_entry->dest_soo_list));
-		json_object_int_add(
-			json, "numRoutesWithSoOUsingSoONHG",
-			bgp_dest_soo_use_soo_nhgid_qlist_count(
-				&soo_entry->dest_soo_use_nhid_list));
-		json_object_boolean_add(
-			json, "nhgValid",
-			CHECK_FLAG(soo_entry->flags,
-				   PER_SRC_NEXTHOP_GROUP_VALID));
-		json_object_boolean_add(
-			json, "nhgInstallPending",
-			CHECK_FLAG(soo_entry->flags,
-				   PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING));
-		json_object_boolean_add(
-			json, "nhgDeletePending",
-			CHECK_FLAG(soo_entry->flags,
-				   PER_SRC_NEXTHOP_GROUP_DEL_PENDING));
-	} else {
-		vty_out(vty, "SoO: %s\n",
-			inaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
-					  BUFSIZ, soo_entry->afi));
-		vty_out(vty, "  NHG:\n");
-		vty_out(vty, "    NHG ID: %d\n", soo_entry->nhg_id);
-		vty_out(vty, "    NHG flags: ");
-
-		if (CHECK_FLAG(soo_entry->flags, PER_SRC_NEXTHOP_GROUP_VALID)) {
-			vty_out(vty, "Valid");
-			if (CHECK_FLAG(soo_entry->flags,
-				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
-				vty_out(vty, ", Install pending");
-			} else {
-				vty_out(vty, ", Installed");
-			}
-		} else {
-			if (CHECK_FLAG(soo_entry->flags,
-				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
-				vty_out(vty, "Install pending");
-			}
-		}
-
-		if (CHECK_FLAG(soo_entry->flags,
-			       PER_SRC_NEXTHOP_GROUP_DEL_PENDING)) {
-			vty_out(vty, ", Delete pending");
-		}
-
-		vty_out(vty, "\n");
-		vty_out(vty, "  SoO route:\n");
-		vty_out(vty, "    Number of paths: %u\n", soo_entry->refcnt);
-		vty_out(vty, "    Number of Routes with SoO: %ld\n",
-			bgp_dest_soo_qlist_count(&soo_entry->dest_soo_list));
-		vty_out(vty,
-			"    Number of Routes with SoO using SoO NHG: %ld\n",
-			bgp_dest_soo_use_soo_nhgid_qlist_count(
-				&soo_entry->dest_soo_use_nhid_list));
-		vty_out(vty, "    SoO route flags: ");
-	}
+	json = json_object_new_object();
+	json_object_array_add(json_soo_array, json);
+	json_object_string_addf(
+		json, "SoORoute", "%s",
+		inaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
+				  BUFSIZ, soo_entry->afi));
+	json_object_int_add(json, "numPaths", soo_entry->refcnt);
+	json_object_int_add(json, "nexthopgroupId", soo_entry->nhg_id);
+	json_object_int_add(
+		json, "numRoutesWithSoO",
+		soo_entry->route_with_soo_table->count);
+	json_object_int_add(
+		json, "numRoutesWithSoOUsingSoONHG",
+			soo_entry->route_with_soo_use_nhid_cnt);
+	json_object_boolean_add(
+	json, "nhgValid",
+		CHECK_FLAG(soo_entry->flags,
+			   PER_SRC_NEXTHOP_GROUP_VALID));
+	json_object_boolean_add(
+		json, "nhgInstallPending",
+		CHECK_FLAG(soo_entry->flags,
+			   PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING));
+	json_object_boolean_add(
+		json, "nhgDeletePending",
+		CHECK_FLAG(soo_entry->flags,
+			   PER_SRC_NEXTHOP_GROUP_DEL_PENDING));
 
 	if (CHECK_FLAG(soo_entry->flags,
 		       PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL)) {
-		if (json) {
-			json_object_string_add(json, "SoORouteFlag",
-					       "Installed");
-		} else {
-			vty_out(vty, "Installed");
-		}
+		json_object_string_add(json, "SoORouteFlag",
+				       "Installed");
 	}
 
-	if (json) {
-		json_peer_bitmap_array = json_object_new_array();
-		json_object_object_add(json, "peerBitIndexMapping",
-				       json_peer_bitmap_array);
-	} else {
-		vty_out(vty, "\n");
-		vty_out(vty, "  Peer BitIndex Mappings:\n");
-	}
+	json_peer_bitmap_array = json_object_new_array();
+	json_object_object_add(json, "peerBitIndexMapping",
+			       json_peer_bitmap_array);
 
 	struct bgp_path_info *pi;
 
@@ -20565,72 +20531,154 @@ static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
 	     pi = pi->next) {
 		if (CHECK_FLAG(pi->flags, BGP_PATH_MULTIPATH) ||
 		    CHECK_FLAG(pi->flags, BGP_PATH_SELECTED)) {
-			if (json_peer_bitmap_array) {
-				json_peer_bitmap = json_object_new_object();
-				json_object_string_addf(json_peer_bitmap,
-							"peerIp", "%pSU",
-							&pi->peer->connection->su);
-				json_object_int_add(json_peer_bitmap,
-						    "bitIndex",
-						    pi->peer->bit_index);
-				json_object_array_add(json_peer_bitmap_array,
-						      json_peer_bitmap);
-			} else {
-				vty_out(vty, "    %pSU: %u\n", &pi->peer->connection->su,
-					pi->peer->bit_index);
-			}
+			json_peer_bitmap = json_object_new_object();
+			json_object_string_addf(json_peer_bitmap,
+						"peerIp", "%pSU",
+						&pi->peer->connection->su);
+			json_object_int_add(json_peer_bitmap,
+					    "bitIndex",
+					    pi->peer->bit_index);
+			json_object_array_add(json_peer_bitmap_array,
+					      json_peer_bitmap);
 		}
 	}
 
-	if (json) {
-		json_bitmap_array = json_object_new_array();
-		json_object_object_add(json, "bitMaps", json_bitmap_array);
-		json_bitmap_object = json_object_new_object();
-	} else {
-		vty_out(vty, "  Bitmaps:\n");
-	}
+	json_bitmap_array = json_object_new_array();
+	json_object_object_add(json, "bitMaps", json_bitmap_array);
+	json_bitmap_object = json_object_new_object();
 
-	vty_print_bitfield(vty, "    Selected path info bitmap ",
+	vty_print_bitfield(NULL, "    Selected path info bitmap ",
 			   &soo_entry->bgp_soo_route_selected_pi_bitmap,
 			   json_bitmap_object);
-	vty_print_bitfield(vty, "    Installed path info bitmap",
+	vty_print_bitfield(NULL, "    Installed path info bitmap",
 			   &soo_entry->bgp_soo_route_installed_pi_bitmap,
 			   json_bitmap_object);
 
-	if (json) {
-		json_object_array_add(json_bitmap_array, json_bitmap_object);
-		json_routes = json_object_new_array();
-		json_object_object_add(json, "routeWithSoO", json_routes);
-	} else {
-		vty_out(vty, "  Route with SoO:\n");
+	json_object_array_add(json_bitmap_array, json_bitmap_object);
+	json_routes = json_object_new_array();
+	json_object_object_add(json, "routeWithSoO", json_routes);
+
+	hash_iterate(
+		soo_entry->route_with_soo_table,
+		(void (*)(struct hash_bucket *, void *))
+			show_bgp_route_with_soo_hashtbl_json_walk_cb,
+		json_routes);
+}
+
+static void show_bgp_route_with_soo_hashtbl_vty_walk_cb(struct hash_bucket *bucket, void *ctx)
+{
+	struct vty *vty = ctx;
+	struct bgp_dest_soo_hash_entry *route_with_soo_entry = bucket->data;
+	char pfxprint[PREFIX2STR_BUFFER];
+
+	if (!route_with_soo_entry)
+		return;
+
+	prefix2str(&route_with_soo_entry->p, pfxprint, sizeof(pfxprint));
+	vty_out(vty, "      %s", pfxprint);
+	if (CHECK_FLAG(route_with_soo_entry->flags,
+		       DEST_USING_SOO_NHGID)) {
+		vty_out(vty, " uses SoO NHG");
 	}
 
-	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
+	vty_print_bitfield(vty, " Selected path info bitmap",
+			   &route_with_soo_entry->bgp_pi_bitmap,
+			   NULL);
+}
 
-	frr_each (bgp_dest_soo_qlist, &soo_entry->dest_soo_list,
-		  bgp_dest_soo_entry) {
-		char pfxprint[PREFIX2STR_BUFFER];
-		prefix2str(&bgp_dest_soo_entry->p, pfxprint, sizeof(pfxprint));
-		if (json_routes) {
-			json_route = json_object_new_object();
-			json_object_string_add(json_route, "prefix", pfxprint);
-			json_object_boolean_add(
-				json_route, "usesSoONhg",
-				CHECK_FLAG(bgp_dest_soo_entry->flags,
-					   DEST_PRESENT_IN_NHGID_USE_LIST));
+static void show_bgp_soo_entry_vty(struct bgp_per_src_nhg_hash_entry *soo_entry,
+		struct vty *vty)
+{
+	char addrbuf[BUFSIZ];
+	struct bgp_path_info *pi;
+
+	vty_out(vty, "SoO: %s\n",
+		inaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
+				  BUFSIZ, soo_entry->afi));
+	vty_out(vty, "  NHG:\n");
+	vty_out(vty, "    NHG ID: %d\n", soo_entry->nhg_id);
+	vty_out(vty, "    NHG flags: ");
+
+	if (CHECK_FLAG(soo_entry->flags, PER_SRC_NEXTHOP_GROUP_VALID)) {
+		vty_out(vty, "Valid");
+		if (CHECK_FLAG(soo_entry->flags,
+			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
+			vty_out(vty, ", Install pending");
 		} else {
-			vty_out(vty, "      %s", pfxprint);
-			if (CHECK_FLAG(bgp_dest_soo_entry->flags,
-				       DEST_PRESENT_IN_NHGID_USE_LIST)) {
-				vty_out(vty, " uses SoO NHG");
-			}
+			vty_out(vty, ", Installed");
 		}
+	} else {
+		if (CHECK_FLAG(soo_entry->flags,
+			       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING)) {
+			vty_out(vty, "Install pending");
+		}
+	}
 
-		vty_print_bitfield(vty, " Selected path info bitmap",
-				   &bgp_dest_soo_entry->bgp_pi_bitmap,
-				   json_route);
-		if (json_routes)
-			json_object_array_add(json_routes, json_route);
+	if (CHECK_FLAG(soo_entry->flags,
+		       PER_SRC_NEXTHOP_GROUP_DEL_PENDING)) {
+		vty_out(vty, ", Delete pending");
+	}
+
+	vty_out(vty, "\n");
+	vty_out(vty, "  SoO route:\n");
+	vty_out(vty, "    Number of paths: %u\n", soo_entry->refcnt);
+	vty_out(vty, "    Number of Routes with SoO: %ld\n",
+		soo_entry->route_with_soo_table->count);
+	vty_out(vty,
+		"    Number of Routes with SoO using SoO NHG: %d\n",
+			soo_entry->route_with_soo_use_nhid_cnt);
+	vty_out(vty, "    SoO route flags: ");
+
+	if (CHECK_FLAG(soo_entry->flags,
+		       PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL)) {
+			vty_out(vty, "Installed");
+	}
+
+	vty_out(vty, "\n");
+	vty_out(vty, "  Peer BitIndex Mappings:\n");
+
+	for (pi = bgp_dest_get_bgp_path_info(soo_entry->dest); pi;
+	     pi = pi->next) {
+		if (CHECK_FLAG(pi->flags, BGP_PATH_MULTIPATH) ||
+		    CHECK_FLAG(pi->flags, BGP_PATH_SELECTED)) {
+			vty_out(vty, "    %pSU: %u\n", &pi->peer->connection->su,
+				pi->peer->bit_index);
+		}
+	}
+
+	vty_out(vty, "  Bitmaps:\n");
+
+	vty_print_bitfield(vty, "    Selected path info bitmap ",
+			   &soo_entry->bgp_soo_route_selected_pi_bitmap,
+			   NULL);
+	vty_print_bitfield(vty, "    Installed path info bitmap",
+			   &soo_entry->bgp_soo_route_installed_pi_bitmap,
+			   NULL);
+
+	vty_out(vty, "  Route with SoO:\n");
+
+	hash_iterate(
+		soo_entry->route_with_soo_table,
+		(void (*)(struct hash_bucket *, void *))
+			show_bgp_route_with_soo_hashtbl_vty_walk_cb,
+		vty);
+}
+
+static void show_bgp_soo_entry(struct bgp_per_src_nhg_hash_entry *soo_entry,
+			       void *ctx)
+{
+	struct bgp_soo_route_walk *args = ctx;
+	struct vty *vty = args->vty;
+	json_object *json_soo_array = args->json;
+
+	if (!soo_entry) {
+		return;
+	}
+
+	if (json_soo_array) {
+		show_bgp_soo_entry_json(soo_entry, json_soo_array);
+	} else {
+		show_bgp_soo_entry_vty(soo_entry, vty);
 	}
 }
 
