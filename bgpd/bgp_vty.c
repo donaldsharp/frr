@@ -14386,9 +14386,16 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags,
 	afi_t afi;
 	safi_t safi;
 	uint16_t i;
+	int len = 0;
 	uint8_t *msg;
-	json_object *json_neigh = NULL;
+	json_object *json_neigh = NULL, *json_stat = NULL, *json_addr_family_info = NULL;
 	uint32_t sync_tcp_mss;
+	int neighbor_col_default_width = 16;
+	struct peer_af *paf;
+	const char *afi_safi = NULL;
+	uint32_t peer_pcount = 0, peer_scount = 0;
+	bool show_brief = CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO);
+	bool is_first_afi_safi = true;
 
 	bgp = p->bgp;
 
@@ -14398,6 +14405,90 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags,
 	memset(dn_flag, '\0', sizeof(dn_flag));
 	if (!p->conf_if && peer_dynamic_neighbor(p))
 		dn_flag[0] = '*';
+
+	if (show_brief) {
+		if (use_json) {
+			if (p->hostname)
+				json_object_string_add(json_neigh, "hostname", p->hostname);
+			else
+				json_object_string_add(json_neigh, "hostname", "Unknown");
+			json_object_int_add(json_neigh, "remoteAs", p->as);
+			if (p->change_local_as)
+				json_object_int_add(json_neigh, "localAs", p->change_local_as);
+			else
+				json_object_int_add(json_neigh, "localAs", p->local_as);
+
+			json_object_string_add(json_neigh, "lastResetDueTo",
+					       peer_down_str[(int)p->last_reset]);
+			bgp_show_peer_status(vty, p, use_json, json_neigh);
+			time_t uptime;
+			struct tm tm;
+
+			uptime = monotime(NULL);
+			uptime -= p->resettime;
+			gmtime_r(&uptime, &tm);
+
+			json_object_int_add(json_neigh, "lastResetTimerMsecs",
+					    (tm.tm_sec * 1000) + (tm.tm_min * 60000) +
+						    (tm.tm_hour * 3600000));
+
+			json_stat = json_object_new_object();
+			json_object_int_add(json_stat, "totalSent", PEER_TOTAL_TX(p));
+			json_object_int_add(json_stat, "totalRecv", PEER_TOTAL_RX(p));
+			json_object_object_add(json_neigh, "messageStats", json_stat);
+
+			json_addr_family_info = json_object_new_object();
+			json_object_object_add(json_neigh, "addressFamilyInfo",
+					       json_addr_family_info);
+
+			if (p->conf_if) /* Configured interface name. */
+				json_object_object_add(json, p->conf_if, json_neigh);
+			else /* Configured IP address. */
+				json_object_object_add(json, p->host, json_neigh);
+		} else {
+			if (p->hostname && CHECK_FLAG(bgp->flags, BGP_FLAG_SHOW_HOSTNAME))
+				len = vty_out(vty, "%s%s(%s)", dn_flag, p->hostname, p->host);
+			else
+				len = vty_out(vty, "%s%s", dn_flag, p->host);
+
+			/* pad the neighbor column with spaces */
+			if (len < neighbor_col_default_width)
+				vty_out(vty, "%*s", neighbor_col_default_width - len, " ");
+			vty_out(vty, "%10u %9u %9u %10s %12s ", p->as, PEER_TOTAL_RX(p),
+				PEER_TOTAL_TX(p),
+				peer_uptime(p->resettime, timebuf, BGP_UPTIME_LEN, 0, NULL),
+				lookup_msg(bgp_status_msg, p->connection->status, NULL));
+		}
+		FOREACH_AFI_SAFI (afi, safi) {
+			if (p->afc[afi][safi]) {
+				paf = peer_af_find(p, afi, safi);
+				peer_pcount = p->pcount[afi][safi];
+				peer_scount = ((paf && PAF_SUBGRP(paf)) ? PAF_SUBGRP(paf)->scount
+									: 0);
+
+				if (!use_json) {
+					afi_safi = get_afi_safi_str(afi, safi, false);
+					if (is_first_afi_safi) {
+						vty_out(vty, "%16s %9u %9u\n", afi_safi,
+							peer_pcount, peer_scount);
+						is_first_afi_safi = false;
+					} else
+						vty_out(vty, "%70s %16s %9u %9u\n", " ", afi_safi,
+							peer_pcount, peer_scount);
+				} else {
+					afi_safi = get_afi_safi_str(afi, safi, true);
+					json_object *json_addr = json_object_new_object();
+					json_object_int_add(json_addr, "acceptedPrefixCounter",
+							    peer_pcount);
+					json_object_int_add(json_addr, "sentPrefixCounter",
+							    peer_scount);
+					json_object_object_add(json_addr_family_info, afi_safi,
+							       json_addr);
+				}
+			}
+		}
+		return;
+	}
 
 	if (use_json) {
 		if (p->conf_if && BGP_CONNECTION_SU_UNSPEC(p->connection))
@@ -14513,9 +14604,8 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags,
 	}
 
 	/* Are we showing specific information? */
-	if (sh_flags) {
-		if (sh_flags & VTY_BGP_PEER_SHOW_GR_INFO)
-			bgp_show_peer_gr_info(vty, p, use_json, json_neigh);
+	if (sh_flags & VTY_BGP_PEER_SHOW_GR_INFO) {
+		bgp_show_peer_gr_info(vty, p, use_json, json_neigh);
 
 		/* Finish JSON, if needed. */
 		if (use_json) {
@@ -16008,6 +16098,8 @@ static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp,
 	bool nbr_output = false;
 	afi_t afi = AFI_MAX;
 	safi_t safi = SAFI_MAX;
+	bool is_first = true;
+	bool show_brief = CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO);
 
 	if (type == show_ipv4_peer || type == show_ipv4_all) {
 		afi = AFI_IP;
@@ -16018,7 +16110,10 @@ static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp,
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
 		if (!CHECK_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE))
 			continue;
-
+		else if (show_brief && is_first && !use_json) {
+			vty_out(vty, BGP_SHOW_NEIGHBORS_BRIEF_HEADER);
+			is_first = false;
+		}
 		switch (type) {
 		case show_all:
 			bgp_show_peer(vty, peer, sh_flags, use_json, json);
@@ -16258,12 +16353,15 @@ static int bgp_show_neighbor_vty(struct vty *vty, const char *name,
 
 /* "show [ip] bgp neighbors" commands.  */
 DEFUN(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
-      "show [ip] bgp [<view|vrf> VIEWVRFNAME] [<ipv4|ipv6>] neighbors [<A.B.C.D|X:X::X:X|WORD>] [graceful-restart] [json]",
+      "show [ip] bgp [<view|vrf> VIEWVRFNAME]"
+      " [<ipv4|ipv6>] neighbors [<A.B.C.D|X:X::X:X|WORD>]"
+      " [brief|graceful-restart] [json] ",
       SHOW_STR IP_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AF_STR BGP_AF_STR
       "Detailed information on TCP and BGP neighbor connections\n"
       "Neighbor to display information about\n"
       "Neighbor to display information about\n"
       "Neighbor on BGP configured interface\n"
+      "Shorten the information on BGP neighbors\n"
       "Neighbor graceful restart information\n" JSON_STR)
 {
 	char *vrf = NULL;
@@ -16324,7 +16422,8 @@ DEFUN(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
 
 	if (show_gr)
 		peer_show_flags |= VTY_BGP_PEER_SHOW_GR_INFO;
-
+	else if (argv_find(argv, argc, "brief", &idx))
+		SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO);
 	return bgp_show_neighbor_vty(vty, vrf, sh_type, sh_arg, peer_show_flags,
 				     uj);
 }
