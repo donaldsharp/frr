@@ -18997,7 +18997,7 @@ static void vty_print_bitfield(struct vty *vty, const char *str,
 	char bitstring[1024] = "";
 	char bitvalue[1024] = "";
 
-	sprintf(bitstring, "%s bits set", str ? str : "");
+	snprintf(bitstring, sizeof(bitstring), "%s bits set", str ? str : "");
 
 	bf_for_each_set_bit((*bf), bit, approx_last_set_bit_index)
 	{
@@ -19251,8 +19251,8 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 	afi_t afi = AFI_UNSPEC;
 	safi_t safi = SAFI_UNSPEC;
 	struct prefix p = {0};
-	struct ipaddr ip = {0};
-	struct ipaddr ipv4_ipaddr = {0};
+	struct ipaddr ip = { .ipa_type = IPADDR_NONE };
+	struct ipaddr ipv4_ipaddr = { .ipa_type = IPADDR_NONE };
 	bool filter_by_soo = false;
 	json_object *json = NULL;
 	json_object *json_vrf_array = NULL;
@@ -19281,9 +19281,16 @@ DEFUN(show_bgp_soo_route, show_bgp_soo_route_cmd,
 		return CMD_WARNING;
 	}
 
-	argv_find_and_parse_afi(argv, argc, &idx, &afi);
+    if (!argv_find_and_parse_afi(argv, argc, &idx, &afi)) {
+        vty_out(vty, "%% Malformed Address Family\n");
+        return CMD_WARNING;
+    }
 	idx++;
-	argv_find_and_parse_safi(argv, argc, &idx, &safi);
+
+	if(!argv_find_and_parse_safi(argv, argc, &idx, &safi)){
+        vty_out(vty, "%% Malformed Subsequent Address Family\n");
+        return CMD_WARNING;
+	}
 	idx++;
 
 	if (!(afi == AFI_IP || afi == AFI_IP6)) {

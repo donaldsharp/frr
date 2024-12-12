@@ -489,7 +489,11 @@ void bgp_path_info_reap(struct bgp_dest *dest, struct bgp_path_info *pi)
 	struct bgp_table *table = NULL;
 
 	table = bgp_dest_table(dest);
-	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
+	if (!table) {
+	   return;
+	}
+
+	if(table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
 		is_evpn = true;
 
 	if (pi->next)
@@ -524,7 +528,10 @@ static void bgp_path_info_reap_unsorted(struct bgp_dest *dest,
 	struct bgp_table *table = NULL;
 
 	table = bgp_dest_table(dest);
-	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
+	if(!table){
+		return;
+	}
+	if (table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
 		is_evpn = true;
 
 	bgp_path_info_mpath_dequeue(pi);
@@ -551,8 +558,14 @@ void bgp_path_info_delete(struct bgp_dest *dest, struct bgp_path_info *pi)
 	struct bgp_table *table = NULL;
 
 	table = bgp_dest_table(dest);
-	if (table && table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
+
+	if(!table){
+            return;
+	}
+
+	if (table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
 		is_evpn = true;
+
 	if (CHECK_FLAG(
                     table->bgp->per_src_nhg_flags[table->afi][table->safi],
                     BGP_FLAG_NHG_PER_ORIGIN) &&
@@ -4220,7 +4233,7 @@ static unsigned int process_subq(struct bgp_dest_queue *subq,
 static wq_item_status meta_queue_process(struct work_queue *dummy, void *data)
 {
         struct meta_queue *mq = data;
-        unsigned i;
+        uint32_t i;
 
 	for (i = 0; i < MQ_SIZE; i++)
 		if (process_subq(mq->subq[i], i)) {
@@ -4232,7 +4245,7 @@ static wq_item_status meta_queue_process(struct work_queue *dummy, void *data)
 
 static int early_route_meta_queue_add(struct meta_queue *mq, void *data)
 {
-	uint8_t qindex = META_QUEUE_EARLY_ROUTE;
+	enum meta_queue_indexes qindex = META_QUEUE_EARLY_ROUTE;
 	struct bgp_dest *dest = data;
 
 	if (bgp_debug_bestpath(dest) || BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -4247,7 +4260,7 @@ static int early_route_meta_queue_add(struct meta_queue *mq, void *data)
 
 static int other_route_meta_queue_add(struct meta_queue *mq, void *data)
 {
-	uint8_t qindex = META_QUEUE_OTHER_ROUTE;
+	enum meta_queue_indexes qindex = META_QUEUE_OTHER_ROUTE;
 	struct bgp_dest *dest = data;
 
 	if (bgp_debug_bestpath(dest))
@@ -4262,7 +4275,7 @@ static int other_route_meta_queue_add(struct meta_queue *mq, void *data)
 
 static int eoiu_marker_meta_queue_add(struct meta_queue *mq, void *data)
 {
-	uint8_t qindex = META_QUEUE_EOIU_MARKER;
+	enum meta_queue_indexes qindex = META_QUEUE_EOIU_MARKER;
 	struct bgp_dest *dest = data;
 
 	if (BGP_DEBUG(update, UPDATE_IN))
