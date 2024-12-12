@@ -53,6 +53,7 @@
 #include <config.h>
 
 extern struct zclient *zclient;
+#define PER_SRC_NHG_TABLE_SIZE 8
 
 DEFINE_MTYPE_STATIC(BGPD, BGP_PER_SRC_NHG, "BGP Per Source NHG Information");
 DEFINE_MTYPE_STATIC(BGPD, BGP_DEST_SOO_HE, "BGP Dest SOO hash entry Information");
@@ -80,7 +81,6 @@ struct bgp_nhg_nexthop_cache *
 bnc_nhg_new(struct bgp_nhg_nexthop_cache_head *tree, struct prefix *prefix,
 	    ifindex_t ifindex);
 
-void bnc_nhg_nexthop_free(struct bgp_nhg_nexthop_cache *bnc);
 void bnc_nhg_free(struct bgp_nhg_nexthop_cache *bnc);
 
 
@@ -209,11 +209,38 @@ bgp_per_src_nhg_zebra_route_install(struct bgp_dest_soo_hash_entry *bgp_dest_soo
 	}
 }
 
+static void bgp_per_src_nhg_move_to_soo_nhid_cb(struct hash_bucket *bucket,
+						void *ctx)
+{
+	struct bgp_dest_soo_hash_entry *route_with_soo_entry = 
+		(struct bgp_dest_soo_hash_entry *)bucket->data;
+
+	if(route_with_soo_entry) {
+		//only move those which are not using soo nhid yet
+		if (!CHECK_FLAG(route_with_soo_entry->flags,
+			DEST_USING_SOO_NHGID))
+			bgp_per_src_nhg_zebra_route_install(route_with_soo_entry, route_with_soo_entry->nhe);
+	}
+}
+
+static void bgp_per_src_nhg_move_to_zebra_nhid_cb(struct hash_bucket *bucket,
+						void *ctx)
+{
+	struct bgp_dest_soo_hash_entry *route_with_soo_entry = 
+		(struct bgp_dest_soo_hash_entry *)bucket->data;
+
+	if(route_with_soo_entry) {
+		//only move those which are using soo nhid yet
+		if (CHECK_FLAG(route_with_soo_entry->flags,
+			DEST_USING_SOO_NHGID))
+			bgp_per_src_nhg_zebra_route_install(route_with_soo_entry, route_with_soo_entry->nhe);
+	}
+}
+
 // SOO timer expiry
 static void bgp_per_src_nhg_timer_slot_run(void *item)
 {
 	struct bgp_per_src_nhg_hash_entry *nhe = item;
-	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
 	struct bgp_dest *dest;
 	/*
 	if SOO selected NHs match installed SOO NHG AND all routes w/ SOO point
@@ -274,12 +301,11 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 	// NHGID if it satisfies
 
 	// Walk all the 'routes with SoO' and move from zebra nhid to soo nhid
-	frr_each (bgp_dest_soo_qlist, &nhe->dest_soo_list, bgp_dest_soo_entry) {
-		//only move those which are not using soo nhid yet
-		if (!CHECK_FLAG(bgp_dest_soo_entry->flags,
-			DEST_PRESENT_IN_NHGID_USE_LIST))
-			bgp_per_src_nhg_zebra_route_install(bgp_dest_soo_entry, nhe);
-	}
+	hash_iterate(
+		nhe->route_with_soo_table,
+		(void (*)(struct hash_bucket *, void *))
+			bgp_per_src_nhg_move_to_soo_nhid_cb,
+		NULL);
 }
 
 void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
@@ -327,12 +353,6 @@ int bgp_nhg_nexthop_cache_compare(const struct bgp_nhg_nexthop_cache *a,
 	return prefix_cmp(&a->prefix, &b->prefix);
 }
 
-void bnc_nhg_nexthop_free(struct bgp_nhg_nexthop_cache *bnc)
-{
-	// TODO processing
-	// nexthops_free(bnc->nexthop);
-}
-
 struct bgp_nhg_nexthop_cache *
 bnc_nhg_new(struct bgp_nhg_nexthop_cache_head *tree, struct prefix *prefix,
 	    ifindex_t ifindex)
@@ -351,7 +371,6 @@ bnc_nhg_new(struct bgp_nhg_nexthop_cache_head *tree, struct prefix *prefix,
 
 void bnc_nhg_free(struct bgp_nhg_nexthop_cache *bnc)
 {
-	bnc_nhg_nexthop_free(bnc);
 	bgp_nhg_nexthop_cache_del(bnc->tree, bnc);
 	XFREE(MTYPE_BGP_SOO_NHG_NEXTHOP_CACHE, bnc);
 }
@@ -427,7 +446,7 @@ void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest 
 					!CHECK_FLAG(nhe->flags,
                                  PER_SRC_NEXTHOP_GROUP_VALID) &&
 					!CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED) &&
-				!bgp_dest_soo_use_soo_nhgid_qlist_count(&nhe->dest_soo_use_nhid_list)) {
+				!nhe->route_with_soo_use_nhid_cnt) {
 				bgp_per_src_nhg_del_send(nhe);
 				bgp_per_src_nhg_del(nhe);
 			}
@@ -443,8 +462,7 @@ void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest 
 				    !CHECK_FLAG(
 					    nhe->flags,
 					    PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED) &&
-				    !bgp_dest_soo_use_soo_nhgid_qlist_count(
-					    &nhe->dest_soo_use_nhid_list)) {
+					    !nhe->route_with_soo_use_nhid_cnt) {
 					bgp_per_src_nhg_del_send(nhe);
 					bgp_per_src_nhg_del(nhe);
 				}
@@ -498,8 +516,10 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 		if (is_soo_route) {
 			if (CHECK_FLAG(nhe->flags,
 				       PER_SRC_NEXTHOP_GROUP_VALID) ||
-			    CHECK_FLAG(nhe->flags,
-				       PER_SRC_NEXTHOP_GROUP_DEL_PENDING)) {
+			    (CHECK_FLAG(nhe->flags,
+				       PER_SRC_NEXTHOP_GROUP_DEL_PENDING) &&
+			     !CHECK_FLAG(bgp->per_src_nhg_flags[table->afi][table->safi],
+                                       BGP_FLAG_CONFIG_DEL_PENDING))) {
 				SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED);
 				*nhg_id = nhe->nhg_id;
 				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -533,6 +553,8 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 				     dest_he) &&
 			     (CHECK_FLAG(nhe->flags,
 					 PER_SRC_NEXTHOP_GROUP_VALID))) ||
+				(CHECK_FLAG(bgp->per_src_nhg_flags[table->afi][table->safi],
+                                       BGP_FLAG_CONFIG_DEL_PENDING)) ||
 			    ((!CHECK_FLAG(nhe->flags,
 					  PER_SRC_NEXTHOP_GROUP_VALID)) &&
 			     (!CHECK_FLAG(
@@ -542,10 +564,9 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 				     nhe->flags,
 				     PER_SRC_NEXTHOP_GROUP_DEL_PENDING)))) {
 				if (CHECK_FLAG(dest_he->flags,
-					 DEST_PRESENT_IN_NHGID_USE_LIST)) {
-					bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
-								     dest_he);
-					UNSET_FLAG(dest_he->flags, DEST_PRESENT_IN_NHGID_USE_LIST);
+					 DEST_USING_SOO_NHGID)) {
+					nhe->route_with_soo_use_nhid_cnt--;
+					UNSET_FLAG(dest_he->flags, DEST_USING_SOO_NHGID);
 					if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 						zlog_debug(
 							"bgp vrf %s per src nhg %s %s dest soo %s "
@@ -562,11 +583,10 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 			}
 
 			if (!CHECK_FLAG(dest_he->flags,
-				DEST_PRESENT_IN_NHGID_USE_LIST)) {
-				bgp_dest_soo_use_soo_nhgid_qlist_add_tail(
-						&nhe->dest_soo_use_nhid_list, dest_he);
+				DEST_USING_SOO_NHGID)) {
+				nhe->route_with_soo_use_nhid_cnt++;
 				SET_FLAG(dest_he->flags,
-				DEST_PRESENT_IN_NHGID_USE_LIST);
+				DEST_USING_SOO_NHGID);
 				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
 					zlog_debug(
 						"bgp vrf %s per src nhg %s dest soo %s %s"
@@ -701,7 +721,6 @@ static void bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry 
 
 	bnc = bnc_nhg_find(&nhe->nhg_nexthop_cache_table, &p, ifindex);
 	if (!bnc) {
-		// TODO, check with Donald, the number of nexthop per pi peer
 		bnc = bnc_nhg_new(&nhe->nhg_nexthop_cache_table, &p, ifindex);
 		if (pi->attr) {
 			if (afi == AFI_IP) {
@@ -827,7 +846,7 @@ bgp_dest_soo_find(struct bgp_per_src_nhg_hash_entry *nhe,
 
 	memset(&tmp, 0, sizeof(tmp));
 	prefix_copy(&tmp.p, p);
-	dest_he = hash_lookup(nhe->dest_with_soo, &tmp);
+	dest_he = hash_lookup(nhe->route_with_soo_table, &tmp);
 
 	return dest_he;
 }
@@ -845,11 +864,10 @@ bgp_dest_soo_add(struct bgp_per_src_nhg_hash_entry *nhe, struct bgp_dest *dest)
 
 	memset(&tmp_he, 0, sizeof(tmp_he));
 	prefix_copy(&tmp_he.p, p);
-	dest_he = hash_get(nhe->dest_with_soo, &tmp_he, bgp_dest_soo_alloc);
+	dest_he = hash_get(nhe->route_with_soo_table, &tmp_he, bgp_dest_soo_alloc);
 	dest_he->nhe = nhe;
 	dest_he->dest = dest;
 
-	bgp_dest_soo_qlist_add_tail(&nhe->dest_soo_list, dest_he);
 	bf_init(dest_he->bgp_pi_bitmap, BGP_PEER_INIT_BITMAP_SIZE);
 	bf_assign_zero_index(dest_he->bgp_pi_bitmap);
 
@@ -873,7 +891,7 @@ static void bgp_dest_soo_del(struct bgp_dest_soo_hash_entry *dest_he,
 	struct bgp_dest_soo_hash_entry *tmp_he;
 
 	bgp_dest_soo_flush_entry(dest_he);
-	tmp_he = hash_release(nhe->dest_with_soo, dest_he);
+	tmp_he = hash_release(nhe->route_with_soo_table, dest_he);
 	bgp_dest_soo_free(tmp_he);
 
 	//check if nhe del pending and process
@@ -882,7 +900,7 @@ static void bgp_dest_soo_del(struct bgp_dest_soo_hash_entry *dest_he,
 			!CHECK_FLAG(nhe->flags,
 		 PER_SRC_NEXTHOP_GROUP_VALID) &&
 			!CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED) &&
-		!bgp_dest_soo_use_soo_nhgid_qlist_count(&nhe->dest_soo_use_nhid_list)) {
+		!nhe->route_with_soo_use_nhid_cnt) {
 		bgp_per_src_nhg_del_send(nhe);
 		bgp_per_src_nhg_del(nhe);
 	}
@@ -893,7 +911,7 @@ static void bgp_process_dest_soo_del(struct bgp_dest_soo_hash_entry *dest_he)
 	struct bgp_per_src_nhg_hash_entry *nhe = dest_he->nhe;
 
 	if (CHECK_FLAG(dest_he->flags,
-		 DEST_PRESENT_IN_NHGID_USE_LIST)) {
+		 DEST_USING_SOO_NHGID)) {
 		//wait for route with soo to move to zebra nhid
 		SET_FLAG(dest_he->flags, DEST_SOO_DEL_PENDING);
 		if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
@@ -929,7 +947,6 @@ static bool bgp_dest_soo_cmp(const void *p1, const void *p2)
 	if (dest_he1 == NULL || dest_he2 == NULL)
 		return false;
 
-	// TODO: check with Donald, host part ignored
 	return (prefix_cmp(&dest_he1->p, &dest_he2->p) == 0);
 }
 
@@ -940,12 +957,12 @@ void bgp_dest_soo_init(struct bgp_per_src_nhg_hash_entry *nhe)
 	ipaddr2str(&nhe->ip, buf, sizeof(buf));
 
 	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
-		zlog_debug("bgp vrf %s per source nhg %s %s dest soo hash init",
+		zlog_debug("bgp vrf %s per source nhg %s %s route with soo hash init",
 			   nhe->bgp->name_pretty, buf,
 			   get_afi_safi_str(nhe->afi, nhe->safi, false));
-	nhe->dest_with_soo =
-		hash_create(bgp_dest_soo_hash_keymake, bgp_dest_soo_cmp,
-			    "BGP Dest SOO hash table");
+	nhe->route_with_soo_table =
+		hash_create_size(PER_SRC_NHG_TABLE_SIZE, bgp_dest_soo_hash_keymake, bgp_dest_soo_cmp,
+			    "BGP route with SOO hash table");
 }
 
 
@@ -959,12 +976,10 @@ static void bgp_dest_soo_flush_entry(struct bgp_dest_soo_hash_entry *dest_he)
 {
 	struct bgp_per_src_nhg_hash_entry *nhe = dest_he->nhe;
 
-	bgp_dest_soo_qlist_del(&nhe->dest_soo_list, dest_he);
 	if (CHECK_FLAG(dest_he->flags,
-		 DEST_PRESENT_IN_NHGID_USE_LIST)) {
-		bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
-					     dest_he);
-		UNSET_FLAG(dest_he->flags, DEST_PRESENT_IN_NHGID_USE_LIST);
+		 DEST_USING_SOO_NHGID)) {
+		nhe->route_with_soo_use_nhid_cnt--,
+		UNSET_FLAG(dest_he->flags, DEST_USING_SOO_NHGID);
 	}
 
 	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
@@ -999,10 +1014,10 @@ void bgp_dest_soo_finish(struct bgp_per_src_nhg_hash_entry *nhe)
 			nhe->bgp->name_pretty, buf,
 			get_afi_safi_str(nhe->afi, nhe->safi, false));
 	hash_iterate(
-		nhe->dest_with_soo,
+		nhe->route_with_soo_table,
 		(void (*)(struct hash_bucket *, void *))bgp_dest_soo_flush_cb,
 		NULL);
-	hash_clean(nhe->dest_with_soo, (void (*)(void *))bgp_dest_soo_free);
+	hash_clean(nhe->route_with_soo_table, (void (*)(void *))bgp_dest_soo_free);
 }
 
 static void *bgp_per_src_nhg_alloc(void *p)
@@ -1054,9 +1069,6 @@ bgp_per_src_nhg_add(struct bgp *bgp, struct ipaddr *ip, afi_t afi, safi_t safi)
 			   get_afi_safi_str(nhe->afi, nhe->safi, false));
 
 	bgp_dest_soo_init(nhe);
-	bgp_dest_soo_qlist_init(&nhe->dest_soo_list);
-	bgp_dest_soo_use_soo_nhgid_qlist_init(&nhe->dest_soo_use_nhid_list);
-
 	bf_init(nhe->bgp_soo_route_selected_pi_bitmap,
 		BGP_PEER_INIT_BITMAP_SIZE);
 	bf_assign_zero_index(nhe->bgp_soo_route_selected_pi_bitmap);
@@ -1064,7 +1076,6 @@ bgp_per_src_nhg_add(struct bgp *bgp, struct ipaddr *ip, afi_t afi, safi_t safi)
 		BGP_PEER_INIT_BITMAP_SIZE);
 	bf_assign_zero_index(nhe->bgp_soo_route_installed_pi_bitmap);
 
-	// TODO, check with Donald if table needs to be per afi
 	bgp_nhg_nexthop_cache_init(&nhe->nhg_nexthop_cache_table);
 
 	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
@@ -1079,18 +1090,18 @@ bgp_per_src_nhg_add(struct bgp *bgp, struct ipaddr *ip, afi_t afi, safi_t safi)
 
 static void bgp_per_src_nhg_delete(struct bgp_per_src_nhg_hash_entry *nhe)
 {
+	struct bgp_dest *dest;
+
 	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 		zlog_debug(
-			"bgp vrf %s per src nhg soo %pIA %s nhg delete cnt:%ld and flags %d",
+			"bgp vrf %s per src nhg soo %pIA %s nhg delete cnt:%d and flags %d",
 			nhe->bgp->name_pretty, &nhe->ip,
 			get_afi_safi_str(nhe->afi, nhe->safi, false),
-			bgp_dest_soo_use_soo_nhgid_qlist_count(
-				&nhe->dest_soo_use_nhid_list),
+			nhe->route_with_soo_use_nhid_cnt,
 			nhe->flags);
 	// cant delete soo NHID till all routes with soo and soo route is  moved
 	// to zebra nhid
-	if (!bgp_dest_soo_use_soo_nhgid_qlist_count(
-		    &nhe->dest_soo_use_nhid_list) &&
+	if (!nhe->route_with_soo_use_nhid_cnt &&
 	    !CHECK_FLAG(nhe->flags,
 			PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED)) {
 		if (CHECK_FLAG(nhe->flags,
@@ -1100,6 +1111,25 @@ static void bgp_per_src_nhg_delete(struct bgp_per_src_nhg_hash_entry *nhe)
 	} else {
 		UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 		SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_DEL_PENDING);
+
+		if (CHECK_FLAG(nhe->bgp->per_src_nhg_flags[nhe->afi][nhe->safi],
+                                       BGP_FLAG_CONFIG_DEL_PENDING)) {
+			// Walk all the 'routes with SoO' and move from zebra nhid to soo nhid
+			hash_iterate(
+			       nhe->route_with_soo_table,
+			       (void (*)(struct hash_bucket *, void *))
+				       bgp_per_src_nhg_move_to_zebra_nhid_cb,
+					NULL);
+			// 'SOO route' dest
+			dest = nhe->dest;
+			if (dest &&
+			    CHECK_FLAG(nhe->flags,
+				       PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL)) {
+				bgp_soo_zebra_route_install(nhe, dest);
+				UNSET_FLAG(nhe->flags,
+					   PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL);
+			}
+		}
 		nhe->dest = NULL;
 	}
 	return;
@@ -1215,8 +1245,6 @@ static void bgp_per_src_nhg_del(struct bgp_per_src_nhg_hash_entry *nhe)
 	}
 
 	bgp_dest_soo_finish(nhe);
-	bgp_dest_soo_qlist_fini(&nhe->dest_soo_list);
-	bgp_dest_soo_use_soo_nhgid_qlist_fini(&nhe->dest_soo_use_nhid_list);
 	tmp_nhe = hash_release(nhe->bgp->per_src_nhg_table[afi][safi], nhe);
 	bgp_per_src_nhe_free(tmp_nhe);
 	if (!bgp->per_src_nhg_table[afi][safi]->count &&
@@ -1259,7 +1287,7 @@ void bgp_per_src_nhg_init(struct bgp *bgp, afi_t afi, safi_t safi)
 		zlog_debug("bgp vrf %s per source nhg hash init",
 			   bgp->name_pretty);
 	bgp->per_src_nhg_table[afi][safi] =
-		hash_create(bgp_per_src_nhg_hash_keymake, bgp_per_src_nhg_cmp,
+		hash_create_size(PER_SRC_NHG_TABLE_SIZE, bgp_per_src_nhg_hash_keymake, bgp_per_src_nhg_cmp,
 			    "BGP Per Source NHG hash table");
 }
 
@@ -1276,8 +1304,6 @@ static void bgp_per_src_nhg_flush_entry(struct bgp_per_src_nhg_hash_entry *nhe)
 
 	bgp_nhg_nexthop_cache_reset(&nhe->nhg_nexthop_cache_table);
 	bgp_dest_soo_finish(nhe);
-	bgp_dest_soo_qlist_fini(&nhe->dest_soo_list);
-	bgp_dest_soo_use_soo_nhgid_qlist_fini(&nhe->dest_soo_use_nhid_list);
 	bgp_stop_soo_timer(nhe->bgp, nhe);
 	if (CHECK_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID))
 		bgp_per_src_nhg_del_send(nhe);
@@ -1296,16 +1322,16 @@ static void bgp_per_src_nhg_flush_entry(struct bgp_per_src_nhg_hash_entry *nhe)
 static void bgp_per_src_nhg_flush_cb(struct hash_bucket *bucket, void *arg)
 {
 	struct bgp_dest *dest;
-	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
 	struct bgp_per_src_nhg_hash_entry *nhe =
 		(struct bgp_per_src_nhg_hash_entry *)bucket->data;
 
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 	SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_DEL_PENDING);
-	frr_each (bgp_dest_soo_use_soo_nhgid_qlist,
-		  &nhe->dest_soo_use_nhid_list, bgp_dest_soo_entry) {
-		bgp_per_src_nhg_zebra_route_install(bgp_dest_soo_entry, nhe);
-	}
+	hash_iterate(
+		nhe->route_with_soo_table,
+		(void (*)(struct hash_bucket *, void *))
+			bgp_per_src_nhg_move_to_zebra_nhid_cb,
+	NULL);
 
 	// 'SOO route' dest
 	dest = nhe->dest;
@@ -1388,6 +1414,25 @@ static bool is_soo_rt_selected_pi_subset_of_rt_with_soo_pi(
 	return bf_is_subset(&soo_rt_selected_pi_bitmap, &rt_with_soo_pi_bitmap);
 }
 
+static void bgp_per_src_nhg_subset_check_cb(struct hash_bucket *bucket,
+						void *ctx)
+{
+	bool *is_subset_of_all_routes = ctx;
+	struct bgp_dest_soo_hash_entry *route_with_soo_entry = 
+		(struct bgp_dest_soo_hash_entry *)bucket->data;
+
+	if(route_with_soo_entry) {
+		if (CHECK_FLAG(route_with_soo_entry->flags,
+			 DEST_USING_SOO_NHGID)) {
+			// Check if 'SoO route' pi bitmap a subset of 'route with SoO'
+			if (!is_soo_rt_selected_pi_subset_of_rt_with_soo_pi(
+				    route_with_soo_entry)) {
+				*is_subset_of_all_routes = false;
+			}
+		}
+	}
+}
+
 /* Check if SOO route path info bitmap is subset of path info bitmap of "all"
  * the routes with SOO. This function walks all the "route with SOO" and checks
  * if "SOO route" path info bitmap is a subset of each one of them
@@ -1398,20 +1443,15 @@ static bool is_soo_rt_selected_pi_subset_of_rt_with_soo_pi(
 static bool is_soo_rt_selected_pi_subset_of_all_rts_with_soo_using_soo_nhg_pi(
 	struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_entry)
 {
-	struct bgp_dest_soo_hash_entry *bgp_dest_soo_entry = NULL;
 	bool is_subset_of_all_routes = true;
 
 	// Walk only the 'routes with SoO' that use SoO NHG, not ALL 'route with
 	// SoO'
-	frr_each (bgp_dest_soo_use_soo_nhgid_qlist,
-		  &bgp_per_src_nhg_entry->dest_soo_use_nhid_list,
-		  bgp_dest_soo_entry) {
-		// Check if 'SoO route' pi bitmap a subset of 'route with SoO'
-		if (!is_soo_rt_selected_pi_subset_of_rt_with_soo_pi(
-			    bgp_dest_soo_entry)) {
-			is_subset_of_all_routes = false;
-		}
-	}
+	hash_iterate(
+		bgp_per_src_nhg_entry->route_with_soo_table,
+		(void (*)(struct hash_bucket *, void *))
+			bgp_per_src_nhg_subset_check_cb,
+	&is_subset_of_all_routes);
 
 	// 'SoO route' pi bitmap is subset of ALL 'route with SoO'
 	return is_subset_of_all_routes;
@@ -1525,14 +1565,13 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 
 		if (soo_attr_del && !dest_he->refcnt) {
 			if (CHECK_FLAG(dest_he->flags,
-				 DEST_PRESENT_IN_NHGID_USE_LIST)) {
+				 DEST_USING_SOO_NHGID)) {
 				char buf[INET6_ADDRSTRLEN];
 				char pfxprint[PREFIX2STR_BUFFER];
 				ipaddr2str(&nhe->ip, buf, sizeof(buf));
 				prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
-				bgp_dest_soo_use_soo_nhgid_qlist_del(&nhe->dest_soo_use_nhid_list,
-							     dest_he);
-				UNSET_FLAG(dest_he->flags, DEST_PRESENT_IN_NHGID_USE_LIST);
+				nhe->route_with_soo_use_nhid_cnt--;
+				UNSET_FLAG(dest_he->flags, DEST_USING_SOO_NHGID);
 				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 					zlog_debug(
 						"bgp vrf %s per src nhg %s %s dest soo %s "
@@ -1843,7 +1882,7 @@ bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 				dest_he = bgp_dest_soo_find(nhe, p);
 				if (dest_he && CHECK_FLAG(
 					    dest_he->flags,
-					    DEST_PRESENT_IN_NHGID_USE_LIST)) {
+					    DEST_USING_SOO_NHGID)) {
 					using_soo_nhg = true;
 					*soo_nhg = nhe->nhg_id;
 					memcpy(soo, &in,
