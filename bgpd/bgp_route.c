@@ -4210,6 +4210,9 @@ static unsigned int process_subq(struct bgp_dest_queue *subq,
 	if (!dest)
 		return 0;
 
+	STAILQ_REMOVE_HEAD(subq, pq);
+        STAILQ_NEXT(dest, pq) = NULL; /* complete unlink */
+
 	switch (qindex) {
 	case META_QUEUE_EARLY_ROUTE:
 		process_subq_early_route(dest);
@@ -4220,8 +4223,6 @@ static unsigned int process_subq(struct bgp_dest_queue *subq,
 	case META_QUEUE_EOIU_MARKER:
 		process_eoiu_marker(dest);
 	}
-	STAILQ_REMOVE_HEAD(subq, pq);
-	STAILQ_NEXT(dest, pq) = NULL; /* complete unlink */
 
 	return 1;
 }
