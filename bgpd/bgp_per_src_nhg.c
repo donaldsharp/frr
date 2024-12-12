@@ -34,6 +34,7 @@
 #include "nexthop_group.h"
 #include "wheel.h"
 #include "lib/jhash.h"
+#include "workqueue.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_table.h"
