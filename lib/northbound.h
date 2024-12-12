@@ -1319,7 +1319,8 @@ extern int nb_notify_subscriptions(void);
 /*
  * Update subscription cache
  */
-extern void nb_cache_subscriptions(struct thread_master *master, const char* xpath, bool add);
+extern void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
+                                   const char* action, uint32_t interval);
 
 extern void nb_show_subscription_cache(struct vty *vty);
 

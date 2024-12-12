@@ -105,7 +105,7 @@ static int nb_oper_data_iter_node(const struct lysc_node *snode,
 				  bool first, uint32_t flags,
 				  nb_oper_data_cb cb, void *arg);
 
-static void nb_wheel_init(struct thread_master *master, const char* xpath);
+static void nb_wheel_init_or_reset(struct thread_master *master, const char* xpath, int interval);
 static unsigned int running_config_entry_key_make(const void *value);
 
 static int nb_node_check_config_only(const struct lysc_node *snode, void *arg)
@@ -2366,18 +2366,16 @@ static void *subsc_cache_entry_alloc(void *p)
 }
 
 /* Add or Delete the subscriprions of xpath to the cache */
-void nb_cache_subscriptions(struct thread_master *master, const char* xpath, bool add)
+void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
+		            const char* action, uint32_t interval)
 {
-    zlog_debug("Updating cache with xpath %s", xpath);
     /* Adding to Hash table */
     struct subscr_cache_entry *cache, s;
     strcpy(s.xpath, xpath);
-    if (add) {
+    if (strcmp(action, "Add") == 0) {
         cache = hash_get(subscr_cache_entries, &s, subsc_cache_entry_alloc);
 	/* Start timer wheel for sampling subscriptions */
-	if (!timer_wheel && hashcount(subscr_cache_entries) == 1) {
-	    nb_wheel_init(master, xpath);
-	}
+	nb_wheel_init_or_reset(master, xpath, interval);
     } else {
 	/* Delete the subscription xpath from the cache */
 	cache = hash_lookup(subscr_cache_entries, &s);
@@ -2561,13 +2559,24 @@ void nb_validate_callbacks(void)
 	}
 }
 
-void nb_wheel_init(struct thread_master *master, const char* xpath)
+void nb_wheel_init_or_reset(struct thread_master *master, const char* xpath, int interval)
 {
 	if (!master) {
 	    return;
 	}
-        timer_wheel = wheel_init(master, SUBSCRIPTION_SAMPLE_TIMER, 1,
-			         nb_xpath_hash_key_make, nb_notify_subscriptions, "subscription thread");
+	int sample_time = 0;
+	if (interval)
+	    sample_time = interval;
+	else
+	    sample_time =  SUBSCRIPTION_SAMPLE_TIMER;
+	/* Timer is running and interval has changed, stop timer wheel */
+	if (timer_wheel && interval)
+            wheel_stop(timer_wheel);
+	/* Timer is running, nothing has changed */
+	else if (timer_wheel)
+	    return;
+        timer_wheel = wheel_init(master, sample_time, 1,
+                                 nb_xpath_hash_key_make, nb_notify_subscriptions, "subscription thread");
 	if (timer_wheel){
 	    xpath = XCALLOC(MTYPE_NB_CONFIG_ENTRY, XPATH_MAXLEN);
             wheel_add_item(timer_wheel, xpath);

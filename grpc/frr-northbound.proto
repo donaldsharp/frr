@@ -176,6 +176,9 @@ message SubscriptionList {
 
 message Subscription {
   string path = 1;
+  string action = 2;
+  string stream_mode = 3;
+  uint32 sample_interval = 4;
 }
 
 message SubscribeResponse {
