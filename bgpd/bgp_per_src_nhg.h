@@ -44,16 +44,10 @@ extern int bgp_nhg_nexthop_cache_compare(const struct bgp_nhg_nexthop_cache *a,
 DECLARE_RBTREE_UNIQ(bgp_nhg_nexthop_cache, struct bgp_nhg_nexthop_cache, entry,
 		    bgp_nhg_nexthop_cache_compare);
 
-
-PREDECL_DLIST(bgp_dest_soo_qlist);
-
-PREDECL_DLIST(bgp_dest_soo_use_soo_nhgid_qlist);
 /*
  * Hashtables containing nhg entries is in `bgp_vrf`.
  */
 struct bgp_dest_soo_hash_entry {
-	struct bgp_dest_soo_qlist_item item;
-	struct bgp_dest_soo_use_soo_nhgid_qlist_item item1;
 	struct bgp *bgp;
 	struct bgp_per_src_nhg_hash_entry *nhe;
 
@@ -68,14 +62,9 @@ struct bgp_dest_soo_hash_entry {
 	uint32_t refcnt;
 
 	uint32_t flags;
-#define DEST_PRESENT_IN_NHGID_USE_LIST (1 << 0)
+#define DEST_USING_SOO_NHGID (1 << 0)
 #define DEST_SOO_DEL_PENDING (1 << 1)
 };
-
-DECLARE_DLIST(bgp_dest_soo_qlist, struct bgp_dest_soo_hash_entry, item);
-
-DECLARE_DLIST(bgp_dest_soo_use_soo_nhgid_qlist, struct bgp_dest_soo_hash_entry,
-	      item1);
 
 /*
  * Hashtables containing nhg entries is in `bgp_vrf`.
@@ -98,12 +87,9 @@ struct bgp_per_src_nhg_hash_entry {
 	struct bgp_nhg_nexthop_cache_head nhg_nexthop_cache_table;
 
 	/* hash table of dest with soo attribute */
-	struct hash *dest_with_soo;
+	struct hash *route_with_soo_table;
 
-	/*linked list of dest_soo for easier walkthrough*/
-	struct bgp_dest_soo_qlist_head dest_soo_list;
-
-	struct bgp_dest_soo_use_soo_nhgid_qlist_head dest_soo_use_nhid_list;
+	uint32_t route_with_soo_use_nhid_cnt;
 
 	bitfield_t bgp_soo_route_selected_pi_bitmap;
 	bitfield_t bgp_soo_route_installed_pi_bitmap;

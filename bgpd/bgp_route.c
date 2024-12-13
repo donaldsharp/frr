@@ -5816,7 +5816,6 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		bgp_path_info_delete(dest, new);
 	}
 
-	bgp_per_src_nhg_upd_msg_check(bgp, afi, safi, dest);
 	return 0;
 
 /* This BGP update is filtered.  Log the reason then update BGP
@@ -5859,7 +5858,6 @@ filtered:
 		bgp_rib_remove(dest, pi, peer, afi, safi);
 	}
 
-	bgp_per_src_nhg_upd_msg_check(bgp, afi, safi, dest);
 	bgp_dest_unlock_node(dest);
 
 #ifdef ENABLE_BGP_VNC
