@@ -530,6 +530,15 @@ static void rtadv_timer(struct event *thread)
 		}
 }
 
+static void rtsolicit_increment_received(struct zebra_if *zif)
+{
+	if (zif) {
+		zif->rs_rcvd++;
+	}
+
+	return;
+}
+
 static void rtadv_process_solicit(struct interface *ifp)
 {
 	struct zebra_vrf *zvrf;
@@ -539,6 +548,7 @@ static void rtadv_process_solicit(struct interface *ifp)
 	assert(zvrf);
 	zif = ifp->info;
 
+	rtsolicit_increment_received(zif);
 	/*
 	 * If FastRetransmit is enabled, send the RA immediately.
 	 * If not enabled but it has been more than MIN_DELAY_BETWEEN_RAS
@@ -1663,6 +1673,7 @@ static int nd_dump_vty(struct vty *vty, struct interface *ifp)
 			rtadv->AdvRetransTimer);
 		vty_out(vty, "  ND advertised hop-count limit is %d hops\n",
 			rtadv->AdvCurHopLimit);
+		vty_out(vty, "  ND router solicit rcvd: %d\n", zif->rs_rcvd);
 		vty_out(vty, "  ND router advertisements sent: %d rcvd: %d\n",
 			zif->ra_sent, zif->ra_rcvd);
 		interval = rtadv->MaxRtrAdvInterval;
@@ -1733,6 +1744,7 @@ int nd_dump_vty_json(struct vty *vty, json_object *json, struct interface *ifp)
 		json_object_int_add(json_nd, "advReachableTime", rtadv->AdvReachableTime);
 		json_object_int_add(json_nd, "advRetransTimer", rtadv->AdvRetransTimer);
 		json_object_int_add(json_nd, "advCurHopLimit", rtadv->AdvCurHopLimit);
+		json_object_int_add(json_nd, "rsRcvd", zif->rs_rcvd);
 		json_object_int_add(json_nd, "raSent", zif->ra_sent);
 		json_object_int_add(json_nd, "raRcvd", zif->ra_rcvd);
 		interval = rtadv->MaxRtrAdvInterval;
