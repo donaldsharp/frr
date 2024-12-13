@@ -8006,7 +8006,7 @@ static void bgp_purge_af_static_redist_routes(struct bgp *bgp, afi_t afi,
 {
 	struct bgp_table *table;
 	struct bgp_dest *dest;
-	struct bgp_path_info *pi;
+	struct bgp_path_info *pi, *next;
 
 	/* Do not install the aggregate route if BGP is in the
 	 * process of termination.
@@ -8017,7 +8017,8 @@ static void bgp_purge_af_static_redist_routes(struct bgp *bgp, afi_t afi,
 
 	table = bgp->rib[afi][safi];
 	for (dest = bgp_table_top(table); dest; dest = bgp_route_next(dest)) {
-		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+		for (pi = bgp_dest_get_bgp_path_info(dest); (pi != NULL) && (next = pi->next, 1);
+		     pi = next) {
 			if (pi->peer == bgp->peer_self
 			    && ((pi->type == ZEBRA_ROUTE_BGP
 				 && pi->sub_type == BGP_ROUTE_STATIC)
@@ -8708,7 +8709,7 @@ void bgp_aggregate_toggle_suppressed(struct bgp_aggregate *aggregate,
 	struct bgp_table *table = bgp->rib[afi][safi];
 	const struct prefix *dest_p;
 	struct bgp_dest *dest, *top;
-	struct bgp_path_info *pi;
+	struct bgp_path_info *pi, *next;
 
 	/* We've found a different MED we must revert any suppressed routes. */
 	top = bgp_node_get(table, p);
@@ -8718,7 +8719,8 @@ void bgp_aggregate_toggle_suppressed(struct bgp_aggregate *aggregate,
 		if (dest_p->prefixlen <= p->prefixlen)
 			continue;
 
-		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+		for (pi = bgp_dest_get_bgp_path_info(dest); (pi != NULL) && (next = pi->next, 1);
+		     pi = next) {
 			if (BGP_PATH_HOLDDOWN(pi))
 				continue;
 			if (pi->sub_type == BGP_ROUTE_AGGREGATE)
@@ -8793,7 +8795,7 @@ void bgp_aggregate_route(struct bgp *bgp, const struct prefix *p, afi_t afi,
 	struct community *community = NULL;
 	struct ecommunity *ecommunity = NULL;
 	struct lcommunity *lcommunity = NULL;
-	struct bgp_path_info *pi;
+	struct bgp_path_info *pi, *next;
 	uint8_t atomic_aggregate = 0;
 
 	/* If the bgp instance is being deleted or self peer is deleted
@@ -8846,7 +8848,8 @@ void bgp_aggregate_route(struct bgp *bgp, const struct prefix *p, afi_t afi,
 		if (!bgp_check_advertise(bgp, dest, safi))
 			continue;
 
-		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+		for (pi = bgp_dest_get_bgp_path_info(dest); (pi != NULL) && (next = pi->next, 1);
+		     pi = next) {
 			if (BGP_PATH_HOLDDOWN(pi))
 				continue;
 
@@ -9002,7 +9005,7 @@ void bgp_aggregate_delete(struct bgp *bgp, const struct prefix *p, afi_t afi,
 	struct bgp_table *table;
 	struct bgp_dest *top;
 	struct bgp_dest *dest;
-	struct bgp_path_info *pi;
+	struct bgp_path_info *pi, *next;
 
 	table = bgp->rib[afi][safi];
 
@@ -9015,7 +9018,8 @@ void bgp_aggregate_delete(struct bgp *bgp, const struct prefix *p, afi_t afi,
 		if (dest_p->prefixlen <= p->prefixlen)
 			continue;
 
-		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = pi->next) {
+		for (pi = bgp_dest_get_bgp_path_info(dest); (pi != NULL) && (next = pi->next, 1);
+		     pi = next) {
 			if (BGP_PATH_HOLDDOWN(pi))
 				continue;
 
