@@ -185,6 +185,7 @@ struct zebra_if {
 
 	struct rtadvconf rtadv;
 	unsigned int ra_sent, ra_rcvd;
+	unsigned int rs_rcvd;
 
 	struct irdp_interface *irdp;
 
