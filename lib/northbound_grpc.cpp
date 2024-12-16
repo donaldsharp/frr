@@ -632,14 +632,14 @@ grpc::Status HandleUnarySubscribe(
 	const char *action;
 	const char *mode;
 	uint32_t interval;
-	bool add = true; /* To be updated based on proto oper variable */
 	for (const frr::Subscription &item : tag->request.subscribe().subscriptions()) {
 	    xpath_str = item.path().c_str();
 	    action = item.action().c_str();
 	    mode = item.stream_mode().c_str();
 	    interval = item.sample_interval();
 	    nb_cache_subscriptions(main_master, xpath_str, action, interval);
-	    zlog_err("Subscribe %s(path: \"%s\") action: %s interval: %d", __func__, xpath_str, action, interval);
+	    grpc_debug("Subscribe %s(path: \"%s\") action: %s interval: %d",
+			__func__, xpath_str, action, interval);
 	}
 	return grpc::Status::OK;
 }
@@ -1303,13 +1303,10 @@ static int  frr_grpc_notification_send(const char *xpath,
     std::string vrf_address = "127.0.0.1:4221";
     args.SetString("grpc.target", vrf_address);
 
-    // Log message for debugging
-    zlog_err("Test GRPC notification checking data tree");
-
     // Find the node in the data tree using the provided XPath
     nb_node = nb_node_find(xpath);
     if (!nb_node) {
-      zlog_err("%s: unknown data path: %s", __func__, xpath);
+        zlog_err("%s: unknown data path: %s", __func__, xpath);
         return -1;
     }
 
@@ -1334,16 +1331,14 @@ static int  frr_grpc_notification_send(const char *xpath,
         zlog_err("%s: failed to populate DataTree for path: %s", __func__, xpath);
         return -1;
     }
-
+    zlog_debug("GRPC notification send for Xpath %s", xpath);
     std::unique_ptr<grpc::ClientReader<frr::SubscriptionCacheResponse>> stream(
         stub->SubscriptionCache(&context, cache)); // Pass both arguments
-
     if (!stream) {
         zlog_err("Failed to open gRPC stream for SubscriptionCache");
         return -1;
     }
-
-    zlog_debug("Telemetry data successfully sent via gRPC");
+    zlog_debug("Telemetry data sucessfully sent via gRPC");
     return 0;
 }
 

@@ -1781,6 +1781,8 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 			strlcpy(xpath, xpath_list, sizeof(xpath));
 			unsigned int i = 0;
 			LY_FOR_KEYS (snode, skey) {
+				DEBUGD(&nb_dbg_events, "Xpath %s compare keys %s",
+				       xpath, list_keys.key[i]);
 				assert(i < list_keys.num);
 				char *p = strstr(xpath, list_keys.key[i]);
 				if (p && strstr(xpath, skey->name))
@@ -2369,6 +2371,8 @@ static void *subsc_cache_entry_alloc(void *p)
 void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
 		            const char* action, uint32_t interval)
 {
+    DEBUGD(&nb_dbg_events, "Subscription for xpath %s, action %s, interval %d",
+           xpath, action, interval);
     /* Adding to Hash table */
     struct subscr_cache_entry *cache, s;
     strcpy(s.xpath, xpath);
@@ -2376,14 +2380,15 @@ void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
         cache = hash_get(subscr_cache_entries, &s, subsc_cache_entry_alloc);
 	/* Start timer wheel for sampling subscriptions */
 	nb_wheel_init_or_reset(master, xpath, interval);
-    } else {
+    } else if(strcmp(action, "Del") == 0) {
 	/* Delete the subscription xpath from the cache */
 	cache = hash_lookup(subscr_cache_entries, &s);
 	if (cache)
 	    hash_release(subscr_cache_entries, cache);
 	if (hashcount(subscr_cache_entries) == 0 && timer_wheel)
 	    wheel_stop(timer_wheel);
-    }
+    } else
+	nb_wheel_init_or_reset(master, xpath, interval);
     /* Send notification of the current subscriptions */
     nb_notify_subscriptions();
     return;
@@ -2397,6 +2402,7 @@ static int hash_walk_dump(struct hash_bucket *bucket, void *arg)
     struct yang_data *data;
     arguments = yang_data_list_new();
     char xpath_arg[XPATH_MAXLEN];
+    DEBUGD(&nb_dbg_events, "Notifying xpath %s", entry->xpath);
     /* TODO: Check if this arg is needed as nb walk will give the data */
     data = yang_data_new_string(xpath_arg, entry->xpath);
     listnode_add(arguments, data);
@@ -2566,15 +2572,17 @@ void nb_wheel_init_or_reset(struct thread_master *master, const char* xpath, int
 	}
 	int sample_time = 0;
 	if (interval)
-	    sample_time = interval;
+	    sample_time = interval * 1000; /* convert to msec */
 	else
 	    sample_time =  SUBSCRIPTION_SAMPLE_TIMER;
+	DEBUGD(&nb_dbg_events, "Wheel sample %d", sample_time);
 	/* Timer is running and interval has changed, stop timer wheel */
-	if (timer_wheel && interval)
+	if (timer_wheel && interval != timer_wheel->period)
             wheel_stop(timer_wheel);
 	/* Timer is running, nothing has changed */
 	else if (timer_wheel)
 	    return;
+	DEBUGD(&nb_dbg_events, "Initing the timer wheel");
         timer_wheel = wheel_init(master, sample_time, 1,
                                  nb_xpath_hash_key_make, nb_notify_subscriptions, "subscription thread");
 	if (timer_wheel){

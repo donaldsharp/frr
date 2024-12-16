@@ -2,6 +2,7 @@
 #include "northbound.h"
 #include "bgpd/bgp_debug.h"
 #include "lib/vrf.h"
+#include "lib/debug.h"
 
 /*
  * XPath: /frr-bgp-peer:lib/vrf
@@ -21,6 +22,7 @@ int lib_vrf_get_keys(struct nb_cb_get_keys_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
 	args->keys->num = 1;
+	DEBUGD(&nb_dbg_events, "Vrf %s", vrfp->name);
 	strlcpy(args->keys->key[0], vrfp->name, sizeof(args->keys->key[0]));
 	return NB_OK;
 }
@@ -104,6 +106,7 @@ int lib_vrf_peer_get_keys(struct nb_cb_get_keys_args *args)
 				strlcpy(args->keys->key[0], &peer->su,
 					sizeof(args->keys->key[0]));
 		}
+		DEBUGD(&nb_dbg_events, "Peer name %s", args->keys->key[0]);
 	}
 	return NB_OK;
 }

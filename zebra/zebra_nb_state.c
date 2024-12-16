@@ -1028,6 +1028,7 @@ int lib_vrf_get_keys(struct nb_cb_get_keys_args *args)
 {
         struct vrf *vrfp = (struct vrf *)args->list_entry;
         args->keys->num = 1;
+        DEBUGD(&nb_dbg_events, "Vrf %s", vrfp->name);
         strlcpy(args->keys->key[0], vrfp->name, sizeof(args->keys->key[0]));
         return NB_OK;
 }
@@ -1036,7 +1037,6 @@ const void *lib_vrf_lookup_entry(struct nb_cb_lookup_entry_args *args)
 {
 	const char *vrfname = args->keys->key[0];
         struct vrf *vrf = vrf_lookup_by_name(vrfname);
-        zlog_err("lib_vrf_lookup_entry name %s", vrfname);
         return vrf;
 }
 
@@ -1064,6 +1064,7 @@ struct yang_data *lib_vrf_ipv4_route_count_total_get_elem(struct nb_cb_get_elem_
         int count = 0;
         for(int i=0; i< ZEBRA_ROUTE_MAX; i++)
             count += info->route_count[i];
+	DEBUGD(&nb_dbg_events, "Total Routes %d", count);
         return yang_data_new_uint32(args->xpath, count);
 }
 
@@ -1295,5 +1296,6 @@ struct yang_data *lib_vrf_ipv6_route_count_total_get_elem(struct nb_cb_get_elem_
         int count = 0;
         for(int i=0; i< ZEBRA_ROUTE_MAX; i++)
             count += info->route_count[i];
+	DEBUGD(&nb_dbg_events, "Total Routes %d", count);
         return yang_data_new_uint32(args->xpath, count);
 }
