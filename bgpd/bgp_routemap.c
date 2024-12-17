@@ -1996,10 +1996,10 @@ route_set_ip_nexthop(void *rule, const struct prefix *prefix, void *object)
 	} else if (rins->peer_address) {
 		if ((CHECK_FLAG(peer->rmap_type, PEER_RMAP_TYPE_IN)
 		     || CHECK_FLAG(peer->rmap_type, PEER_RMAP_TYPE_IMPORT))
-		    && peer->su_remote
-		    && sockunion_family(peer->su_remote) == AF_INET) {
+		    && peer->connection->su_remote
+		    && sockunion_family(peer->connection->su_remote) == AF_INET) {
 			path->attr->nexthop.s_addr =
-				sockunion2ip(peer->su_remote);
+				sockunion2ip(peer->connection->su_remote);
 			path->attr->flag |= ATTR_FLAG_BIT(BGP_ATTR_NEXT_HOP);
 		} else if (CHECK_FLAG(peer->rmap_type, PEER_RMAP_TYPE_OUT)) {
 			/* The next hop value will be set as part of
@@ -4067,9 +4067,9 @@ route_set_ipv6_nexthop_peer(void *rule, const struct prefix *pfx, void *object)
 
 	if ((CHECK_FLAG(peer->rmap_type, PEER_RMAP_TYPE_IN)
 	     || CHECK_FLAG(peer->rmap_type, PEER_RMAP_TYPE_IMPORT))
-	    && peer->su_remote
-	    && sockunion_family(peer->su_remote) == AF_INET6) {
-		peer_address = peer->su_remote->sin6.sin6_addr;
+	    && peer->connection->su_remote
+	    && sockunion_family(peer->connection->su_remote) == AF_INET6) {
+		peer_address = peer->connection->su_remote->sin6.sin6_addr;
 		/* Set next hop value and length in attribute. */
 		if (IN6_IS_ADDR_LINKLOCAL(&peer_address)) {
 			path->attr->mp_nexthop_local = peer_address;

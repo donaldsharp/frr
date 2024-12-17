@@ -450,24 +450,24 @@ static struct stream *bmp_peerstate(struct peer *peer, bool down)
 				 &uptime_real);
 
 		/* Local Address (16 bytes) */
-		if (peer->su_local->sa.sa_family == AF_INET6)
-			stream_put(s, &peer->su_local->sin6.sin6_addr, 16);
-		else if (peer->su_local->sa.sa_family == AF_INET) {
+		if (peer->connection->su_local->sa.sa_family == AF_INET6)
+			stream_put(s, &peer->connection->su_local->sin6.sin6_addr, 16);
+		else if (peer->connection->su_local->sa.sa_family == AF_INET) {
 			stream_putl(s, 0);
 			stream_putl(s, 0);
 			stream_putl(s, 0);
-			stream_put_in_addr(s, &peer->su_local->sin.sin_addr);
+			stream_put_in_addr(s, &peer->connection->su_local->sin.sin_addr);
 		}
 
 		/* Local Port, Remote Port */
-		if (peer->su_local->sa.sa_family == AF_INET6)
-			stream_putw(s, htons(peer->su_local->sin6.sin6_port));
-		else if (peer->su_local->sa.sa_family == AF_INET)
-			stream_putw(s, htons(peer->su_local->sin.sin_port));
-		if (peer->su_remote->sa.sa_family == AF_INET6)
-			stream_putw(s, htons(peer->su_remote->sin6.sin6_port));
-		else if (peer->su_remote->sa.sa_family == AF_INET)
-			stream_putw(s, htons(peer->su_remote->sin.sin_port));
+		if (peer->connection->su_local->sa.sa_family == AF_INET6)
+			stream_putw(s, htons(peer->connection->su_local->sin6.sin6_port));
+		else if (peer->connection->su_local->sa.sa_family == AF_INET)
+			stream_putw(s, htons(peer->connection->su_local->sin.sin_port));
+		if (peer->connection->su_remote->sa.sa_family == AF_INET6)
+			stream_putw(s, htons(peer->connection->su_remote->sin6.sin6_port));
+		else if (peer->connection->su_remote->sa.sa_family == AF_INET)
+			stream_putw(s, htons(peer->connection->su_remote->sin.sin_port));
 
 		static const uint8_t dummy_open[] = {
 			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
