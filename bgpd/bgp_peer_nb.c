@@ -61,31 +61,18 @@ const void *lib_vrf_peer_get_next(struct nb_cb_get_next_args *args)
 	else
 	    bgp = bgp_lookup_by_vrf_id(vrfp->vrf_id);
         if (args->list_entry == NULL) {
-		if (bgp) {
-			for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-				if (peer)
-					return peer;
-			}
-		}
+		if (bgp)
+			return listnode_head(bgp->peer);
 	} else {
-		struct peer *iter;
-		bool next = false;
 		peer = (struct peer *)args->list_entry;
 		if (!peer)
 			return NULL;
-		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, iter)) {
-			if (peer->conf_if) {
-				if (strcmp(peer->conf_if, iter->conf_if) == 0)
-					next = true;
-				else if (next == true)
-					return iter;
-			} else if (peer->host) {
-				if (strcmp(peer->host, iter->host) == 0)
-					next = true;
-				else if (next == true)
-					return iter;
-			}
-		}
+		node = listnode_lookup(bgp->peer, peer);
+		nnode = listnextnode(node);
+		if (nnode)
+			return listgetdata(nnode);
+		else
+			return NULL;
 	}
 	return NULL;
 }
