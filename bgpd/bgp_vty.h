@@ -59,6 +59,9 @@ struct bgp;
 	"V         AS    LocalAS   MsgRcvd   MsgSent   TblVer  InQ OutQ  Up/Down State/PfxRcd   PfxSnt Desc\n"
 #define BGP_SHOW_SUMMARY_HEADER_FAILED "EstdCnt DropCnt ResetTime Reason\n"
 
+#define BGP_SHOW_NEIGHBORS_BRIEF_HEADER                                        \
+	"\nNeighbor                AS   MsgRcvd   MsgSent  ResetTime        State         Afi/Safi    PfxRcd    PfxSnt\n"
+
 #define BGP_SHOW_PEER_GR_CAPABILITY(vty, p, use_json, json)                    \
 	do {                                                                   \
 		bgp_show_neighbor_graceful_restart_local_mode(vty, p,          \
@@ -152,6 +155,12 @@ extern void bgp_clear_soft_in(struct bgp *bgp, afi_t afi, safi_t safi);
 /* Peer show flags */
 /* Value of 0 means show all information */
 #define VTY_BGP_PEER_SHOW_GR_INFO (1 << 0)
+/* Value of 2 means - show brief info for neighbors */
+#define VTY_BGP_PEER_SHOW_BRIEF_INFO (1 << 1)
+/* Value of 4 means - list brief info for established neighbors */
+#define VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO (1 << 2)
+/* Value of 8 means - list brief info for not-established neighbors */
+#define VTY_BGP_PEER_SHOW_STATE_FAILED_INFO (1 << 3)
 
 extern void bgp_vty_init(void);
 extern void community_alias_vty(void);
