@@ -64,6 +64,7 @@ struct bgp_dest_soo_hash_entry {
 	uint32_t flags;
 #define DEST_USING_SOO_NHGID (1 << 0)
 #define DEST_SOO_DEL_PENDING (1 << 1)
+#define DEST_SOO_ROUTE_ATTR_DEL (1 << 2)
 };
 
 /*
@@ -127,6 +128,7 @@ struct bgp_per_src_nhg_hash_entry {
 #define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED (1 << 6)
 #define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_DO_WECMP (1 << 7)
 #define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_CLEAR_ONLY (1 << 8)
+#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_ATTR_DEL (1 << 9)
 };
 
 #define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS 10
