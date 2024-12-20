@@ -138,6 +138,8 @@ func_frr()
     exec_cmd frr.work_queues vtysh -c "show work-queues"
     exec_cmd frr.memory vtysh -c "show memory"
     exec_cmd frr.modules vtysh -c "show modules"
+    exec_cmd frr.bgp_yang vtysh -c "show yang operational-data bgpd"
+    exec_cmd frr.zebra_yang vtysh -c "show yang operational-data zebra"
 
     exec_cmd evpn.local_mac.all  vtysh -c "show evpn local-mac"
 
