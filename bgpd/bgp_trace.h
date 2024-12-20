@@ -638,7 +638,6 @@ TRACEPOINT_EVENT(
 )
 TRACEPOINT_LOGLEVEL(frr_bgp, evpn_ignore_suppress_route, TRACE_INFO)
 
->>>>>>> bbdfc4b6be (bgpd: suppressed export to evpn add tp)
 /* clang-format on */
 
 #include <lttng/tracepoint-event.h>

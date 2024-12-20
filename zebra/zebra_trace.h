@@ -36,7 +36,6 @@
 #include "zebra/debug.h"
 #include "zebra/interface.h"
 #include "zebra/rib.h"
-#include "zebra/rt.h"
 #include "zebra/rt_netlink.h"
 #include "zebra/zebra_errors.h"
 #include "zebra/zebra_l2.h"
@@ -51,8 +50,10 @@
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_router.h"
 
+#include "include/linux/neighbour.h"
 #include <linux/if_bridge.h>
 
+/* clang-format off */
 TRACEPOINT_EVENT(
 	frr_zebra,
 	netlink_request_intf_addr,

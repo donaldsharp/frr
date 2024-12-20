@@ -3367,8 +3367,6 @@ static void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest,
 		return;
 	}
 
-	const struct prefix *p = bgp_dest_get_prefix(dest);
-
 	debug = bgp_debug_bestpath(dest);
 	if (debug)
 		zlog_debug("%s: p=%pBD(%s) afi=%s, safi=%s start", __func__,
