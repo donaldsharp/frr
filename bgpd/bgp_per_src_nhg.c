@@ -524,7 +524,9 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 			    (CHECK_FLAG(nhe->flags,
 				       PER_SRC_NEXTHOP_GROUP_DEL_PENDING) &&
 			     !CHECK_FLAG(bgp->per_src_nhg_flags[table->afi][table->safi],
-                                       BGP_FLAG_CONFIG_DEL_PENDING))) {
+                                       BGP_FLAG_CONFIG_DEL_PENDING) &&
+			     !CHECK_FLAG(nhe->flags,
+                                       PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_ATTR_DEL))) {
 				SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED);
 				*nhg_id = nhe->nhg_id;
 				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -561,6 +563,10 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 					 PER_SRC_NEXTHOP_GROUP_VALID))) ||
 				(CHECK_FLAG(bgp->per_src_nhg_flags[table->afi][table->safi],
                                        BGP_FLAG_CONFIG_DEL_PENDING)) ||
+				CHECK_FLAG(nhe->flags,
+                                       PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_ATTR_DEL) ||
+			        CHECK_FLAG(dest_he->flags,
+                                       DEST_SOO_ROUTE_ATTR_DEL) ||
 			    ((!CHECK_FLAG(nhe->flags,
 					  PER_SRC_NEXTHOP_GROUP_VALID)) &&
 			     (!CHECK_FLAG(
@@ -1553,38 +1559,44 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
 				zlog_debug(
 					"bgp vrf %s per src nhg route with soo %s %s dest %s "
-					"peer %pSU idx %d %s refcnt:%d",
+					"peer %pSU idx %d %s refcnt:%d soo_attr_del:%d",
 					bgp->name_pretty, buf,
 					get_afi_safi_str(afi, safi, false),
 					bgp_dest_get_prefix_str(dest),
 					&pi->peer->connection->su, pi->peer->bit_index,
 					is_add ? "upd" : "del",
-					dest_he->refcnt);
+					dest_he->refcnt, soo_attr_del);
 			bgp_path_info_set_flag(dest, pi, BGP_PATH_ATTR_CHANGED);
-		}
 
-		if (soo_attr_del && !dest_he->refcnt) {
-			if (CHECK_FLAG(dest_he->flags,
-				 DEST_USING_SOO_NHGID)) {
-				char buf[INET6_ADDRSTRLEN];
-				char pfxprint[PREFIX2STR_BUFFER];
-				ipaddr2str(&nhe->ip, buf, sizeof(buf));
-				prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
-				nhe->route_with_soo_use_nhid_cnt--;
-				UNSET_FLAG(dest_he->flags, DEST_USING_SOO_NHGID);
-				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
-					zlog_debug(
-						"bgp vrf %s per src nhg %s %s dest soo %s "
-						"del from soo nhid use list",
-						nhe->bgp->name_pretty, buf,
-						get_afi_safi_str(afi, safi,
-								 false),
-						pfxprint);
+			if (soo_attr_del) {
+				if (!dest_he->refcnt) {
+					if (CHECK_FLAG(dest_he->flags,
+						 DEST_USING_SOO_NHGID)) {
+						char buf[INET6_ADDRSTRLEN];
+						char pfxprint[PREFIX2STR_BUFFER];
+						ipaddr2str(&nhe->ip, buf, sizeof(buf));
+						prefix2str(&dest_he->p, pfxprint, sizeof(pfxprint));
+						nhe->route_with_soo_use_nhid_cnt--;
+						UNSET_FLAG(dest_he->flags, DEST_USING_SOO_NHGID);
+						SET_FLAG(
+							dest_he->flags,
+							DEST_SOO_ROUTE_ATTR_DEL);
+						if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
+							zlog_debug(
+							"bgp vrf %s per src nhg %s %s dest soo %s "
+							"del from soo nhid use list",
+							nhe->bgp->name_pretty, buf,
+							get_afi_safi_str(afi, safi,
+									 false),
+							pfxprint);
+						bgp_zebra_announce_actual(dest, pi, bgp);
+					}
+				}
 			}
-		}
 
-		if (!dest_he->refcnt)
-			bgp_process_dest_soo_del(dest_he);
+			if (!dest_he->refcnt)
+				bgp_process_dest_soo_del(dest_he);
+		}
 	}
 }
 
@@ -1629,11 +1641,11 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, safi_t safi,
 			ipaddr2str(&ip, buf, sizeof(buf));
 			zlog_debug(
 				"bgp vrf %s per src nhg soo route soo %s %s dest %s "
-				"peer %pSU idx %d %s",
+				"peer %pSU idx %d %s soo_attr_del:%d",
 				bgp->name_pretty, buf,
 				get_afi_safi_str(afi, safi, false),
 				bgp_dest_get_prefix_str(dest), &pi->peer->connection->su,
-				pi->peer->bit_index, is_add ? "upd" : "del");
+				pi->peer->bit_index, is_add ? "upd" : "del", soo_attr_del);
 		}
 		if (is_add) {
 			// Even though NHG is allocated here, it is
@@ -1661,15 +1673,20 @@ void bgp_process_soo_route(struct bgp *bgp, afi_t afi, safi_t safi,
 			bf_release_index(nhe->bgp_soo_route_selected_pi_bitmap,
 					 pi->peer->bit_index);
 			nhe->refcnt--;
+			if (soo_attr_del && !nhe->refcnt) {
+				UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED);
+				SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_ATTR_DEL);
+			}
 		}
 
-		if (soo_attr_del && !nhe->refcnt)
-			UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED);
 		bgp_per_src_nhg_nc_del(afi, nhe, pi);
 	}
 
 	if (!nhe->refcnt) {
 		bgp_per_src_nhg_delete(nhe);
+		if (soo_attr_del) {
+			bgp_zebra_announce_actual(dest, pi, bgp);
+		}
 	} else {
 		bgp_per_src_nhg_update(nhe);
 	}
@@ -1733,6 +1750,10 @@ void bgp_process_route_soo_attr_change(struct bgp *bgp, afi_t afi, safi_t safi,
 
 	/*old select has the soo attr attached but new one doesn't*/
 	if (is_soo_attr(pi->attr) && !is_soo_attr(new_attr)) {
+		/* when soo attr is removed from path, we need to immediately
+		 * announce route to zebra, as we can delete nhg only when all
+		 * routes are moved to zebra nhgid.
+		 */
 		if (bgp_is_soo_route(dest, pi, &ip)) {
 			/*processing of soo route*/
 			bgp_process_soo_route(bgp, afi, safi, dest, pi, &ip,
