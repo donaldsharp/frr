@@ -928,7 +928,7 @@ DEFUN(debug_bgp_per_src_nhg, debug_bgp_per_src_nhg_cmd,
 }
 
 DEFUN(no_debug_bgp_per_src_nhg, no_debug_bgp_per_src_nhg_cmd,
-      "no debug bgp per-src-nhg",
+      "no debug bgp per-source-nhg",
       NO_STR DEBUG_STR BGP_STR "BGP per source nexthop group events\n")
 {
 	if (vty->node == CONFIG_NODE)
