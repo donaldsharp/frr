@@ -51,15 +51,20 @@ const void *lib_vrf_peer_get_next(struct nb_cb_get_next_args *args)
         struct bgp *bgp;
         struct peer *peer;
         struct listnode *node, *nnode;
-        struct nb_config_entry *config;
 	struct vrf *vrfp = (struct vrf *)args->parent_list_entry;
 
-	if (!vrfp)
+	if (!vrfp) {
+		DEBUGD(&nb_dbg_events, "VRF NULL in parent list");
 		return NULL;
+	}
 	if (!vrfp->vrf_id)
 	    bgp = bgp_get_default();
 	else
 	    bgp = bgp_lookup_by_vrf_id(vrfp->vrf_id);
+	if (!bgp || !bgp->peer) {
+	    DEBUGD(&nb_dbg_events, "No BGP peers in vrf %d", vrfp->vrf_id);
+	    return NULL;
+	}
         if (args->list_entry == NULL) {
 		if (bgp)
 			return listnode_head(bgp->peer);

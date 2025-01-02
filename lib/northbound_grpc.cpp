@@ -599,8 +599,8 @@ bool HandleStreamingSubscriptionCache(
                     mypathps->push_back(std::string(path));
 		    const char* xpath_str = path.c_str();
 		    const char* dt_str = dt.data().c_str();
-		    flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", xpath_str);
-		    flog_err(EC_LIB_YANG_UNKNOWN_DATA_PATH, "%s path string", dt_str);
+		    grpc_debug("Xpath = %s", xpath_str);
+		    grpc_debug("Data %s", dt_str);
                 }
         }
         if (mypathps->empty()) {
@@ -1311,7 +1311,7 @@ static int  frr_grpc_notification_send(const char *xpath,
     }
 
     // Create a gRPC channel to send telemetry data to the routing application
-   zlog_debug("Attempting to connect to gRPC service at %s", vrf_address.c_str());
+   grpc_debug("Attempting to connect to gRPC service at %s", vrf_address.c_str());
    auto channel = grpc::CreateCustomChannel(vrf_address, grpc::InsecureChannelCredentials(), args);
    auto stub = frr::Northbound::NewStub(channel);
    if (!channel) {
@@ -1331,14 +1331,14 @@ static int  frr_grpc_notification_send(const char *xpath,
         zlog_err("%s: failed to populate DataTree for path: %s", __func__, xpath);
         return -1;
     }
-    zlog_debug("GRPC notification send for Xpath %s", xpath);
+    grpc_debug("GRPC notification send for Xpath %s", xpath);
     std::unique_ptr<grpc::ClientReader<frr::SubscriptionCacheResponse>> stream(
         stub->SubscriptionCache(&context, cache)); // Pass both arguments
     if (!stream) {
         zlog_err("Failed to open gRPC stream for SubscriptionCache");
         return -1;
     }
-    zlog_debug("Telemetry data sucessfully sent via gRPC");
+    grpc_debug("Telemetry data sucessfully sent via gRPC");
     return 0;
 }
 

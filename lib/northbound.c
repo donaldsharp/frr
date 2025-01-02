@@ -38,7 +38,7 @@ DEFINE_MTYPE_STATIC(LIB, NB_NODE, "Northbound Node");
 DEFINE_MTYPE_STATIC(LIB, NB_CONFIG, "Northbound Configuration");
 DEFINE_MTYPE_STATIC(LIB, NB_CONFIG_ENTRY, "Northbound Configuration Entry");
 
-#define SUBSCRIPTION_SAMPLE_TIMER 30000
+#define SUBSCRIPTION_SAMPLE_TIMER 10000
 
 /* Running configuration - shouldn't be modified directly. */
 struct nb_config *running_config;
@@ -1781,13 +1781,20 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 			strlcpy(xpath, xpath_list, sizeof(xpath));
 			unsigned int i = 0;
 			LY_FOR_KEYS (snode, skey) {
-				DEBUGD(&nb_dbg_events, "Xpath %s compare keys %s",
+				DEBUGD(&nb_dbg_events, "Xpath %s compare list key %s",
 				       xpath, list_keys.key[i]);
 				assert(i < list_keys.num);
-				char *p = strstr(xpath, list_keys.key[i]);
-				if (p && strstr(xpath, skey->name))
+				/* Checking if the xpath is fully constucted with the
+				 * predicate and its value in which case skip appending nam
+				 * but iterate its children to get the values
+				 * e.g xpath  = .../predicate[key='value']*/
+				char *predicate_match = strstr(xpath, list_keys.key[i]);
+                                char *value_match = strstr(xpath, skey->name);
+				if (predicate_match && value_match)
+					/* Don't append anything to xpath */
 					iterate_child = true;
-				else if (!p && strstr(xpath, skey->name)) {
+				else if (!predicate_match && value_match) {
+					/* Continue to next iteration */
 					iterate_child = false;
 					i++;
 					continue;
@@ -2385,8 +2392,11 @@ void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
 	cache = hash_lookup(subscr_cache_entries, &s);
 	if (cache)
 	    hash_release(subscr_cache_entries, cache);
-	if (hashcount(subscr_cache_entries) == 0 && timer_wheel)
-	    wheel_stop(timer_wheel);
+	if (hashcount(subscr_cache_entries) == 0 && timer_wheel) {
+	    DEBUGD(&nb_dbg_events, "Deleting timer wheel");
+	    wheel_delete(timer_wheel);
+	    timer_wheel = NULL;
+	}
     } else
 	nb_wheel_init_or_reset(master, xpath, interval);
     /* Send notification of the current subscriptions */
@@ -2398,15 +2408,8 @@ void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
 static int hash_walk_dump(struct hash_bucket *bucket, void *arg)
 {
     struct subscr_cache_entry *entry = bucket->data;
-    struct list *arguments;
-    struct yang_data *data;
-    arguments = yang_data_list_new();
-    char xpath_arg[XPATH_MAXLEN];
     DEBUGD(&nb_dbg_events, "Notifying xpath %s", entry->xpath);
-    /* TODO: Check if this arg is needed as nb walk will give the data */
-    data = yang_data_new_string(xpath_arg, entry->xpath);
-    listnode_add(arguments, data);
-    nb_notification_send(entry->xpath, arguments);
+    nb_notification_send(entry->xpath, NULL);
     return;
 }
 
@@ -2576,19 +2579,19 @@ void nb_wheel_init_or_reset(struct thread_master *master, const char* xpath, int
 	else
 	    sample_time =  SUBSCRIPTION_SAMPLE_TIMER;
 	DEBUGD(&nb_dbg_events, "Wheel sample %d", sample_time);
-	/* Timer is running and interval has changed, stop timer wheel */
-	if (timer_wheel && interval != timer_wheel->period)
-            wheel_stop(timer_wheel);
-	/* Timer is running, nothing has changed */
-	else if (timer_wheel)
-	    return;
+	if (timer_wheel) {
+	   if (interval != timer_wheel->period)
+		/* Timer is running and interval has changed, stop timer wheel */
+                wheel_delete(timer_wheel);
+	   else
+	        /* Timer is running, nothing has changed */
+	        return;
+	}
 	DEBUGD(&nb_dbg_events, "Initing the timer wheel");
         timer_wheel = wheel_init(master, sample_time, 1,
                                  nb_xpath_hash_key_make, nb_notify_subscriptions, "subscription thread");
-	if (timer_wheel){
-	    xpath = XCALLOC(MTYPE_NB_CONFIG_ENTRY, XPATH_MAXLEN);
-            wheel_add_item(timer_wheel, xpath);
-	}
+	xpath = XCALLOC(MTYPE_NB_CONFIG_ENTRY, XPATH_MAXLEN);
+        wheel_add_item(timer_wheel, xpath);
 	return;
 }
 
