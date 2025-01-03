@@ -8639,9 +8639,57 @@ void bgp_process_maintenance_mode(struct vty *vty, bool enter)
 		bgp_initiate_graceful_shut_unshut(vty, bgp);
 }
 
+/*
+ * Function to terminate peer threads and close peer socket.
+ */
+void bgp_stop_peer_threads_and_close(struct peer *peer)
+{
+	/* Stop read and write threads. */
+	bgp_keepalives_off(peer);
+	bgp_writes_off(peer);
+	bgp_reads_off(peer);
+
+	THREAD_OFF(peer->t_connect_check_r);
+	THREAD_OFF(peer->t_connect_check_w);
+	THREAD_OFF(peer->t_stop_with_notify);
+
+	/* Stop all timers. */
+	THREAD_OFF(peer->t_start);
+	THREAD_OFF(peer->t_connect);
+	THREAD_OFF(peer->t_holdtime);
+	THREAD_OFF(peer->t_routeadv);
+	THREAD_OFF(peer->t_delayopen);
+
+	/*close socket and set to -1*/
+	close(peer->fd);
+	peer->fd = -1;
+	return;
+}
+
 void bgp_process_fast_down(bool upgrade)
 {
+	struct bgp *bgp;
+	struct peer *peer;
+	struct listnode *node, *nnode;
+	struct listnode *mnode, *mnnode;
+
 	SET_FLAG(bm->flags, BM_FLAG_FAST_SHUTDOWN);
+
+	zlog_info("Fast-shutdown configured, closing sockets.");
+
+	/* Terminate listener threads and close the sockets to prevent
+	 * the peer from trying to re-establish the connection
+	 */
+	bgp_close();
+
+	/* Terminate all the peer threads and
+	 * close the sockets
+	 */
+	for (ALL_LIST_ELEMENTS(bm->bgp, mnode, mnnode, bgp))
+		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
+			if (peer->fd >= 0) {
+				bgp_stop_peer_threads_and_close(peer);
+			}
 	if (upgrade)
 		SET_FLAG(bm->flags, BM_FLAG_UPGRADE);
 }
