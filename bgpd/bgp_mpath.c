@@ -556,6 +556,9 @@ void bgp_path_info_mpath_update(struct bgp *bgp, struct bgp_dest *dest,
 			 */
 			mpath_changed = true;
 			UNSET_FLAG(cur_iterator->flags, BGP_PATH_MULTIPATH);
+			if (eval_soo_per_nhg)
+				bgp_process_route_soo_attr(table->bgp, table->afi, table->safi,
+						dest, cur_iterator, false);
 		}
 
 		cur_iterator = cur_iterator->next;
