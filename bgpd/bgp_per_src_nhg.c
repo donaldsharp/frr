@@ -1764,6 +1764,7 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
 	struct ipaddr ip;
 	struct bgp_per_src_nhg_hash_entry *nhe;
 	struct bgp_table *table = NULL;
+	struct prefix *p = &dest->p;
 
 	table = bgp_dest_table(dest);
 	if (table && ((table->afi == AFI_L2VPN && table->safi == SAFI_EVPN)
@@ -1772,10 +1773,21 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
                     BGP_FLAG_NHG_PER_ORIGIN)))
 		return;
 
-	/* find-create nh */
 	memset(&ip, 0, sizeof(ip));
 	SET_IPADDR_V4(&ip);
-	memcpy(&ip.ipaddr_v4, &dest->p.u.prefix4, sizeof(dest->p.u.prefix4));
+
+	if (p) {
+		if (p->family == AF_INET) {
+			memcpy(&ip.ipaddr_v4, &dest->p.u.prefix4,
+			       sizeof(dest->p.u.prefix4));
+		} else if (p->family == AF_INET6) {
+			struct in_addr ipv4;
+			if (IS_MAPPED_IPV6(&p->u.prefix6)) {
+				ipv4_mapped_ipv6_to_ipv4(&p->u.prefix6, &ipv4);
+				memcpy(&ip.ipaddr_v4, &ipv4, sizeof(ipv4));
+			}
+		}
+	}
 
 	nhe = bgp_per_src_nhg_find(bgp, &ip, afi, safi);
 	if (nhe && nhe->refcnt &&
