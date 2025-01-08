@@ -1542,6 +1542,7 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 				   pi->peer->bit_index)) {
 			bf_set_bit(dest_he->bgp_pi_bitmap, pi->peer->bit_index);
 			dest_he->refcnt++;
+			bgp_path_info_set_flag(dest, pi, BGP_PATH_ATTR_CHANGED);
 		}
 	} else {
 		if (bf_test_index(dest_he->bgp_pi_bitmap,
@@ -1559,6 +1560,7 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 					&pi->peer->connection->su, pi->peer->bit_index,
 					is_add ? "upd" : "del",
 					dest_he->refcnt);
+			bgp_path_info_set_flag(dest, pi, BGP_PATH_ATTR_CHANGED);
 		}
 
 		if (soo_attr_del && !dest_he->refcnt) {
