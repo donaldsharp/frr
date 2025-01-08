@@ -469,6 +469,11 @@ void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest 
 				return;
 			}
 
+			if (withdraw && CHECK_FLAG(dest_he->flags, DEST_USING_SOO_NHGID)) {
+				nhe->route_with_soo_use_nhid_cnt--;
+				UNSET_FLAG(dest_he->flags, DEST_USING_SOO_NHGID);
+			}
+
 			if (CHECK_FLAG(dest_he->flags,
 				DEST_SOO_DEL_PENDING)) {
 				bgp_dest_soo_del(dest_he, nhe);
