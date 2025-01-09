@@ -8644,8 +8644,23 @@ void bgp_process_maintenance_mode(struct vty *vty, bool enter)
  */
 void bgp_stop_peer_threads_and_close(struct peer *peer)
 {
-	/* Stop read and write threads. */
+	/* Delete all existing events of the peer */
+	BGP_EVENT_FLUSH(peer);
+
+	if (peer_established(peer)) {
+		/* Stop graceful restart stalepath timer */
+		THREAD_OFF(peer->t_gr_stale);
+		/* Stop route-refresh stalepath timer */
+		THREAD_OFF(peer->t_refresh_stalepath);
+
+		/*Remove peer from all update group*/
+		update_group_remove_peer_afs(peer);
+	}
+
+	/* stop keepalives */
 	bgp_keepalives_off(peer);
+
+	/* Stop read and write threads. */
 	bgp_writes_off(peer);
 	bgp_reads_off(peer);
 
@@ -8659,6 +8674,22 @@ void bgp_stop_peer_threads_and_close(struct peer *peer)
 	THREAD_OFF(peer->t_holdtime);
 	THREAD_OFF(peer->t_routeadv);
 	THREAD_OFF(peer->t_delayopen);
+
+	/* Clear input and output buffer.  */
+	frr_with_mutex (&peer->io_mtx) {
+		if (peer->ibuf)
+			stream_fifo_clean(peer->ibuf);
+		if (peer->obuf)
+			stream_fifo_clean(peer->obuf);
+
+		if (peer->ibuf_work)
+			ringbuf_wipe(peer->ibuf_work);
+
+		if (peer->curr) {
+			stream_free(peer->curr);
+			peer->curr = NULL;
+		}
+	}
 
 	/*close socket and set to -1*/
 	close(peer->fd);
