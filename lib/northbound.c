@@ -31,13 +31,28 @@
 #include "northbound_cli.h"
 #include "northbound_db.h"
 #include "frrstr.h"
+#include "lib/wheel.h"
+
 
 DEFINE_MTYPE_STATIC(LIB, NB_NODE, "Northbound Node");
 DEFINE_MTYPE_STATIC(LIB, NB_CONFIG, "Northbound Configuration");
 DEFINE_MTYPE_STATIC(LIB, NB_CONFIG_ENTRY, "Northbound Configuration Entry");
 
+#define SUBSCRIPTION_SAMPLE_TIMER 10000
+
 /* Running configuration - shouldn't be modified directly. */
 struct nb_config *running_config;
+
+struct timer_wheel *timer_wheel;
+
+struct hash* subscr_cache_entries;
+
+/* Subscription Cache entry */
+struct subscr_cache_entry {
+    char xpath[XPATH_MAXLEN];
+}subscr_cache_entry;
+
+unsigned int nb_xpath_hash_key(const char* str);
 
 /* Hash table of user pointers associated with configuration entries. */
 static struct hash *running_config_entries;
@@ -89,6 +104,9 @@ static int nb_oper_data_iter_node(const struct lysc_node *snode,
 				  struct yang_translator *translator,
 				  bool first, uint32_t flags,
 				  nb_oper_data_cb cb, void *arg);
+
+static void nb_wheel_init_or_reset(struct thread_master *master, const char* xpath, int interval);
+static unsigned int running_config_entry_key_make(const void *value);
 
 static int nb_node_check_config_only(const struct lysc_node *snode, void *arg)
 {
@@ -1728,6 +1746,7 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 	const struct lysc_node *snode = nb_node->snode;
 	const void *list_entry = NULL;
 	uint32_t position = 1;
+	bool iterate_child = true;
 
 	if (CHECK_FLAG(nb_node->flags, F_NB_NODE_CONFIG_ONLY))
 		return NB_OK;
@@ -1757,15 +1776,35 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 				return NB_ERR;
 			}
 
+
 			/* Build XPath of the list entry. */
 			strlcpy(xpath, xpath_list, sizeof(xpath));
 			unsigned int i = 0;
 			LY_FOR_KEYS (snode, skey) {
+				DEBUGD(&nb_dbg_events, "Xpath %s compare list key %s",
+				       xpath, list_keys.key[i]);
 				assert(i < list_keys.num);
-				snprintf(xpath + strlen(xpath),
-					 sizeof(xpath) - strlen(xpath),
-					 "[%s='%s']", skey->name,
-					 list_keys.key[i]);
+				/* Checking if the xpath is fully constucted with the
+				 * predicate and its value in which case skip appending nam
+				 * but iterate its children to get the values
+				 * e.g xpath  = .../predicate[key='value']*/
+				char *predicate_match = strstr(xpath, list_keys.key[i]);
+                                char *value_match = strstr(xpath, skey->name);
+				if (predicate_match && value_match)
+					/* Don't append anything to xpath */
+					iterate_child = true;
+				else if (!predicate_match && value_match) {
+					/* Continue to next iteration */
+					iterate_child = false;
+					i++;
+					continue;
+				} else {
+					snprintf(xpath + strlen(xpath),
+						 sizeof(xpath) - strlen(xpath),
+						 "[%s='%s']", skey->name,
+						 list_keys.key[i]);
+				}
+				iterate_child = true;
 				i++;
 			}
 			assert(i == list_keys.num);
@@ -1777,13 +1816,14 @@ static int nb_oper_data_iter_list(const struct nb_node *nb_node,
 				 position);
 			position++;
 		}
-
 		/* Iterate over the child nodes. */
-		ret = nb_oper_data_iter_children(
-			nb_node->snode, xpath, list_entry, &list_keys,
-			translator, false, flags, cb, arg);
-		if (ret != NB_OK)
-			return ret;
+		if (iterate_child) {
+			ret = nb_oper_data_iter_children(
+				nb_node->snode, xpath, list_entry, &list_keys,
+				translator, false, flags, cb, arg);
+			if (ret != NB_OK)
+				return ret;
+		}
 	} while (list_entry);
 
 	return NB_OK;
@@ -1908,10 +1948,13 @@ int nb_oper_data_iterate(const char *xpath, struct yang_translator *translator,
 	 */
 	list_dnodes = list_new();
 	for (dn = dnode; dn; dn = lyd_parent(dn)) {
-		if (dn->schema->nodetype != LYS_LIST || !lyd_child(dn))
+		if (!CHECK_FLAG(dn->schema->nodetype,
+				LYS_CONTAINER | LYS_LIST) ||
+		    !lyd_child_no_keys(dn))
 			continue;
-		listnode_add_head(list_dnodes, dn);
+		listnode_add_head(list_dnodes, lyd_child_no_keys(dn));
 	}
+
 	/*
 	 * Use the northbound callbacks to find list entry pointer corresponding
 	 * to the given XPath.
@@ -1960,14 +2003,16 @@ int nb_oper_data_iterate(const char *xpath, struct yang_translator *translator,
 	}
 
 	/* If a list entry was given, iterate over that list entry only. */
-	if (dnode->schema->nodetype == LYS_LIST && lyd_child(dnode))
+	if (dnode->schema->nodetype == LYS_LIST && lyd_child(dnode)){
 		ret = nb_oper_data_iter_children(
 			nb_node->snode, xpath, list_entry, &list_keys,
 			translator, true, flags, cb, arg);
-	else
+	}
+	else {
 		ret = nb_oper_data_iter_node(nb_node->snode, xpath, list_entry,
 					     &list_keys, translator, true,
 					     flags, cb, arg);
+	}
 
 	list_delete(&list_dnodes);
 	yang_dnode_free(dnode);
@@ -2150,7 +2195,7 @@ int nb_notification_send(const char *xpath, struct list *arguments)
 
 	ret = hook_call(nb_notification_send, xpath, arguments);
 	if (arguments)
-		list_delete(&arguments);
+	    list_delete(&arguments);
 
 	return ret;
 }
@@ -2307,6 +2352,93 @@ void *nb_running_get_entry_non_rec(const struct lyd_node *dnode,
 					   false);
 }
 
+/* Create the hash key for the given xpath */
+static unsigned int nb_xpath_hash_key_make(const void *value)
+{
+    return string_hash_make(value);
+}
+
+static bool nb_xpath_hash_entry_cmp(const void *value1, const void *value2)
+{
+    const struct subscr_cache_entry *c1 = value1;
+    const struct subscr_cache_entry *c2 = value2;
+    return strmatch(c1->xpath, c2->xpath);
+}
+
+/* Allocating a new hash entry to save xpath */
+static void *subsc_cache_entry_alloc(void *p)
+{
+    struct subscr_cache_entry *new, *key = p;
+    new = XCALLOC(MTYPE_NB_CONFIG_ENTRY, sizeof(*new));
+    strlcpy(new->xpath, key->xpath, sizeof(new->xpath));
+    return new;
+}
+
+/* Add or Delete the subscriprions of xpath to the cache */
+void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
+		            const char* action, uint32_t interval)
+{
+    DEBUGD(&nb_dbg_events, "Subscription for xpath %s, action %s, interval %d",
+           xpath, action, interval);
+    /* Adding to Hash table */
+    struct subscr_cache_entry *cache, s;
+    strcpy(s.xpath, xpath);
+    if (strcmp(action, "Add") == 0) {
+        cache = hash_get(subscr_cache_entries, &s, subsc_cache_entry_alloc);
+	/* Start timer wheel for sampling subscriptions */
+	nb_wheel_init_or_reset(master, xpath, interval);
+    } else if(strcmp(action, "Del") == 0) {
+	/* Delete the subscription xpath from the cache */
+	cache = hash_lookup(subscr_cache_entries, &s);
+	if (cache)
+	    hash_release(subscr_cache_entries, cache);
+	if (hashcount(subscr_cache_entries) == 0 && timer_wheel) {
+	    DEBUGD(&nb_dbg_events, "Deleting timer wheel");
+	    wheel_delete(timer_wheel);
+	    timer_wheel = NULL;
+	}
+    } else
+	nb_wheel_init_or_reset(master, xpath, interval);
+    /* Send notification of the current subscriptions */
+    nb_notify_subscriptions();
+    return;
+}
+
+/* Walk the current subscriptions in the cache */
+static int hash_walk_dump(struct hash_bucket *bucket, void *arg)
+{
+    struct subscr_cache_entry *entry = bucket->data;
+    DEBUGD(&nb_dbg_events, "Notifying xpath %s", entry->xpath);
+    nb_notification_send(entry->xpath, NULL);
+    return;
+}
+
+/* Send notification of the xpaths */
+int nb_notify_subscriptions(void)
+{
+    struct subscr_cache_entry entry;
+    /* Walk the subscription cache */
+    hash_walk(subscr_cache_entries, hash_walk_dump, &entry);
+    return;
+}
+
+void show_subscriptions(struct hash_bucket *bucket, void *arg)
+{
+	struct subscr_cache_entry *entry = bucket->data;
+	struct vty *vtyp = (struct vty *)arg;
+	vty_out(vtyp, "%s \n", entry->xpath);
+	return;
+}
+
+void nb_show_subscription_cache(struct vty *vty)
+{
+	vty_out(vty, "-------  Subscriptions ------ \n");
+	if (subscr_cache_entries) {
+		/* Walk the subscription cache */
+		hash_walk(subscr_cache_entries, show_subscriptions, vty);
+	}
+}
+
 /* Logging functions. */
 const char *nb_event_name(enum nb_event event)
 {
@@ -2436,6 +2568,30 @@ void nb_validate_callbacks(void)
 	}
 }
 
+void nb_wheel_init_or_reset(struct thread_master *master, const char* xpath, int interval)
+{
+	if (!master) {
+	    return;
+	}
+	int sample_time =
+		interval ? interval * 1000 : SUBSCRIPTION_SAMPLE_TIMER;
+	DEBUGD(&nb_dbg_events, "Wheel sample %d", sample_time);
+	if (timer_wheel) {
+	   if (interval != timer_wheel->period)
+		/* Timer is running and interval has changed, stop timer wheel */
+                wheel_delete(timer_wheel);
+	   else
+	        /* Timer is running, nothing has changed */
+	        return;
+	}
+	DEBUGD(&nb_dbg_events, "Initing the timer wheel");
+        timer_wheel = wheel_init(master, sample_time, 1,
+                                 nb_xpath_hash_key_make, nb_notify_subscriptions, "subscription thread");
+	xpath = XCALLOC(MTYPE_NB_CONFIG_ENTRY, XPATH_MAXLEN);
+        wheel_add_item(timer_wheel, xpath);
+	return;
+}
+
 
 void nb_init(struct thread_master *tm,
 	     const struct frr_yang_module_info *const modules[],
@@ -2481,6 +2637,10 @@ void nb_init(struct thread_master *tm,
 	running_config_entries = hash_create(running_config_entry_key_make,
 					     running_config_entry_cmp,
 					     "Running Configuration Entries");
+	subscr_cache_entries = hash_create(nb_xpath_hash_key_make,
+			                   nb_xpath_hash_entry_cmp,
+					   "Subscription Cache Entries");
+
 	pthread_mutex_init(&running_config_mgmt_lock.mtx, NULL);
 
 	/* Initialize the northbound CLI. */

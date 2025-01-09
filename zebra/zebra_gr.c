@@ -703,7 +703,8 @@ static bool zebra_gr_process_route_entry(struct route_node *rn,
 			SET_FLAG(nexthop->flags, NEXTHOP_FLAG_FIB);
 
 		rib_delnode(rn, re);
-
+                struct rib_table_info *info = srcdest_rnode_table_info(rn);
+		info->route_count[re->type]--;
 		return true;
 	}
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-2-Clause
 //
 // Copyright 2019 FRRouting
 //
@@ -28,6 +29,8 @@ syntax = "proto3";
 
 package frr;
 
+option go_package =".";
+
 // Service specification for the FRR northbound interface.
 service Northbound {
   // Retrieve the capabilities supported by the target.
@@ -35,6 +38,10 @@ service Northbound {
 
   // Retrieve configuration data, state data or both from the target.
   rpc Get(GetRequest) returns (stream GetResponse) {}
+
+
+  // Subscribe
+  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse) {}
 
   // Create a new candidate configuration and return a reference to it. The
   // created candidate is a copy of the running configuration.
@@ -72,6 +79,9 @@ service Northbound {
 
   // Unlock the running configuration.
   rpc UnlockConfig(UnlockConfigRequest) returns (UnlockConfigResponse) {}
+
+  // Send Data
+  rpc SubscriptionCache(SubscriptionCacheRequest) returns (stream SubscriptionCacheResponse) {}
 
   // Execute a YANG RPC.
   rpc Execute(ExecuteRequest) returns (ExecuteResponse) {}
@@ -150,6 +160,31 @@ message GetResponse {
 //
 message CreateCandidateRequest {
   // Empty.
+}
+
+message SubscribeRequest {
+  oneof request {
+    SubscriptionList subscribe = 1;
+   // Poll poll = 3;
+  }
+}
+
+message SubscriptionList {
+  repeated Subscription subscriptions = 1;
+  //SamplingParams sampling_params = 2;
+}
+
+//action = Add/Del/Update
+message Subscription {
+  string path = 1;
+  string action = 2;
+  string stream_mode = 3;
+  uint32 sample_interval = 4;
+}
+
+message SubscribeResponse {
+  // Return values:
+  //grpc StatusCodes::OK: Success/ERROR
 }
 
 message CreateCandidateResponse {
@@ -419,4 +454,14 @@ message PathValue {
 message DataTree {
   Encoding encoding = 1;
   string data = 2;
+}
+
+message SubscriptionCacheRequest {
+  // Paths requested by the client.
+  repeated string path = 1;
+  DataTree data = 2;
+}
+
+message SubscriptionCacheResponse {
+ // grpc StatusCodes::OK: Success/ERROR
 }

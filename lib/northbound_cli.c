@@ -1479,24 +1479,23 @@ error:
 	return NB_ERR;
 }
 
-DEFPY (show_yang_operational_data,
-       show_yang_operational_data_cmd,
-       "show yang operational-data XPATH$xpath\
+DEFPY(show_yang_operational_data, show_yang_operational_data_cmd,
+      "show yang operational-data [XPATH$xpath]\
          [{\
 	   format <json$json|xml$xml>\
 	   |translate WORD$translator_family\
 	   |with-config$with_config\
 	 }]",
-       SHOW_STR
-       "YANG information\n"
-       "Show YANG operational data\n"
-       "XPath expression specifying the YANG data path\n"
-       "Set the output format\n"
-       "JavaScript Object Notation\n"
-       "Extensible Markup Language\n"
-       "Translate operational data\n"
-       "YANG module translator\n"
-       "Merge configuration data\n")
+      SHOW_STR
+      "YANG information\n"
+      "Show YANG operational data\n"
+      "XPath expression specifying the YANG data path\n"
+      "Set the output format\n"
+      "JavaScript Object Notation\n"
+      "Extensible Markup Language\n"
+      "Translate operational data\n"
+      "YANG module translator\n"
+      "Merge configuration data\n")
 {
 	LYD_FORMAT format;
 	struct yang_translator *translator = NULL;
@@ -1510,6 +1509,10 @@ DEFPY (show_yang_operational_data,
 	else
 		format = LYD_JSON;
 
+	if (!xpath) {
+		nb_show_subscription_cache(vty);
+		return;
+	}
 	if (translator_family) {
 		translator = yang_translator_find(translator_family);
 		if (!translator) {

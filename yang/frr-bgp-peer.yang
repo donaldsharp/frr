@@ -1,0 +1,99 @@
+module frr-bgp-peer {
+  yang-version 1.1;
+  namespace "http://frrouting.org/yang/bgp-peer";
+  prefix frr-bgp-peer;
+
+  import ietf-inet-types {
+    prefix inet;
+  }
+
+  import frr-routing {
+    prefix frr-rt;
+  }
+
+  organization
+    "Free Range Routing";
+  contact
+    "FRR Users List:       <mailto:frog@lists.frrouting.org>
+     FRR Development List: <mailto:dev@lists.frrouting.org>";
+  description
+    "This module defines bgp route map settings";
+
+  revision 2020-01-02 {
+    description
+      "Initial revision";
+  }
+
+  container lib {
+     list vrf {
+       config false;
+       key "id";
+       description
+         "Vrf.";
+       leaf id {
+         type string;
+         description
+           "VRF Id";
+       }
+       list peer {
+          config false;
+          key "name";
+          description
+            "Peer.";
+          leaf name {
+            type string;
+            description
+              "Peer name";
+          }
+          leaf status {
+            config false;
+            type string;
+            description
+              "Peer status";
+          }
+          leaf established-transitions {
+            config false;
+            type uint32;
+            description
+               "Transitions";
+          }
+          leaf in-queue {
+            config false;
+            type uint32;
+            description
+               "Input buffer queue";
+          }
+          leaf out-queue {
+            config false;
+            type uint32;
+            description
+               "Output buffer queue";
+          }
+          leaf tx-updates {
+            config false;
+            type uint32;
+            description
+               "Messages Sent";
+          }
+          leaf rx-updates {
+            config false;
+            type uint32;
+            description
+               "Messages Recieved";
+          }
+          leaf ipv4-unicast-rcvd {
+            config false;
+            type uint32;
+            description
+               "IPV4 unicast prefix count after post policy";
+          }
+          leaf ipv6-unicast-rcvd {
+            config false;
+            type uint32;
+            description
+               "IPV6 unicast prefix count after post policy";
+          }
+      }
+    }
+  }
+}

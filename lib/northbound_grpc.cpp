@@ -585,6 +585,66 @@ grpc::Status HandleUnaryGetCapabilities(
 // Define the context variable type for this streaming handler
 typedef std::list<std::string> GetContextType;
 
+typedef std::list<std::string> SubscriptionCacheContextType;
+
+bool HandleStreamingSubscriptionCache(
+	StreamRpcState<frr::SubscriptionCacheRequest, frr::SubscriptionCacheResponse, SubscriptionCacheContextType> *tag)
+{
+        auto mypathps = &tag->context;
+        if (tag->is_initial_process()) {
+		// Parse the data in subscription
+                auto paths = tag->request.path();
+		auto dt = tag->request.data();
+                for (const std::string &path : paths) {
+                    mypathps->push_back(std::string(path));
+		    const char* xpath_str = path.c_str();
+		    const char* dt_str = dt.data().c_str();
+		    grpc_debug("Xpath = %s", xpath_str);
+		    grpc_debug("Data %s", dt_str);
+                }
+        }
+        if (mypathps->empty()) {
+                tag->async_responder.Finish(grpc::Status::OK, tag);
+                return false;
+        }
+
+        frr::SubscriptionCacheResponse response;
+        grpc::Status status;
+
+        mypathps->pop_back();
+        if (mypathps->empty()) {
+                tag->async_responder.WriteAndFinish(
+                        response, grpc::WriteOptions(), grpc::Status::OK, tag);
+                return false;
+        } else {
+                tag->async_responder.Write(response, tag);
+                return true;
+        }
+	return true;
+}
+
+
+grpc::Status HandleUnarySubscribe(
+			UnaryRpcState<frr::SubscribeRequest, frr::SubscribeResponse> *tag)
+{
+	grpc_debug("%s: entered", __func__);
+        const char *xpath_str;
+	const char *action;
+	const char *mode;
+	uint32_t interval;
+	for (const frr::Subscription &item : tag->request.subscribe().subscriptions()) {
+	    xpath_str = item.path().c_str();
+	    action = item.action().c_str();
+	    mode = item.stream_mode().c_str();
+	    interval = item.sample_interval();
+	    nb_cache_subscriptions(main_master, xpath_str, action, interval);
+	    grpc_debug("Subscribe %s(path: \"%s\") action: %s interval: %d",
+			__func__, xpath_str, action, interval);
+	}
+	return grpc::Status::OK;
+}
+
+
 bool HandleStreamingGet(
 	StreamRpcState<frr::GetRequest, frr::GetResponse, GetContextType> *tag)
 {
@@ -1169,10 +1229,12 @@ static void *grpc_pthread_start(void *arg)
 	REQUEST_NEWRPC(LockConfig, NULL);
 	REQUEST_NEWRPC(UnlockConfig, NULL);
 	REQUEST_NEWRPC(Execute, NULL);
+	REQUEST_NEWRPC(Subscribe, NULL);
 
 	/* Schedule streaming RPC handlers */
 	REQUEST_NEWRPC_STREAMING(Get);
 	REQUEST_NEWRPC_STREAMING(ListTransactions);
+	REQUEST_NEWRPC_STREAMING(SubscriptionCache);
 
 	zlog_notice("gRPC server listening on %s",
 		    server_address.str().c_str());
@@ -1226,6 +1288,60 @@ static void *grpc_pthread_start(void *arg)
 	return NULL;
 }
 
+/* Establish grpc channel and send message */
+static int  frr_grpc_notification_send(const char *xpath,
+				  struct list *arguments)
+{
+    struct nb_node *nb_node = NULL;
+    grpc::Status status;
+    grpc::ClientContext context;
+    grpc::ChannelArguments args;
+    args.SetString(GRPC_ARG_PRIMARY_USER_AGENT_STRING, "frr_grpc_client");
+    args.SetString("grpc.lb_policy_name", "pick_first");
+    args.SetString("grpc.service_config_disable_resolution", "true");
+
+    std::string vrf_address = "127.0.0.1:4221";
+    args.SetString("grpc.target", vrf_address);
+
+    // Find the node in the data tree using the provided XPath
+    nb_node = nb_node_find(xpath);
+    if (!nb_node) {
+        zlog_err("%s: unknown data path: %s", __func__, xpath);
+        return -1;
+    }
+
+    // Create a gRPC channel to send telemetry data to the routing application
+   grpc_debug("Attempting to connect to gRPC service at %s", vrf_address.c_str());
+   auto channel = grpc::CreateCustomChannel(vrf_address, grpc::InsecureChannelCredentials(), args);
+   auto stub = frr::Northbound::NewStub(channel);
+   if (!channel) {
+     zlog_err("Failed to create gRPC channel to %s", vrf_address.c_str());
+   }
+   if (!stub) {
+     zlog_err("Failed to create gRPC stub for %s", vrf_address.c_str());
+   }
+    frr::SubscriptionCacheRequest cache;
+    cache.add_path(nb_node->xpath); // Add the XPath to the request
+
+    auto *dt = cache.mutable_data();
+    dt->set_encoding(frr::JSON);
+
+    status = get_path(dt, xpath, frr::GetRequest_DataType_STATE, LYD_JSON, false);
+    if (!status.ok()) {
+        zlog_err("%s: failed to populate DataTree for path: %s", __func__, xpath);
+        return -1;
+    }
+    grpc_debug("GRPC notification send for Xpath %s", xpath);
+    std::unique_ptr<grpc::ClientReader<frr::SubscriptionCacheResponse>> stream(
+        stub->SubscriptionCache(&context, cache)); // Pass both arguments
+    if (!stream) {
+        zlog_err("Failed to open gRPC stream for SubscriptionCache");
+        return -1;
+    }
+    grpc_debug("Telemetry data sucessfully sent via gRPC");
+    return 0;
+}
+
 
 static int frr_grpc_init(uint port)
 {
@@ -1245,7 +1361,7 @@ static int frr_grpc_init(uint port)
 			 __func__, safe_strerror(errno));
 		return -1;
 	}
-
+        hook_register(nb_notification_send, frr_grpc_notification_send);
 	return 0;
 }
 

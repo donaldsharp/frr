@@ -23,6 +23,7 @@
 #define _ZEBRA_DEBUG_H
 
 #include "lib/vty.h"
+#include "lib/debug.h"
 
 #ifdef __cplusplus
 extern "C" {
