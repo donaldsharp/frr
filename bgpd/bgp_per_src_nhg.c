@@ -745,9 +745,15 @@ static void bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry 
 					bnc_nhg_free(bnc);
 					return;
 				}
-				bnc->nh.ifindex = ifindex;
 				bnc->nh.gate.ipv6 = *nexthop;
-				bnc->nh.type = NEXTHOP_TYPE_IPV6;
+				if (IN6_IS_ADDR_LINKLOCAL(nexthop)) {
+					bnc->nh.ifindex = ifindex;
+					bnc->nh.type =
+						NEXTHOP_TYPE_IPV6_IFINDEX;
+				} else {
+					bnc->nh.ifindex = 0;
+					bnc->nh.type = NEXTHOP_TYPE_IPV6;
+				}
 			}
 		} else {
 			zlog_err(
