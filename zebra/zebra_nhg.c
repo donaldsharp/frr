@@ -3633,7 +3633,17 @@ void zebra_nhg_install_kernel(struct nhg_hash_entry *nhe, uint8_t type)
 
 void zebra_nhg_uninstall_kernel(struct nhg_hash_entry *nhe)
 {
-	if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED)) {
+	/*
+	 * Clearly if the nexthop group is installed we should
+	 * remove it.  Additionally If the nexthop is already
+	 * QUEUED for installation, we should also just send
+	 * a deletion down as well.  We cannot necessarily pluck
+	 * the installation out of the queue ( since it may have
+	 * already been acted on, but not processed yet in the
+	 * main pthread ).
+	 */
+	if (CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED) ||
+	    CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_QUEUED)) {
 		int ret = dplane_nexthop_delete(nhe);
 
 		frrtrace(1, frr_zebra, zebra_nhg_uninstall_kernel, nhe->id);
