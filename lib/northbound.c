@@ -2573,11 +2573,8 @@ void nb_wheel_init_or_reset(struct thread_master *master, const char* xpath, int
 	if (!master) {
 	    return;
 	}
-	int sample_time = 0;
-	if (interval)
-	    sample_time = interval * 1000; /* convert to msec */
-	else
-	    sample_time =  SUBSCRIPTION_SAMPLE_TIMER;
+	int sample_time =
+		interval ? interval * 1000 : SUBSCRIPTION_SAMPLE_TIMER;
 	DEBUGD(&nb_dbg_events, "Wheel sample %d", sample_time);
 	if (timer_wheel) {
 	   if (interval != timer_wheel->period)

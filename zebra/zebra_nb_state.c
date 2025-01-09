@@ -1068,19 +1068,27 @@ struct yang_data *lib_vrf_ipv4_route_count_total_get_elem(struct nb_cb_get_elem_
         return yang_data_new_uint32(args->xpath, count);
 }
 
+static uint32_t lib_get_route_count(afi_t afi, safi_t safi, vrf_id_t vrf_id,
+				    uint8_t route_type)
+{
+	struct route_table *table = zebra_vrf_table(afi, safi, vrf_id);
+	if (!table)
+		return 0;
+	struct rib_table_info *info = route_table_get_info(table);
+	if (!info)
+		return 0;
+	return info->route_count[route_type];
+}
+
 /*
  * XPath: /frr-zebra:lib/vrf/ipv4-route-count/connected
  */
 struct yang_data *lib_vrf_ipv4_route_count_connected_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-	struct route_table *table = zebra_vrf_table(AFI_IP, SAFI_UNICAST, vrfp->vrf_id);
-	if (!table)
-            return 0;
-	struct rib_table_info *info = route_table_get_info(table);
-	if (!info)
-	    return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_CONNECT]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_CONNECT);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1090,13 +1098,9 @@ struct yang_data *lib_vrf_ipv4_route_count_connected_get_elem(struct nb_cb_get_e
 struct yang_data *lib_vrf_ipv4_route_count_bgp_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_BGP]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_BGP);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1105,13 +1109,9 @@ struct yang_data *lib_vrf_ipv4_route_count_bgp_get_elem(struct nb_cb_get_elem_ar
 struct yang_data *lib_vrf_ipv4_route_count_kernel_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_KERNEL]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_KERNEL);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1120,13 +1120,9 @@ struct yang_data *lib_vrf_ipv4_route_count_kernel_get_elem(struct nb_cb_get_elem
 struct yang_data *lib_vrf_ipv4_route_count_static_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_STATIC]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_STATIC);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1135,13 +1131,9 @@ struct yang_data *lib_vrf_ipv4_route_count_static_get_elem(struct nb_cb_get_elem
 struct yang_data *lib_vrf_ipv4_route_count_ospf_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_OSPF]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_OSPF);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1150,13 +1142,9 @@ struct yang_data *lib_vrf_ipv4_route_count_ospf_get_elem(struct nb_cb_get_elem_a
 struct yang_data *lib_vrf_ipv4_route_count_table_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_TABLE]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_TABLE);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1165,13 +1153,9 @@ struct yang_data *lib_vrf_ipv4_route_count_table_get_elem(struct nb_cb_get_elem_
 struct yang_data *lib_vrf_ipv4_route_count_pbr_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_PBR]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_PBR);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1180,13 +1164,9 @@ struct yang_data *lib_vrf_ipv4_route_count_pbr_get_elem(struct nb_cb_get_elem_ar
 struct yang_data *lib_vrf_ipv6_route_count_connected_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP6, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_CONNECT]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP6, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_CONNECT);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1196,13 +1176,9 @@ struct yang_data *lib_vrf_ipv6_route_count_connected_get_elem(struct nb_cb_get_e
 struct yang_data *lib_vrf_ipv6_route_count_bgp_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP6, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_BGP]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP6, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_BGP);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1211,13 +1187,9 @@ struct yang_data *lib_vrf_ipv6_route_count_bgp_get_elem(struct nb_cb_get_elem_ar
 struct yang_data *lib_vrf_ipv6_route_count_kernel_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP6, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_KERNEL]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP6, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_KERNEL);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1225,14 +1197,10 @@ struct yang_data *lib_vrf_ipv6_route_count_kernel_get_elem(struct nb_cb_get_elem
  */
 struct yang_data *lib_vrf_ipv6_route_count_static_get_elem(struct nb_cb_get_elem_args *args)
 {
-        struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP6, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_STATIC]);
+	struct vrf *vrfp = (struct vrf *)args->list_entry;
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP6, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_STATIC);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1241,13 +1209,9 @@ struct yang_data *lib_vrf_ipv6_route_count_static_get_elem(struct nb_cb_get_elem
 struct yang_data *lib_vrf_ipv6_route_count_ospf_get_elem(struct nb_cb_get_elem_args *args)
 {
         struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP6, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_OSPF6]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP6, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_OSPF6);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 
@@ -1257,13 +1221,9 @@ struct yang_data *lib_vrf_ipv6_route_count_ospf_get_elem(struct nb_cb_get_elem_a
 struct yang_data *lib_vrf_ipv6_route_count_table_get_elem(struct nb_cb_get_elem_args *args)
 {
         struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP6, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_TABLE]);
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP6, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_TABLE);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
@@ -1271,14 +1231,10 @@ struct yang_data *lib_vrf_ipv6_route_count_table_get_elem(struct nb_cb_get_elem_
  */
 struct yang_data *lib_vrf_ipv6_route_count_pbr_get_elem(struct nb_cb_get_elem_args *args)
 {
-        struct vrf *vrfp = (struct vrf *)args->list_entry;
-        struct route_table *table = zebra_vrf_table(AFI_IP6, SAFI_UNICAST, vrfp->vrf_id);
-        if (!table)
-            return 0;
-        struct rib_table_info *info = route_table_get_info(table);
-        if (!info)
-            return 0;
-        return yang_data_new_uint32(args->xpath, info->route_count[ZEBRA_ROUTE_PBR]);
+	struct vrf *vrfp = (struct vrf *)args->list_entry;
+	uint32_t route_count = lib_get_route_count(
+		AFI_IP6, SAFI_UNICAST, vrfp->vrf_id, ZEBRA_ROUTE_PBR);
+	return yang_data_new_uint32(args->xpath, route_count);
 }
 
 /*
