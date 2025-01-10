@@ -93,6 +93,12 @@ module frr-bgp-peer {
             description
                "IPV6 unicast prefix count after post policy";
           }
+          leaf l2vpn-evpn-rcvd {
+            config false;
+            type uint32;
+            description
+               "L2VPN EVPN prefix count after post policy";
+          }           
       }
     }
   }

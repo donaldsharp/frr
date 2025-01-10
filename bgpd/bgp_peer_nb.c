@@ -225,6 +225,20 @@ lib_vrf_peer_ipv6_unicast_rcvd_get_elem(struct nb_cb_get_elem_args *args)
 	return NULL;
 }
 
+/*
+ * XPath: /frr-bgp-peer:lib/vrf/peer/l2vpn-evpn-rcvd
+ */
+struct yang_data *
+lib_vrf_peer_l2vpn_evpn_rcvd_get_elem(struct nb_cb_get_elem_args *args)
+{
+	struct peer *peer;
+	peer = (struct peer *)args->list_entry;
+	if (peer)
+		return yang_data_new_uint32(args->xpath,
+					    peer->pcount[AFI_L2VPN][SAFI_EVPN]);
+	return NULL;
+}
+
 /* clang-format off */
 const struct frr_yang_module_info frr_bgp_peer_info = {
 	.name = "frr-bgp-peer",
@@ -305,6 +319,12 @@ const struct frr_yang_module_info frr_bgp_peer_info = {
 				.get_elem = lib_vrf_peer_ipv6_unicast_rcvd_get_elem,
 			}
 		},
+                {
+                        .xpath = "/frr-bgp-peer:lib/vrf/peer/l2vpn-evpn-rcvd",
+                        .cbs = {
+                                .get_elem = lib_vrf_peer_l2vpn_evpn_rcvd_get_elem,
+                        }
+                },
 		{
 			.xpath = NULL,
 		},

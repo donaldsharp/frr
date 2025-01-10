@@ -1511,7 +1511,7 @@ DEFPY(show_yang_operational_data, show_yang_operational_data_cmd,
 
 	if (!xpath) {
 		nb_show_subscription_cache(vty);
-		return;
+		return CMD_SUCCESS;
 	}
 	if (translator_family) {
 		translator = yang_translator_find(translator_family);

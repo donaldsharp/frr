@@ -2410,7 +2410,7 @@ static int hash_walk_dump(struct hash_bucket *bucket, void *arg)
     struct subscr_cache_entry *entry = bucket->data;
     DEBUGD(&nb_dbg_events, "Notifying xpath %s", entry->xpath);
     nb_notification_send(entry->xpath, NULL);
-    return;
+    return NB_OK;
 }
 
 /* Send notification of the xpaths */
@@ -2419,7 +2419,7 @@ int nb_notify_subscriptions(void)
     struct subscr_cache_entry entry;
     /* Walk the subscription cache */
     hash_walk(subscr_cache_entries, hash_walk_dump, &entry);
-    return;
+    return NB_OK;
 }
 
 void show_subscriptions(struct hash_bucket *bucket, void *arg)
