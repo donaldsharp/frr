@@ -4526,13 +4526,16 @@ static void bgp_process_internal(struct bgp *bgp, struct bgp_dest *dest,
 void bgp_process(struct bgp *bgp, struct bgp_dest *dest,
 		 struct bgp_path_info *pi, afi_t afi, safi_t safi)
 {
-	bgp_process_internal(bgp, dest, pi, afi, safi, false);
-}
-
-void bgp_process_early(struct bgp *bgp, struct bgp_dest *dest,
-		       struct bgp_path_info *pi, afi_t afi, safi_t safi)
-{
-	bgp_process_internal(bgp, dest, pi, afi, safi, true);
+    /*
+     * add soo route for processing at the beginning
+     * of the current queue.
+     */
+	if ((CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+			BGP_FLAG_NHG_PER_ORIGIN)) &&
+	    (safi != SAFI_EVPN) && bgp_check_is_soo_route(bgp, dest, pi))
+	    bgp_process_internal(bgp, dest, pi, afi, safi, true);
+    else
+        bgp_process_internal(bgp, dest, pi, afi, safi, false);
 }
 
 void bgp_add_eoiu_mark(struct bgp *bgp)
@@ -4729,12 +4732,8 @@ void bgp_rib_remove(struct bgp_dest *dest, struct bgp_path_info *pi,
 	}
 
 	hook_call(bgp_process, peer->bgp, afi, safi, dest, peer, true);
-	if ((CHECK_FLAG(peer->bgp->per_src_nhg_flags[afi][safi],
-			BGP_FLAG_NHG_PER_ORIGIN)) &&
-	    (safi != SAFI_EVPN) && bgp_check_is_soo_route(peer->bgp, dest, pi))
-		bgp_process_early(peer->bgp, dest, pi, afi, safi);
-	else
-		bgp_process(peer->bgp, dest, pi, afi, safi);
+
+    bgp_process(peer->bgp, dest, pi, afi, safi);
 }
 
 static void bgp_rib_withdraw(struct bgp_dest *dest, struct bgp_path_info *pi,
@@ -5295,11 +5294,6 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 						   BGP_FLAG_NHG_PER_ORIGIN)) &&
 					   (safi != SAFI_EVPN) &&
 					   route_has_soo_attr(pi)) {
-					struct in_addr ip;
-					if (bgp_is_soo_route(dest, pi, &ip))
-						bgp_process_early(bgp, dest, pi,
-								  afi, safi);
-					else
 						bgp_process(bgp, dest, pi, afi,
 							    safi);
 				}
@@ -5642,13 +5636,7 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 		bgp_aggregate_increment(bgp, p, pi, afi, safi);
 
 
-		if ((CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
-				BGP_FLAG_NHG_PER_ORIGIN)) &&
-		    (safi != SAFI_EVPN) &&
-		    bgp_check_is_soo_route(bgp, dest, pi)) {
-			bgp_process_early(bgp, dest, pi, afi, safi);
-		} else
-			bgp_process(bgp, dest, pi, afi, safi);
+        bgp_process(bgp, dest, pi, afi, safi);
 		bgp_dest_unlock_node(dest);
 
 		if (SAFI_UNICAST == safi
@@ -5807,12 +5795,7 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 
 	/* Process change. */
 
-	if ((CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
-			BGP_FLAG_NHG_PER_ORIGIN)) &&
-	    (safi != SAFI_EVPN) && bgp_check_is_soo_route(bgp, dest, new)) {
-		bgp_process_early(bgp, dest, new, afi, safi);
-	} else
-		bgp_process(bgp, dest, new, afi, safi);
+    bgp_process(bgp, dest, new, afi, safi);
 
 	if (SAFI_UNICAST == safi
 	    && (bgp->inst_type == BGP_INSTANCE_TYPE_VRF
