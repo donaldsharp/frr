@@ -719,6 +719,9 @@ static void bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry 
 	uint32_t nh_weight;
 	bool do_wt_ecmp = false;
 
+	if (pi->attr && IN6_IS_ADDR_LINKLOCAL(&pi->attr->mp_nexthop_global))
+		afi = AFI_IP6;
+
 	if (make_prefix(afi, pi, &p) < 0)
 		return;
 
@@ -818,9 +821,11 @@ void bgp_per_src_nhg_nc_del(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 	struct prefix p = {0};
 	struct bgp_nhg_nexthop_cache *bnc;
 
+	if (pi->attr && IN6_IS_ADDR_LINKLOCAL(&pi->attr->mp_nexthop_global))
+		afi = AFI_IP6;
+
 	if (make_prefix(afi, pi, &p) < 0)
 		return;
-
 
 	bnc = bnc_nhg_find(&nhe->nhg_nexthop_cache_table, &p, ifindex);
 	if (!bnc)
