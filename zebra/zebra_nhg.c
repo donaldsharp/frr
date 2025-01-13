@@ -3265,6 +3265,9 @@ static struct nhg_hash_entry *zebra_nhg_rib_compare_old_nhe(
 	nhop = new_nhe->nhg.nexthop;
 	old_nhop = old_nhe->nhg.nexthop;
 
+	if (PROTO_OWNED(old_nhe) && !PROTO_OWNED(new_nhe))
+		return new_nhe;
+
 	same = zebra_nhg_nexthop_compare(nhop, old_nhop, rn);
 
 	if (same) {
