@@ -20486,6 +20486,10 @@ static void show_bgp_soo_entry_json(struct bgp_per_src_nhg_hash_entry *soo_entry
 	json_object *json_peer_bitmap = NULL;
 	json_object *json_bitmap_array = NULL;
 	json_object *json_bitmap_object = NULL;
+	json_object *json_nexthop_cache_array = NULL;
+	json_object *json_nexthop_cache_object = NULL;
+	struct bgp_nhg_nexthop_cache_head *tree;
+	struct bgp_nhg_nexthop_cache *bnc_iter;
 	char addrbuf[BUFSIZ];
 
 	json = json_object_new_object();
@@ -20519,6 +20523,27 @@ static void show_bgp_soo_entry_json(struct bgp_per_src_nhg_hash_entry *soo_entry
 		       PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL)) {
 		json_object_string_add(json, "SoORouteFlag",
 				       "Installed");
+	}
+
+	json_nexthop_cache_array = json_object_new_array();
+	json_object_object_add(json, "nextHopCache", json_nexthop_cache_array);
+
+	tree = &soo_entry->nhg_nexthop_cache_table;
+
+	frr_each (bgp_nhg_nexthop_cache, tree, bnc_iter) {
+		json_nexthop_cache_object = json_object_new_object();
+		json_object_string_addf(json_nexthop_cache_object, "prefix",
+					"%pFX", &bnc_iter->prefix);
+		json_object_int_add(json_nexthop_cache_object, "ifIndex",
+				    bnc_iter->nh.ifindex);
+		json_object_int_add(json_nexthop_cache_object, "type",
+				    bnc_iter->nh.type);
+		json_object_int_add(json_nexthop_cache_object, "flags",
+				    bnc_iter->nh.flags);
+		json_object_int_add(json_nexthop_cache_object, "lbw",
+				    bnc_iter->nh_weight);
+		json_object_array_add(json_nexthop_cache_array,
+				      json_nexthop_cache_object);
 	}
 
 	json_peer_bitmap_array = json_object_new_array();
@@ -20591,6 +20616,8 @@ static void show_bgp_soo_entry_vty(struct bgp_per_src_nhg_hash_entry *soo_entry,
 {
 	char addrbuf[BUFSIZ];
 	struct bgp_path_info *pi;
+	struct bgp_nhg_nexthop_cache_head *tree;
+	struct bgp_nhg_nexthop_cache *bnc_iter;
 
 	vty_out(vty, "SoO: %s\n",
 		inaddr_afi_to_str(&soo_entry->ip.ipaddr_v4, addrbuf,
@@ -20635,6 +20662,18 @@ static void show_bgp_soo_entry_vty(struct bgp_per_src_nhg_hash_entry *soo_entry,
 	}
 
 	vty_out(vty, "\n");
+
+	vty_out(vty, "  Nexthop cache:\n");
+	tree = &soo_entry->nhg_nexthop_cache_table;
+
+	frr_each (bgp_nhg_nexthop_cache, tree, bnc_iter) {
+		vty_out(vty,
+			"      %pFX NH ifidx: %d type: %d flags: %d lbw: %d\n",
+			&bnc_iter->prefix, bnc_iter->nh.ifindex,
+			bnc_iter->nh.type, bnc_iter->nh.flags,
+			bnc_iter->nh_weight);
+	}
+
 	vty_out(vty, "  Peer BitIndex Mappings:\n");
 
 	for (pi = bgp_dest_get_bgp_path_info(soo_entry->dest); pi;
