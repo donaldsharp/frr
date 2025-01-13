@@ -3972,7 +3972,6 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 			return CMD_WARNING;
 		}
 
-		bgp_per_src_nhg_finish(bgp, afi, safi);
 		if (!bgp->per_src_nhg_table[afi][safi]->count) {
 			UNSET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 				   BGP_FLAG_NHG_PER_ORIGIN);
@@ -3981,6 +3980,7 @@ DEFPY(bgp_nhg_per_origin, bgp_nhg_per_origin_cmd, "[no$no] bgp nhg-per-origin",
 		} else {
 			SET_FLAG(bgp->per_src_nhg_flags[afi][safi],
 				 BGP_FLAG_CONFIG_DEL_PENDING);
+			bgp_per_src_nhg_finish(bgp, afi, safi);
 		}
 	}
 	else {
