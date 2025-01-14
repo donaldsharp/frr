@@ -3451,6 +3451,13 @@ void zebra_nhg_dplane_result(struct zebra_dplane_ctx *ctx)
 						 nhe->zapi_session, nhe->id,
 						 ZAPI_NHG_INSTALLED);
 		} else {
+			/*
+			 * With a request failure it is unknown what we now know
+			 * this is because Zebra has lost track of whether or not
+			 * any previous versions of this NHG are in the kernel
+			 * or even what those versions were.  So at this point
+			 * we cannot unset the INSTALLED flag.
+			 */
 			/* If daemon nhg, send it an update */
 			if (PROTO_OWNED(nhe))
 				zsend_nhg_notify(nhe->type, nhe->zapi_instance,
