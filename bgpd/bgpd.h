@@ -2089,6 +2089,9 @@ struct bgp_nlri {
 #define BGP_DYNAMIC_NEIGHBORS_LIMIT_MIN          1
 #define BGP_DYNAMIC_NEIGHBORS_LIMIT_MAX      65535
 
+/*Max Buffer size for BGP Send Community*/
+#define BGP_SEND_COMMUNITY_MAX_LENGTH 30
+
 /* Flag for peer_clear_soft().  */
 enum bgp_clear_type {
 	BGP_CLEAR_SOFT_NONE,
