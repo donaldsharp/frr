@@ -1,6 +1,9 @@
 #ifndef _FRR_BGP_PEER_NB_H_
 #define _FRR_BGP_PEER_NB_H_
 
+#include "bgpd/bgp_debug.h"
+#include "bgpd/bgpd.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

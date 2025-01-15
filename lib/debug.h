@@ -194,14 +194,6 @@ struct debug_callbacks {
 #define DEBUG_CLEAR(name) RESET_FLAG_ATOMIC(&(name)->flags)
 
 /*
- * Set all modes and options on a debug.
- *
- * MT-Safe
- */
-#define DEBUG_ON(name)                                                         \
-	SET_FLAG_ATOMIC(&(name)->flags, DEBUG_MODE_ALL | DEBUG_OPT_ALL)
-
-/*
  * Map a vty node to the correct debugging mode flags. FRR behaves such that a
  * debug statement issued under the config node persists to the config file,
  * whereas the same debug statement issued from the enable node only persists
