@@ -105,7 +105,9 @@ static int nb_oper_data_iter_node(const struct lysc_node *snode,
 				  bool first, uint32_t flags,
 				  nb_oper_data_cb cb, void *arg);
 
-static void nb_wheel_init_or_reset(struct thread_master *master, const char* xpath, int interval);
+static void nb_wheel_init_or_reset(struct thread_master *master, char *xpath,
+				   uint32_t interval);
+
 static unsigned int running_config_entry_key_make(const void *value);
 
 static int nb_node_check_config_only(const struct lysc_node *snode, void *arg)
@@ -2374,9 +2376,27 @@ static void *subsc_cache_entry_alloc(void *p)
     return new;
 }
 
+/* Walk the current subscriptions in the cache */
+static int hash_walk_dump(struct hash_bucket *bucket, void *arg)
+{
+	struct subscr_cache_entry *entry = bucket->data;
+	DEBUGD(&nb_dbg_events, "Notifying xpath %s", entry->xpath);
+	nb_notification_send(entry->xpath, NULL);
+	return NB_OK;
+}
+
+/* Send notification of the xpaths */
+static void nb_notify_subscriptions(void *)
+{
+	struct subscr_cache_entry entry;
+	/* Walk the subscription cache */
+	hash_walk(subscr_cache_entries, hash_walk_dump, &entry);
+	return;
+}
+
 /* Add or Delete the subscriprions of xpath to the cache */
-void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
-		            const char* action, uint32_t interval)
+void nb_cache_subscriptions(struct thread_master *master, char *xpath,
+			    const char *action, uint32_t interval)
 {
     DEBUGD(&nb_dbg_events, "Subscription for xpath %s, action %s, interval %d",
            xpath, action, interval);
@@ -2400,34 +2420,16 @@ void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
     } else
 	nb_wheel_init_or_reset(master, xpath, interval);
     /* Send notification of the current subscriptions */
-    nb_notify_subscriptions();
+    nb_notify_subscriptions(NULL);
     return;
 }
 
-/* Walk the current subscriptions in the cache */
-static int hash_walk_dump(struct hash_bucket *bucket, void *arg)
-{
-    struct subscr_cache_entry *entry = bucket->data;
-    DEBUGD(&nb_dbg_events, "Notifying xpath %s", entry->xpath);
-    nb_notification_send(entry->xpath, NULL);
-    return NB_OK;
-}
-
-/* Send notification of the xpaths */
-int nb_notify_subscriptions(void)
-{
-    struct subscr_cache_entry entry;
-    /* Walk the subscription cache */
-    hash_walk(subscr_cache_entries, hash_walk_dump, &entry);
-    return NB_OK;
-}
-
-void show_subscriptions(struct hash_bucket *bucket, void *arg)
+static int show_subscriptions(struct hash_bucket *bucket, void *arg)
 {
 	struct subscr_cache_entry *entry = bucket->data;
 	struct vty *vtyp = (struct vty *)arg;
 	vty_out(vtyp, "%s \n", entry->xpath);
-	return;
+	return NB_OK;
 }
 
 void nb_show_subscription_cache(struct vty *vty)
@@ -2568,7 +2570,8 @@ void nb_validate_callbacks(void)
 	}
 }
 
-void nb_wheel_init_or_reset(struct thread_master *master, const char* xpath, int interval)
+static void nb_wheel_init_or_reset(struct thread_master *master, char *xpath,
+				   uint32_t interval)
 {
 	if (!master) {
 	    return;

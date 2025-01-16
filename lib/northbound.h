@@ -1312,15 +1312,10 @@ extern void nb_init(struct thread_master *tm,
 extern void nb_terminate(void);
 
 /*
- * Notify subscribed xpaths
- */
-extern int nb_notify_subscriptions(void);
-
-/*
  * Update subscription cache
  */
-extern void nb_cache_subscriptions(struct thread_master *master, const char* xpath,
-                                   const char* action, uint32_t interval);
+extern void nb_cache_subscriptions(struct thread_master *master, char *xpath,
+				   const char *action, uint32_t interval);
 
 extern void nb_show_subscription_cache(struct vty *vty);
 

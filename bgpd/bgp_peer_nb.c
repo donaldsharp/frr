@@ -1,7 +1,6 @@
-#include "bgpd/bgpd.h"
 #include "northbound.h"
-#include "bgpd/bgp_debug.h"
 #include "lib/vrf.h"
+#include "bgp_peer_nb.h"
 #include "lib/debug.h"
 
 /*
@@ -74,10 +73,8 @@ const void *lib_vrf_peer_get_next(struct nb_cb_get_next_args *args)
 			return NULL;
 		node = listnode_lookup(bgp->peer, peer);
 		nnode = listnextnode(node);
-		if (nnode)
-			return listgetdata(nnode);
-		else
-			return NULL;
+		if (nnode && nnode->data)
+			return nnode->data;
 	}
 	return NULL;
 }
@@ -94,9 +91,22 @@ int lib_vrf_peer_get_keys(struct nb_cb_get_keys_args *args)
 			else if (peer->host)
 				strlcpy(args->keys->key[0], peer->host,
 					sizeof(args->keys->key[0]));
-			else
-				strlcpy(args->keys->key[0], &peer->su,
-					sizeof(args->keys->key[0]));
+			else {
+				char buf[INET6_ADDRSTRLEN];
+				if (peer->su.sa.sa_family == AF_INET) {
+					inet_ntop(AF_INET,
+						  &peer->su.sin.sin_addr, buf,
+						  sizeof(buf));
+					strlcpy(args->keys->key[0], buf,
+						sizeof(args->keys->key[0]));
+				} else if (peer->su.sa.sa_family == AF_INET6) {
+					inet_ntop(AF_INET6,
+						  &peer->su.sin6.sin6_addr, buf,
+						  sizeof(buf));
+					strlcpy(args->keys->key[0], buf,
+						sizeof(args->keys->key[0]));
+				}
+			}
 		}
 		DEBUGD(&nb_dbg_events, "Peer name %s", args->keys->key[0]);
 	}

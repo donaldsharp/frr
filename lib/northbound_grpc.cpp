@@ -628,18 +628,19 @@ grpc::Status HandleUnarySubscribe(
 			UnaryRpcState<frr::SubscribeRequest, frr::SubscribeResponse> *tag)
 {
 	grpc_debug("%s: entered", __func__);
-        const char *xpath_str;
+	char *xpath_str;
 	const char *action;
 	const char *mode;
 	uint32_t interval;
 	for (const frr::Subscription &item : tag->request.subscribe().subscriptions()) {
-	    xpath_str = item.path().c_str();
-	    action = item.action().c_str();
-	    mode = item.stream_mode().c_str();
-	    interval = item.sample_interval();
-	    nb_cache_subscriptions(main_master, xpath_str, action, interval);
-	    grpc_debug("Subscribe %s(path: \"%s\") action: %s interval: %d",
-			__func__, xpath_str, action, interval);
+		xpath_str = (char *)item.path().c_str();
+		action = item.action().c_str();
+		mode = item.stream_mode().c_str();
+		interval = item.sample_interval();
+		nb_cache_subscriptions(main_master, xpath_str, action,
+				       interval);
+		grpc_debug("Subscribe %s(path: \"%s\") action: %s interval: %d",
+			   __func__, xpath_str, action, interval);
 	}
 	return grpc::Status::OK;
 }
