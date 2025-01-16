@@ -1007,9 +1007,14 @@ void subgroup_default_originate(struct update_subgroup *subgrp, int withdraw)
 				bgp_attr_add_gshut_community(new_attr);
 
 			if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
-				       BGP_FLAG_ADVERTISE_ORIGIN))
+				       BGP_FLAG_ADVERTISE_ORIGIN)) {
+				struct attr attr_tmp = *new_attr;
 				bgp_attr_add_soo_community(
-					bgp->per_source_nhg_soo, new_attr);
+					bgp->per_source_nhg_soo, &attr_tmp);
+				struct attr *interned =
+					bgp_attr_intern(&attr_tmp);
+				*new_attr = *interned;
+			}
 
 			SET_FLAG(subgrp->sflags,
 				 SUBGRP_STATUS_DEFAULT_ORIGINATE);
