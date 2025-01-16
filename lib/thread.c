@@ -1985,6 +1985,7 @@ void thread_getrusage(RUSAGE_T *r)
 void thread_call(struct thread *thread)
 {
 	RUSAGE_T before, after;
+	bool suppress_warnings = THREAD_ARG(thread);
 
 	/* if the thread being called is the CLI, it may change cputime_enabled
 	 * ("service cputime-stats" command), which can result in nonsensical
@@ -2044,6 +2045,9 @@ void thread_call(struct thread *thread)
 				  memory_order_seq_cst);
 	atomic_fetch_or_explicit(&thread->hist->types, 1 << thread->add_type,
 				 memory_order_seq_cst);
+
+	if (suppress_warnings)
+		return;
 
 	if (cputime_enabled_here && cputime_enabled && cputime_threshold
 	    && cputime > cputime_threshold) {
