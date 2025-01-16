@@ -2377,7 +2377,7 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 				if (re->nhe && re->nhe->rejected_rn) {
 					if (IS_ZEBRA_DEBUG_RIB_DETAILED)
 						zlog_debug(
-							"Remove (RN:%p) from NHE list of rejected routes",
+							"Remove (RN:%p) from NHE list of rejected routes(Install/Update case)",
 							rn);
 					listnode_delete(re->nhe->rejected_rn,
 							rn);
@@ -2515,6 +2515,23 @@ static void rib_process_result(struct zebra_dplane_ctx *ctx)
 			zlog_warn("%s(%u:%u):%pRN: Route Deletion failure",
 				  VRF_LOGNAME(vrf), dplane_ctx_get_vrf(ctx),
 				  dplane_ctx_get_table(ctx), rn);
+		}
+
+		/*
+		 * Regardless of whether the DELETE is success or failure, it is
+		 * better to cleanup the route node entry from the rejected_rn
+		 * since the end state is ZEBRA is told to delete the route and
+		 * it doesnt make sense to try reinstall it.
+		 */
+		if (re && re->nhe && re->nhe->rejected_rn) {
+			if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+				zlog_debug(
+					"Remove (RN:%p) from NHE list of rejected routes (Delete case)",
+					rn);
+
+			listnode_delete(re->nhe->rejected_rn, rn);
+			if (list_isempty(re->nhe->rejected_rn))
+				list_delete(&re->nhe->rejected_rn);
 		}
 
 		/*
