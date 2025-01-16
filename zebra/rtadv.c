@@ -1700,8 +1700,9 @@ DEFUN (ipv6_nd_ra_interval_msec,
 	zvrf = rtadv_interface_get_zvrf(ifp);
 
 	interval = strtoul(argv[idx_number]->arg, NULL, 10);
-	if ((zif->rtadv.AdvDefaultLifetime != -1
-	     && interval > (unsigned)zif->rtadv.AdvDefaultLifetime * 1000)) {
+	if ((zif->rtadv.AdvDefaultLifetime != -1) &&
+	    (zif->rtadv.AdvDefaultLifetime != 0) &&
+	    interval > (unsigned)zif->rtadv.AdvDefaultLifetime * 1000) {
 		vty_out(vty,
 			"This ra-interval would conflict with configured ra-lifetime!\n");
 		return CMD_WARNING_CONFIG_FAILED;
@@ -1742,8 +1743,9 @@ DEFUN (ipv6_nd_ra_interval,
 	zvrf = rtadv_interface_get_zvrf(ifp);
 
 	interval = strtoul(argv[idx_number]->arg, NULL, 10);
-	if ((zif->rtadv.AdvDefaultLifetime != -1
-	     && interval > (unsigned)zif->rtadv.AdvDefaultLifetime)) {
+	if ((zif->rtadv.AdvDefaultLifetime != -1) &&
+	    (zif->rtadv.AdvDefaultLifetime != 0) &&
+	    interval > (unsigned)zif->rtadv.AdvDefaultLifetime) {
 		vty_out(vty,
 			"This ra-interval would conflict with configured ra-lifetime!\n");
 		return CMD_WARNING_CONFIG_FAILED;
