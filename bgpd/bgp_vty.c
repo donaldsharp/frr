@@ -3577,7 +3577,7 @@ DEFUN (no_bgp_neighbor_graceful_restart_disable,
  *Function to re-announce route to peer after applying graceful
  *shutdown configuration on peer or peer-group
  */
-void bgp_peer_gshut_reannounce_route(struct peer *peer)
+static void bgp_peer_gshut_reannounce_route(struct peer *peer)
 {
 	afi_t afi;
 	safi_t safi;
@@ -3599,8 +3599,8 @@ void bgp_peer_gshut_reannounce_route(struct peer *peer)
  *Function to perform a soft reset of BGP neighborship to enable or
  *disable graceful shutdown configuration on a peer or peer group
  */
-void bgp_peer_gshut_reset(struct vty *vty, const char *peer_str,
-			  enum clear_sort sort)
+static int bgp_peer_gshut_reset(struct vty *vty, const char *peer_str,
+			 enum clear_sort sort)
 {
 	struct peer *peer = NULL;
 	struct listnode *node, *nnode;
@@ -3620,14 +3620,14 @@ void bgp_peer_gshut_reset(struct vty *vty, const char *peer_str,
 	} else {
 		bgp_peer_gshut_reannounce_route(peer);
 	}
-	return;
+	return CMD_SUCCESS;
 }
 
 /*
  *Function to enable or disable graceful shutdown configuration
  *on a peer or peer group
  */
-int bgp_peer_gshut_set_vty(struct vty *vty, const char *peer_str, bool set)
+static int bgp_peer_gshut_set_vty(struct vty *vty, const char *peer_str, bool set)
 {
 	struct peer *peer = NULL;
 	int ret = 0;
@@ -3646,9 +3646,9 @@ int bgp_peer_gshut_set_vty(struct vty *vty, const char *peer_str, bool set)
 
 	if (ret == 0) {
 		if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
-			bgp_peer_gshut_reset(vty, peer_str, clear_peer);
+			ret = bgp_peer_gshut_reset(vty, peer_str, clear_peer);
 		} else {
-			bgp_peer_gshut_reset(vty, peer_str, clear_group);
+			ret = bgp_peer_gshut_reset(vty, peer_str, clear_group);
 		}
 	}
 

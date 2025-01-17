@@ -8642,7 +8642,7 @@ void bgp_process_maintenance_mode(struct vty *vty, bool enter)
 /*
  * Function to terminate peer threads and close peer socket.
  */
-void bgp_stop_peer_threads_and_close(struct peer *peer)
+static void bgp_stop_peer_threads_and_close(struct peer *peer)
 {
 	/* Delete all existing events of the peer */
 	BGP_EVENT_FLUSH(peer);
