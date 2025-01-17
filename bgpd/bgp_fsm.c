@@ -1039,7 +1039,26 @@ void bgp_start_routeadv(struct bgp *bgp)
 		if (!peer_established(peer))
 			continue;
 		THREAD_OFF(peer->t_routeadv);
-		BGP_TIMER_ON(peer->t_routeadv, bgp_routeadv_timer, 0);
+		/*
+		 * In node reboot scenario, with per src NHG feature enabled,
+		 * once BGP routes are sent to its peers, the peers may start
+		 * sending traffic sooner while the node undergoing reboot
+		 * may not have programmed all the routes in hardware.
+		 * This is not an issue with out per src nhg feature because of
+		 * the way how NHG's are created on the peer nodes but with
+		 * per src nhg, we introduce a delay of 10 seconds(which may be
+		 * later made a configurable parameter) before advertising the
+		 * routes to peers. This 10 seconds is effectively the time it
+		 * takes for all routes to be programmed in hardware on the node
+		 * undergoing reboot. Same logic applies for FRR restart as
+		 * well. 10 seconds is based on emperical data for high scale.
+		 * This timer value can change and made configurable later
+		 */
+		if (is_nhg_per_origin_configured(bgp)) {
+			BGP_TIMER_ON(peer->t_routeadv, bgp_routeadv_timer, 10);
+		} else {
+			BGP_TIMER_ON(peer->t_routeadv, bgp_routeadv_timer, 0);
+		}
 	}
 }
 
