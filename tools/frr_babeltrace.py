@@ -34,6 +34,18 @@ import babeltrace
 import datetime
 
 ########################### common parsers - start ############################
+def location_interface_nhg_reinstall(field_val):
+    if field_val == 1:
+        return ("Interface dependent NHE")
+    elif field_val == 2:
+        return ("Dependents of NHE")
+
+def location_nhg_install(field_val):
+    if field_val == 1:
+        return ("Queuing NH ADD changing the type to Zebra")
+    elif field_val == 2:
+        return ("Queuing NH ADD")
+
 def location_if_oper_zrecv(field_val):
     if field_val == 1:
         return ("Rx Intf address Add")
@@ -473,6 +485,15 @@ def parse_bgp_redistribute_zrecv(event):
 
     parse_event(event, field_parsers)
 
+def parse_frr_zebra_interface_nhg_reinstall(event):
+    field_parsers = {"location" : location_interface_nhg_reinstall}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_zebra_nhg_install(event):
+    field_parsers = {"location" : location_nhg_install}
+
+    parse_event(event, field_parsers)
 ############################ common parsers - end #############################
 
 ############################ evpn parsers - start #############################
@@ -1162,6 +1183,10 @@ def main():
                      parse_frr_zebra_l3vni_remote_vtep_nh_upd,
                      "frr_zebra:remote_nh_add_rmac_change":
                      parse_frr_zebra_remote_nh_add_rmac_change,
+                     "frr_zebra:zebra_interface_nhg_reinstall":
+                     parse_frr_zebra_interface_nhg_reinstall,
+                     "frr_zebra:zebra_nhg_install_kernel":
+                     parse_frr_zebra_nhg_install,
 }
 
     # get the trace path from the first command line argument

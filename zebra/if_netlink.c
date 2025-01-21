@@ -800,8 +800,8 @@ static int netlink_request_intf_addr(struct nlsock *netlink_cmd, int family,
 		char buf[256];
 	} req;
 
-	frrtrace(4, frr_zebra, netlink_request_intf_addr, netlink_cmd, family,
-		 type, filter_mask);
+	frrtrace(3, frr_zebra, netlink_request_intf_addr, family, type,
+		 filter_mask);
 
 	/* Form the request, specifying filter (rtattr) if needed. */
 	memset(&req, 0, sizeof(req));
@@ -1076,8 +1076,6 @@ int netlink_interface_addr(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	struct zebra_ns *zns;
 	uint32_t metric = METRIC_MAX;
 	uint32_t kernel_flags = 0;
-
-	frrtrace(3, frr_zebra, netlink_interface_addr, h, ns_id, startup);
 
 	zns = zebra_ns_lookup(ns_id);
 	ifa = NLMSG_DATA(h);
@@ -1516,8 +1514,6 @@ int netlink_link_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	ns_id_t link_nsid = ns_id;
 	ifindex_t master_infindex = IFINDEX_INTERNAL;
 	uint8_t bypass = 0;
-
-	frrtrace(3, frr_zebra, netlink_interface, h, ns_id, startup);
 
 	ifi = NLMSG_DATA(h);
 
