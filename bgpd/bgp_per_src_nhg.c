@@ -1528,6 +1528,20 @@ void bgp_process_route_with_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 					pfxprint);
 			return;
 		}
+	} else {
+		/*
+		 * handle case where soo route was created due to arrival  route
+		 * with soo arrive first.
+		 */
+		if (!is_add) {
+			if (!nhe->refcnt &&
+			    !CHECK_FLAG(
+				    nhe->flags,
+				    PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED) &&
+			    !nhe->route_with_soo_use_nhid_cnt)
+				SET_FLAG(nhe->flags,
+					 PER_SRC_NEXTHOP_GROUP_DEL_PENDING);
+		}
 	}
 
 	dest_he = bgp_dest_soo_find(nhe, &dest->p);
