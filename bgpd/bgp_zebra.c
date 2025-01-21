@@ -1179,10 +1179,9 @@ int bgp_zebra_get_table_range(uint32_t chunk_size,
 	return 0;
 }
 
-static bool update_ipv4nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
-					    struct in_addr *nexthop,
-					    struct attr *attr, bool is_evpn,
-					    struct zapi_nexthop *api_nh)
+bool update_ipv4nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
+				     struct in_addr *nexthop, struct attr *attr,
+				     bool is_evpn, struct zapi_nexthop *api_nh)
 {
 	api_nh->gate.ipv4 = *nexthop;
 	api_nh->vrf_id = nh_bgp->vrf_id;
@@ -1217,13 +1216,12 @@ static bool update_ipv4nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
 	return true;
 }
 
-static bool update_ipv6nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
-					    struct in6_addr *nexthop,
-					    ifindex_t ifindex,
-					    struct bgp_path_info *pi,
-					    struct bgp_path_info *best_pi,
-					    bool is_evpn,
-					    struct zapi_nexthop *api_nh)
+bool update_ipv6nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
+				     struct in6_addr *nexthop,
+				     ifindex_t ifindex,
+				     struct bgp_path_info *pi,
+				     struct bgp_path_info *best_pi,
+				     bool is_evpn, struct zapi_nexthop *api_nh)
 {
 	struct attr *attr;
 

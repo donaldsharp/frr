@@ -143,4 +143,15 @@ struct in6_addr *bgp_path_info_to_ipv6_nexthop(struct bgp_path_info *path,
 					       ifindex_t *ifindex);
 bool bgp_zebra_use_nhop_weighted(struct bgp *bgp, uint32_t attr_bw,
 					uint32_t *nh_weight);
+
+bool update_ipv4nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
+				     struct in_addr *nexthop, struct attr *attr,
+				     bool is_evpn, struct zapi_nexthop *api_nh);
+
+bool update_ipv6nh_for_route_install(int nh_othervrf, struct bgp *nh_bgp,
+				     struct in6_addr *nexthop,
+				     ifindex_t ifindex,
+				     struct bgp_path_info *pi,
+				     struct bgp_path_info *best_pi,
+				     bool is_evpn, struct zapi_nexthop *api_nh);
 #endif /* _QUAGGA_BGP_ZEBRA_H */
