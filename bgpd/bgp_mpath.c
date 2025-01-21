@@ -670,9 +670,11 @@ void bgp_path_info_mpath_update(struct bgp *bgp, struct bgp_dest *dest,
 						mpath_count);
 				}
 
-                if (eval_soo_per_nhg)
-                    bgp_process_route_soo_attr(table->bgp, table->afi, table->safi,
-                                   dest, cur_mpath, false);
+				if (eval_soo_per_nhg)
+					bgp_process_route_soo_attr(
+						table->bgp, table->afi,
+						table->safi, dest, cur_mpath,
+						false);
 			}
 			mp_node = mp_next_node;
 			cur_mpath = next_mpath;
@@ -702,9 +704,10 @@ void bgp_path_info_mpath_update(struct bgp *bgp, struct bgp_dest *dest,
 					&cur_mpath->attr->nexthop, mpath_count);
 			}
 
-            if (eval_soo_per_nhg)
-                bgp_process_route_soo_attr(table->bgp, table->afi, table->safi,
-                               dest, cur_mpath, false);
+			if (eval_soo_per_nhg)
+				bgp_process_route_soo_attr(
+					table->bgp, table->afi, table->safi,
+					dest, cur_mpath, false);
 			cur_mpath = next_mpath;
 		} else {
 			/*
