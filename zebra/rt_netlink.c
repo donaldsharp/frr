@@ -728,9 +728,6 @@ static int netlink_route_change_read_unicast(struct nlmsghdr *h, ns_id_t ns_id,
 	void *src = NULL;     /* IPv6 srcdest   source prefix */
 	enum blackhole_type bh_type = BLACKHOLE_UNSPEC;
 
-	frrtrace(3, frr_zebra, netlink_route_change_read_unicast, h, ns_id,
-		 startup);
-
 	rtm = NLMSG_DATA(h);
 
 	if (startup && h->nlmsg_type != RTM_NEWROUTE)
@@ -3163,8 +3160,6 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	/* Count of nexthops in group array */
 	uint8_t grp_count = 0;
 	struct rtattr *tb[NHA_MAX + 1] = {};
-
-	frrtrace(3, frr_zebra, netlink_nexthop_change, h, ns_id, startup);
 
 	nhm = NLMSG_DATA(h);
 
