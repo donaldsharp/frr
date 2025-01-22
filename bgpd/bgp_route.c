@@ -3702,8 +3702,22 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi,
 		}
 	}
 
-	if (old_select)
+	if (old_select) {
+		/*
+		 * since this is old selected, the path will not be removed in
+		 * bgp best path selection, handle the case here.
+		 */
+		if (!(afi == AFI_L2VPN && safi == SAFI_EVPN) &&
+		    CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+			       BGP_FLAG_NHG_PER_ORIGIN) &&
+		    (old_select != new_select) &&
+		    !CHECK_FLAG(old_select->flags, BGP_PATH_MULTIPATH)) {
+			bgp_process_route_soo_attr(bgp, afi, safi, dest,
+						   old_select, false);
+			bgp_per_src_nhg_upd_msg_check(bgp, afi, safi, dest);
+		}
 		bgp_path_info_unset_flag(dest, old_select, BGP_PATH_SELECTED);
+	}
 	if (new_select) {
 		if (debug)
 			zlog_debug("%s: %pBD setting SELECTED flag", __func__,

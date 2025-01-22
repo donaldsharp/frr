@@ -1917,6 +1917,12 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
 						buf2));
 			}
 			bgp_per_src_nhg_add_send(nhe);
+		} else {
+			/*
+			 * case where installed path subset is disjoint/overlap/superset
+			 * from selected path subset
+			 */
+			bgp_start_soo_timer(bgp, nhe);
 		}
 	}
 }
