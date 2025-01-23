@@ -296,9 +296,6 @@ static inline bool bf_is_strict_superset(bitfield_t *bitfield1,
 
 #define bf_words_size(bf) (bf.m)
 
-// approximate upper limit for the index of the last set bit
-#define bf_approx_last_set_bit_index(bf) ((bf->n + 1) * WORD_SIZE)
-
 /*
  * Free the allocated memory for data
  * @v: an instance of bitfield_t struct.
