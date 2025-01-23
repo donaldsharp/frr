@@ -1206,11 +1206,9 @@ static char *print_bitfield(const bitfield_t *bf, char *out)
 	}
 
 	unsigned int bit = 0;
-	unsigned int approx_last_set_bit_index =
-		bf_approx_last_set_bit_index(bf);
 	int offset = 0;
 
-	bf_for_each_set_bit((*bf), bit, approx_last_set_bit_index)
+	bf_for_each_set_bit((*bf), bit, BGP_PEER_INIT_BITMAP_SIZE)
 	{
 		if (bit != 0) {
 			offset += sprintf(out + offset, "%u ", bit);
