@@ -479,17 +479,13 @@ TRACEPOINT_EVENT(
 	TP_ARGS(
 		const struct prefix *, p,
 		int, cmd,
-		uint32_t, nhg_id,
-		const char *, nexthop,
-		size_t , datalen),
+		const char *, nexthop),
 	TP_FIELDS(
 		ctf_string(family, (p->family == AF_INET) ? "AF_INET" : "AF_INET6")
 		ctf_array(unsigned char, pfx, p, sizeof(struct prefix))
 		ctf_integer(unsigned int, pfxlen, p->prefixlen)
 		ctf_integer(uint8_t, cmd, cmd)
-		ctf_integer(unsigned int, nhg_id, nhg_id)
 		ctf_string(nexthops, nexthop)
-		ctf_integer(uint32_t, datalen, datalen)
 		)
 	)
 
@@ -500,15 +496,11 @@ TRACEPOINT_EVENT(
 	netlink_nexthop_msg_encode,
 	TP_ARGS(
 		const struct nexthop *, nh,
-		uint32_t, nhg_id,
-		char *, label_buf,
-		const char *, nexthop),
+		uint32_t, nhg_id),
 	TP_FIELDS(
 		ctf_integer(uint32_t, nh_index, nh->ifindex)
 		ctf_integer(uint32_t, nh_vrfid, nh->vrf_id)
 		ctf_integer(uint32_t, nhg_id, nhg_id)
-		ctf_string(label_buf, label_buf)
-		ctf_string(nexthops, nexthop)
 		)
 	)
 
@@ -1345,13 +1337,11 @@ TRACEPOINT_EVENT(
     frr_zebra,
     zebra_nhg_intf_lkup_failed,
     TP_ARGS(
-        int, ifindex,
-        int, vrf_id,
         struct nhg_hash_entry *, nhe),
     TP_FIELDS(
-        ctf_integer(int, if_index, ifindex)
-        ctf_integer(int, vrf_id, vrf_id)
-        ctf_integer_hex(intptr_t, nhe_id, nhe->id)
+        ctf_integer(int, if_index, nhe->nhg.nexthop->ifindex)
+        ctf_integer(int, vrf_id, nhe->nhg.nexthop->vrf_id)
+        ctf_integer_hex(uint32_t, nhe_id, nhe->id)
         )
    )
 
@@ -1439,25 +1429,14 @@ TRACEPOINT_EVENT(
     frr_zebra,
     rib_uninstall_kernel_route,
     TP_ARGS(
-        const char*, prefix),
+        const char*, prefix, int, ret),
     TP_FIELDS(
         ctf_string(prefix, prefix)
+        ctf_integer(int, dplane_status, ret)
         )
    )
 
 TRACEPOINT_LOGLEVEL(frr_zebra, rib_uninstall_kernel_route, TRACE_INFO)
-
-TRACEPOINT_EVENT(
-    frr_zebra,
-    zebra_rib_evaluate_nht_tracking_bailout,
-    TP_ARGS(
-        const char*, prefix),
-    TP_FIELDS(
-        ctf_string(prefix, prefix)
-        )
-   )
-
-TRACEPOINT_LOGLEVEL(frr_zebra, zebra_rib_evaluate_nht_tracking_bailout, TRACE_INFO)
 
 TRACEPOINT_EVENT(
     frr_zebra,

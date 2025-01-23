@@ -1567,7 +1567,6 @@ static enum filter_type bgp_input_filter(struct peer *peer,
 					 safi_t safi)
 {
 	struct bgp_filter *filter;
-	enum filter_type ret = FILTER_PERMIT;
 
 	filter = &peer->filter[afi][safi];
 
@@ -1581,8 +1580,7 @@ static enum filter_type bgp_input_filter(struct peer *peer,
 
 		if (access_list_apply(DISTRIBUTE_IN(filter), p)
 		    == FILTER_DENY) {
-			ret = FILTER_DENY;
-			goto done;
+			return FILTER_DENY;
 		}
 	}
 
@@ -1591,8 +1589,7 @@ static enum filter_type bgp_input_filter(struct peer *peer,
 
 		if (prefix_list_apply(PREFIX_LIST_IN(filter), p)
 		    == PREFIX_DENY) {
-			ret = FILTER_DENY;
-			goto done;
+			return FILTER_DENY;
 		}
 	}
 
@@ -1601,21 +1598,11 @@ static enum filter_type bgp_input_filter(struct peer *peer,
 
 		if (as_list_apply(FILTER_LIST_IN(filter), attr->aspath)
 		    == AS_FILTER_DENY) {
-			ret = FILTER_DENY;
-			goto done;
+			return FILTER_DENY;
 		}
 	}
 
-done:
-	if (frrtrace_enabled(frr_bgp, input_filter)) {
-		char pfxprint[PREFIX2STR_BUFFER];
-
-		prefix2str(p, pfxprint, sizeof(pfxprint));
-		frrtrace(5, frr_bgp, input_filter, peer, pfxprint, afi, safi,
-			 ret == FILTER_PERMIT ? "permit" : "deny");
-	}
-
-	return ret;
+	return FILTER_PERMIT;
 #undef FILTER_EXIST_WARN
 }
 
@@ -4955,14 +4942,6 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	bool leak_success = true;
 	int allowas_in = 0;
 
-	if (frrtrace_enabled(frr_bgp, process_update)) {
-		char pfxprint[PREFIX2STR_BUFFER];
-
-		prefix2str(p, pfxprint, sizeof(pfxprint));
-		frrtrace(6, frr_bgp, process_update, peer, pfxprint, addpath_id,
-			 afi, safi, attr);
-	}
-
 #ifdef ENABLE_BGP_VNC
 	int vnc_implicit_withdraw = 0;
 #endif
@@ -5075,7 +5054,17 @@ int bgp_update(struct peer *peer, const struct prefix *p, uint32_t addpath_id,
 	}
 
 	/* Apply incoming filter.  */
-	if (bgp_input_filter(peer, p, attr, afi, orig_safi) == FILTER_DENY) {
+	enum filter_type ip_filter =
+		bgp_input_filter(peer, p, attr, afi, orig_safi);
+	if (frrtrace_enabled(frr_bgp, process_update)) {
+		char pfxprint[PREFIX2STR_BUFFER];
+
+		prefix2str(p, pfxprint, sizeof(pfxprint));
+		frrtrace(6, frr_bgp, process_update, peer, pfxprint, addpath_id,
+			 afi, safi, ip_filter);
+	}
+
+	if (ip_filter == FILTER_DENY) {
 		peer->stat_pfx_filter++;
 		reason = "filter;";
 		goto filtered;
