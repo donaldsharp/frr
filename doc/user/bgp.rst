@@ -1794,6 +1794,11 @@ Configuring Peers
    This command sets the time in milli secs to wait before processing SOO for per source
    nexthop group
 
+.. clicmd:: bgp per-source-nhg adv-delay-timer (0-60)
+
+   This command sets the time in secs to wait before starting to advertise routes to
+    neighbors for per source nexthop group
+
 .. clicmd:: neighbor PEER advertisement-interval (0-600)
 
    Setup the minimum route advertisement interval(mrai) for the

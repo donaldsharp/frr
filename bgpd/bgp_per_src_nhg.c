@@ -1952,6 +1952,22 @@ bool is_nhg_per_origin_configured(struct bgp *bgp)
 	return nhg_per_origin;
 }
 
+bool is_adv_origin_configured(struct bgp *bgp)
+{
+	afi_t afi;
+	safi_t safi;
+	bool adv_origin = false;
+	FOREACH_AFI_SAFI (afi, safi) {
+		if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
+			       BGP_FLAG_ADVERTISE_ORIGIN)) {
+			adv_origin = true;
+			break;
+		}
+	}
+
+	return adv_origin;
+}
+
 bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 			   uint32_t *soo_nhg, struct in_addr *soo)
 {
