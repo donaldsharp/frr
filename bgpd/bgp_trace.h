@@ -69,7 +69,6 @@ TRACEPOINT_EVENT_CLASS(
 	TRACEPOINT_LOGLEVEL(frr_bgp, name, TRACE_INFO)
 
 PKT_PROCESS_TRACEPOINT_INSTANCE(open_process)
-PKT_PROCESS_TRACEPOINT_INSTANCE(update_process)
 PKT_PROCESS_TRACEPOINT_INSTANCE(notification_process)
 PKT_PROCESS_TRACEPOINT_INSTANCE(capability_process)
 PKT_PROCESS_TRACEPOINT_INSTANCE(refresh_process)
@@ -78,34 +77,18 @@ TRACEPOINT_EVENT(
 	frr_bgp,
 	process_update,
 	TP_ARGS(struct peer *, peer, char *, pfx, uint32_t, addpath_id, afi_t,
-		afi, safi_t, safi, struct attr *, attr),
+		afi, safi_t, safi, uint8_t, filter),
 	TP_FIELDS(
 		ctf_string(peer, PEER_HOSTNAME(peer))
 		ctf_string(prefix, pfx)
 		ctf_integer(uint32_t, addpath_id, addpath_id)
 		ctf_integer(afi_t, afi, afi)
 		ctf_integer(safi_t, safi, safi)
-		ctf_integer_hex(intptr_t, attribute_ptr, attr)
+		ctf_integer(uint8_t, action, filter)
 	)
 )
 
 TRACEPOINT_LOGLEVEL(frr_bgp, process_update, TRACE_INFO)
-
-TRACEPOINT_EVENT(
-	frr_bgp,
-	input_filter,
-	TP_ARGS(struct peer *, peer, char *, pfx, afi_t, afi, safi_t, safi,
-		const char *, result),
-	TP_FIELDS(
-		ctf_string(peer, PEER_HOSTNAME(peer))
-		ctf_string(prefix, pfx)
-		ctf_integer(afi_t, afi, afi)
-		ctf_integer(safi_t, safi, safi)
-		ctf_string(action, result)
-	)
-)
-
-TRACEPOINT_LOGLEVEL(frr_bgp, input_filter, TRACE_INFO)
 
 /* BMP tracepoints */
 

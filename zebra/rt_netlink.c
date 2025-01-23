@@ -2253,9 +2253,8 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 		/* NOTE: if required to pring all nhg depends then use
 		 * printfrr_nhghe()
 		 */
-		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p,
-			 cmd, 0, nexthop_group2str(ctxnhg, buf, sizeof(buf)),
-			 datalen);
+		frrtrace(3, frr_zebra, netlink_route_multipath_msg_encode, p,
+			 cmd, nexthop_group2str(ctxnhg, buf, sizeof(buf)));
 
 		return NLMSG_ALIGN(req->n.nlmsg_len);
 	}
@@ -2413,9 +2412,8 @@ ssize_t netlink_route_multipath_msg_encode(int cmd,
 	if (p && nexthop) {
 		char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) + 1];
 		const struct nexthop_group *ctxnhg = dplane_ctx_get_ng(ctx);
-		frrtrace(4, frr_zebra, netlink_route_multipath_msg_encode, p,
-			 cmd, 0, nexthop_group2str(ctxnhg, buf, sizeof(buf)),
-			 datalen);
+		frrtrace(3, frr_zebra, netlink_route_multipath_msg_encode, p,
+			 cmd, nexthop_group2str(ctxnhg, buf, sizeof(buf)));
 	}
 
 	return NLMSG_ALIGN(req->n.nlmsg_len);
@@ -2884,18 +2882,9 @@ nexthop_done:
 					   __func__, id, nh, nh->ifindex,
 					   vrf_id_to_name(nh->vrf_id),
 					   nh->vrf_id, label_buf);
-			if (nh) {
-				char buf[MULTIPATH_NUM * (NEXTHOP_STRLEN + 1) +
-					 1];
-				const struct nexthop_group *ctxnhg =
-					dplane_ctx_get_ng(ctx);
-				buf[0] = '\0';
-				frrtrace(4, frr_zebra,
-					 netlink_nexthop_msg_encode, nh, id,
-					 label_buf,
-					 nexthop_group2str(ctxnhg, buf,
-							   sizeof(buf)));
-			}
+			if (nh)
+				frrtrace(2, frr_zebra,
+					 netlink_nexthop_msg_encode, nh, id);
 }
 
 		req->nhm.nh_protocol = zebra2proto(type);

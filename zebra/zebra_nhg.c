@@ -542,9 +542,7 @@ static void *zebra_nhg_hash_alloc(void *arg)
 					"Failed to lookup an interface with ifindex=%d in vrf=%u for NHE %pNG",
 					nhe->nhg.nexthop->ifindex,
 					nhe->nhg.nexthop->vrf_id, nhe);
-			frrtrace(3, frr_zebra, zebra_nhg_intf_lkup_failed,
-				 nhe->nhg.nexthop->ifindex,
-				 nhe->nhg.nexthop->vrf_id, nhe);
+			frrtrace(1, frr_zebra, zebra_nhg_intf_lkup_failed, nhe);
 		}
 	}
 

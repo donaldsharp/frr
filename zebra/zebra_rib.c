@@ -716,11 +716,6 @@ void rib_install_kernel(struct route_node *rn, struct route_entry *re,
 	 * Install the resolved nexthop object first.
 	 */
 	zebra_nhg_install_kernel(re->nhe, re->type);
-
-
-	if (IS_ZEBRA_DEBUG_RIB)
-		frrtrace(1, frr_zebra, rib_install_kernel_route,
-			 srcdest_rnode2str(rn, buf, sizeof(buf)));
 	/*
 	 * If this is a replace to a new RE let the originator of the RE
 	 * know that they've lost
@@ -854,10 +849,10 @@ void rib_uninstall_kernel(struct route_node *rn, struct route_entry *re)
 	 * the dataplane.
 	 */
 	hook_call(rib_update, rn, "uninstalling from kernel");
-	frrtrace(1, frr_zebra, rib_uninstall_kernel_route,
-		 srcdest_rnode2str(rn, buf, sizeof(buf)));
-
-	switch (dplane_route_delete(rn, re)) {
+	enum zebra_dplane_result result = dplane_route_delete(rn, re);
+	frrtrace(2, frr_zebra, rib_uninstall_kernel_route,
+		 srcdest_rnode2str(rn, buf, sizeof(buf)), result);
+	switch (result) {
 	case ZEBRA_DPLANE_REQUEST_QUEUED:
 		if (zvrf)
 			zvrf->removals_queued++;
@@ -913,7 +908,6 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn, uint32_t seq,
 {
 	rib_dest_t *dest = rib_dest_from_rnode(rn);
 	struct rnh *rnh;
-	char buf[SRCDEST2STR_BUFFER];
 
 	/*
 	 * We are storing the rnh's associated withb
@@ -935,9 +929,6 @@ void zebra_rib_evaluate_rn_nexthops(struct route_node *rn, uint32_t seq,
 			if (IS_ZEBRA_DEBUG_NHT_DETAILED)
 				zlog_debug("%pRN has no tracking NHTs. Bailing",
 					   rn);
-			frrtrace(1, frr_zebra,
-				 zebra_rib_evaluate_nht_tracking_bailout,
-				 srcdest_rnode2str(rn, buf, sizeof(buf)));
 			break;
 		}
 		if (!dest) {

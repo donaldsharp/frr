@@ -2944,7 +2944,6 @@ void bgp_process_packet(struct thread *thread)
 					__func__, peer->host);
 			break;
 		case BGP_MSG_UPDATE:
-			frrtrace(2, frr_bgp, update_process, peer, size);
 			atomic_fetch_add_explicit(&peer->update_in, 1,
 						  memory_order_relaxed);
 			peer->readtime = monotime(NULL);
