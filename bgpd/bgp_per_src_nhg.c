@@ -712,6 +712,12 @@ static void bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry 
 	uint32_t nh_weight;
 	bool do_wt_ecmp = false;
 
+	if (!pi->attr) {
+		zlog_err("pi attr is NULL for bgp(%s) peer %p afi:%d add bnc",
+			 nhe->bgp->name_pretty, pi->peer, afi);
+		return;
+	}
+
 	/* Validation for the ipv4 mapped ipv6 nexthop. */
 	if (IS_MAPPED_IPV6(&pi->attr->mp_nexthop_global)) {
 		afi = AFI_IP;
@@ -756,66 +762,50 @@ static void bgp_per_src_nhg_nc_add(afi_t afi, struct bgp_per_src_nhg_hash_entry 
 		struct zapi_nexthop api_nh = {0};
 
 		bnc = bnc_nhg_new(&nhe->nhg_nexthop_cache_table, &p, ifindex);
-		if (pi->attr) {
-			BGP_ORIGINAL_UPDATE(bgp_orig, pi, nhe->bgp);
-			is_parent_evpn = is_route_parent_evpn(pi);
+		BGP_ORIGINAL_UPDATE(bgp_orig, pi, nhe->bgp);
+		is_parent_evpn = is_route_parent_evpn(pi);
 
-			if (afi == AFI_IP) {
+		if (afi == AFI_IP) {
+			(void)update_ipv4nh_for_route_install(
+				nh_othervrf, bgp_orig, &pi->attr->nexthop,
+				pi->attr, is_parent_evpn, &api_nh);
+			bnc->nh.gate.ipv4 = api_nh.gate.ipv4;
+		} else if (afi == AFI_IP6) {
+			ifindex_t ifindex = IFINDEX_INTERNAL;
+			struct in6_addr *nexthop;
+			struct bgp_path_info *select = NULL;
+
+			nexthop = bgp_path_info_to_ipv6_nexthop(pi, &ifindex);
+
+			if (!nexthop) {
 				(void)update_ipv4nh_for_route_install(
 					nh_othervrf, bgp_orig,
 					&pi->attr->nexthop, pi->attr,
 					is_parent_evpn, &api_nh);
 				bnc->nh.gate.ipv4 = api_nh.gate.ipv4;
-			} else if (afi == AFI_IP6) {
-				ifindex_t ifindex = IFINDEX_INTERNAL;
-				struct in6_addr *nexthop;
-				struct bgp_path_info *select = NULL;
+			} else {
+				if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED))
+					select = pi;
 
-				nexthop = bgp_path_info_to_ipv6_nexthop(
-					pi, &ifindex);
-
-				if (!nexthop) {
-					(void)update_ipv4nh_for_route_install(
-						nh_othervrf, bgp_orig,
-						&pi->attr->nexthop, pi->attr,
-						is_parent_evpn, &api_nh);
-					bnc->nh.gate.ipv4 = api_nh.gate.ipv4;
-				} else {
-					if (CHECK_FLAG(pi->flags,
-						       BGP_PATH_SELECTED))
-						select = pi;
-
-					nh_updated =
-						update_ipv6nh_for_route_install(
-							nh_othervrf, bgp_orig,
-							nexthop, ifindex, pi,
-							select, is_parent_evpn,
-							&api_nh);
-					if (!nh_updated) {
-						zlog_err(
-							"Unable to get ipv6 nexthop for bnc nhg %pFX(%d)(%s) peer %p afi:%d",
-							&bnc->prefix,
-							bnc->ifindex,
-							nhe->bgp->name_pretty,
-							pi->peer, afi);
-						bnc_nhg_free(bnc);
-						return;
-					}
-					bnc->nh.gate.ipv6 = api_nh.gate.ipv6;
+				nh_updated = update_ipv6nh_for_route_install(
+					nh_othervrf, bgp_orig, nexthop, ifindex,
+					pi, select, is_parent_evpn, &api_nh);
+				if (!nh_updated) {
+					zlog_err(
+						"Unable to get ipv6 nexthop for bnc nhg %pFX(%d)(%s) peer %p afi:%d",
+						&bnc->prefix, bnc->ifindex,
+						nhe->bgp->name_pretty, pi->peer,
+						afi);
+					bnc_nhg_free(bnc);
+					return;
 				}
+				bnc->nh.gate.ipv6 = api_nh.gate.ipv6;
 			}
-			bnc->nh.ifindex = api_nh.ifindex;
-			bnc->nh.type = api_nh.type;
-			bnc->nh.flags = api_nh.flags;
-			bnc->nh.vrf_id = bgp_orig->vrf_id;
-		} else {
-			zlog_err(
-				"pi attr is NULL for bnc nhg %pFX(%d)(%s) peer %p afi:%d",
-				&bnc->prefix, bnc->ifindex,
-				nhe->bgp->name_pretty, pi->peer, afi);
-			bnc_nhg_free(bnc);
-			return;
 		}
+		bnc->nh.ifindex = api_nh.ifindex;
+		bnc->nh.type = api_nh.type;
+		bnc->nh.flags = api_nh.flags;
+		bnc->nh.vrf_id = bgp_orig->vrf_id;
 		SET_FLAG(bnc->nh.flags, NEXTHOP_FLAG_RECURSIVE);
 		bnc->refcnt++;
 		if (do_wt_ecmp && pi->attr) {
@@ -862,19 +852,32 @@ void bgp_per_src_nhg_nc_del(afi_t afi, struct bgp_per_src_nhg_hash_entry *nhe,
 	struct prefix p = {0};
 	struct bgp_nhg_nexthop_cache *bnc;
 
-	if (pi->attr && IN6_IS_ADDR_LINKLOCAL(&pi->attr->mp_nexthop_global))
-		afi = AFI_IP6;
+	if (!pi->attr) {
+		zlog_err("pi attr is NULL for bgp(%s) peer %p afi:%d del bnc",
+			 nhe->bgp->name_pretty, pi->peer, afi);
+		return;
+	}
+
+	/* Validation for the ipv4 mapped ipv6 nexthop. */
+	if (IS_MAPPED_IPV6(&pi->attr->mp_nexthop_global)) {
+		afi = AFI_IP;
+	} else {
+		afi = BGP_ATTR_MP_NEXTHOP_LEN_IP6(pi->attr) ? AFI_IP6 : AFI_IP;
+	}
 
 	if (make_prefix(afi, pi, &p) < 0)
 		return;
 
+	if (afi == AFI_IP6 && IN6_IS_ADDR_LINKLOCAL(&p.u.prefix6))
+		ifindex = pi->peer->connection->su.sin6.sin6_scope_id;
+
 	bnc = bnc_nhg_find(&nhe->nhg_nexthop_cache_table, &p, ifindex);
-	if (!bnc)
+	if (!bnc) {
+		zlog_debug("pi bnc nhg %pFX(%d)(%s) peer %p not found", &p,
+			   ifindex, nhe->bgp->name_pretty, pi->peer);
 		return;
-	if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
-		zlog_debug("Unlink pi bnc nhg %pFX(%d)(%s) peer %p refcnt(%d)",
-			   &bnc->prefix, bnc->ifindex, nhe->bgp->name_pretty,
-			   pi->peer, bnc->refcnt);
+	}
+
 	bnc->refcnt--;
 	if (!bnc->refcnt) {
 		UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_DO_WECMP);
