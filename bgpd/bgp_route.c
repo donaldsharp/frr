@@ -2719,12 +2719,8 @@ bool subgroup_announce_check(struct bgp_dest *dest, struct bgp_path_info *pi,
 	}
 
 	if (CHECK_FLAG(bgp->per_src_nhg_flags[afi][safi],
-		       BGP_FLAG_ADVERTISE_ORIGIN)) {
-		struct attr attr_tmp = *attr;
-		bgp_attr_add_soo_community(bgp->per_source_nhg_soo, &attr_tmp);
-		struct attr *interned = bgp_attr_intern(&attr_tmp);
-		*attr = *interned;
-	}
+		       BGP_FLAG_ADVERTISE_ORIGIN))
+		bgp_attr_add_soo_community(bgp->per_source_nhg_soo, attr);
 
 	/*
 	 * When the next hop is set to ourselves, if all multipaths have
