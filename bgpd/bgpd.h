@@ -917,6 +917,8 @@ struct bgp {
 	struct timer_wheel *per_src_nhg_soo_timer_wheel;
 	/* per source nhg convergence wait timer*/
 	int per_src_nhg_convergence_timer;
+	/* per source nhg advertise bgp routes delay timer*/
+	int per_src_nhg_start_adv_delay_timer;
 
 	/* BGP Conditional advertisement */
 	uint32_t condition_check_period;
@@ -2190,6 +2192,9 @@ struct bgp_nlri {
 
 /* BGP Long-lived Graceful Restart */
 #define BGP_DEFAULT_LLGR_STALE_TIME 0
+
+/* BGP default per src nhg advertise delay time in secs */
+#define BGP_DEFAULT_PER_SRC_NHG_START_ADV_DELAY_TIME 10
 
 /* BGP uptime string length.  */
 #define BGP_UPTIME_LEN 25

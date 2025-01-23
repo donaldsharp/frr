@@ -1010,16 +1010,34 @@ void bgp_start_routeadv(struct bgp *bgp)
 		 * may not have programmed all the routes in hardware.
 		 * This is not an issue with out per src nhg feature because of
 		 * the way how NHG's are created on the peer nodes but with
-		 * per src nhg, we introduce a delay of 10 seconds(which may be
-		 * later made a configurable parameter) before advertising the
-		 * routes to peers. This 10 seconds is effectively the time it
-		 * takes for all routes to be programmed in hardware on the node
-		 * undergoing reboot. Same logic applies for FRR restart as
-		 * well. 10 seconds is based on emperical data for high scale.
-		 * This timer value can change and made configurable later
+		 * per src nhg, we introduce a delay of 10 seconds before
+		 * advertising the routes to peers. This 10 seconds is
+		 * effectively the time it takes for all routes to be programmed
+		 * in hardware on the node undergoing reboot. Same logic applies
+		 * for FRR restart as well. 10 seconds is based on emperical
+		 * data for high scale.
+		 *
+		 * nhg-per-origin     advertise-origin
+		 * TRUE                TRUE
+		 *    typically on leaf, use timer value 0 as we don't need to
+		 * delay start advertising routes on leafs TRUE FALSE typically
+		 * on spine/superspine, use timer value specified in
+		 *    bgp->per_src_nhg_start_adv_delay_timer
+		 *
+		 * FALSE               TRUE
+		 *    typically on leafs, we would enable both cli's, if
+		 * nhg-per-origin is not enabled use timer value 0
+		 *
+		 * FALSE              FALSE
+		 *    per src nhg feature is disabled, use timer value 0
 		 */
-		if (is_nhg_per_origin_configured(bgp)) {
-			BGP_TIMER_ON(connection->t_routeadv, bgp_routeadv_timer, 10);
+		if (is_nhg_per_origin_configured(bgp) &&
+		    !is_adv_origin_configured(bgp)) {
+			zlog_info("%s, setting route adv timer to %d secs",
+				  __func__,
+				  bgp->per_src_nhg_start_adv_delay_timer);
+			BGP_TIMER_ON(connection->t_routeadv, bgp_routeadv_timer,
+				     bgp->per_src_nhg_start_adv_delay_timer);
 		} else {
 			BGP_TIMER_ON(connection->t_routeadv, bgp_routeadv_timer, 0);
 		}
