@@ -19238,14 +19238,12 @@ static void vty_print_bitfield(struct vty *vty, const char *str,
 			       const bitfield_t *bf, json_object *json)
 {
 	unsigned int bit;
-	unsigned int approx_last_set_bit_index =
-		bf_approx_last_set_bit_index(bf);
-	char bitstring[1024] = "";
-	char bitvalue[1024] = "";
+	char bitstring[BUFSIZ] = "";
+	char bitvalue[BUFSIZ] = "";
 
 	snprintf(bitstring, sizeof(bitstring), "%s bits set", str ? str : "");
 
-	bf_for_each_set_bit((*bf), bit, approx_last_set_bit_index)
+	bf_for_each_set_bit((*bf), bit, BGP_PEER_INIT_BITMAP_SIZE)
 	{
 		if (bit == 0)
 			continue;
