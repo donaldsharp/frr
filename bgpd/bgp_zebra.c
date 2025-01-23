@@ -1333,7 +1333,7 @@ enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
 	struct bgp_path_info *mpinfo_cp = &local_info;
 	route_tag_t tag;
 	struct bgp_sid_info *sid_info;
-	mpls_label_t *labels;
+	mpls_label_t *labels = NULL;
 	uint32_t num_labels = 0;
 	mpls_label_t nh_label;
 	int nh_othervrf = 0;
@@ -1541,6 +1541,9 @@ enum zclient_send_status bgp_zebra_announce_actual(struct bgp_dest *dest,
 		if (mpinfo->extra) {
 			labels = mpinfo->extra->label;
 			num_labels = mpinfo->extra->num_labels;
+		} else {
+			num_labels = 0;
+			labels = NULL;
 		}
 
 		if (labels && (num_labels > 0) &&
