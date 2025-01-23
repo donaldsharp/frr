@@ -167,6 +167,7 @@ void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 			   uint32_t *soo_nhg, struct in_addr *soo);
 bool is_nhg_per_origin_configured(struct bgp *bgp);
+bool is_adv_origin_configured(struct bgp *bgp);
 void bgp_per_src_nhg_handle_router_id_update(struct bgp *bgp,
 					     const struct in_addr *id);
 char *ipaddr_afi_to_str(const struct in_addr *id, char *buf, int size,
