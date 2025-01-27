@@ -26,17 +26,14 @@
 PREDECL_RBTREE_UNIQ(bgp_nhg_nexthop_cache);
 
 struct bgp_nhg_nexthop_cache {
-	// afi_t afi;
 	ifindex_t ifindex;
 	struct prefix prefix;
 	struct nexthop nh;
-	int refcnt;
 	uint32_t nh_weight;
 	/* RB-tree entry. */
 	struct bgp_nhg_nexthop_cache_item entry;
 	struct bgp_nhg_nexthop_cache_head *tree;
 };
-
 
 extern int bgp_nhg_nexthop_cache_compare(const struct bgp_nhg_nexthop_cache *a,
 					 const struct bgp_nhg_nexthop_cache *b);
@@ -52,10 +49,8 @@ struct bgp_dest_soo_hash_entry {
 	struct bgp_per_src_nhg_hash_entry *nhe;
 
 	struct prefix p;
-	/* Time since last update */
-	uint64_t uptime;
 
-	// we need to back pointer for dest
+	/* back pointer to dest */
 	struct bgp_dest *dest;
 
 	bitfield_t bgp_pi_bitmap;
@@ -79,11 +74,8 @@ struct bgp_per_src_nhg_hash_entry {
 	afi_t afi;
 	safi_t safi;
 
-	// we need to back pointer for dest
+	/* back pointer for dest */
 	struct bgp_dest *dest;
-
-	/* Time since last update */
-	uint64_t uptime;
 
 	struct bgp_nhg_nexthop_cache_head nhg_nexthop_cache_table;
 
@@ -101,83 +93,67 @@ struct bgp_per_src_nhg_hash_entry {
 
 	uint32_t flags;
 
-/*
- * Is this nexthop group valid, ie all nexthops are fully resolved.
- * What is fully resolved?  It's a nexthop that is either self contained
- * and correct( ie no recursive pointer ) or a nexthop that is recursively
- * resolved and correct.
- */
 #define PER_SRC_NEXTHOP_GROUP_VALID (1 << 0)
-/*
- * Has this nexthop group been installed?  At this point in time, this
- * means that the data-plane has been told about this nexthop group
- * and it's possible usage by a route entry.
- */
-#define PER_SRC_NEXTHOP_GROUP_INSTALLED (1 << 1)
-/*
- * Has the nexthop group been queued to be send to the ZEBRA?
- * The NEXTHOP_GROUP_VALID flag should also be set by this point.
- */
-#define PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING (1 << 2)
-/*
- * Is this a nexthop group timer on?
- */
-#define PER_SRC_NEXTHOP_GROUP_TIMER_ON (1 << 3)
-#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL (1 << 4)
-#define PER_SRC_NEXTHOP_GROUP_DEL_PENDING (1 << 5)
-#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED (1 << 6)
-#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_DO_WECMP (1 << 7)
-#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_CLEAR_ONLY (1 << 8)
-#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_ATTR_DEL (1 << 9)
+#define PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING (1 << 1)
+#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_INSTALL (1 << 2)
+#define PER_SRC_NEXTHOP_GROUP_DEL_PENDING (1 << 3)
+#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_NHID_USED (1 << 4)
+#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_DO_WECMP (1 << 5)
+#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_CLEAR_ONLY (1 << 6)
+#define PER_SRC_NEXTHOP_GROUP_SOO_ROUTE_ATTR_DEL (1 << 7)
 };
 
 #define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS 10
-#define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD                                 \
-	50 // in milli seconds, total timer wheel period
+/* in milli seconds, total timer wheel period */
+#define BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_PERIOD 50
 
-void bgp_dest_soo_init(struct bgp_per_src_nhg_hash_entry *nhe);
-void bgp_dest_soo_finish(struct bgp_per_src_nhg_hash_entry *nhe);
+/* SOO Hash Table APIs */
 void bgp_per_src_nhg_init(struct bgp *bgp, afi_t afi, safi_t safi);
 void bgp_per_src_nhg_finish(struct bgp *bgp, afi_t afi, safi_t safi);
 void bgp_per_src_nhg_stop(struct bgp *bgp);
-void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
-				struct bgp_dest *dest, struct bgp_path_info *pi,
-				bool is_add);
-bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
-			       struct bgp_path_info *pi, uint32_t *nhg_id);
-extern void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp);
-extern void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp);
 struct bgp_per_src_nhg_hash_entry *bgp_per_src_nhg_find(struct bgp *bgp,
 							struct ipaddr *ip,
 							afi_t afi, safi_t safi);
+
+/* SOO timer wheel APIs */
+void bgp_per_src_nhg_soo_timer_wheel_delete(struct bgp *bgp);
+void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp);
+
+/* NHID */
+bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
+			       struct bgp_path_info *pi, uint32_t *nhg_id);
+void bgp_process_route_transition_between_nhid(struct bgp *bgp,
+					       struct bgp_dest *dest,
+					       struct bgp_path_info *pi,
+					       bool withdraw);
+
+/* Handle SOO Attr*/
+void bgp_process_route_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
+				struct bgp_dest *dest, struct bgp_path_info *pi,
+				bool is_add);
 void bgp_process_route_soo_attr_change(struct bgp *bgp, afi_t afi, safi_t safi,
 				       struct bgp_dest *dest,
 				       struct bgp_path_info *pi,
 				       struct attr *new_attr);
-bool bgp_is_soo_route(struct bgp_dest *dest, struct bgp_path_info *pi,
-		      struct in_addr *ip);
-bool bgp_check_is_soo_route(struct bgp *bgp, struct bgp_dest *dest,
-			    struct bgp_path_info *pi);
-void bgp_process_route_transition_between_nhid(struct bgp *bgp, struct bgp_dest *dest,
-                               struct bgp_path_info *pi, bool withdraw);
 void bgp_process_mpath_route_soo_attr(struct bgp *bgp, afi_t afi, safi_t safi,
 				      struct bgp_dest *dest,
 				      struct bgp_path_info *new_best,
 				      bool is_add);
+
+void bgp_per_src_nhg_handle_router_id_update(struct bgp *bgp,
+					     const struct in_addr *id);
+void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
+				   struct bgp_dest *dest);
+void bgp_peer_clear_soo_routes(struct peer *peer, afi_t afi, safi_t safi,
+			       struct bgp_table *table);
+/* Utils */
+bool bgp_check_is_soo_route(struct bgp *bgp, struct bgp_dest *dest,
+			    struct bgp_path_info *pi);
 bool is_path_using_soo_nhg(const struct prefix *p, struct bgp_path_info *path,
 			   uint32_t *soo_nhg, struct in_addr *soo);
 bool is_nhg_per_origin_configured(struct bgp *bgp);
 bool is_adv_origin_configured(struct bgp *bgp);
-void bgp_per_src_nhg_handle_router_id_update(struct bgp *bgp,
-					     const struct in_addr *id);
-char *ipaddr_afi_to_str(const struct in_addr *id, char *buf, int size,
-			afi_t afi);
-
-void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
-				   struct bgp_dest *dest);
 char *inaddr_afi_to_str(const struct in_addr *id, char *buf, int size,
 			afi_t afi);
 
-void bgp_peer_clear_soo_routes(struct peer *peer, afi_t afi, safi_t safi,
-			       struct bgp_table *table);
 #endif /* _BGP_PER_SRC_NHG_H */

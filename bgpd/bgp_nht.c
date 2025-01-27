@@ -1489,7 +1489,7 @@ void bgp_nht_dereg_enhe_cap_intfs(struct peer *peer)
  * the APIs for allocating L3 NHG ids. Management of the L3 NHG itself is
  * left to the application using it.
  ***************************************************************************/
-static bgp_nhg_app_info_t bgp_nhg_app_info[APP_MAX];
+static struct bgp_nhg_app_info bgp_nhg_app_info[APP_MAX];
 static uint32_t bgp_l3nhg_start;
 
 /* XXX - currently we do nothing on the callbacks */
@@ -1533,7 +1533,7 @@ void bgp_l3nhg_init(void)
 	uint32_t cumulative_offset = 0;
 	bgp_l3nhg_start = zclient_get_nhg_start(ZEBRA_ROUTE_BGP);
 
-	for (bgp_nhg_app_t app = EVPN_MH; app < APP_MAX; app++) {
+	for (enum bgp_nhg_app app = EVPN_MH; app < APP_MAX; app++) {
 		if (app == EVPN_MH) {
 			bgp_nhg_app_info[app].id_max =
 				MIN(ZEBRA_NHG_PROTO_SPACING - 1,
@@ -1567,12 +1567,12 @@ void bgp_l3nhg_init(void)
 
 void bgp_l3nhg_finish(void)
 {
-	for (bgp_nhg_app_t app = EVPN_MH; app < APP_MAX; app++) {
+	for (enum bgp_nhg_app app = EVPN_MH; app < APP_MAX; app++) {
 		bf_free(bgp_nhg_app_info[app].bitmap);
 	}
 }
 
-uint32_t bgp_l3nhg_id_alloc(bgp_nhg_app_t app)
+uint32_t bgp_l3nhg_id_alloc(enum bgp_nhg_app app)
 {
 	if (app >= APP_MAX)
 		return 0;
@@ -1587,7 +1587,7 @@ uint32_t bgp_l3nhg_id_alloc(bgp_nhg_app_t app)
 	return nhg_id;
 }
 
-void bgp_l3nhg_id_free(bgp_nhg_app_t app, uint32_t nhg_id)
+void bgp_l3nhg_id_free(enum bgp_nhg_app app, uint32_t nhg_id)
 {
 	if (app >= APP_MAX || !nhg_id ||
 	    (nhg_id <= bgp_nhg_app_info[app].start_id))
