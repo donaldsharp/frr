@@ -7598,7 +7598,7 @@ int bgp_static_set(struct vty *vty, struct bgp *bgp, bool negate,
 			vty_out(vty, "%% Malformed prefix\n");
 			return CMD_WARNING_CONFIG_FAILED;
 		} else {
-			zlog_err("%% Malformed prefix\n");
+			zlog_err("%% Malformed prefix");
 			return -1;
 		}
 	}
@@ -7608,7 +7608,7 @@ int bgp_static_set(struct vty *vty, struct bgp *bgp, bool negate,
 				"%% Malformed prefix (link-local address)\n");
 			return CMD_WARNING_CONFIG_FAILED;
 		} else {
-			zlog_err("%% Malformed prefix (link-local address)\n");
+			zlog_err("%% Malformed prefix (link-local address)");
 			return -1;
 		}
 	}
@@ -7626,7 +7626,7 @@ int bgp_static_set(struct vty *vty, struct bgp *bgp, bool negate,
 					"%% Can't find static route specified\n");
 				return CMD_WARNING_CONFIG_FAILED;
 			} else {
-				zlog_err("%% Can't find static route specified\n");
+				zlog_err("%% Can't find static route specified");
 				return -1;
 			}
 		}
@@ -7639,7 +7639,7 @@ int bgp_static_set(struct vty *vty, struct bgp *bgp, bool negate,
 				vty_out(vty,
 					"%% label-index doesn't match static route\n");
 			else {
-				zlog_err("%% label-index doesn't match static route\n");
+				zlog_err("%% label-index doesn't match static route");
 			}
 
 			bgp_dest_unlock_node(dest);
@@ -7655,7 +7655,7 @@ int bgp_static_set(struct vty *vty, struct bgp *bgp, bool negate,
 				vty_out(vty,
 					"%% route-map name doesn't match static route\n");
 			else
-				zlog_err("%% route-map name doesn't match static route\n");
+				zlog_err("%% route-map name doesn't match static route");
 			bgp_dest_unlock_node(dest);
 			if (vty)
 				return CMD_WARNING_CONFIG_FAILED;
@@ -7686,7 +7686,7 @@ int bgp_static_set(struct vty *vty, struct bgp *bgp, bool negate,
 					vty_out(vty,
 						"%% cannot change label-index\n");
 				else
-					zlog_err("%% cannot change label-index\n");
+					zlog_err("%% cannot change label-index");
 				bgp_dest_unlock_node(dest);
 				if (vty)
 					return CMD_WARNING_CONFIG_FAILED;
