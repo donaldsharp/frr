@@ -1033,6 +1033,174 @@ def parse_frr_zebra_remote_nh_add_rmac_change(event):
 
 ############################ evpn parsers - end *#############################
 
+############################ bgp per src nhg - start *#############################
+
+soo_nhg_flag_descriptions = {
+    0: "valid",
+    1: "install pending",
+    2: "del pending",
+}
+
+soo_rt_flag_descriptions = {
+    3: "installed",
+    4: "use soo nhg",
+    5: "wecmp",
+    6: "clear",
+    7: "soo attr del",
+}
+
+rt_with_soo_flag_descriptions = {
+    0: "use soo nhg",
+    1: "del pending",
+    2: "soo attr del",
+}
+
+def print_soo_nhg_flags(flags):
+    parts = []
+    for bit_position, description in soo_nhg_flag_descriptions.items():
+        if flags & (1 << bit_position):
+            parts.append(description)
+    return ", ".join(parts)
+
+def print_soo_rt_flags(flags):
+    parts = []
+    for bit_position, description in soo_rt_flag_descriptions.items():
+        if flags & (1 << bit_position):
+            parts.append(description)
+    return ", ".join(parts)
+
+def print_rt_with_soo_flags(flags):
+    parts = []
+    for bit_position, description in rt_with_soo_flag_descriptions.items():
+        if flags & (1 << bit_position):
+            parts.append(description)
+    return ", ".join(parts)
+
+def location_per_src_nhg_soo_timer_slot_run(field_val):
+    if field_val == 1:
+        return ("soo selected is subset of all route with soo, converged")
+    
+def parse_frr_bgp_per_src_nhg_soo_timer_slot_run(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                    "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags,
+                     "loc": location_per_src_nhg_soo_timer_slot_run}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_bgp_per_src_nhg_soo_timer_start(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                    "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_bgp_per_src_nhg_soo_timer_stop(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                    "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_bgp_per_src_nhg_add_send(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                    "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_bgp_per_src_nhg_del_send(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                    "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags}
+
+    parse_event(event, field_parsers)
+
+def location_per_src_nhg_soo_rt_dest_ecmp_check(field_val):
+    if field_val == 1:
+        return ("soo selected is subset of installed, ecmp shrink/lbw change, nhg replace")
+    elif field_val == 2:
+        return ("soo selected is superset/disjoint/overlap of installed, nhg replace after timer")
+
+def parse_frr_bgp_per_src_nhg_soo_rt_dest_ecmp_check(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                    "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags,
+                    "loc": location_per_src_nhg_soo_rt_dest_ecmp_check}
+
+    parse_event(event, field_parsers)
+
+def location_per_src_nhg_soo_rt_pi_ecmp_check(field_val):
+    if field_val == 1:
+        return ("soo selected is superset of installed, expansion, nhg replace after timer")
+    
+def parse_frr_bgp_per_src_nhg_soo_rt_pi_ecmp_check(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                    "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags,
+                     "loc": location_per_src_nhg_soo_rt_pi_ecmp_check}
+
+    parse_event(event, field_parsers)
+
+def location_per_src_nhg_soo_rt_use_nhgid(field_val):
+    if field_val == 1:
+        return ("use soo nhgid")
+    elif field_val == 2:
+        return ("do not use soo nhgid")
+ 
+def parse_frr_bgp_per_src_nhg_soo_rt_use_nhgid(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                    "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags,
+                     "loc": location_per_src_nhg_soo_rt_use_nhgid}
+
+    parse_event(event, field_parsers)
+
+def location_per_src_nhg_rt_with_soo_use_nhgid(field_val):
+    if field_val == 1:
+        return ("do not use soo nhgid")
+    elif field_val == 2:
+        return ("use soo nhgid")
+
+def parse_frr_bgp_per_src_nhg_rt_with_soo_use_nhgid(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                    "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags,
+                     "rt_with_soo" : print_prefix_addr,
+                     "rt_with_soo_flags": print_rt_with_soo_flags,
+                     "loc": location_per_src_nhg_rt_with_soo_use_nhgid}
+
+    parse_event(event, field_parsers)
+
+def parse_frr_bgp_per_src_nhg_peer_clear_route(event):
+    field_parsers = {"soo_rt": print_ip_addr,
+                     "afi": print_afi_string,
+                     "safi": print_safi_string,
+                     "soo_nhg_flags": print_soo_nhg_flags,
+                     "soo_rt_flags": print_soo_rt_flags}
+
+    parse_event(event, field_parsers)
+
+############################ bgp per src nhg - end *#############################
+
 def main():
     """
     FRR lttng trace output parser; babel trace plugin
@@ -1145,6 +1313,26 @@ def main():
                      parse_frr_update_prefix_filter,
                      "frr_bgp:upd_attr_type_unsupported":
                      parse_frr_bgp_attr_type_unsupported,
+                     "frr_bgp:per_src_nhg_soo_timer_slot_run":
+                     parse_frr_bgp_per_src_nhg_soo_timer_slot_run,
+                     "frr_bgp:per_src_nhg_soo_timer_start":
+                     parse_frr_bgp_per_src_nhg_soo_timer_start,
+                     "frr_bgp:per_src_nhg_soo_timer_stop":
+                     parse_frr_bgp_per_src_nhg_soo_timer_stop,
+                     "frr_bgp:per_src_nhg_add_send":
+                     parse_frr_bgp_per_src_nhg_add_send,
+                     "frr_bgp:per_src_nhg_del_send":
+                     parse_frr_bgp_per_src_nhg_del_send,
+                     "frr_bgp:per_src_nhg_soo_rt_dest_ecmp_check":
+                     parse_frr_bgp_per_src_nhg_soo_rt_dest_ecmp_check,
+                     "frr_bgp:per_src_nhg_soo_rt_pi_ecmp_check":
+                     parse_frr_bgp_per_src_nhg_soo_rt_pi_ecmp_check,
+                     "frr_bgp:per_src_nhg_soo_rt_use_nhgid":
+                     parse_frr_bgp_per_src_nhg_soo_rt_use_nhgid,
+                     "frr_bgp:per_src_nhg_rt_with_soo_use_nhgid":
+                     parse_frr_bgp_per_src_nhg_rt_with_soo_use_nhgid,
+                     "frr_bgp:per_src_nhg_peer_clear_route":
+                     parse_frr_bgp_per_src_nhg_peer_clear_route,
                      "frr_zebra:gr_last_route_re":
                      parse_frr_zebra_gr_last_route_re,
                      "frr_zebra:netlink_vrf_change":

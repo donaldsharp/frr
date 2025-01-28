@@ -37,6 +37,7 @@
 #include "workqueue.h"
 #include <config.h>
 
+#include "bgpd/bgp_trace.h"
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_table.h"
 #include "bgpd/bgp_route.h"
@@ -131,6 +132,7 @@ static void bgp_start_soo_timer(struct bgp *bgp,
 				get_afi_safi_str(soo_entry->afi,
 						 soo_entry->safi, false));
 
+		frrtrace(1, frr_bgp, per_src_nhg_soo_timer_start, soo_entry);
 		wheel_add_item(bgp->per_src_nhg_soo_timer_wheel, soo_entry);
 		soo_entry->soo_timer_running = true;
 	}
@@ -151,6 +153,7 @@ static void bgp_stop_soo_timer(struct bgp *bgp,
 				bgp->name_pretty, &soo_entry->ip,
 				get_afi_safi_str(soo_entry->afi,
 						 soo_entry->safi, false));
+		frrtrace(1, frr_bgp, per_src_nhg_soo_timer_stop, soo_entry);
 		wheel_remove_item(bgp->per_src_nhg_soo_timer_wheel, soo_entry);
 		soo_entry->soo_timer_running = false;
 	}
@@ -222,6 +225,9 @@ static void bgp_per_src_nhg_timer_slot_run(void *item)
 				"remove soo entry from timer wheel",
 				nhe->bgp->name_pretty, &nhe->ip,
 				get_afi_safi_str(nhe->afi, nhe->safi, false));
+
+		frrtrace(2, frr_bgp, per_src_nhg_soo_timer_slot_run, nhe, 1);
+
 		if (nhe->refcnt) {
 			if (CHECK_FLAG(nhe->flags,
 				       PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING))
@@ -270,6 +276,10 @@ void bgp_per_src_nhg_soo_timer_wheel_init(struct bgp *bgp)
 				bgp->name_pretty,
 				bgp->per_src_nhg_convergence_timer,
 				BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS);
+
+		frrtrace(2, frr_bgp, per_src_nhg_soo_timer_wheel_init,
+			 bgp->per_src_nhg_convergence_timer,
+			 BGP_PER_SRC_NHG_SOO_TIMER_WHEEL_SLOTS);
 
 		bgp->per_src_nhg_soo_timer_wheel = wheel_init(
 			bm->master, bgp->per_src_nhg_convergence_timer,
@@ -487,6 +497,8 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 						get_afi_safi_str(nhe->afi,
 								 nhe->safi,
 								 false));
+				frrtrace(2, frr_bgp,
+					 per_src_nhg_soo_rt_use_nhgid, nhe, 1);
 				return true;
 			} else {
 				if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG))
@@ -497,6 +509,8 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 						get_afi_safi_str(nhe->afi,
 								 nhe->safi,
 								 false));
+				frrtrace(2, frr_bgp,
+					 per_src_nhg_soo_rt_use_nhgid, nhe, 2);
 				return false;
 			}
 		} else {
@@ -539,6 +553,10 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 								nhe->safi,
 								false),
 							pfxprint);
+					frrtrace(
+						3, frr_bgp,
+						per_src_nhg_rt_with_soo_use_nhgid,
+						nhe, dest_he, 1);
 				}
 				return false;
 			}
@@ -558,6 +576,9 @@ bool bgp_per_src_nhg_use_nhgid(struct bgp *bgp, struct bgp_dest *dest,
 								 false),
 						pfxprint);
 				}
+				frrtrace(3, frr_bgp,
+					 per_src_nhg_rt_with_soo_use_nhgid, nhe,
+					 dest_he, 2);
 			}
 			*nhg_id = nhe->nhg_id;
 			return true;
@@ -615,6 +636,7 @@ static void bgp_per_src_nhg_add_send(struct bgp_per_src_nhg_hash_entry *nhe)
 	zclient_nhg_send(zclient, ZEBRA_NHG_ADD, &api_nhg);
 	SET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
+	frrtrace(1, frr_bgp, per_src_nhg_add_send, nhe);
 	if (bf_words_size(nhe->bgp_soo_route_selected_pi_bitmap) !=
 	    bf_words_size(nhe->bgp_soo_route_installed_pi_bitmap)) {
 		bf_free(nhe->bgp_soo_route_installed_pi_bitmap);
@@ -647,6 +669,7 @@ static void bgp_per_src_nhg_del_send(struct bgp_per_src_nhg_hash_entry *nhe)
 	zclient_nhg_send(zclient, ZEBRA_NHG_DEL, &api_nhg);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_VALID);
 	UNSET_FLAG(nhe->flags, PER_SRC_NEXTHOP_GROUP_INSTALL_PENDING);
+	frrtrace(1, frr_bgp, per_src_nhg_del_send, nhe);
 	if (bf_words_size(nhe->bgp_soo_route_selected_pi_bitmap) !=
 	    bf_words_size(nhe->bgp_soo_route_installed_pi_bitmap)) {
 		bf_free(nhe->bgp_soo_route_installed_pi_bitmap);
@@ -897,7 +920,6 @@ bgp_dest_soo_add(struct bgp_per_src_nhg_hash_entry *nhe, struct bgp_dest *dest)
 			   nhe->bgp->name_pretty, buf,
 			   get_afi_safi_str(nhe->afi, nhe->safi, false),
 			   pfxprint);
-
 	return dest_he;
 }
 
@@ -1234,6 +1256,7 @@ static void bgp_per_src_nhg_update(struct bgp_per_src_nhg_hash_entry *nhe)
 					&nhe->bgp_soo_route_installed_pi_bitmap,
 					buf2));
 		}
+		frrtrace(2, frr_bgp, per_src_nhg_soo_rt_pi_ecmp_check, nhe, 1);
 		bgp_start_soo_timer(nhe->bgp, nhe);
 	}
 }
@@ -1908,6 +1931,8 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
 						&nhe->bgp_soo_route_installed_pi_bitmap,
 						buf2));
 			}
+			frrtrace(2, frr_bgp, per_src_nhg_soo_rt_dest_ecmp_check,
+				 nhe, 1);
 			bgp_per_src_nhg_add_send(nhe);
 		} else {
 			if (BGP_DEBUG(per_src_nhg, PER_SRC_NHG)) {
@@ -1926,6 +1951,8 @@ void bgp_per_src_nhg_upd_msg_check(struct bgp *bgp, afi_t afi, safi_t safi,
 						&nhe->bgp_soo_route_installed_pi_bitmap,
 						buf2));
 			}
+			frrtrace(2, frr_bgp, per_src_nhg_soo_rt_dest_ecmp_check,
+				 nhe, 2);
 			/*
 			 * case where installed path subset is disjoint/overlap/superset
 			 * from selected path subset
@@ -2172,6 +2199,7 @@ static void bgp_per_src_nhg_peer_clear_route_cb(struct hash_bucket *bucket,
 				}
 			}
 		}
+		frrtrace(2, frr_bgp, per_src_nhg_peer_clear_route, peer, nhe);
 	}
 }
 
