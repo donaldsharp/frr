@@ -617,6 +617,11 @@ void bgp_path_info_set_flag(struct bgp_dest *dest, struct bgp_path_info *pi,
 {
 	SET_FLAG(pi->flags, flag);
 
+	if (flag == BGP_PATH_REMOVED && bgp_debug_bestpath(dest)) {
+		zlog_debug("%pBD: PATH_INFO_SET_FLAG of PATH_REMOVED is called",
+			   dest);
+		zlog_backtrace(LOG_INFO);
+	}
 	/* early bath if we know it's not a flag that changes countability state
 	 */
 	if (!CHECK_FLAG(flag,
@@ -2955,9 +2960,9 @@ void bgp_best_selection(struct bgp *bgp, struct bgp_dest *dest,
 			 */
 			if (debug)
 				zlog_debug(
-					"%s: %pBD(%s) pi from %s in holddown",
+					"%s: %pBD(%s) pi from %s in holddown flags: %u",
 					__func__, dest, bgp->name_pretty,
-					first->peer->host);
+					first->peer->host, pi->flags);
 			if (old_select != first &&
 			    CHECK_FLAG(first->flags, BGP_PATH_REMOVED)) {
 				bgp_path_info_reap_unsorted(dest, first);
