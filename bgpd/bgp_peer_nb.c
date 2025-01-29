@@ -188,10 +188,13 @@ struct yang_data *
 lib_vrf_peer_tx_updates_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct peer *peer;
+	int update_out = 0;
+	if (!args || !args->list_entry)
+		return NULL;
 	peer = (struct peer *)args->list_entry;
-	if (peer)
-		return yang_data_new_uint32(args->xpath, PEER_TOTAL_TX(peer));
-	return NULL;
+	update_out =
+		atomic_load_explicit(&peer->update_out, memory_order_relaxed);
+	return yang_data_new_uint32(args->xpath, update_out);
 }
 
 /*
@@ -201,10 +204,13 @@ struct yang_data *
 lib_vrf_peer_rx_updates_get_elem(struct nb_cb_get_elem_args *args)
 {
 	struct peer *peer;
+	int update_in = 0;
+	if (!args || !args->list_entry)
+		return NULL;
 	peer = (struct peer *)args->list_entry;
-	if (peer)
-		return yang_data_new_uint32(args->xpath, PEER_TOTAL_RX(peer));
-	return NULL;
+	update_in =
+		atomic_load_explicit(&peer->update_in, memory_order_relaxed);
+	return yang_data_new_uint32(args->xpath, update_in);
 }
 
 /*
