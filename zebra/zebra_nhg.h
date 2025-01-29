@@ -88,7 +88,6 @@ struct nhg_hash_entry {
 	 * nhg(3)->nhg_dependents is 3 in the tree
 	 */
 	struct nhg_connected_tree_head nhg_depends, nhg_dependents;
-	struct list *rejected_rn;
 
 	struct event *timer;
 
