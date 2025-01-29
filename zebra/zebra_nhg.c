@@ -1133,7 +1133,7 @@ static void zebra_nhg_set_valid(struct nhg_hash_entry *nhe, bool valid)
 			UNSET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
 	}
 
-	frrtrace(2, frr_zebra, zebra_nhg_set_valid, nhe->id, nhe->flags);
+	frrtrace(1, frr_zebra, zebra_nhg_set_valid, nhe);
 	/* Update validity of nexthops depending on it */
 	frr_each (nhg_connected_tree, &nhe->nhg_dependents, rb_node_dep) {
 		dependent_valid = valid;
@@ -1637,7 +1637,8 @@ struct nhg_hash_entry *zebra_nhg_rib_find(uint32_t id,
 	zebra_nhg_find(&nhe, id, nhg, NULL, vrf_id, rt_afi, type, false);
 
 	if (IS_ZEBRA_DEBUG_NHG_DETAIL)
-		zlog_debug("%s: => nhe %p (%pNG)", __func__, nhe, nhe);
+		zlog_debug("%s: => nhe %p (%pNG), flags 0x%x", __func__, nhe,
+			   nhe, nhe->flags);
 
 	return nhe;
 }
@@ -1744,20 +1745,17 @@ void zebra_nhg_free(struct nhg_hash_entry *nhe)
 	if (IS_ZEBRA_DEBUG_NHG_DETAIL) {
 		/* Group or singleton? */
 		if (nhe->nhg.nexthop && nhe->nhg.nexthop->next)
-			zlog_debug("%s: nhe %p (%pNG), refcnt %d", __func__,
-				   nhe, nhe, nhe->refcnt);
+			zlog_debug("%s: nhe %p (%pNG), refcnt %d flags 0x%x",
+				   __func__, nhe, nhe, nhe->refcnt, nhe->flags);
 		else
-			zlog_debug("%s: nhe %p (%pNG), refcnt %d, NH %pNHv",
-				   __func__, nhe, nhe, nhe->refcnt,
-				   nhe->nhg.nexthop);
+			zlog_debug(
+				"%s: nhe %p (%pNG), refcnt %d, flags 0x%x, NH %pNHv",
+				__func__, nhe, nhe, nhe->refcnt, nhe->flags,
+				nhe->nhg.nexthop);
 	}
 
-	if (nhe->refcnt)
-		zlog_debug("nhe_id=%pNG hash refcnt=%d", nhe, nhe->refcnt);
-
 	if (nhe->id)
-		frrtrace(2, frr_zebra, zebra_nhg_free_nhe_refcount, nhe->id,
-			 nhe->refcnt);
+		frrtrace(1, frr_zebra, zebra_nhg_free_nhe_refcount, nhe);
 
 	zebra_nhg_free_members(nhe);
 
@@ -1774,12 +1772,14 @@ void zebra_nhg_hash_free(void *p)
 	if (IS_ZEBRA_DEBUG_NHG_DETAIL) {
 		/* Group or singleton? */
 		if (nhe->nhg.nexthop && nhe->nhg.nexthop->next)
-			zlog_debug("%s: nhe %p (%u), refcnt %d", __func__, nhe,
-				   nhe->id, nhe->refcnt);
+			zlog_debug("%s: nhe %p (%u), refcnt %d flags 0x%x",
+				   __func__, nhe, nhe->id, nhe->refcnt,
+				   nhe->flags);
 		else
-			zlog_debug("%s: nhe %p (%pNG), refcnt %d, NH %pNHv",
-				   __func__, nhe, nhe, nhe->refcnt,
-				   nhe->nhg.nexthop);
+			zlog_debug(
+				"%s: nhe %p (%pNG), refcnt %d, flags 0x%x, NH %pNHv",
+				__func__, nhe, nhe, nhe->refcnt, nhe->flags,
+				nhe->nhg.nexthop);
 	}
 
 
@@ -1823,8 +1823,8 @@ void zebra_nhg_hash_free_zero_id(struct hash_bucket *b, void *arg)
 void zebra_nhg_decrement_ref(struct nhg_hash_entry *nhe)
 {
 	if (IS_ZEBRA_DEBUG_NHG_DETAIL)
-		zlog_debug("%s: nhe %p (%pNG) %d => %d", __func__, nhe, nhe,
-			   nhe->refcnt, nhe->refcnt - 1);
+		zlog_debug("%s: nhe %p (%pNG) %d => %d, flags 0x%x", __func__,
+			   nhe, nhe, nhe->refcnt, nhe->refcnt - 1, nhe->flags);
 
 	nhe->refcnt--;
 
@@ -1838,8 +1838,8 @@ void zebra_nhg_decrement_ref(struct nhg_hash_entry *nhe)
 void zebra_nhg_increment_ref(struct nhg_hash_entry *nhe)
 {
 	if (IS_ZEBRA_DEBUG_NHG_DETAIL)
-		zlog_debug("%s: nhe %p (%pNG) %d => %d", __func__, nhe, nhe,
-			   nhe->refcnt, nhe->refcnt + 1);
+		zlog_debug("%s: nhe %p (%pNG) %d => %d, flags 0x%x", __func__,
+			   nhe, nhe, nhe->refcnt, nhe->refcnt + 1, nhe->flags);
 
 	nhe->refcnt++;
 
@@ -3606,11 +3606,11 @@ void zebra_nhg_install_kernel(struct nhg_hash_entry *nhe, uint8_t type)
 		/* Change its type to us since we are installing it */
 		if (!ZEBRA_NHG_CREATED(nhe)) {
 			nhe->type = ZEBRA_ROUTE_NHG;
-			frrtrace(3, frr_zebra, zebra_nhg_install_kernel,
-				 nhe->id, nhe->flags, 1);
+			frrtrace(2, frr_zebra, zebra_nhg_install_kernel, nhe,
+				 1);
 		} else
-			frrtrace(3, frr_zebra, zebra_nhg_install_kernel,
-				 nhe->id, nhe->flags, 2);
+			frrtrace(2, frr_zebra, zebra_nhg_install_kernel, nhe,
+				 2);
 
 		enum zebra_dplane_result ret = dplane_nexthop_add(nhe);
 
@@ -3649,8 +3649,7 @@ void zebra_nhg_uninstall_kernel(struct nhg_hash_entry *nhe)
 	    CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_QUEUED)) {
 		int ret = dplane_nexthop_delete(nhe);
 
-		frrtrace(2, frr_zebra, zebra_nhg_uninstall_kernel, nhe->id,
-			 ret);
+		frrtrace(2, frr_zebra, zebra_nhg_uninstall_kernel, nhe, ret);
 		switch (ret) {
 		case ZEBRA_DPLANE_REQUEST_QUEUED:
 			SET_FLAG(nhe->flags, NEXTHOP_GROUP_QUEUED);
@@ -3998,8 +3997,8 @@ struct nhg_hash_entry *zebra_nhe_proto_add(struct nhg_hash_entry *nhe)
 	count = nhg_nexthop_list_active_update(nhe, false, &change_p);
 
 	if (IS_ZEBRA_DEBUG_NHG)
-		zlog_debug("%s: %pNG => count %u%s", __func__, nhe, count,
-			   (change_p ? ", changed" : ""));
+		zlog_debug("%s: %pNG => count %u%s, flags 0x%x", __func__, nhe,
+			   count, (change_p ? ", changed" : ""), nhe->flags);
 
 	zebra_nhe_init(&lookup, nhe->afi, nhg->nexthop);
 	lookup.nhg.nexthop = nhg->nexthop;
@@ -4126,15 +4125,16 @@ struct nhg_hash_entry *zebra_nhg_proto_del(uint32_t id, int type)
 	if (nhe->refcnt > 1) {
 		if (IS_ZEBRA_DEBUG_NHG)
 			zlog_debug(
-				"%s: %pNG, still being used by routes refcnt %u",
-				__func__, nhe, nhe->refcnt);
+				"%s: %pNG, still being used by routes refcnt %u, flags 0x%x",
+				__func__, nhe, nhe->refcnt, nhe->flags);
 		return nhe;
 	}
 
 	if (IS_ZEBRA_DEBUG_NHG_DETAIL)
-		zlog_debug("%s: deleted nhe %p (%pNG), vrf %d, type %s",
-			   __func__, nhe, nhe, nhe->vrf_id,
-			   zebra_route_string(nhe->type));
+		zlog_debug(
+			"%s: deleted nhe %p (%pNG), vrf %d, type %s, flags 0x%x",
+			__func__, nhe, nhe, nhe->vrf_id,
+			zebra_route_string(nhe->type), nhe->flags);
 
 	return nhe;
 }
@@ -4268,9 +4268,8 @@ void zebra_interface_nhg_reinstall(struct interface *ifp)
 		nh = rb_node_dep->nhe->nhg.nexthop;
 
 		if (zebra_nhg_set_valid_if_active(rb_node_dep->nhe)) {
-			frrtrace(4, frr_zebra, zebra_interface_nhg_reinstall,
-				 ifp, rb_node_dep->nhe->id,
-				 rb_node_dep->nhe->flags, 1);
+			frrtrace(3, frr_zebra, zebra_interface_nhg_reinstall,
+				 ifp, rb_node_dep->nhe, 1);
 			if (IS_ZEBRA_DEBUG_NHG_DETAIL)
 				zlog_debug(
 					"%s: Setting the valid flag for nhe %pNG, interface: %s",
@@ -4313,10 +4312,9 @@ void zebra_interface_nhg_reinstall(struct interface *ifp)
 						rb_node_dependent->nhe);
 				SET_FLAG(rb_node_dependent->nhe->flags,
 					 NEXTHOP_GROUP_REINSTALL);
-				frrtrace(4, frr_zebra,
+				frrtrace(3, frr_zebra,
 					 zebra_interface_nhg_reinstall, ifp,
-					 rb_node_dependent->nhe->id,
-					 rb_node_dependent->nhe->flags, 2);
+					 rb_node_dependent->nhe, 2);
 			}
 		}
 	}
