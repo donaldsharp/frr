@@ -1133,7 +1133,7 @@ static void zebra_nhg_set_valid(struct nhg_hash_entry *nhe, bool valid)
 			UNSET_FLAG(nhe->flags, NEXTHOP_GROUP_INSTALLED);
 	}
 
-	frrtrace(2, frr_zebra, zebra_nhg_set_valid, nhe->id, nhe->flags);
+	frrtrace(1, frr_zebra, zebra_nhg_set_valid, nhe);
 	/* Update validity of nexthops depending on it */
 	frr_each (nhg_connected_tree, &nhe->nhg_dependents, rb_node_dep) {
 		dependent_valid = valid;
@@ -1755,8 +1755,7 @@ void zebra_nhg_free(struct nhg_hash_entry *nhe)
 	}
 
 	if (nhe->id)
-		frrtrace(2, frr_zebra, zebra_nhg_free_nhe_refcount, nhe->id,
-			 nhe->refcnt);
+		frrtrace(1, frr_zebra, zebra_nhg_free_nhe_refcount, nhe);
 
 	zebra_nhg_free_members(nhe);
 
@@ -3607,11 +3606,11 @@ void zebra_nhg_install_kernel(struct nhg_hash_entry *nhe, uint8_t type)
 		/* Change its type to us since we are installing it */
 		if (!ZEBRA_NHG_CREATED(nhe)) {
 			nhe->type = ZEBRA_ROUTE_NHG;
-			frrtrace(3, frr_zebra, zebra_nhg_install_kernel,
-				 nhe->id, nhe->flags, 1);
+			frrtrace(2, frr_zebra, zebra_nhg_install_kernel, nhe,
+				 1);
 		} else
-			frrtrace(3, frr_zebra, zebra_nhg_install_kernel,
-				 nhe->id, nhe->flags, 2);
+			frrtrace(2, frr_zebra, zebra_nhg_install_kernel, nhe,
+				 2);
 
 		enum zebra_dplane_result ret = dplane_nexthop_add(nhe);
 
@@ -3650,8 +3649,7 @@ void zebra_nhg_uninstall_kernel(struct nhg_hash_entry *nhe)
 	    CHECK_FLAG(nhe->flags, NEXTHOP_GROUP_QUEUED)) {
 		int ret = dplane_nexthop_delete(nhe);
 
-		frrtrace(2, frr_zebra, zebra_nhg_uninstall_kernel, nhe->id,
-			 ret);
+		frrtrace(2, frr_zebra, zebra_nhg_uninstall_kernel, nhe, ret);
 		switch (ret) {
 		case ZEBRA_DPLANE_REQUEST_QUEUED:
 			SET_FLAG(nhe->flags, NEXTHOP_GROUP_QUEUED);
@@ -4270,9 +4268,8 @@ void zebra_interface_nhg_reinstall(struct interface *ifp)
 		nh = rb_node_dep->nhe->nhg.nexthop;
 
 		if (zebra_nhg_set_valid_if_active(rb_node_dep->nhe)) {
-			frrtrace(4, frr_zebra, zebra_interface_nhg_reinstall,
-				 ifp, rb_node_dep->nhe->id,
-				 rb_node_dep->nhe->flags, 1);
+			frrtrace(3, frr_zebra, zebra_interface_nhg_reinstall,
+				 ifp, rb_node_dep->nhe, 1);
 			if (IS_ZEBRA_DEBUG_NHG_DETAIL)
 				zlog_debug(
 					"%s: Setting the valid flag for nhe %pNG, interface: %s",
@@ -4315,10 +4312,9 @@ void zebra_interface_nhg_reinstall(struct interface *ifp)
 						rb_node_dependent->nhe);
 				SET_FLAG(rb_node_dependent->nhe->flags,
 					 NEXTHOP_GROUP_REINSTALL);
-				frrtrace(4, frr_zebra,
+				frrtrace(3, frr_zebra,
 					 zebra_interface_nhg_reinstall, ifp,
-					 rb_node_dependent->nhe->id,
-					 rb_node_dependent->nhe->flags, 2);
+					 rb_node_dependent->nhe, 2);
 			}
 		}
 	}
