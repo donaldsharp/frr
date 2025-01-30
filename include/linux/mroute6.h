@@ -43,7 +43,7 @@
 #endif
 
 #ifndef MAXMIFS
-#define MAXMIFS 32
+#define MAXMIFS 256
 #endif
 /* MRT6_FLUSH optional flags */
 #define MRT6_FLUSH_MFC	1	/* Flush multicast entries */
