@@ -506,6 +506,7 @@ void zread_client_capabilities(ZAPI_HANDLER_ARGS)
  * destination VRF and installed in kernel in that
  * destination VRF.
  */
+#if defined(HAVE_CSMGR)
 static void zebra_gr_cleanup_of_non_gr_vrf(struct zebra_gr_afi_clean *gac)
 {
 	struct vrf *vrf;
@@ -549,12 +550,12 @@ static void zebra_gr_cleanup_of_non_gr_vrf(struct zebra_gr_afi_clean *gac)
 		}
 	}
 }
+#endif
 
 static void zebra_gr_complete_check(struct zserv *client, bool do_evpn_cleanup,
 				    struct zebra_gr_afi_clean *gac)
 {
 #if defined(HAVE_CSMGR)
-
 	struct client_gr_info *info;
 
 	/* Check to see if we have to send an INIT_COMPLETE */
