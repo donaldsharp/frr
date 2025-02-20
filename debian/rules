@@ -60,13 +60,14 @@ override_dh_auto_configure:
 		--disable-zeromq \
 		--enable-ospfapi \
 		--enable-bgp-vnc \
-		--enable-multipath=256 \
+		--enable-multipath=512 \
 		\
 		--enable-user=frr \
 		--enable-group=frr \
 		--enable-vty-group=frrvty \
 		--enable-configfile-mask=0640 \
 		--enable-logfile-mask=0640 \
+		--enable-bfdd=yes \
 		# end
 
 override_dh_auto_install:
