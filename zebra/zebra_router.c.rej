@@ -1,0 +1,24 @@
+diff a/zebra/zebra_router.c b/zebra/zebra_router.c	(rejected hunks)
+@@ -220,10 +221,22 @@ uint32_t zebra_router_get_next_sequence(void)
+ 					   memory_order_relaxed);
+ }
+ 
++static inline unsigned int interface_hash_key(const void *arg)
++{
++	const struct interface *ifp = arg;
++
++	return ifp->ifindex;
++}
++
+ void zebra_router_terminate(void)
+ {
+ 	struct zebra_router_table *zrt, *tmp;
+ 
++	if (zrouter.ra_wheel) {
++		wheel_delete(zrouter.ra_wheel);
++		zrouter.ra_wheel = NULL;
++	}
++
+ 	EVENT_OFF(zrouter.t_rib_sweep);
+ 
+ 	RB_FOREACH_SAFE (zrt, zebra_router_table_head, &zrouter.tables, tmp)
