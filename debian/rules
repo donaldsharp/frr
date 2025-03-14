@@ -68,6 +68,7 @@ override_dh_auto_configure:
 		--enable-configfile-mask=0640 \
 		--enable-logfile-mask=0640 \
 		--enable-bfdd=yes \
+		--enable-sharpd=yes \
 		# end
 
 override_dh_auto_install:
