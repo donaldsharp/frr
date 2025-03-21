@@ -8403,6 +8403,10 @@ void bgp_master_init(struct event_loop *master, const int buffer_size,
 
 	bm = &bgp_master;
 
+	/* Initialize the peer connection FIFO list */
+	peer_connection_fifo_init(&bm->connection_fifo);
+	pthread_mutex_init(&bm->peer_connection_mtx, NULL);
+
 	zebra_announce_init(&bm->zebra_announce_head);
 	bm->bgp = list_new();
 	bm->listen_sockets = list_new();
