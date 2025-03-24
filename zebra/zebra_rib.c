@@ -3318,8 +3318,8 @@ static int rib_meta_queue_add(struct meta_queue *mq, void *data)
 	mq->size++;
 
 	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
-		rnode_debug(rn, re->vrf_id, "queued rn %p into sub-queue %s",
-			    (void *)rn, subqueue2str(qindex));
+		rnode_debug(rn, re->vrf_id, "queued rn %p into sub-queue %s mq size %u", (void *)rn,
+			    subqueue2str(qindex), zrouter.mq->size);
 
 	return 0;
 }
@@ -3351,8 +3351,8 @@ static int rib_meta_queue_nhg_ctx_add(struct meta_queue *mq, void *data)
 	mq->size++;
 
 	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
-		zlog_debug("NHG Context id=%u queued into sub-queue %s",
-			   ctx->id, subqueue2str(qindex));
+		zlog_debug("NHG Context id=%u queued into sub-queue %s mq size %u", ctx->id,
+			   subqueue2str(qindex), zrouter.mq->size);
 
 	return 0;
 }
@@ -3379,8 +3379,8 @@ static int rib_meta_queue_nhg_process(struct meta_queue *mq, void *data,
 	mq->size++;
 
 	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
-		zlog_debug("NHG id=%u queued into sub-queue %s", nhe->id,
-			   subqueue2str(qindex));
+		zlog_debug("NHG id=%u queued into sub-queue %s mq size %u", nhe->id,
+			   subqueue2str(qindex), zrouter.mq->size);
 
 	return 0;
 }
@@ -3424,6 +3424,11 @@ static int mq_add_handler(void *data,
 		work_queue_add(zrouter.ribq, zrouter.mq);
 
 	return mq_add_func(zrouter.mq, data);
+}
+
+uint32_t zebra_rib_meta_queue_size(void)
+{
+	return zrouter.mq->size;
 }
 
 void mpls_ftn_uninstall(struct zebra_vrf *zvrf, enum lsp_types_t type,
@@ -4245,7 +4250,7 @@ static int rib_meta_queue_gr_run_add(struct meta_queue *mq, void *data)
 	mq->size++;
 
 	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
-		zlog_debug("Graceful Run adding");
+		zlog_debug("Graceful Run adding mq size %u", zrouter.mq->size);
 
 	return 0;
 }
@@ -4258,10 +4263,9 @@ static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 	mq->size++;
 
 	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
-		zlog_debug("Route %pFX(%u) (%s) queued for processing into sub-queue %s",
-			   &ere->p, ere->re->vrf_id,
-			   ere->deletion ? "delete" : "add",
-			   subqueue2str(META_QUEUE_EARLY_ROUTE));
+		zlog_debug("Route %pFX(%u) (%s) queued for processing into sub-queue %s mq size %u",
+			   &ere->p, ere->re->vrf_id, ere->deletion ? "delete" : "add",
+			   subqueue2str(META_QUEUE_EARLY_ROUTE), zrouter.mq->size);
 
 	return 0;
 }
