@@ -2775,6 +2775,56 @@ void peer_nsf_stop(struct peer *peer)
 	bgp_clear_route_all(peer);
 }
 
+static void bgp_peer_delete_connection(struct peer_connection *connection)
+{
+	struct peer *peer = connection->peer;
+	struct bgp *bgp = peer->bgp;
+	bool accept_peer;
+
+	bgp_keepalives_off(connection);
+
+	bgp_reads_off(connection);
+	bgp_writes_off(connection);
+	event_cancel_event_ready(bm->master, connection);
+	assert(!CHECK_FLAG(connection->thread_flags, PEER_THREAD_WRITES_ON));
+	assert(!CHECK_FLAG(connection->thread_flags, PEER_THREAD_READS_ON));
+
+	/* Ensure the peer is removed from the connection error list */
+	frr_with_mutex (&bgp->peer_errs_mtx) {
+		if (bgp_peer_conn_errlist_anywhere(connection))
+			bgp_peer_conn_errlist_del(&bgp->peer_conn_errlist, connection);
+	}
+
+	bgp_stop(connection);
+
+	bgp_fsm_change_status(connection, Deleted);
+
+	accept_peer = CHECK_FLAG(peer->sflags, PEER_STATUS_ACCEPT_PEER);
+	/* Password configuration */
+	if (CHECK_FLAG(peer->flags, PEER_FLAG_PASSWORD)) {
+		XFREE(MTYPE_PEER_PASSWORD, peer->password);
+		if (!accept_peer && !BGP_CONNECTION_SU_UNSPEC(connection) &&
+		    !CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP) &&
+		    !CHECK_FLAG(peer->flags, PEER_FLAG_DYNAMIC_NEIGHBOR))
+			bgp_md5_unset(connection);
+	}
+
+	bgp_timer_set(connection);
+
+	hash_release(bgp->connectionhash, connection);
+
+	/* Local and remote addresses. */
+	if (connection->su_local) {
+		sockunion_free(connection->su_local);
+		connection->su_local = NULL;
+	}
+
+	if (connection->su_remote) {
+		sockunion_free(connection->su_remote);
+		connection->su_remote = NULL;
+	}
+}
+
 /* Delete peer from confguration.
  *
  * The peer is moved to a dead-end "Deleted" neighbour-state, to allow
@@ -2794,7 +2844,6 @@ int peer_delete(struct peer *peer)
 	struct bgp *bgp;
 	struct bgp_filter *filter;
 	struct listnode *pn;
-	int accept_peer;
 
 	assert(peer->connection->status != Deleted);
 
@@ -2802,31 +2851,17 @@ int peer_delete(struct peer *peer)
 		zlog_debug("%s: peer %pBP", __func__, peer);
 
 	bgp = peer->bgp;
-	accept_peer = CHECK_FLAG(peer->sflags, PEER_STATUS_ACCEPT_PEER);
 
 	bgp_soft_reconfig_table_task_cancel(bgp, NULL, peer);
 
-	bgp_keepalives_off(peer->connection);
-	bgp_reads_off(peer->connection);
-	bgp_writes_off(peer->connection);
-	event_cancel_event_ready(bm->master, peer->connection);
-	assert(!CHECK_FLAG(peer->connection->thread_flags,
-			   PEER_THREAD_WRITES_ON));
-	assert(!CHECK_FLAG(peer->connection->thread_flags,
-			   PEER_THREAD_READS_ON));
-	assert(!CHECK_FLAG(peer->thread_flags, PEER_THREAD_KEEPALIVES_ON));
+	SET_FLAG(peer->flags, PEER_FLAG_DELETE);
 
-	/* Ensure the peer is removed from the connection error list */
-	frr_with_mutex (&bgp->peer_errs_mtx) {
-		if (bgp_peer_conn_errlist_anywhere(peer->connection))
-			bgp_peer_conn_errlist_del(&bgp->peer_conn_errlist,
-						  peer->connection);
-	}
+	bgp_peer_delete_connection(peer->connection);
+
+	assert(!CHECK_FLAG(peer->thread_flags, PEER_THREAD_KEEPALIVES_ON));
 
 	if (CHECK_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT))
 		peer_nsf_stop(peer);
-
-	SET_FLAG(peer->flags, PEER_FLAG_DELETE);
 
 	/* Remove BFD settings. */
 	if (peer->bfd_config)
@@ -2869,7 +2904,6 @@ int peer_delete(struct peer *peer)
 	 * executed after peer structure is deleted.
 	 */
 	peer_set_last_reset(peer, PEER_DOWN_NEIGHBOR_DELETE);
-	bgp_stop(peer->connection);
 	UNSET_FLAG(peer->flags, PEER_FLAG_DELETE);
 
 	if (peer->doppelganger) {
@@ -2878,23 +2912,10 @@ int peer_delete(struct peer *peer)
 	}
 
 	UNSET_FLAG(peer->sflags, PEER_STATUS_ACCEPT_PEER);
-	bgp_fsm_change_status(peer->connection, Deleted);
 
 	/* Remove from NHT */
 	if (CHECK_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE))
 		bgp_unlink_nexthop_by_peer(peer);
-
-	/* Password configuration */
-	if (CHECK_FLAG(peer->flags, PEER_FLAG_PASSWORD)) {
-		XFREE(MTYPE_PEER_PASSWORD, peer->password);
-		if (!accept_peer &&
-		    !BGP_CONNECTION_SU_UNSPEC(peer->connection) &&
-		    !CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP) &&
-		    !CHECK_FLAG(peer->flags, PEER_FLAG_DYNAMIC_NEIGHBOR))
-			bgp_md5_unset(peer->connection);
-	}
-
-	bgp_timer_set(peer->connection); /* stops all timers for Deleted */
 
 	/* Delete from all peer list. */
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)
@@ -2907,19 +2928,7 @@ int peer_delete(struct peer *peer)
 		 * it's in there or not.
 		 */
 		list_delete_node(bgp->peer, pn);
-		hash_release(bgp->connectionhash, peer->connection);
 		peer_unlock(peer); /* bgp peer list reference */
-	}
-
-	/* Local and remote addresses. */
-	if (peer->connection->su_local) {
-		sockunion_free(peer->connection->su_local);
-		peer->connection->su_local = NULL;
-	}
-
-	if (peer->connection->su_remote) {
-		sockunion_free(peer->connection->su_remote);
-		peer->connection->su_remote = NULL;
 	}
 
 	/* Free filter related memory.  */
