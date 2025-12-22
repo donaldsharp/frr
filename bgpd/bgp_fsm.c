@@ -2967,7 +2967,7 @@ static void bgp_gr_update_mode_of_all_peers(struct bgp *bgp,
 			peer_set_last_reset(peer, PEER_DOWN_CAPABILITY_CHANGE);
 
 			if (!peer_notify_config_change(peer->connection))
-				bgp_session_reset_safe(peer, &nnode);
+				bgp_session_reset_safe(peer->connection, &nnode);
 		} else {
 			group = peer->group;
 			for (ALL_LIST_ELEMENTS(group->peer, node, nnode, member)) {
@@ -2987,7 +2987,7 @@ static void bgp_gr_update_mode_of_all_peers(struct bgp *bgp,
 				peer_set_last_reset(member, PEER_DOWN_CAPABILITY_CHANGE);
 
 				if (!peer_notify_config_change(member->connection))
-					bgp_session_reset(member);
+					bgp_session_reset(member->connection);
 			}
 		}
 	}
@@ -3202,7 +3202,7 @@ unsigned int bgp_peer_gr_action(struct peer *peer, enum peer_mode old_state,
 			peer_set_last_reset(peer, PEER_DOWN_CAPABILITY_CHANGE);
 
 			if (!peer_notify_config_change(peer->connection))
-				bgp_session_reset(peer);
+				bgp_session_reset(peer->connection);
 		} else {
 			group = peer->group;
 			for (ALL_LIST_ELEMENTS(group->peer, node, nnode, member)) {
@@ -3210,7 +3210,7 @@ unsigned int bgp_peer_gr_action(struct peer *peer, enum peer_mode old_state,
 				bgp_peer_move_to_gr_mode(member, new_state);
 
 				if (!peer_notify_config_change(member->connection))
-					bgp_session_reset(member);
+					bgp_session_reset(member->connection);
 			}
 		}
 	}

@@ -5357,7 +5357,7 @@ static int peer_conf_interface_get(struct vty *vty, const char *conf_if,
 
 		/* v6only flag changed. Reset bgp seesion */
 		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 	}
 
 	if (!CHECK_FLAG(peer->flags_invert, PEER_FLAG_CAPABILITY_ENHE)) {

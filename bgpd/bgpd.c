@@ -175,14 +175,16 @@ static int bgp_check_main_socket(bool create, struct bgp *bgp)
 	return 0;
 }
 
-void bgp_session_reset(struct peer *peer)
+void bgp_session_reset(struct peer_connection *connection)
 {
+	struct peer *peer = connection->peer;
+
 	if (peer->doppelganger &&
 	    (peer->doppelganger->connection->status != Deleted) &&
 	    !(CHECK_FLAG(peer->doppelganger->flags, PEER_FLAG_CONFIG_NODE)))
 		peer_delete(peer->doppelganger);
 
-	BGP_EVENT_ADD(peer->connection, BGP_Stop);
+	BGP_EVENT_ADD(connection, BGP_Stop);
 }
 
 /*
@@ -191,10 +193,12 @@ void bgp_session_reset(struct peer *peer)
  * during walk of peer list, we would end up accessing the freed next
  * node. This function moves the next node along.
  */
-void bgp_session_reset_safe(struct peer *peer, struct listnode **nnode)
+void bgp_session_reset_safe(struct peer_connection *connection, struct listnode **nnode)
 {
 	struct listnode *n;
-	struct peer *npeer;
+	struct peer *peer, *npeer;
+
+	peer = connection->peer;
 
 	n = (nnode) ? *nnode : NULL;
 	npeer = (n) ? listgetdata(n) : NULL;
@@ -208,7 +212,7 @@ void bgp_session_reset_safe(struct peer *peer, struct listnode **nnode)
 		peer_delete(peer->doppelganger);
 	}
 
-	BGP_EVENT_ADD(peer->connection, BGP_Stop);
+	BGP_EVENT_ADD(connection, BGP_Stop);
 }
 
 /* BGP global flag manipulation.  */
@@ -676,7 +680,7 @@ void bgp_confederation_id_set(struct bgp *bgp, as_t as, const char *as_str)
 				if (peer_notify_config_change(peer->connection))
 					peer_set_last_reset(peer, PEER_DOWN_CONFED_ID_CHANGE);
 				else
-					bgp_session_reset_safe(peer, &nnode);
+					bgp_session_reset_safe(peer->connection, &nnode);
 			}
 		} else {
 			/* Not doign confederation before, so reset every
@@ -689,7 +693,7 @@ void bgp_confederation_id_set(struct bgp *bgp, as_t as, const char *as_str)
 				if (peer_notify_config_change(peer->connection))
 					peer_set_last_reset(peer, PEER_DOWN_CONFED_ID_CHANGE);
 				else
-					bgp_session_reset_safe(peer, &nnode);
+					bgp_session_reset_safe(peer->connection, &nnode);
 			}
 		}
 	}
@@ -711,7 +715,7 @@ void bgp_confederation_id_unset(struct bgp *bgp)
 			peer->local_as = bgp->as;
 			peer_set_last_reset(peer, PEER_DOWN_CONFED_ID_CHANGE);
 			if (!peer_notify_config_change(peer->connection))
-				bgp_session_reset_safe(peer, &nnode);
+				bgp_session_reset_safe(peer->connection, &nnode);
 		}
 	}
 }
@@ -760,7 +764,7 @@ void bgp_confederation_peers_add(struct bgp *bgp, as_t as, const char *as_str)
 				if (peer_notify_config_change(peer->connection))
 					peer_set_last_reset(peer, PEER_DOWN_CONFED_PEER_CHANGE);
 				else
-					bgp_session_reset_safe(peer, &nnode);
+					bgp_session_reset_safe(peer->connection, &nnode);
 			}
 		}
 	}
@@ -812,7 +816,7 @@ void bgp_confederation_peers_remove(struct bgp *bgp, as_t as)
 				if (peer_notify_config_change(peer->connection))
 					peer_set_last_reset(peer, PEER_DOWN_CONFED_PEER_CHANGE);
 				else
-					bgp_session_reset_safe(peer, &nnode);
+					bgp_session_reset_safe(peer->connection, &nnode);
 			}
 		}
 	}
@@ -2198,7 +2202,7 @@ void peer_as_change(struct peer *peer, as_t as, enum peer_asn_type as_type,
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		peer_set_last_reset(peer, PEER_DOWN_REMOTE_AS_CHANGE);
 		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 	}
 	origtype = peer_sort_lookup(peer);
 	peer->as = as;
@@ -3485,7 +3489,7 @@ int peer_group_bind(struct bgp *bgp, union sockunion *su, struct peer *peer,
 		peer_set_last_reset(peer, PEER_DOWN_RMAP_BIND);
 
 		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 	}
 
 	/* Create a new peer. */
@@ -4131,7 +4135,7 @@ void bgp_instance_down(struct bgp *bgp)
 			bgp_notify_send(peer->connection, BGP_NOTIFY_CEASE,
 					BGP_NOTIFY_CEASE_ADMIN_SHUTDOWN);
 		else
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 	}
 
 	/* Purge network and redistributed routes. */
@@ -5275,7 +5279,7 @@ static void peer_flag_modify_action(struct peer *peer, uint64_t flag)
 							BGP_NOTIFY_CEASE,
 							BGP_NOTIFY_CEASE_ADMIN_SHUTDOWN);
 			} else
-				bgp_session_reset(peer);
+				bgp_session_reset(peer->connection);
 		} else {
 			peer->v_start = BGP_INIT_START_TIMER;
 			BGP_EVENT_ADD(peer->connection, BGP_Stop);
@@ -5285,7 +5289,7 @@ static void peer_flag_modify_action(struct peer *peer, uint64_t flag)
 		   flag == PEER_FLAG_CAPABILITY_ENHE) {
 		peer_set_last_reset(peer, PEER_DOWN_CAPABILITY_CHANGE);
 	} else if (!peer_notify_config_change(peer->connection))
-		bgp_session_reset(peer);
+		bgp_session_reset(peer->connection);
 }
 
 /* Enable global administrative shutdown of all peers of BGP instance */
@@ -5767,7 +5771,7 @@ int peer_ebgp_multihop_set(struct peer *peer, int ttl)
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		if (peer->sort != BGP_PEER_IBGP) {
 			if (!peer_notify_config_change(peer->connection))
-				bgp_session_reset(peer);
+				bgp_session_reset(peer->connection);
 
 			/* Reconfigure BFD peer with new TTL. */
 			if (peer->bfd_config)
@@ -5782,7 +5786,7 @@ int peer_ebgp_multihop_set(struct peer *peer, int ttl)
 			member->ttl = group->conf->ttl;
 
 			if (!peer_notify_config_change(member->connection))
-				bgp_session_reset(member);
+				bgp_session_reset(member->connection);
 
 			/* Reconfigure BFD peer with new TTL. */
 			if (member->bfd_config)
@@ -5817,7 +5821,7 @@ int peer_ebgp_multihop_unset(struct peer *peer)
 
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 
 		/* Reconfigure BFD peer with new TTL. */
 		if (peer->bfd_config)
@@ -5832,7 +5836,7 @@ int peer_ebgp_multihop_unset(struct peer *peer)
 
 			if (member->connection->fd >= 0) {
 				if (!peer_notify_config_change(member->connection))
-					bgp_session_reset(member);
+					bgp_session_reset(member->connection);
 			}
 
 			/* Reconfigure BFD peer with new TTL. */
@@ -5873,7 +5877,7 @@ int peer_role_set(struct peer *peer, uint8_t role, bool strict_mode)
 				 * Notification
 				 */
 				if (peer->remote_role == ROLE_UNDEFINED)
-					bgp_session_reset(peer);
+					bgp_session_reset(peer->connection);
 			}
 		} else {
 			peer->local_role = role;
@@ -5913,7 +5917,7 @@ int peer_role_set(struct peer *peer, uint8_t role, bool strict_mode)
 				 * Notification
 				 */
 				if (member->remote_role == ROLE_UNDEFINED)
-					bgp_session_reset(member);
+					bgp_session_reset(member->connection);
 			}
 		} else {
 			member->local_role = role;
@@ -5984,7 +5988,7 @@ int peer_update_source_if_set(struct peer *peer, const char *ifname)
 		peer_set_last_reset(peer, PEER_DOWN_UPDATE_SOURCE_CHANGE);
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 
 		/* Apply new source configuration to BFD session. */
 		if (peer->bfd_config)
@@ -6019,7 +6023,7 @@ int peer_update_source_if_set(struct peer *peer, const char *ifname)
 
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(member->connection))
-			bgp_session_reset(member);
+			bgp_session_reset(member->connection);
 
 		/* Apply new source configuration to BFD session. */
 		if (member->bfd_config)
@@ -6049,7 +6053,7 @@ void peer_update_source_addr_set(struct peer *peer, const union sockunion *su)
 		peer_set_last_reset(peer, PEER_DOWN_UPDATE_SOURCE_CHANGE);
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 
 		/* Apply new source configuration to BFD session. */
 		if (peer->bfd_config)
@@ -6083,7 +6087,7 @@ void peer_update_source_addr_set(struct peer *peer, const union sockunion *su)
 
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(member->connection))
-			bgp_session_reset(member);
+			bgp_session_reset(member->connection);
 
 		/* Apply new source configuration to BFD session. */
 		if (member->bfd_config)
@@ -6131,7 +6135,7 @@ void peer_update_source_unset(struct peer *peer)
 		peer_set_last_reset(peer, PEER_DOWN_UPDATE_SOURCE_CHANGE);
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 
 		/* Apply new source configuration to BFD session. */
 		if (peer->bfd_config)
@@ -6164,7 +6168,7 @@ void peer_update_source_unset(struct peer *peer)
 
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(member->connection))
-			bgp_session_reset(member);
+			bgp_session_reset(member->connection);
 
 		/* Apply new source configuration to BFD session. */
 		if (member->bfd_config)
@@ -7227,7 +7231,7 @@ int peer_local_as_unset(struct peer *peer)
 
 		/* Send notification or stop peer depending on state. */
 		if (!peer_notify_config_change(member->connection))
-			bgp_session_reset(member);
+			bgp_session_reset(member->connection);
 	}
 
 	return 0;
@@ -7256,7 +7260,7 @@ int peer_password_set(struct peer *peer, const char *password)
 		peer_set_last_reset(peer, PEER_DOWN_PASSWORD_CHANGE);
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 
 		/*
 		 * Attempt to install password on socket and skip peer-group
@@ -7291,7 +7295,7 @@ int peer_password_set(struct peer *peer, const char *password)
 		peer_set_last_reset(member, PEER_DOWN_PASSWORD_CHANGE);
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(member->connection))
-			bgp_session_reset(member);
+			bgp_session_reset(member->connection);
 
 		/* Attempt to install password on socket. */
 		if (!BGP_CONNECTION_SU_UNSPEC(member->connection) &&
@@ -7334,7 +7338,7 @@ int peer_password_unset(struct peer *peer)
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
+			bgp_session_reset(peer->connection);
 
 		/* Attempt to uninstall password on socket. */
 		if (!BGP_CONNECTION_SU_UNSPEC(peer->connection))
@@ -7358,7 +7362,7 @@ int peer_password_unset(struct peer *peer)
 
 		/* Send notification or reset peer depending on state. */
 		if (!peer_notify_config_change(member->connection))
-			bgp_session_reset(member);
+			bgp_session_reset(member->connection);
 
 		/* Attempt to uninstall password on socket. */
 		if (!BGP_CONNECTION_SU_UNSPEC(member->connection))
@@ -8759,7 +8763,7 @@ int peer_clear(struct peer *peer, struct listnode **nnode)
 			bgp_notify_send(peer->connection, BGP_NOTIFY_CEASE,
 					BGP_NOTIFY_CEASE_ADMIN_RESET);
 		else
-			bgp_session_reset_safe(peer, nnode);
+			bgp_session_reset_safe(peer->connection, nnode);
 	}
 	return 0;
 }

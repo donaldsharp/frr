@@ -2568,7 +2568,7 @@ extern void bgp_init(unsigned short instance);
 extern void bgp_pthreads_run(void);
 extern void bgp_pthreads_finish(void);
 extern void bgp_route_map_init(void);
-extern void bgp_session_reset(struct peer *peer);
+extern void bgp_session_reset(struct peer_connection *connection);
 
 extern int bgp_option_set(int flag);
 extern int bgp_option_unset(int flag);
@@ -3173,7 +3173,7 @@ extern bool bgp_path_attribute_treat_as_withdraw(struct peer *peer, char *buf,
 
 extern void srv6_function_free(struct bgp_srv6_function *func);
 
-extern void bgp_session_reset_safe(struct peer *peer, struct listnode **nnode);
+extern void bgp_session_reset_safe(struct peer_connection *connection, struct listnode **nnode);
 
 /* If a clearing batch is available for 'peer', add it and return 'true',
  * else return 'false'.
