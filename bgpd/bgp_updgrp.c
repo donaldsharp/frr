@@ -140,7 +140,7 @@ static void conf_copy(struct peer *dst, struct peer *src, afi_t afi,
 
 	dst->host = XSTRDUP(MTYPE_BGP_PEER_HOST, src->host);
 	dst->cap = src->cap;
-	dst->af_cap[afi][safi] = src->af_cap[afi][safi];
+	dst->connection->af_cap[afi][safi] = src->connection->af_cap[afi][safi];
 	dst->connection->afc_nego[afi][safi] = src->connection->afc_nego[afi][safi];
 	dst->orf_plist[afi][safi] = src->orf_plist[afi][safi];
 	dst->addpath_type[afi][safi] = src->addpath_type[afi][safi];
@@ -359,8 +359,7 @@ static unsigned int updgrp_hash_key_make(const void *p)
 	key = jhash_1word(peer->addpath_paths_limit[afi][safi].receive, key);
 	key = jhash_1word(peer->addpath_paths_limit[afi][safi].send, key);
 	key = jhash_1word((peer->cap & PEER_UPDGRP_CAP_FLAGS), key);
-	key = jhash_1word((peer->af_cap[afi][safi] & PEER_UPDGRP_AF_CAP_FLAGS),
-			  key);
+	key = jhash_1word((peer->connection->af_cap[afi][safi] & PEER_UPDGRP_AF_CAP_FLAGS), key);
 	key = jhash_1word(peer->v_routeadv, key);
 	key = jhash_1word(peer->change_local_as, key);
 	key = jhash_1word(peer->max_packet_size, key);
@@ -435,9 +434,9 @@ static unsigned int updgrp_hash_key_make(const void *p)
 	 * - peers that negotiated ORF
 	 * - maximum-prefix-out is set
 	 */
-	if (CHECK_FLAG(peer->flags, PEER_FLAG_LONESOUL)
-	    || CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV)
-	    || CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_OUT))
+	if (CHECK_FLAG(peer->flags, PEER_FLAG_LONESOUL) ||
+	    CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV) ||
+	    CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_OUT))
 		key = jhash_1word(jhash(peer->host, strlen(peer->host), SEED2),
 				  key);
 
@@ -484,13 +483,11 @@ static unsigned int updgrp_hash_key_make(const void *p)
 			   (intmax_t)CHECK_FLAG(flags, PEER_UPDGRP_AF_FLAGS));
 		zlog_debug("%pBP Update Group Hash: addpath: %u UpdGrpCapFlag: %ju UpdGrpCapAFFlag: %u route_adv: %u change local as: %u, as_path_loop_detection: %d",
 			   peer, (uint32_t)peer->addpath_type[afi][safi],
-			   (intmax_t)CHECK_FLAG(peer->cap,
-						PEER_UPDGRP_CAP_FLAGS),
-			   CHECK_FLAG(peer->af_cap[afi][safi],
+			   (intmax_t)CHECK_FLAG(peer->cap, PEER_UPDGRP_CAP_FLAGS),
+			   CHECK_FLAG(peer->connection->af_cap[afi][safi],
 				      PEER_UPDGRP_AF_CAP_FLAGS),
 			   peer->v_routeadv, peer->change_local_as,
-			   !!CHECK_FLAG(peer->flags,
-					PEER_FLAG_AS_LOOP_DETECTION));
+			   !!CHECK_FLAG(peer->flags, PEER_FLAG_AS_LOOP_DETECTION));
 		zlog_debug("%pBP Update Group Hash: addpath paths-limit: (send %u, receive %u)",
 			   peer, peer->addpath_paths_limit[afi][safi].send,
 			   peer->addpath_paths_limit[afi][safi].receive);
@@ -531,7 +528,7 @@ static unsigned int updgrp_hash_key_make(const void *p)
 				peer_afi_active_nego(peer, AFI_IP6));
 		zlog_debug("%pBP Update Group Hash: Lonesoul: %d ORF prefix: %u max prefix out: %ju",
 			   peer, !!CHECK_FLAG(peer->flags, PEER_FLAG_LONESOUL),
-			   CHECK_FLAG(peer->af_cap[afi][safi],
+			   CHECK_FLAG(peer->connection->af_cap[afi][safi],
 				      PEER_CAP_ORF_PREFIX_SM_RCV),
 			   (intmax_t)CHECK_FLAG(peer->af_flags[afi][safi],
 						PEER_FLAG_MAX_PREFIX_OUT));
@@ -611,8 +608,8 @@ static bool updgrp_hash_cmp(const void *p1, const void *p2)
 	if (CHECK_FLAG(pe1->flags, PEER_FLAG_AS_LOOP_DETECTION) && (pe1->as != pe2->as))
 		return false;
 
-	if ((pe1->af_cap[afi][safi] & PEER_UPDGRP_AF_CAP_FLAGS)
-	    != (pe2->af_cap[afi][safi] & PEER_UPDGRP_AF_CAP_FLAGS))
+	if ((pe1->connection->af_cap[afi][safi] & PEER_UPDGRP_AF_CAP_FLAGS) !=
+	    (pe2->connection->af_cap[afi][safi] & PEER_UPDGRP_AF_CAP_FLAGS))
 		return false;
 
 	if (pe1->v_routeadv != pe2->v_routeadv)
@@ -682,7 +679,7 @@ static bool updgrp_hash_cmp(const void *p1, const void *p2)
 		return false;
 
 	if ((CHECK_FLAG(pe1->flags, PEER_FLAG_LONESOUL) ||
-	     CHECK_FLAG(pe1->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV)) &&
+	     CHECK_FLAG(pe1->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV)) &&
 	    !sockunion_same(&pe1->connection->su, &pe2->connection->su))
 		return false;
 
@@ -2339,9 +2336,8 @@ int update_group_clear_update_dbg(struct update_group *updgrp, void *arg)
 /* Return true if we should addpath encode NLRI to this peer */
 bool bgp_addpath_encode_tx(struct peer *peer, afi_t afi, safi_t safi)
 {
-	return (CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_TX_ADV)
-		&& CHECK_FLAG(peer->af_cap[afi][safi],
-			      PEER_CAP_ADDPATH_AF_RX_RCV));
+	return (CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_TX_ADV) &&
+		CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_RX_RCV));
 }
 
 bool bgp_addpath_capable(struct bgp_path_info *bpi, struct peer *peer,

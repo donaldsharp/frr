@@ -62,7 +62,7 @@ void bgp_notify_io_invalid(struct peer *peer, uint8_t code, uint8_t sub_code,
 extern void bgp_route_refresh_send(struct peer *peer, afi_t afi, safi_t safi,
 				   uint8_t orf_type, uint8_t when_to_refresh,
 				   int remove, uint8_t subtype);
-extern void bgp_capability_send(struct peer *peer, afi_t afi, safi_t safi,
+extern void bgp_capability_send(struct peer_connection *connection, afi_t afi, safi_t safi,
 				int capabilty_code, int action);
 
 extern int bgp_capability_receive(struct peer_connection *connection,

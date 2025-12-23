@@ -479,14 +479,14 @@ static int bgp_capability_orf_entry(struct peer *peer, struct peer_connection *c
 
 		switch (mode) {
 		case ORF_MODE_BOTH:
-			SET_FLAG(peer->af_cap[afi][safi], sm_cap);
-			SET_FLAG(peer->af_cap[afi][safi], rm_cap);
+			SET_FLAG(connection->af_cap[afi][safi], sm_cap);
+			SET_FLAG(connection->af_cap[afi][safi], rm_cap);
 			break;
 		case ORF_MODE_SEND:
-			SET_FLAG(peer->af_cap[afi][safi], sm_cap);
+			SET_FLAG(connection->af_cap[afi][safi], sm_cap);
 			break;
 		case ORF_MODE_RECEIVE:
-			SET_FLAG(peer->af_cap[afi][safi], rm_cap);
+			SET_FLAG(connection->af_cap[afi][safi], rm_cap);
 			break;
 		}
 	}
@@ -570,10 +570,9 @@ static int bgp_capability_restart(struct peer *peer, struct peer_connection *con
 										    : "NOT-SET",
 					   get_afi_safi_str(afi, safi, false));
 
-			SET_FLAG(peer->af_cap[afi][safi],
-				 PEER_CAP_RESTART_AF_RCV);
+			SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV);
 			if (CHECK_FLAG(flag, GRACEFUL_RESTART_F_BIT))
-				SET_FLAG(peer->af_cap[afi][safi],
+				SET_FLAG(connection->af_cap[afi][safi],
 					 PEER_CAP_RESTART_AF_PRESERVE_RCV);
 		}
 	}
@@ -602,9 +601,8 @@ static int bgp_capability_llgr(struct peer *peer, struct peer_connection *connec
 					"%s Addr-family %s/%s(afi/safi) not supported. Ignore the Long-lived Graceful Restart capability for this AFI/SAFI",
 					peer->host, iana_afi2str(pkt_afi),
 					iana_safi2str(pkt_safi));
-		} else if (!peer->afc[afi][safi]
-			   || !CHECK_FLAG(peer->af_cap[afi][safi],
-					  PEER_CAP_RESTART_AF_RCV)) {
+		} else if (!peer->afc[afi][safi] ||
+			   !CHECK_FLAG(connection->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV)) {
 			if (bgp_debug_neighbor_events(peer))
 				zlog_debug(
 					"%s Addr-family %s/%s(afi/safi) not enabled. Ignore the Long-lived Graceful Restart capability",
@@ -620,7 +618,7 @@ static int bgp_capability_llgr(struct peer *peer, struct peer_connection *connec
 			peer->llgr[afi][safi].flags = flags;
 			peer->llgr[afi][safi].stale_time =
 				MIN(stale_time, peer->bgp->llgr_stale_time);
-			SET_FLAG(peer->af_cap[afi][safi], PEER_CAP_LLGR_AF_RCV);
+			SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_LLGR_AF_RCV);
 		}
 	}
 
@@ -731,18 +729,14 @@ static int bgp_capability_addpath(struct peer *peer, struct peer_connection *con
 		}
 
 		if (CHECK_FLAG(send_receive, BGP_ADDPATH_RX))
-			SET_FLAG(peer->af_cap[afi][safi],
-				 PEER_CAP_ADDPATH_AF_RX_RCV);
+			SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_RX_RCV);
 		else
-			UNSET_FLAG(peer->af_cap[afi][safi],
-				   PEER_CAP_ADDPATH_AF_RX_RCV);
+			UNSET_FLAG(connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_RX_RCV);
 
 		if (CHECK_FLAG(send_receive, BGP_ADDPATH_TX))
-			SET_FLAG(peer->af_cap[afi][safi],
-				 PEER_CAP_ADDPATH_AF_TX_RCV);
+			SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_TX_RCV);
 		else
-			UNSET_FLAG(peer->af_cap[afi][safi],
-				   PEER_CAP_ADDPATH_AF_TX_RCV);
+			UNSET_FLAG(connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_TX_RCV);
 	}
 
 	return 0;
@@ -797,7 +791,7 @@ static int bgp_capability_paths_limit(struct peer *peer, struct peer_connection 
 			continue;
 		}
 
-		SET_FLAG(peer->af_cap[afi][safi], PEER_CAP_PATHS_LIMIT_AF_RCV);
+		SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_PATHS_LIMIT_AF_RCV);
 		peer->addpath_paths_limit[afi][safi].receive = paths_limit;
 	}
 
@@ -864,11 +858,10 @@ static int bgp_capability_enhe(struct peer *peer, struct peer_connection *connec
 			continue;
 		}
 
-		SET_FLAG(peer->af_cap[afi][safi], PEER_CAP_ENHE_AF_RCV);
+		SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_ENHE_AF_RCV);
 
-		if (CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_ENHE_AF_ADV))
-			SET_FLAG(peer->af_cap[afi][safi],
-				 PEER_CAP_ENHE_AF_NEGO);
+		if (CHECK_FLAG(connection->af_cap[afi][safi], PEER_CAP_ENHE_AF_ADV))
+			SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_ENHE_AF_NEGO);
 	}
 
 	SET_FLAG(peer->cap, PEER_CAP_ENHE_RCV);
@@ -1556,23 +1549,16 @@ static void bgp_open_capability_orf(struct stream *s, struct peer *peer,
 	    || CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_ORF_PREFIX_RM)) {
 		stream_putc(s, ORF_TYPE_PREFIX);
 
-		if (CHECK_FLAG(peer->af_flags[afi][safi],
-			       PEER_FLAG_ORF_PREFIX_SM)
-		    && CHECK_FLAG(peer->af_flags[afi][safi],
-				  PEER_FLAG_ORF_PREFIX_RM)) {
-			SET_FLAG(peer->af_cap[afi][safi],
-				 PEER_CAP_ORF_PREFIX_SM_ADV);
-			SET_FLAG(peer->af_cap[afi][safi],
-				 PEER_CAP_ORF_PREFIX_RM_ADV);
+		if (CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_ORF_PREFIX_SM) &&
+		    CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_ORF_PREFIX_RM)) {
+			SET_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV);
+			SET_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV);
 			stream_putc(s, ORF_MODE_BOTH);
-		} else if (CHECK_FLAG(peer->af_flags[afi][safi],
-				      PEER_FLAG_ORF_PREFIX_SM)) {
-			SET_FLAG(peer->af_cap[afi][safi],
-				 PEER_CAP_ORF_PREFIX_SM_ADV);
+		} else if (CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_ORF_PREFIX_SM)) {
+			SET_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV);
 			stream_putc(s, ORF_MODE_SEND);
 		} else {
-			SET_FLAG(peer->af_cap[afi][safi],
-				 PEER_CAP_ORF_PREFIX_RM_ADV);
+			SET_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV);
 			stream_putc(s, ORF_MODE_RECEIVE);
 		}
 		number_of_orfs++;
@@ -1723,7 +1709,7 @@ static void bgp_peer_send_llgr_capability(struct stream *s, struct peer *peer,
 		stream_putc(s, LLGR_F_BIT);
 		stream_put3(s, peer->bgp->llgr_stale_time);
 
-		SET_FLAG(peer->af_cap[afi][safi], PEER_CAP_LLGR_AF_ADV);
+		SET_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_LLGR_AF_ADV);
 	}
 
 	/* Total Long-lived Graceful Restart capability Len. */
@@ -1811,15 +1797,13 @@ uint16_t bgp_open_capability(struct stream *s, struct peer *peer,
 				stream_putc(s, CAPABILITY_CODE_ENHE);
 				stream_putc(s, CAPABILITY_CODE_ENHE_LEN);
 
-				SET_FLAG(peer->af_cap[AFI_IP][safi],
-					 PEER_CAP_ENHE_AF_ADV);
+				SET_FLAG(connection->af_cap[AFI_IP][safi], PEER_CAP_ENHE_AF_ADV);
 				stream_putw(s, pkt_afi);
 				stream_putw(s, pkt_safi);
 				stream_putw(s, afi_int2iana(AFI_IP6));
 
-				if (CHECK_FLAG(peer->af_cap[afi][safi],
-					       PEER_CAP_ENHE_AF_RCV))
-					SET_FLAG(peer->af_cap[afi][safi],
+				if (CHECK_FLAG(connection->af_cap[afi][safi], PEER_CAP_ENHE_AF_RCV))
+					SET_FLAG(connection->af_cap[afi][safi],
 						 PEER_CAP_ENHE_AF_NEGO);
 			}
 		}
@@ -1921,23 +1905,20 @@ uint16_t bgp_open_capability(struct stream *s, struct peer *peer,
 
 			if (adv_addpath_rx) {
 				SET_FLAG(flags, BGP_ADDPATH_RX);
-				SET_FLAG(peer->af_cap[afi][safi],
-					 PEER_CAP_ADDPATH_AF_RX_ADV);
+				SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_RX_ADV);
 			} else {
-				UNSET_FLAG(peer->af_cap[afi][safi],
+				UNSET_FLAG(connection->af_cap[afi][safi],
 					   PEER_CAP_ADDPATH_AF_RX_ADV);
 			}
 
 			if (adv_addpath_tx) {
 				SET_FLAG(flags, BGP_ADDPATH_TX);
-				SET_FLAG(peer->af_cap[afi][safi],
-					 PEER_CAP_ADDPATH_AF_TX_ADV);
+				SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_TX_ADV);
 				if (safi == SAFI_LABELED_UNICAST)
-					SET_FLAG(
-						peer->af_cap[afi][SAFI_UNICAST],
-						PEER_CAP_ADDPATH_AF_TX_ADV);
+					SET_FLAG(connection->af_cap[afi][SAFI_UNICAST],
+						 PEER_CAP_ADDPATH_AF_TX_ADV);
 			} else {
-				UNSET_FLAG(peer->af_cap[afi][safi],
+				UNSET_FLAG(connection->af_cap[afi][safi],
 					   PEER_CAP_ADDPATH_AF_TX_ADV);
 			}
 
@@ -1967,7 +1948,7 @@ uint16_t bgp_open_capability(struct stream *s, struct peer *peer,
 		stream_putc(s, pkt_safi);
 		stream_putw(s, peer->addpath_paths_limit[afi][safi].send);
 
-		SET_FLAG(peer->af_cap[afi][safi], PEER_CAP_PATHS_LIMIT_AF_ADV);
+		SET_FLAG(connection->af_cap[afi][safi], PEER_CAP_PATHS_LIMIT_AF_ADV);
 	}
 
 	/* ORF capability. */

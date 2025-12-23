@@ -2597,7 +2597,7 @@ static int peer_activate_af(struct peer *peer, struct peer_connection *connectio
 		if (peer_established(connection)) {
 			if (CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV)) {
 				connection->afc_adv[afi][safi] = 1;
-				bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_MP,
+				bgp_capability_send(connection, afi, safi, CAPABILITY_CODE_MP,
 						    CAPABILITY_ACTION_SET);
 				if (connection->afc_recv[afi][safi]) {
 					connection->afc_nego[afi][safi] = 1;
@@ -2721,9 +2721,8 @@ static bool non_peergroup_deactivate_af(struct peer *peer, struct peer_connectio
 			connection->afc_nego[afi][safi] = 0;
 
 			if (peer_active_nego(peer)) {
-				bgp_capability_send(peer, afi, safi,
-						    CAPABILITY_CODE_MP,
-						    CAPABILITY_ACTION_UNSET);
+				bgp_capability_send(peer->connection, afi, safi,
+						    CAPABILITY_CODE_MP, CAPABILITY_ACTION_UNSET);
 				bgp_clear_route(peer, afi, safi);
 				peer->pcount[afi][safi] = 0;
 			} else {
@@ -7765,9 +7764,9 @@ static void peer_prefix_list_update(struct prefix_list *plist)
 				 * new updates. This is important for ORF to
 				 * work correctly.
 				 */
-				if (CHECK_FLAG(peer->af_cap[afi][safi],
+				if (CHECK_FLAG(peer->connection->af_cap[afi][safi],
 					       PEER_CAP_ORF_PREFIX_SM_ADV) &&
-				    CHECK_FLAG(peer->af_cap[afi][safi],
+				    CHECK_FLAG(peer->connection->af_cap[afi][safi],
 					       PEER_CAP_ORF_PREFIX_RM_RCV))
 					peer_clear_soft(
 						peer, afi, safi,
@@ -8766,7 +8765,7 @@ static void peer_reset_message_stats(struct peer *peer)
  */
 static void peer_clear_capabilities(struct peer *peer, afi_t afi, safi_t safi)
 {
-	bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_FQDN,
+	bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_FQDN,
 			    CAPABILITY_ACTION_SET);
 }
 
@@ -8823,14 +8822,12 @@ int peer_clear_soft(struct peer *peer, afi_t afi, safi_t safi,
 	}
 
 	if (stype == BGP_CLEAR_SOFT_IN_ORF_PREFIX) {
-		if (CHECK_FLAG(peer->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_SM_ADV) &&
-		    CHECK_FLAG(peer->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_RM_RCV)) {
+		if (CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV) &&
+		    CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV)) {
 			struct bgp_filter *filter = &peer->filter[afi][safi];
 			uint8_t prefix_type;
 
-			if (CHECK_FLAG(peer->af_cap[afi][safi],
+			if (CHECK_FLAG(peer->connection->af_cap[afi][safi],
 				       PEER_CAP_ORF_PREFIX_RM_RCV))
 				prefix_type = ORF_TYPE_PREFIX;
 

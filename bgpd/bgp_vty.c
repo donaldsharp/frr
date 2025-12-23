@@ -3381,7 +3381,7 @@ DEFUN (bgp_graceful_restart_restart_time,
 				    !CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_ADV))
 					bgp_update_graceful_restart_capability(peer);
 				else
-					bgp_capability_send(peer, AFI_IP, SAFI_UNICAST,
+					bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
 							    CAPABILITY_CODE_RESTART,
 							    CAPABILITY_ACTION_SET);
 			}
@@ -3394,7 +3394,7 @@ DEFUN (bgp_graceful_restart_restart_time,
 			    !CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_ADV))
 				bgp_update_graceful_restart_capability(peer);
 			else
-				bgp_capability_send(peer, AFI_IP, SAFI_UNICAST,
+				bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
 						    CAPABILITY_CODE_RESTART, CAPABILITY_ACTION_SET);
 		}
 	}
@@ -3486,7 +3486,7 @@ DEFUN (no_bgp_graceful_restart_restart_time,
 				    !CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_ADV))
 					bgp_update_graceful_restart_capability(peer);
 				else
-					bgp_capability_send(peer, AFI_IP, SAFI_UNICAST,
+					bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
 							    CAPABILITY_CODE_RESTART,
 							    CAPABILITY_ACTION_UNSET);
 			}
@@ -3500,7 +3500,7 @@ DEFUN (no_bgp_graceful_restart_restart_time,
 			    !CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_ADV))
 				bgp_update_graceful_restart_capability(peer);
 			else
-				bgp_capability_send(peer, AFI_IP, SAFI_UNICAST,
+				bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
 						    CAPABILITY_CODE_RESTART,
 						    CAPABILITY_ACTION_UNSET);
 		}
@@ -3597,9 +3597,8 @@ DEFPY (bgp_graceful_restart_notification,
 		SET_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_NOTIFICATION);
 
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
-		bgp_capability_send(peer, AFI_IP, SAFI_UNICAST,
-				    CAPABILITY_CODE_RESTART,
-				    CAPABILITY_ACTION_SET);
+		bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
+				    CAPABILITY_CODE_RESTART, CAPABILITY_ACTION_SET);
 
 	return CMD_SUCCESS;
 }
@@ -3642,12 +3641,10 @@ DEFUN (bgp_graceful_restart_disable,
 			"Graceful restart configuration changed, reset all peers to take effect\n");
 
 		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-			bgp_capability_send(peer, AFI_IP, SAFI_UNICAST,
-					    CAPABILITY_CODE_RESTART,
-					    CAPABILITY_ACTION_UNSET);
-			bgp_capability_send(peer, AFI_IP, SAFI_UNICAST,
-					    CAPABILITY_CODE_LLGR,
-					    CAPABILITY_ACTION_UNSET);
+			bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
+					    CAPABILITY_CODE_RESTART, CAPABILITY_ACTION_UNSET);
+			bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
+					    CAPABILITY_CODE_LLGR, CAPABILITY_ACTION_UNSET);
 		}
 	}
 
@@ -4008,8 +4005,8 @@ DEFUN(bgp_llgr_stalepath_time, bgp_llgr_stalepath_time_cmd,
 	bgp->llgr_stale_time = llgr_stale_time;
 
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
-		bgp_capability_send(peer, AFI_IP, SAFI_UNICAST,
-				    CAPABILITY_CODE_LLGR, CAPABILITY_ACTION_SET);
+		bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_LLGR,
+				    CAPABILITY_ACTION_SET);
 
 	return CMD_SUCCESS;
 }
@@ -4028,8 +4025,7 @@ DEFUN(no_bgp_llgr_stalepath_time, no_bgp_llgr_stalepath_time_cmd,
 	bgp->llgr_stale_time = BGP_DEFAULT_LLGR_STALE_TIME;
 
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
-		bgp_capability_send(peer, AFI_IP, SAFI_UNICAST,
-				    CAPABILITY_CODE_LLGR,
+		bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_LLGR,
 				    CAPABILITY_ACTION_UNSET);
 
 	return CMD_SUCCESS;
@@ -6283,9 +6279,8 @@ DEFPY (neighbor_capability_fqdn,
 		ret = peer_flag_set_vty(vty, neighbor,
 					PEER_FLAG_CAPABILITY_FQDN);
 
-	bgp_capability_send(peer, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_FQDN,
-			    no ? CAPABILITY_ACTION_UNSET
-			       : CAPABILITY_ACTION_SET);
+	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_FQDN,
+			    no ? CAPABILITY_ACTION_UNSET : CAPABILITY_ACTION_SET);
 
 	return ret;
 }
@@ -6309,7 +6304,8 @@ DEFUN (neighbor_capability_enhe,
 
 	ret = peer_flag_set_vty(vty, argv[idx_peer]->arg, PEER_FLAG_CAPABILITY_ENHE);
 
-	bgp_capability_send(peer, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ENHE, CAPABILITY_ACTION_SET);
+	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ENHE,
+			    CAPABILITY_ACTION_SET);
 
 	return ret;
 }
@@ -6337,7 +6333,7 @@ DEFUN (no_neighbor_capability_enhe,
 
 	ret = peer_flag_unset_vty(vty, argv[idx_peer]->arg, PEER_FLAG_CAPABILITY_ENHE);
 
-	bgp_capability_send(peer, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ENHE,
+	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ENHE,
 			    CAPABILITY_ACTION_UNSET);
 
 	return ret;
@@ -6368,7 +6364,7 @@ DEFPY(neighbor_capability_software_version,
 	else
 		ret = peer_flag_set_vty(vty, neighbor, encoding);
 
-	bgp_capability_send(peer, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_SOFT_VERSION,
+	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_SOFT_VERSION,
 			    no ? CAPABILITY_ACTION_UNSET : CAPABILITY_ACTION_SET);
 
 	return ret;
@@ -6396,7 +6392,7 @@ DEFPY(neighbor_capability_link_local,
 	else
 		ret = peer_flag_set_vty(vty, neighbor, PEER_FLAG_CAPABILITY_LINK_LOCAL);
 
-	bgp_capability_send(peer, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_LINK_LOCAL,
+	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_LINK_LOCAL,
 			    no ? CAPABILITY_ACTION_UNSET : CAPABILITY_ACTION_SET);
 
 	return ret;
@@ -6482,7 +6478,7 @@ DEFUN (neighbor_capability_orf_prefix,
 	if (strmatch(argv[idx_send_recv]->text, "send")) {
 		ret = peer_af_flag_set_vty(vty, peer_str, afi, safi,
 					   PEER_FLAG_ORF_PREFIX_SM);
-		bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_ORF,
+		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
 				    CAPABILITY_ACTION_SET);
 		return ret;
 	}
@@ -6490,7 +6486,7 @@ DEFUN (neighbor_capability_orf_prefix,
 	if (strmatch(argv[idx_send_recv]->text, "receive")) {
 		ret = peer_af_flag_set_vty(vty, peer_str, afi, safi,
 					   PEER_FLAG_ORF_PREFIX_RM);
-		bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_ORF,
+		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
 				    CAPABILITY_ACTION_SET);
 		return ret;
 	}
@@ -6500,7 +6496,7 @@ DEFUN (neighbor_capability_orf_prefix,
 					   PEER_FLAG_ORF_PREFIX_SM) |
 		      peer_af_flag_set_vty(vty, peer_str, afi, safi,
 					   PEER_FLAG_ORF_PREFIX_RM);
-		bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_ORF,
+		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
 				    CAPABILITY_ACTION_SET);
 		return ret;
 	}
@@ -6547,7 +6543,7 @@ DEFUN (no_neighbor_capability_orf_prefix,
 	if (strmatch(argv[idx_send_recv]->text, "send")) {
 		ret = peer_af_flag_unset_vty(vty, peer_str, afi, safi,
 					     PEER_FLAG_ORF_PREFIX_SM);
-		bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_ORF,
+		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
 				    CAPABILITY_ACTION_UNSET);
 		return ret;
 	}
@@ -6555,7 +6551,7 @@ DEFUN (no_neighbor_capability_orf_prefix,
 	if (strmatch(argv[idx_send_recv]->text, "receive")) {
 		ret = peer_af_flag_unset_vty(vty, peer_str, afi, safi,
 					     PEER_FLAG_ORF_PREFIX_RM);
-		bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_ORF,
+		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
 				    CAPABILITY_ACTION_UNSET);
 		return ret;
 	}
@@ -6565,7 +6561,7 @@ DEFUN (no_neighbor_capability_orf_prefix,
 					     PEER_FLAG_ORF_PREFIX_SM) |
 		      peer_af_flag_unset_vty(vty, peer_str, afi, safi,
 					     PEER_FLAG_ORF_PREFIX_RM);
-		bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_ORF,
+		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
 				    CAPABILITY_ACTION_UNSET);
 		return ret;
 	}
@@ -7539,7 +7535,7 @@ DEFPY(neighbor_role,
 
 	ret = peer_role_set_vty(vty, peer, role, false);
 
-	bgp_capability_send(peer, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ROLE,
+	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ROLE,
 			    CAPABILITY_ACTION_SET);
 
 	return ret;
@@ -7563,7 +7559,7 @@ DEFPY(neighbor_role_strict,
 
 	ret = peer_role_set_vty(vty, peer, role, true);
 
-	bgp_capability_send(peer, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ROLE,
+	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ROLE,
 			    CAPABILITY_ACTION_SET);
 
 	return ret;
@@ -7588,7 +7584,7 @@ DEFPY(no_neighbor_role,
 
 	ret = bgp_vty_return(vty, peer_role_unset(peer));
 
-	bgp_capability_send(peer, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ROLE,
+	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ROLE,
 			    CAPABILITY_ACTION_UNSET);
 
 	return ret;
@@ -9867,7 +9863,7 @@ DEFPY (neighbor_addpath_paths_limit,
 
 	peer->addpath_paths_limit[afi][safi].send = paths_limit;
 
-	bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_PATHS_LIMIT,
+	bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_PATHS_LIMIT,
 			    CAPABILITY_ACTION_SET);
 
 	return ret;
@@ -9896,7 +9892,7 @@ DEFPY (no_neighbor_addpath_paths_limit,
 
 	peer->addpath_paths_limit[afi][safi].send = 0;
 
-	bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_PATHS_LIMIT,
+	bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_PATHS_LIMIT,
 			    CAPABILITY_ACTION_SET);
 
 	return ret;
@@ -14156,27 +14152,26 @@ static void bgp_show_peer_afi_orf_cap(struct vty *vty, struct peer *p,
 				      bool use_json, json_object *json_pref)
 {
 	/* Send-Mode */
-	if (CHECK_FLAG(p->af_cap[afi][safi], adv_smcap)
-	    || CHECK_FLAG(p->af_cap[afi][safi], rcv_smcap)) {
+	if (CHECK_FLAG(p->connection->af_cap[afi][safi], adv_smcap) ||
+	    CHECK_FLAG(p->connection->af_cap[afi][safi], rcv_smcap)) {
 		if (use_json) {
-			if (CHECK_FLAG(p->af_cap[afi][safi], adv_smcap)
-			    && CHECK_FLAG(p->af_cap[afi][safi], rcv_smcap))
+			if (CHECK_FLAG(p->connection->af_cap[afi][safi], adv_smcap) &&
+			    CHECK_FLAG(p->connection->af_cap[afi][safi], rcv_smcap))
 				json_object_string_add(json_pref, "sendMode",
 						       "advertisedAndReceived");
-			else if (CHECK_FLAG(p->af_cap[afi][safi], adv_smcap))
+			else if (CHECK_FLAG(p->connection->af_cap[afi][safi], adv_smcap))
 				json_object_string_add(json_pref, "sendMode",
 						       "advertised");
-			else if (CHECK_FLAG(p->af_cap[afi][safi], rcv_smcap))
+			else if (CHECK_FLAG(p->connection->af_cap[afi][safi], rcv_smcap))
 				json_object_string_add(json_pref, "sendMode",
 						       "received");
 		} else {
 			vty_out(vty, "      Send-mode: ");
-			if (CHECK_FLAG(p->af_cap[afi][safi], adv_smcap))
+			if (CHECK_FLAG(p->connection->af_cap[afi][safi], adv_smcap))
 				vty_out(vty, "advertised");
-			if (CHECK_FLAG(p->af_cap[afi][safi], rcv_smcap))
+			if (CHECK_FLAG(p->connection->af_cap[afi][safi], rcv_smcap))
 				vty_out(vty, "%sreceived",
-					CHECK_FLAG(p->af_cap[afi][safi],
-						   adv_smcap)
+					CHECK_FLAG(p->connection->af_cap[afi][safi], adv_smcap)
 						? ", "
 						: "");
 			vty_out(vty, "\n");
@@ -14184,27 +14179,26 @@ static void bgp_show_peer_afi_orf_cap(struct vty *vty, struct peer *p,
 	}
 
 	/* Receive-Mode */
-	if (CHECK_FLAG(p->af_cap[afi][safi], adv_rmcap)
-	    || CHECK_FLAG(p->af_cap[afi][safi], rcv_rmcap)) {
+	if (CHECK_FLAG(p->connection->af_cap[afi][safi], adv_rmcap) ||
+	    CHECK_FLAG(p->connection->af_cap[afi][safi], rcv_rmcap)) {
 		if (use_json) {
-			if (CHECK_FLAG(p->af_cap[afi][safi], adv_rmcap)
-			    && CHECK_FLAG(p->af_cap[afi][safi], rcv_rmcap))
+			if (CHECK_FLAG(p->connection->af_cap[afi][safi], adv_rmcap) &&
+			    CHECK_FLAG(p->connection->af_cap[afi][safi], rcv_rmcap))
 				json_object_string_add(json_pref, "recvMode",
 						       "advertisedAndReceived");
-			else if (CHECK_FLAG(p->af_cap[afi][safi], adv_rmcap))
+			else if (CHECK_FLAG(p->connection->af_cap[afi][safi], adv_rmcap))
 				json_object_string_add(json_pref, "recvMode",
 						       "advertised");
-			else if (CHECK_FLAG(p->af_cap[afi][safi], rcv_rmcap))
+			else if (CHECK_FLAG(p->connection->af_cap[afi][safi], rcv_rmcap))
 				json_object_string_add(json_pref, "recvMode",
 						       "received");
 		} else {
 			vty_out(vty, "      Receive-mode: ");
-			if (CHECK_FLAG(p->af_cap[afi][safi], adv_rmcap))
+			if (CHECK_FLAG(p->connection->af_cap[afi][safi], adv_rmcap))
 				vty_out(vty, "advertised");
-			if (CHECK_FLAG(p->af_cap[afi][safi], rcv_rmcap))
+			if (CHECK_FLAG(p->connection->af_cap[afi][safi], rcv_rmcap))
 				vty_out(vty, "%sreceived",
-					CHECK_FLAG(p->af_cap[afi][safi],
-						   adv_rmcap)
+					CHECK_FLAG(p->connection->af_cap[afi][safi], adv_rmcap)
 						? ", "
 						: "");
 			vty_out(vty, "\n");
@@ -14331,10 +14325,8 @@ static void bgp_show_peer_gr_info_afi_safi(struct vty *vty, struct peer *peer, b
 			vty_out(vty, "      F bit: ");
 		}
 
-		if (peer->nsf[afi][safi] &&
-		    CHECK_FLAG(peer->af_cap[afi][safi],
-			       PEER_CAP_RESTART_AF_PRESERVE_RCV)) {
-
+		if (peer->nsf[afi][safi] && CHECK_FLAG(peer->connection->af_cap[afi][safi],
+						       PEER_CAP_RESTART_AF_PRESERVE_RCV)) {
 			if (json) {
 				json_object_boolean_true_add(json_afi_safi,
 							     "fBit");
@@ -14579,13 +14571,10 @@ static void bgp_show_peer_afi(struct vty *vty, struct peer *p, afi_t afi,
 					    bpacket_queue_virtual_length(paf));
 		}
 
-		if (CHECK_FLAG(p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV)
-		    || CHECK_FLAG(p->af_cap[afi][safi],
-				  PEER_CAP_ORF_PREFIX_SM_RCV)
-		    || CHECK_FLAG(p->af_cap[afi][safi],
-				  PEER_CAP_ORF_PREFIX_RM_ADV)
-		    || CHECK_FLAG(p->af_cap[afi][safi],
-				  PEER_CAP_ORF_PREFIX_RM_RCV)) {
+		if (CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV)) {
 			json_object_int_add(json_af, "orfType",
 					    ORF_TYPE_PREFIX);
 			json_prefA = json_object_new_object();
@@ -14599,13 +14588,10 @@ static void bgp_show_peer_afi(struct vty *vty, struct peer *p, afi_t afi,
 					       json_prefA);
 		}
 
-		if (CHECK_FLAG(p->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_SM_ADV) ||
-		    CHECK_FLAG(p->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_SM_RCV) ||
-		    CHECK_FLAG(p->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_RM_ADV) ||
-		    CHECK_FLAG(p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV))
+		if (CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV))
 			json_object_object_add(json_addr, "afDependentCap",
 					       json_af);
 		else
@@ -14911,22 +14897,16 @@ static void bgp_show_peer_afi(struct vty *vty, struct peer *p, afi_t afi,
 		} else {
 			vty_out(vty, "  Not part of any update group\n");
 		}
-		if (CHECK_FLAG(p->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_SM_ADV) ||
-		    CHECK_FLAG(p->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_SM_RCV) ||
-		    CHECK_FLAG(p->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_RM_ADV) ||
-		    CHECK_FLAG(p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV))
+		if (CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV))
 			vty_out(vty, "  AF-dependant capabilities:\n");
 
-		if (CHECK_FLAG(p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV)
-		    || CHECK_FLAG(p->af_cap[afi][safi],
-				  PEER_CAP_ORF_PREFIX_SM_RCV)
-		    || CHECK_FLAG(p->af_cap[afi][safi],
-				  PEER_CAP_ORF_PREFIX_RM_ADV)
-		    || CHECK_FLAG(p->af_cap[afi][safi],
-				  PEER_CAP_ORF_PREFIX_RM_RCV)) {
+		if (CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV) ||
+		    CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV)) {
 			vty_out(vty,
 				"    Outbound Route Filter (ORF) type (%d) Prefix-list:\n",
 				ORF_TYPE_PREFIX);
@@ -15296,10 +15276,10 @@ static void bgp_show_peer_gr_capability(struct vty *vty, struct peer *p, bool us
 			vty_out(vty, "      Address families by peer:\n        ");
 
 		FOREACH_AFI_SAFI (afi, safi) {
-			if (CHECK_FLAG(p->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV)) {
+			if (CHECK_FLAG(p->connection->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV)) {
 				bool f_bit;
 
-				f_bit = CHECK_FLAG(p->af_cap[afi][safi],
+				f_bit = CHECK_FLAG(p->connection->af_cap[afi][safi],
 						   PEER_CAP_RESTART_AF_PRESERVE_RCV);
 
 				if (use_json) {
@@ -15909,78 +15889,62 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 					print_store = get_afi_safi_str(
 						afi, safi, true);
 
-					if (CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_TX_ADV) ||
-					    CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_TX_RCV)) {
+					if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_TX_ADV) ||
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_TX_RCV)) {
 						json_object_boolean_add(
-							json_sub,
-							"txAdvertisedAndReceived",
-							CHECK_FLAG(p->af_cap[afi]
-									    [safi],
+							json_sub, "txAdvertisedAndReceived",
+							CHECK_FLAG(p->connection->af_cap[afi][safi],
 								   PEER_CAP_ADDPATH_AF_TX_ADV) &&
-								CHECK_FLAG(
-									p->af_cap[afi]
-										 [safi],
-									PEER_CAP_ADDPATH_AF_TX_RCV));
+								CHECK_FLAG(p->connection
+										   ->af_cap[afi]
+											   [safi],
+									   PEER_CAP_ADDPATH_AF_TX_RCV));
 
 						json_object_boolean_add(
 							json_sub, "txAdvertised",
-							CHECK_FLAG(p->af_cap[afi]
-									    [safi],
+							CHECK_FLAG(p->connection->af_cap[afi][safi],
 								   PEER_CAP_ADDPATH_AF_TX_ADV));
 
 						json_object_boolean_add(
 							json_sub, "txReceived",
-							CHECK_FLAG(p->af_cap[afi]
-									    [safi],
+							CHECK_FLAG(p->connection->af_cap[afi][safi],
 								   PEER_CAP_ADDPATH_AF_TX_RCV));
 					}
 
-					if (CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_RX_ADV) ||
-					    CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_RX_RCV)) {
+					if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_RX_ADV) ||
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_RX_RCV)) {
 						json_object_boolean_add(
-							json_sub,
-							"rxAdvertisedAndReceived",
-							CHECK_FLAG(p->af_cap[afi]
-									    [safi],
+							json_sub, "rxAdvertisedAndReceived",
+							CHECK_FLAG(p->connection->af_cap[afi][safi],
 								   PEER_CAP_ADDPATH_AF_RX_ADV) &&
-								CHECK_FLAG(
-									p->af_cap[afi]
-										 [safi],
-									PEER_CAP_ADDPATH_AF_RX_RCV));
+								CHECK_FLAG(p->connection
+										   ->af_cap[afi]
+											   [safi],
+									   PEER_CAP_ADDPATH_AF_RX_RCV));
 
 						json_object_boolean_add(
 							json_sub, "rxAdvertised",
-							CHECK_FLAG(p->af_cap[afi]
-									    [safi],
+							CHECK_FLAG(p->connection->af_cap[afi][safi],
 								   PEER_CAP_ADDPATH_AF_RX_ADV));
 
 						json_object_boolean_add(
 							json_sub, "rxReceived",
-							CHECK_FLAG(p->af_cap[afi]
-									    [safi],
+							CHECK_FLAG(p->connection->af_cap[afi][safi],
 								   PEER_CAP_ADDPATH_AF_RX_RCV));
 					}
 
-					if (CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_TX_ADV) ||
-					    CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_TX_RCV) ||
-					    CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_RX_ADV) ||
-					    CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_RX_RCV))
+					if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_TX_ADV) ||
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_TX_RCV) ||
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_RX_ADV) ||
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_RX_RCV))
 						json_object_object_add(
 							json_add, print_store,
 							json_sub);
@@ -16007,13 +15971,13 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 					print_store = get_afi_safi_str(afi, safi,
 								       true);
 
-					if (CHECK_FLAG(p->af_cap[afi][safi],
+					if (CHECK_FLAG(p->connection->af_cap[afi][safi],
 						       PEER_CAP_PATHS_LIMIT_AF_ADV) ||
-					    CHECK_FLAG(p->af_cap[afi][safi],
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
 						       PEER_CAP_PATHS_LIMIT_AF_RCV)) {
-						if (CHECK_FLAG(p->af_cap[afi][safi],
+						if (CHECK_FLAG(p->connection->af_cap[afi][safi],
 							       PEER_CAP_PATHS_LIMIT_AF_ADV) &&
-						    CHECK_FLAG(p->af_cap[afi][safi],
+						    CHECK_FLAG(p->connection->af_cap[afi][safi],
 							       PEER_CAP_PATHS_LIMIT_AF_RCV)) {
 							json_object_boolean_true_add(
 								json_sub,
@@ -16030,8 +15994,8 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 								p->addpath_paths_limit
 									[afi][safi]
 										.receive);
-						} else if (CHECK_FLAG(p->af_cap[afi]
-									       [safi],
+						} else if (CHECK_FLAG(p->connection
+									      ->af_cap[afi][safi],
 								      PEER_CAP_PATHS_LIMIT_AF_ADV)) {
 							json_object_boolean_true_add(
 								json_sub,
@@ -16042,8 +16006,8 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 								p->addpath_paths_limit
 									[afi][safi]
 										.send);
-						} else if (CHECK_FLAG(p->af_cap[afi]
-									       [safi],
+						} else if (CHECK_FLAG(p->connection
+									      ->af_cap[afi][safi],
 								      PEER_CAP_PATHS_LIMIT_AF_RCV)) {
 							json_object_boolean_true_add(
 								json_sub,
@@ -16057,9 +16021,9 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 						}
 					}
 
-					if (CHECK_FLAG(p->af_cap[afi][safi],
+					if (CHECK_FLAG(p->connection->af_cap[afi][safi],
 						       PEER_CAP_PATHS_LIMIT_AF_ADV) ||
-					    CHECK_FLAG(p->af_cap[afi][safi],
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
 						       PEER_CAP_PATHS_LIMIT_AF_RCV))
 						json_object_object_add(json_add,
 								       print_store,
@@ -16134,10 +16098,8 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 
 					for (safi = SAFI_UNICAST;
 					     safi < SAFI_MAX; safi++) {
-						if (CHECK_FLAG(
-							    p->af_cap[AFI_IP]
-								     [safi],
-							    PEER_CAP_ENHE_AF_RCV)) {
+						if (CHECK_FLAG(p->connection->af_cap[AFI_IP][safi],
+							       PEER_CAP_ENHE_AF_RCV)) {
 							print_store =
 								get_afi_safi_str(
 									AFI_IP,
@@ -16183,10 +16145,8 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 					json_llgr = json_object_new_object();
 
 					FOREACH_AFI_SAFI (afi, safi) {
-						if (CHECK_FLAG(
-							    p->af_cap[afi]
-								     [safi],
-							    PEER_CAP_ENHE_AF_RCV)) {
+						if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+							       PEER_CAP_ENHE_AF_RCV)) {
 							afi_safi_str =
 								get_afi_safi_str(
 									afi,
@@ -16391,70 +16351,54 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 				vty_out(vty, "    AddPath:\n");
 
 				FOREACH_AFI_SAFI (afi, safi) {
-					if (CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_TX_ADV) ||
-					    CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_TX_RCV)) {
+					if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_TX_ADV) ||
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_TX_RCV)) {
 						vty_out(vty, "      %s: TX ",
 							get_afi_safi_str(
 								afi, safi,
 								false));
 
-						if (CHECK_FLAG(
-							    p->af_cap[afi]
-								     [safi],
-							    PEER_CAP_ADDPATH_AF_TX_ADV))
+						if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+							       PEER_CAP_ADDPATH_AF_TX_ADV))
 							vty_out(vty,
 								"advertised");
 
-						if (CHECK_FLAG(
-							    p->af_cap[afi]
-								     [safi],
-							    PEER_CAP_ADDPATH_AF_TX_RCV))
-							vty_out(vty,
-								"%sreceived",
-								CHECK_FLAG(
-									p->af_cap
-										[afi]
-										[safi],
-									PEER_CAP_ADDPATH_AF_TX_ADV)
+						if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+							       PEER_CAP_ADDPATH_AF_TX_RCV))
+							vty_out(vty, "%sreceived",
+								CHECK_FLAG(p->connection
+										   ->af_cap[afi]
+											   [safi],
+									   PEER_CAP_ADDPATH_AF_TX_ADV)
 									? " and "
 									: "");
 
 						vty_out(vty, "\n");
 					}
 
-					if (CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_RX_ADV) ||
-					    CHECK_FLAG(
-						    p->af_cap[afi][safi],
-						    PEER_CAP_ADDPATH_AF_RX_RCV)) {
+					if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_RX_ADV) ||
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
+						       PEER_CAP_ADDPATH_AF_RX_RCV)) {
 						vty_out(vty, "      %s: RX ",
 							get_afi_safi_str(
 								afi, safi,
 								false));
 
-						if (CHECK_FLAG(
-							    p->af_cap[afi]
-								     [safi],
-							    PEER_CAP_ADDPATH_AF_RX_ADV))
+						if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+							       PEER_CAP_ADDPATH_AF_RX_ADV))
 							vty_out(vty,
 								"advertised");
 
-						if (CHECK_FLAG(
-							    p->af_cap[afi]
-								     [safi],
-							    PEER_CAP_ADDPATH_AF_RX_RCV))
-							vty_out(vty,
-								"%sreceived",
-								CHECK_FLAG(
-									p->af_cap
-										[afi]
-										[safi],
-									PEER_CAP_ADDPATH_AF_RX_ADV)
+						if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+							       PEER_CAP_ADDPATH_AF_RX_RCV))
+							vty_out(vty, "%sreceived",
+								CHECK_FLAG(p->connection
+										   ->af_cap[afi]
+											   [safi],
+									   PEER_CAP_ADDPATH_AF_RX_ADV)
 									? " and "
 									: "");
 
@@ -16469,16 +16413,16 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 				vty_out(vty, "    Paths-Limit:\n");
 
 				FOREACH_AFI_SAFI (afi, safi) {
-					if (CHECK_FLAG(p->af_cap[afi][safi],
+					if (CHECK_FLAG(p->connection->af_cap[afi][safi],
 						       PEER_CAP_PATHS_LIMIT_AF_ADV) ||
-					    CHECK_FLAG(p->af_cap[afi][safi],
+					    CHECK_FLAG(p->connection->af_cap[afi][safi],
 						       PEER_CAP_PATHS_LIMIT_AF_RCV)) {
 						vty_out(vty, "      %s: ",
 							get_afi_safi_str(afi,
 									 safi,
 									 false));
 
-						if (CHECK_FLAG(p->af_cap[afi][safi],
+						if (CHECK_FLAG(p->connection->af_cap[afi][safi],
 							       PEER_CAP_PATHS_LIMIT_AF_ADV))
 							vty_out(vty,
 								"advertised (%u)",
@@ -16486,18 +16430,17 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 									[afi][safi]
 										.send);
 
-						if (CHECK_FLAG(p->af_cap[afi][safi],
+						if (CHECK_FLAG(p->connection->af_cap[afi][safi],
 							       PEER_CAP_PATHS_LIMIT_AF_RCV))
-							vty_out(vty,
-								"%sreceived (%u)",
-								CHECK_FLAG(p->af_cap[afi]
-										    [safi],
+							vty_out(vty, "%sreceived (%u)",
+								CHECK_FLAG(p->connection
+										   ->af_cap[afi]
+											   [safi],
 									   PEER_CAP_PATHS_LIMIT_AF_ADV)
 									? " and "
 									: "",
-								p->addpath_paths_limit
-									[afi][safi]
-										.receive);
+								p->addpath_paths_limit[afi][safi]
+									.receive);
 
 						vty_out(vty, "\n");
 					}
@@ -16553,10 +16496,8 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 						"      Address families by peer:\n        ");
 					for (safi = SAFI_UNICAST;
 					     safi < SAFI_MAX; safi++)
-						if (CHECK_FLAG(
-							    p->af_cap[AFI_IP]
-								     [safi],
-							    PEER_CAP_ENHE_AF_RCV))
+						if (CHECK_FLAG(p->connection->af_cap[AFI_IP][safi],
+							       PEER_CAP_ENHE_AF_RCV))
 							vty_out(vty,
 								"           %s\n",
 								get_afi_safi_str(
@@ -16585,10 +16526,8 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 					vty_out(vty,
 						"      Address families by peer:\n");
 					FOREACH_AFI_SAFI (afi, safi)
-						if (CHECK_FLAG(
-							    p->af_cap[afi]
-								     [safi],
-							    PEER_CAP_LLGR_AF_RCV))
+						if (CHECK_FLAG(p->connection->af_cap[afi][safi],
+							       PEER_CAP_LLGR_AF_RCV))
 							vty_out(vty,
 								"           %s\n",
 								get_afi_safi_str(

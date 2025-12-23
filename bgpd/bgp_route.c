@@ -2555,8 +2555,8 @@ bool subgroup_announce_check(struct bgp_dest *dest, struct bgp_path_info *pi,
 	}
 
 	/* ORF prefix-list filter check */
-	if (CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV) &&
-	    CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV))
+	if (CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV) &&
+	    CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV))
 		if (peer->orf_plist[afi][safi]) {
 			if (prefix_list_apply(peer->orf_plist[afi][safi], p)
 			    == PREFIX_DENY) {
@@ -8017,9 +8017,8 @@ void bgp_cleanup_routes(struct bgp *bgp)
 
 bool bgp_addpath_encode_rx(struct peer *peer, afi_t afi, safi_t safi)
 {
-	return (CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_RX_ADV)
-		&& CHECK_FLAG(peer->af_cap[afi][safi],
-			      PEER_CAP_ADDPATH_AF_TX_RCV));
+	return (CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_RX_ADV) &&
+		CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ADDPATH_AF_TX_RCV));
 }
 
 /* Parse NLRI stream.  Withdraw NLRI is recognized by NULL attr

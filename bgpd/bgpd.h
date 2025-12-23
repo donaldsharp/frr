@@ -1509,6 +1509,26 @@ struct peer_connection {
 	uint8_t afc_nego[AFI_MAX][SAFI_MAX];
 	uint8_t afc_adv[AFI_MAX][SAFI_MAX];
 	uint8_t afc_recv[AFI_MAX][SAFI_MAX];
+
+	/* Capability flags (reset in bgp_stop) */
+	uint32_t af_cap[AFI_MAX][SAFI_MAX];
+#define PEER_CAP_ORF_PREFIX_SM_ADV	 (1U << 0)  /* send-mode advertised */
+#define PEER_CAP_ORF_PREFIX_RM_ADV	 (1U << 1)  /* receive-mode advertised */
+#define PEER_CAP_ORF_PREFIX_SM_RCV	 (1U << 2)  /* send-mode received */
+#define PEER_CAP_ORF_PREFIX_RM_RCV	 (1U << 3)  /* receive-mode received */
+#define PEER_CAP_RESTART_AF_RCV		 (1U << 6)  /* graceful restart afi/safi received */
+#define PEER_CAP_RESTART_AF_PRESERVE_RCV (1U << 7)  /* graceful restart afi/safi F-bit received */
+#define PEER_CAP_ADDPATH_AF_TX_ADV	 (1U << 8)  /* addpath tx advertised */
+#define PEER_CAP_ADDPATH_AF_TX_RCV	 (1U << 9)  /* addpath tx received */
+#define PEER_CAP_ADDPATH_AF_RX_ADV	 (1U << 10) /* addpath rx advertised */
+#define PEER_CAP_ADDPATH_AF_RX_RCV	 (1U << 11) /* addpath rx received */
+#define PEER_CAP_ENHE_AF_ADV		 (1U << 12) /* Extended nexthopi afi/safi advertised */
+#define PEER_CAP_ENHE_AF_RCV		 (1U << 13) /* Extended nexthop afi/safi received */
+#define PEER_CAP_ENHE_AF_NEGO		 (1U << 14) /* Extended nexthop afi/safi negotiated */
+#define PEER_CAP_LLGR_AF_ADV		 (1U << 15)
+#define PEER_CAP_LLGR_AF_RCV		 (1U << 16)
+#define PEER_CAP_PATHS_LIMIT_AF_ADV	 (1U << 17)
+#define PEER_CAP_PATHS_LIMIT_AF_RCV	 (1U << 18)
 };
 
 /* Declare the FIFO list implementation */
@@ -1667,26 +1687,6 @@ struct peer {
 #define PEER_CAP_PATHS_LIMIT_RCV (1U << 30)
 #define PEER_CAP_LINK_LOCAL_ADV		    (1ULL << 31)
 #define PEER_CAP_LINK_LOCAL_RCV		    (1ULL << 32)
-
-	/* Capability flags (reset in bgp_stop) */
-	uint32_t af_cap[AFI_MAX][SAFI_MAX];
-#define PEER_CAP_ORF_PREFIX_SM_ADV          (1U << 0) /* send-mode advertised */
-#define PEER_CAP_ORF_PREFIX_RM_ADV          (1U << 1) /* receive-mode advertised */
-#define PEER_CAP_ORF_PREFIX_SM_RCV          (1U << 2) /* send-mode received */
-#define PEER_CAP_ORF_PREFIX_RM_RCV          (1U << 3) /* receive-mode received */
-#define PEER_CAP_RESTART_AF_RCV             (1U << 6) /* graceful restart afi/safi received */
-#define PEER_CAP_RESTART_AF_PRESERVE_RCV    (1U << 7) /* graceful restart afi/safi F-bit received */
-#define PEER_CAP_ADDPATH_AF_TX_ADV          (1U << 8) /* addpath tx advertised */
-#define PEER_CAP_ADDPATH_AF_TX_RCV          (1U << 9) /* addpath tx received */
-#define PEER_CAP_ADDPATH_AF_RX_ADV          (1U << 10) /* addpath rx advertised */
-#define PEER_CAP_ADDPATH_AF_RX_RCV          (1U << 11) /* addpath rx received */
-#define PEER_CAP_ENHE_AF_ADV                (1U << 12) /* Extended nexthopi afi/safi advertised */
-#define PEER_CAP_ENHE_AF_RCV                (1U << 13) /* Extended nexthop afi/safi received */
-#define PEER_CAP_ENHE_AF_NEGO               (1U << 14) /* Extended nexthop afi/safi negotiated */
-#define PEER_CAP_LLGR_AF_ADV                (1U << 15)
-#define PEER_CAP_LLGR_AF_RCV                (1U << 16)
-#define PEER_CAP_PATHS_LIMIT_AF_ADV         (1U << 17)
-#define PEER_CAP_PATHS_LIMIT_AF_RCV         (1U << 18)
 
 	/* Global configuration flags. */
 	/*
@@ -3103,7 +3103,7 @@ static inline bool peer_is_config_node(const struct peer *peer)
 static inline int peer_cap_enhe(struct peer *peer, afi_t afi, safi_t safi)
 {
 	assert(peer);
-	return (CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_ENHE_AF_NEGO));
+	return (CHECK_FLAG(peer->connection->af_cap[afi][safi], PEER_CAP_ENHE_AF_NEGO));
 }
 
 /* Lookup VRF for BGP instance based on its type. */

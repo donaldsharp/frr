@@ -259,7 +259,7 @@ static struct peer *peer_xfer_conn(struct peer *from_peer)
 
 	FOREACH_AFI_SAFI (afi, safi) {
 		peer->af_sflags[afi][safi] = from_peer->af_sflags[afi][safi];
-		peer->af_cap[afi][safi] = from_peer->af_cap[afi][safi];
+		keeper->af_cap[afi][safi] = going_away->af_cap[afi][safi];
 		keeper->afc_nego[afi][safi] = going_away->afc_nego[afi][safi];
 		keeper->afc_adv[afi][safi] = going_away->afc_adv[afi][safi];
 		keeper->afc_recv[afi][safi] = going_away->afc_recv[afi][safi];
@@ -2114,7 +2114,7 @@ enum bgp_fsm_state_progress bgp_stop(struct peer_connection *connection)
 		connection->afc_recv[afi][safi] = 0;
 
 		/* peer address family capability flags*/
-		peer->af_cap[afi][safi] = 0;
+		connection->af_cap[afi][safi] = 0;
 
 		/* peer address family status flags*/
 		/* Don't clear WAIT_EOR */
@@ -2674,7 +2674,7 @@ static void bgp_peer_process_gr_cap_clear_stale(struct peer_connection *connecti
 	FOREACH_AFI_SAFI_NSF (afi, safi) {
 		if (connection->afc_nego[afi][safi] &&
 		    CHECK_FLAG(peer->cap, PEER_CAP_RESTART_ADV) &&
-		    CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV)) {
+		    CHECK_FLAG(connection->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV)) {
 			/*
 			 * If an (afi,safi) is negotiated with the
 			 * peer and it has announced the GR capab
@@ -2683,8 +2683,8 @@ static void bgp_peer_process_gr_cap_clear_stale(struct peer_connection *connecti
 			 * the F-bit, any previous (stale) routes
 			 * should be flushed.
 			 */
-			if (peer->nsf[afi][safi] &&
-			    !CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_RESTART_AF_PRESERVE_RCV))
+			if (peer->nsf[afi][safi] && !CHECK_FLAG(connection->af_cap[afi][safi],
+								PEER_CAP_RESTART_AF_PRESERVE_RCV))
 				bgp_clear_stale_route(peer, afi, safi);
 
 			peer->nsf[afi][safi] = 1;
@@ -2826,23 +2826,18 @@ bgp_establish(struct peer_connection *connection)
 					   bgp_peer_get_connection_direction_string(connection));
 		}
 
-		if (CHECK_FLAG(peer->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_SM_ADV)) {
-			if (CHECK_FLAG(peer->af_cap[afi][safi],
-				       PEER_CAP_ORF_PREFIX_RM_RCV))
-				bgp_route_refresh_send(
-					peer, afi, safi, ORF_TYPE_PREFIX,
-					REFRESH_IMMEDIATE, 0,
-					BGP_ROUTE_REFRESH_NORMAL);
+		if (CHECK_FLAG(connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV)) {
+			if (CHECK_FLAG(connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV))
+				bgp_route_refresh_send(peer, afi, safi, ORF_TYPE_PREFIX,
+						       REFRESH_IMMEDIATE, 0,
+						       BGP_ROUTE_REFRESH_NORMAL);
 		}
 	}
 
 	/* First update is deferred until ORF or ROUTE-REFRESH is received */
 	FOREACH_AFI_SAFI (afi, safi) {
-		if (CHECK_FLAG(peer->af_cap[afi][safi],
-			       PEER_CAP_ORF_PREFIX_RM_ADV))
-			if (CHECK_FLAG(peer->af_cap[afi][safi],
-				       PEER_CAP_ORF_PREFIX_SM_RCV))
+		if (CHECK_FLAG(connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV))
+			if (CHECK_FLAG(connection->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV))
 				SET_FLAG(peer->af_sflags[afi][safi],
 					 PEER_STATUS_ORF_WAIT_REFRESH);
 	}
