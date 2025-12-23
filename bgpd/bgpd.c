@@ -4993,13 +4993,13 @@ bool peer_active_nego(struct peer *peer)
 }
 
 /* If peer received at least one address family MP, return true */
-bool peer_afc_received(struct peer *peer)
+bool peer_afc_received(struct peer_connection *connection)
 {
 	afi_t afi;
 	safi_t safi;
 
 	FOREACH_AFI_SAFI (afi, safi)
-		if (peer->connection->afc_recv[afi][safi])
+		if (connection->afc_recv[afi][safi])
 			return true;
 
 	return false;

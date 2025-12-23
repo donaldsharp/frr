@@ -15854,7 +15854,7 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 	}
 	/* Capability. */
 	if (peer_established(p->connection) &&
-	    (p->cap || peer_afc_advertised(p) || peer_afc_received(p))) {
+	    (p->cap || peer_afc_advertised(p) || peer_afc_received(p->connection))) {
 		if (use_json) {
 			json_object *json_cap = NULL;
 

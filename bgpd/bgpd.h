@@ -2635,7 +2635,7 @@ extern enum bgp_peer_sort peer_sort_lookup(struct peer *peer);
 
 extern enum bgp_peer_active peer_active(struct peer_connection *connection);
 extern bool peer_active_nego(struct peer *peer);
-extern bool peer_afc_received(struct peer *peer);
+extern bool peer_afc_received(struct peer_connection *connection);
 extern bool peer_afc_advertised(struct peer *peer);
 extern void bgp_recalculate_all_bestpaths(struct bgp *bgp);
 extern struct peer *peer_create(union sockunion *su, const char *conf_if, struct bgp *bgp,
