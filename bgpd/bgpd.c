@@ -2599,7 +2599,7 @@ static int peer_activate_af(struct peer *peer, struct peer_connection *connectio
 				connection->afc_adv[afi][safi] = 1;
 				bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_MP,
 						    CAPABILITY_ACTION_SET);
-				if (peer->afc_recv[afi][safi]) {
+				if (connection->afc_recv[afi][safi]) {
 					connection->afc_nego[afi][safi] = 1;
 					bgp_announce_route(peer, afi, safi, false);
 				}
@@ -4999,7 +4999,7 @@ bool peer_afc_received(struct peer *peer)
 	safi_t safi;
 
 	FOREACH_AFI_SAFI (afi, safi)
-		if (peer->afc_recv[afi][safi])
+		if (peer->connection->afc_recv[afi][safi])
 			return true;
 
 	return false;

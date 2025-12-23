@@ -3912,13 +3912,13 @@ static int bgp_capability_msg_parse(struct peer_connection *connection, uint8_t 
 					   iana_safi2str(pkt_safi));
 
 			if (action == CAPABILITY_ACTION_SET) {
-				peer->afc_recv[afi][safi] = 1;
+				connection->afc_recv[afi][safi] = 1;
 				if (peer->afc[afi][safi]) {
 					connection->afc_nego[afi][safi] = 1;
 					bgp_announce_route(peer, afi, safi, false);
 				}
 			} else {
-				peer->afc_recv[afi][safi] = 0;
+				connection->afc_recv[afi][safi] = 0;
 				connection->afc_nego[afi][safi] = 0;
 
 				if (peer_active_nego(peer))

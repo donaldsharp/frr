@@ -13030,8 +13030,7 @@ static void bgp_show_peer_reset(struct vty * vty, struct peer *peer,
 static inline bool bgp_has_peer_failed(struct peer *peer, afi_t afi,
 				       safi_t safi)
 {
-	return ((!peer_established(peer->connection)) ||
-		!peer->afc_recv[afi][safi]);
+	return ((!peer_established(peer->connection)) || !peer->connection->afc_recv[afi][safi]);
 }
 
 static void bgp_show_failed_summary(struct vty *vty, struct bgp *bgp,
@@ -13596,15 +13595,12 @@ static int bgp_show_summary(struct vty *vty, struct bgp *bgp, int afi, int safi,
 				if (CHECK_FLAG(peer->flags, PEER_FLAG_SHUTDOWN)
 				    || CHECK_FLAG(peer->bgp->flags,
 						  BGP_FLAG_SHUTDOWN))
-					json_object_string_add(json_peer,
-							       "state",
-							       "Idle (Admin)");
-				else if (peer->afc_recv[afi][safi])
-					json_object_string_add(
-						json_peer, "state",
-						lookup_msg(bgp_status_msg,
-							   peer->connection->status,
-							   NULL));
+					json_object_string_add(json_peer, "state", "Idle (Admin)");
+				else if (peer->connection->afc_recv[afi][safi])
+					json_object_string_add(json_peer, "state",
+							       lookup_msg(bgp_status_msg,
+									  peer->connection->status,
+									  NULL));
 				else if (CHECK_FLAG(
 						 peer->sflags,
 						 PEER_STATUS_PREFIX_OVERFLOW))
@@ -13765,14 +13761,11 @@ static int bgp_show_summary(struct vty *vty, struct bgp *bgp, int afi, int safi,
 						    BGP_UPTIME_LEN, 0, NULL));
 
 				if (peer_established(peer->connection)) {
-					if (peer->afc_recv[afi][safi]) {
-						if (CHECK_FLAG(
-							    bgp->flags,
-							    BGP_FLAG_EBGP_REQUIRES_POLICY)
-						    && !bgp_inbound_policy_exists(
-							    peer, filter))
-							vty_out(vty, " %12s",
-								"(Policy)");
+					if (peer->connection->afc_recv[afi][safi]) {
+						if (CHECK_FLAG(bgp->flags,
+							       BGP_FLAG_EBGP_REQUIRES_POLICY) &&
+						    !bgp_inbound_policy_exists(peer, filter))
+							vty_out(vty, " %12s", "(Policy)");
 						else
 							vty_out(vty,
 								" %12u",
@@ -16263,20 +16256,21 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 			json_multi = json_object_new_object();
 
 			FOREACH_AFI_SAFI (afi, safi) {
-				if (p->connection->afc_adv[afi][safi] || p->afc_recv[afi][safi]) {
+				if (p->connection->afc_adv[afi][safi] ||
+				    p->connection->afc_recv[afi][safi]) {
 					json_object *json_exten = NULL;
 					json_exten = json_object_new_object();
 
 					if (p->connection->afc_adv[afi][safi] &&
-					    p->afc_recv[afi][safi])
+					    p->connection->afc_recv[afi][safi])
 						json_object_boolean_true_add(json_exten,
 									     "advertisedAndReceived");
 					else if (p->connection->afc_adv[afi][safi])
 						json_object_boolean_true_add(json_exten,
 									     "advertised");
-					else if (p->afc_recv[afi][safi])
-						json_object_boolean_true_add(
-							json_exten, "received");
+					else if (p->connection->afc_recv[afi][safi])
+						json_object_boolean_true_add(json_exten,
+									     "received");
 
 					json_object_object_add(
 						json_multi,
@@ -16638,12 +16632,13 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 
 			/* Multiprotocol Extensions */
 			FOREACH_AFI_SAFI (afi, safi)
-				if (p->connection->afc_adv[afi][safi] || p->afc_recv[afi][safi]) {
+				if (p->connection->afc_adv[afi][safi] ||
+				    p->connection->afc_recv[afi][safi]) {
 					vty_out(vty, "    Address Family %s:",
 						get_afi_safi_str(afi, safi, false));
 					if (p->connection->afc_adv[afi][safi])
 						vty_out(vty, " advertised");
-					if (p->afc_recv[afi][safi])
+					if (p->connection->afc_recv[afi][safi])
 						vty_out(vty, " %sreceived",
 							p->connection->afc_adv[afi][safi] ? "and "
 											  : "");

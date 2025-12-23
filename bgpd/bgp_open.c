@@ -336,7 +336,7 @@ static int bgp_capability_mp(struct peer *peer, struct peer_connection *connecti
 		return -1;
 
 	/* Now safi remapped, and afi/safi are valid array indices */
-	peer->afc_recv[afi][safi] = 1;
+	connection->afc_recv[afi][safi] = 1;
 
 	if (peer->afc[afi][safi])
 		connection->afc_nego[afi][safi] = 1;

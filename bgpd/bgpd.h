@@ -1508,6 +1508,7 @@ struct peer_connection {
 	/* Address family negotiated for this connection */
 	uint8_t afc_nego[AFI_MAX][SAFI_MAX];
 	uint8_t afc_adv[AFI_MAX][SAFI_MAX];
+	uint8_t afc_recv[AFI_MAX][SAFI_MAX];
 };
 
 /* Declare the FIFO list implementation */
@@ -1627,7 +1628,6 @@ struct peer {
 
 	/* Peer address family configuration. */
 	uint8_t afc[AFI_MAX][SAFI_MAX];
-	uint8_t afc_recv[AFI_MAX][SAFI_MAX];
 
 	/* Capability flags (reset in bgp_stop) */
 	uint64_t cap;

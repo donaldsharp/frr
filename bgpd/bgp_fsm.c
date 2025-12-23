@@ -262,7 +262,7 @@ static struct peer *peer_xfer_conn(struct peer *from_peer)
 		peer->af_cap[afi][safi] = from_peer->af_cap[afi][safi];
 		keeper->afc_nego[afi][safi] = going_away->afc_nego[afi][safi];
 		keeper->afc_adv[afi][safi] = going_away->afc_adv[afi][safi];
-		peer->afc_recv[afi][safi] = from_peer->afc_recv[afi][safi];
+		keeper->afc_recv[afi][safi] = going_away->afc_recv[afi][safi];
 		peer->orf_plist[afi][safi] = from_peer->orf_plist[afi][safi];
 		peer->llgr[afi][safi] = from_peer->llgr[afi][safi];
 		peer->addpath_paths_limit[afi][safi] =
@@ -2111,7 +2111,7 @@ enum bgp_fsm_state_progress bgp_stop(struct peer_connection *connection)
 		/* Reset all negotiated variables */
 		connection->afc_nego[afi][safi] = 0;
 		connection->afc_adv[afi][safi] = 0;
-		peer->afc_recv[afi][safi] = 0;
+		connection->afc_recv[afi][safi] = 0;
 
 		/* peer address family capability flags*/
 		peer->af_cap[afi][safi] = 0;
