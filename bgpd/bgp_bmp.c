@@ -1065,7 +1065,7 @@ static void bmp_eor(struct bmp *bmp, afi_t afi, safi_t safi, uint8_t flags, uint
 	bgp_packet_set_size(s);
 
 	for (ALL_LIST_ELEMENTS_RO(bgp->peer, node, peer)) {
-		if (!peer->afc_nego[afi][safi])
+		if (!peer->connection->afc_nego[afi][safi])
 			continue;
 
 		uint64_t peer_distinguisher = 0;

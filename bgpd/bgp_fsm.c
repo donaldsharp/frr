@@ -260,7 +260,7 @@ static struct peer *peer_xfer_conn(struct peer *from_peer)
 	FOREACH_AFI_SAFI (afi, safi) {
 		peer->af_sflags[afi][safi] = from_peer->af_sflags[afi][safi];
 		peer->af_cap[afi][safi] = from_peer->af_cap[afi][safi];
-		peer->afc_nego[afi][safi] = from_peer->afc_nego[afi][safi];
+		keeper->afc_nego[afi][safi] = going_away->afc_nego[afi][safi];
 		peer->afc_adv[afi][safi] = from_peer->afc_adv[afi][safi];
 		peer->afc_recv[afi][safi] = from_peer->afc_recv[afi][safi];
 		peer->orf_plist[afi][safi] = from_peer->orf_plist[afi][safi];
@@ -1734,7 +1734,7 @@ static void bgp_gr_process_peer_up_include(struct bgp *bgp, struct peer *peer)
 	 * we need to check if path-selection can proceed.
 	 */
 	FOREACH_AFI_SAFI_NSF (afi, safi) {
-		if (!peer->afc_nego[afi][safi]) {
+		if (!peer->connection->afc_nego[afi][safi]) {
 			UNSET_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_GR_WAIT_EOR);
 			if (bgp_gr_supported_for_afi_safi(afi, safi))
 				bgp_gr_check_path_select(bgp, afi, safi);
@@ -2108,7 +2108,7 @@ enum bgp_fsm_state_progress bgp_stop(struct peer_connection *connection)
 
 	FOREACH_AFI_SAFI (afi, safi) {
 		/* Reset all negotiated variables */
-		peer->afc_nego[afi][safi] = 0;
+		connection->afc_nego[afi][safi] = 0;
 		peer->afc_adv[afi][safi] = 0;
 		peer->afc_recv[afi][safi] = 0;
 
@@ -2670,7 +2670,8 @@ static void bgp_peer_process_gr_cap_clear_stale(struct peer *peer)
 
 	UNSET_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT);
 	FOREACH_AFI_SAFI_NSF (afi, safi) {
-		if (peer->afc_nego[afi][safi] && CHECK_FLAG(peer->cap, PEER_CAP_RESTART_ADV) &&
+		if (peer->connection->afc_nego[afi][safi] &&
+		    CHECK_FLAG(peer->cap, PEER_CAP_RESTART_ADV) &&
 		    CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV)) {
 			/*
 			 * If an (afi,safi) is negotiated with the

@@ -339,7 +339,7 @@ static int bgp_capability_mp(struct peer *peer, struct peer_connection *connecti
 	peer->afc_recv[afi][safi] = 1;
 
 	if (peer->afc[afi][safi])
-		peer->afc_nego[afi][safi] = 1;
+		connection->afc_nego[afi][safi] = 1;
 	else
 		return -1;
 
@@ -1240,13 +1240,14 @@ static int bgp_capability_parse(struct peer *peer, struct peer_connection *conne
 	return 0;
 }
 
-static bool strict_capability_same(struct peer *peer)
+static bool strict_capability_same(struct peer_connection *connection)
 {
+	struct peer *peer = connection->peer;
 	int i, j;
 
 	for (i = AFI_IP; i < AFI_MAX; i++)
 		for (j = SAFI_UNICAST; j < SAFI_MAX; j++)
-			if (peer->afc[i][j] != peer->afc_nego[i][j])
+			if (peer->afc[i][j] != connection->afc_nego[i][j])
 				return false;
 	return true;
 }
@@ -1473,7 +1474,7 @@ int bgp_open_option_parse(struct peer *peer, struct peer_connection *connection,
 		/* If Unsupported Capability exists or local capability does
 		 * not negotiated with remote peer
 		 */
-		if (error != error_data || !strict_capability_same(peer)) {
+		if (error != error_data || !strict_capability_same(connection)) {
 			bgp_notify_send_with_data(connection, BGP_NOTIFY_OPEN_ERR,
 						  BGP_NOTIFY_OPEN_UNSUP_CAPBL, error_data,
 						  error - error_data);
@@ -1496,19 +1497,19 @@ int bgp_open_option_parse(struct peer *peer, struct peer_connection *connection,
 	   error. */
 	if (*mp_capability
 	    && !CHECK_FLAG(peer->flags, PEER_FLAG_OVERRIDE_CAPABILITY)) {
-		if (!peer->afc_nego[AFI_IP][SAFI_UNICAST]
-		    && !peer->afc_nego[AFI_IP][SAFI_MULTICAST]
-		    && !peer->afc_nego[AFI_IP][SAFI_LABELED_UNICAST]
-		    && !peer->afc_nego[AFI_IP][SAFI_MPLS_VPN]
-		    && !peer->afc_nego[AFI_IP][SAFI_ENCAP]
-		    && !peer->afc_nego[AFI_IP][SAFI_FLOWSPEC]
-		    && !peer->afc_nego[AFI_IP6][SAFI_UNICAST]
-		    && !peer->afc_nego[AFI_IP6][SAFI_MULTICAST]
-		    && !peer->afc_nego[AFI_IP6][SAFI_LABELED_UNICAST]
-		    && !peer->afc_nego[AFI_IP6][SAFI_MPLS_VPN]
-		    && !peer->afc_nego[AFI_IP6][SAFI_ENCAP]
-		    && !peer->afc_nego[AFI_IP6][SAFI_FLOWSPEC]
-		    && !peer->afc_nego[AFI_L2VPN][SAFI_EVPN]) {
+		if (!connection->afc_nego[AFI_IP][SAFI_UNICAST] &&
+		    !connection->afc_nego[AFI_IP][SAFI_MULTICAST] &&
+		    !connection->afc_nego[AFI_IP][SAFI_LABELED_UNICAST] &&
+		    !connection->afc_nego[AFI_IP][SAFI_MPLS_VPN] &&
+		    !connection->afc_nego[AFI_IP][SAFI_ENCAP] &&
+		    !connection->afc_nego[AFI_IP][SAFI_FLOWSPEC] &&
+		    !connection->afc_nego[AFI_IP6][SAFI_UNICAST] &&
+		    !connection->afc_nego[AFI_IP6][SAFI_MULTICAST] &&
+		    !connection->afc_nego[AFI_IP6][SAFI_LABELED_UNICAST] &&
+		    !connection->afc_nego[AFI_IP6][SAFI_MPLS_VPN] &&
+		    !connection->afc_nego[AFI_IP6][SAFI_ENCAP] &&
+		    !connection->afc_nego[AFI_IP6][SAFI_FLOWSPEC] &&
+		    !connection->afc_nego[AFI_L2VPN][SAFI_EVPN]) {
 			flog_err(EC_BGP_PKT_OPEN,
 				 "%s [Error] Configured AFI/SAFIs do not overlap with received MP capabilities",
 				 peer->host);

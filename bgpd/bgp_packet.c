@@ -284,9 +284,8 @@ static void bgp_update_explicit_eors(struct peer *peer)
 		zlog_debug("Peer %s: Checking explicit EORs", peer->host);
 
 	FOREACH_AFI_SAFI (afi, safi) {
-		if (peer->afc_nego[afi][safi]
-		    && !CHECK_FLAG(peer->af_sflags[afi][safi],
-				   PEER_STATUS_EOR_RECEIVED)) {
+		if (peer->connection->afc_nego[afi][safi] &&
+		    !CHECK_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_EOR_RECEIVED)) {
 			if (bgp_debug_neighbor_events(peer))
 				zlog_debug(
 					"   afi %d safi %d didn't receive EOR",
@@ -401,11 +400,10 @@ static void bgp_write_proceed_actions(struct peer *peer)
 
 		/* No packets to send, see if EOR is pending */
 		if (CHECK_FLAG(peer->cap, PEER_CAP_RESTART_RCV)) {
-			if (!subgrp->t_coalesce && peer->afc_nego[afi][safi]
-			    && peer->synctime
-			    && !CHECK_FLAG(peer->af_sflags[afi][safi],
-					   PEER_STATUS_EOR_SEND)
-			    && safi != SAFI_MPLS_VPN) {
+			if (!subgrp->t_coalesce && connection->afc_nego[afi][safi] &&
+			    peer->synctime &&
+			    !CHECK_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_EOR_SEND) &&
+			    safi != SAFI_MPLS_VPN) {
 				BGP_TIMER_ON(connection->t_generate_updgrp_packets,
 					     bgp_generate_updgrp_packets, 0);
 				return;
@@ -576,12 +574,12 @@ void bgp_generate_updgrp_packets(struct event *event)
 				 *   general, and thus the practice is
 				 *   recommended.
 				 */
-				if (!(PAF_SUBGRP(paf))->t_coalesce && peer->afc_nego[afi][safi] &&
-				    peer->synctime &&
+				if (!(PAF_SUBGRP(paf))->t_coalesce &&
+				    connection->afc_nego[afi][safi] && peer->synctime &&
 				    !CHECK_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_EOR_SEND) &&
 				    advertise_list_is_empty(PAF_SUBGRP(paf))) {
 					/* If EOR is disabled, the message is
-					 * not sent.
+				 * not sent.
 					 */
 					if (!BGP_SEND_EOR(peer->bgp, afi, safi))
 						continue;
@@ -2142,33 +2140,26 @@ static int bgp_open_receive(struct peer_connection *connection,
 	 */
 	if (!mp_capability
 	    || CHECK_FLAG(peer->flags, PEER_FLAG_OVERRIDE_CAPABILITY)) {
-		peer->afc_nego[AFI_IP][SAFI_UNICAST] =
-			peer->afc[AFI_IP][SAFI_UNICAST];
-		peer->afc_nego[AFI_IP][SAFI_MULTICAST] =
-			peer->afc[AFI_IP][SAFI_MULTICAST];
-		peer->afc_nego[AFI_IP][SAFI_LABELED_UNICAST] =
+		connection->afc_nego[AFI_IP][SAFI_UNICAST] = peer->afc[AFI_IP][SAFI_UNICAST];
+		connection->afc_nego[AFI_IP][SAFI_MULTICAST] = peer->afc[AFI_IP][SAFI_MULTICAST];
+		connection->afc_nego[AFI_IP][SAFI_LABELED_UNICAST] =
 			peer->afc[AFI_IP][SAFI_LABELED_UNICAST];
-		peer->afc_nego[AFI_IP][SAFI_FLOWSPEC] =
-			peer->afc[AFI_IP][SAFI_FLOWSPEC];
-		peer->afc_nego[AFI_IP6][SAFI_UNICAST] =
-			peer->afc[AFI_IP6][SAFI_UNICAST];
-		peer->afc_nego[AFI_IP6][SAFI_MULTICAST] =
-			peer->afc[AFI_IP6][SAFI_MULTICAST];
-		peer->afc_nego[AFI_IP6][SAFI_LABELED_UNICAST] =
+		connection->afc_nego[AFI_IP][SAFI_FLOWSPEC] = peer->afc[AFI_IP][SAFI_FLOWSPEC];
+		connection->afc_nego[AFI_IP6][SAFI_UNICAST] = peer->afc[AFI_IP6][SAFI_UNICAST];
+		connection->afc_nego[AFI_IP6][SAFI_MULTICAST] = peer->afc[AFI_IP6][SAFI_MULTICAST];
+		connection->afc_nego[AFI_IP6][SAFI_LABELED_UNICAST] =
 			peer->afc[AFI_IP6][SAFI_LABELED_UNICAST];
-		peer->afc_nego[AFI_L2VPN][SAFI_EVPN] =
-			peer->afc[AFI_L2VPN][SAFI_EVPN];
-		peer->afc_nego[AFI_IP6][SAFI_FLOWSPEC] =
-			peer->afc[AFI_IP6][SAFI_FLOWSPEC];
+		connection->afc_nego[AFI_L2VPN][SAFI_EVPN] = peer->afc[AFI_L2VPN][SAFI_EVPN];
+		connection->afc_nego[AFI_IP6][SAFI_FLOWSPEC] = peer->afc[AFI_IP6][SAFI_FLOWSPEC];
 	}
 
 	/* Verify valid local address present based on negotiated
 	 * address-families. */
-	if (peer->afc_nego[AFI_IP][SAFI_UNICAST]
-	    || peer->afc_nego[AFI_IP][SAFI_LABELED_UNICAST]
-	    || peer->afc_nego[AFI_IP][SAFI_MULTICAST]
-	    || peer->afc_nego[AFI_IP][SAFI_MPLS_VPN]
-	    || peer->afc_nego[AFI_IP][SAFI_ENCAP]) {
+	if (connection->afc_nego[AFI_IP][SAFI_UNICAST] ||
+	    connection->afc_nego[AFI_IP][SAFI_LABELED_UNICAST] ||
+	    connection->afc_nego[AFI_IP][SAFI_MULTICAST] ||
+	    connection->afc_nego[AFI_IP][SAFI_MPLS_VPN] ||
+	    connection->afc_nego[AFI_IP][SAFI_ENCAP]) {
 		if (peer->nexthop.v4.s_addr == INADDR_ANY) {
 #if defined(HAVE_CUMULUS)
 			zlog_warn("%s: No local IPv4 addr, BGP routing may not work",
@@ -2176,11 +2167,11 @@ static int bgp_open_receive(struct peer_connection *connection,
 #endif
 		}
 	}
-	if (peer->afc_nego[AFI_IP6][SAFI_UNICAST]
-	    || peer->afc_nego[AFI_IP6][SAFI_LABELED_UNICAST]
-	    || peer->afc_nego[AFI_IP6][SAFI_MULTICAST]
-	    || peer->afc_nego[AFI_IP6][SAFI_MPLS_VPN]
-	    || peer->afc_nego[AFI_IP6][SAFI_ENCAP]) {
+	if (connection->afc_nego[AFI_IP6][SAFI_UNICAST] ||
+	    connection->afc_nego[AFI_IP6][SAFI_LABELED_UNICAST] ||
+	    connection->afc_nego[AFI_IP6][SAFI_MULTICAST] ||
+	    connection->afc_nego[AFI_IP6][SAFI_MPLS_VPN] ||
+	    connection->afc_nego[AFI_IP6][SAFI_ENCAP]) {
 		if (IN6_IS_ADDR_UNSPECIFIED(&peer->nexthop.v6_global) &&
 		    !bm->v6_with_v4_nexthops) {
 			flog_err(EC_BGP_SND_FAIL,
@@ -3921,13 +3912,12 @@ static int bgp_capability_msg_parse(struct peer *peer, uint8_t *pnt,
 			if (action == CAPABILITY_ACTION_SET) {
 				peer->afc_recv[afi][safi] = 1;
 				if (peer->afc[afi][safi]) {
-					peer->afc_nego[afi][safi] = 1;
-					bgp_announce_route(peer, afi, safi,
-							   false);
+					peer->connection->afc_nego[afi][safi] = 1;
+					bgp_announce_route(peer, afi, safi, false);
 				}
 			} else {
 				peer->afc_recv[afi][safi] = 0;
-				peer->afc_nego[afi][safi] = 0;
+				peer->connection->afc_nego[afi][safi] = 0;
 
 				if (peer_active_nego(peer))
 					bgp_clear_route(peer, afi, safi);

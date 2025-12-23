@@ -200,7 +200,7 @@ static void bgp_conditional_adv_timer(struct event *t)
 			continue;
 
 		FOREACH_AFI_SAFI (afi, safi) {
-			if (!peer->afc_nego[afi][safi])
+			if (!peer->connection->afc_nego[afi][safi])
 				continue;
 
 			/* labeled-unicast routes are installed in the unicast

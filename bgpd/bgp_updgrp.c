@@ -141,7 +141,7 @@ static void conf_copy(struct peer *dst, struct peer *src, afi_t afi,
 	dst->host = XSTRDUP(MTYPE_BGP_PEER_HOST, src->host);
 	dst->cap = src->cap;
 	dst->af_cap[afi][safi] = src->af_cap[afi][safi];
-	dst->afc_nego[afi][safi] = src->afc_nego[afi][safi];
+	dst->connection->afc_nego[afi][safi] = src->connection->afc_nego[afi][safi];
 	dst->orf_plist[afi][safi] = src->orf_plist[afi][safi];
 	dst->addpath_type[afi][safi] = src->addpath_type[afi][safi];
 	dst->addpath_best_selected[afi][safi] =
@@ -2051,7 +2051,7 @@ void update_group_adjust_peer(struct peer_af *paf)
 		return;
 	}
 
-	if (!peer->afc_nego[paf->afi][paf->safi]) {
+	if (!peer->connection->afc_nego[paf->afi][paf->safi]) {
 		return;
 	}
 

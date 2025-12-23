@@ -6667,7 +6667,7 @@ static void bgp_announce_route_timer_expired(struct event *t)
 	if (!peer_established(peer->connection))
 		return;
 
-	if (!peer->afc_nego[paf->afi][paf->safi])
+	if (!peer->connection->afc_nego[paf->afi][paf->safi])
 		return;
 
 	peer_af_announce_route(paf, 1);

@@ -1504,6 +1504,9 @@ struct peer_connection {
 	 * last_sendq_warn is only for ratelimiting log warning messages.
 	 */
 	time_t last_sendq_warn;
+
+	/* Address family negotiated for this connection */
+	uint8_t afc_nego[AFI_MAX][SAFI_MAX];
 };
 
 /* Declare the FIFO list implementation */
@@ -1623,7 +1626,6 @@ struct peer {
 
 	/* Peer address family configuration. */
 	uint8_t afc[AFI_MAX][SAFI_MAX];
-	uint8_t afc_nego[AFI_MAX][SAFI_MAX];
 	uint8_t afc_adv[AFI_MAX][SAFI_MAX];
 	uint8_t afc_recv[AFI_MAX][SAFI_MAX];
 
@@ -3009,13 +3011,13 @@ static inline int peer_group_active(struct peer *peer)
 /* If peer is negotiated at least one address family return 1. */
 static inline int peer_afi_active_nego(const struct peer *peer, afi_t afi)
 {
-	if (peer->afc_nego[afi][SAFI_UNICAST]
-	    || peer->afc_nego[afi][SAFI_MULTICAST]
-	    || peer->afc_nego[afi][SAFI_LABELED_UNICAST]
-	    || peer->afc_nego[afi][SAFI_MPLS_VPN]
-	    || peer->afc_nego[afi][SAFI_ENCAP]
-	    || peer->afc_nego[afi][SAFI_FLOWSPEC]
-	    || peer->afc_nego[afi][SAFI_EVPN])
+	if (peer->connection->afc_nego[afi][SAFI_UNICAST] ||
+	    peer->connection->afc_nego[afi][SAFI_MULTICAST] ||
+	    peer->connection->afc_nego[afi][SAFI_LABELED_UNICAST] ||
+	    peer->connection->afc_nego[afi][SAFI_MPLS_VPN] ||
+	    peer->connection->afc_nego[afi][SAFI_ENCAP] ||
+	    peer->connection->afc_nego[afi][SAFI_FLOWSPEC] ||
+	    peer->connection->afc_nego[afi][SAFI_EVPN])
 		return 1;
 	return 0;
 }

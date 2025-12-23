@@ -2596,13 +2596,11 @@ static int peer_activate_af(struct peer *peer, afi_t afi, safi_t safi)
 		if (peer_established(peer->connection)) {
 			if (CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV)) {
 				peer->afc_adv[afi][safi] = 1;
-				bgp_capability_send(peer, afi, safi,
-						    CAPABILITY_CODE_MP,
+				bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_MP,
 						    CAPABILITY_ACTION_SET);
 				if (peer->afc_recv[afi][safi]) {
-					peer->afc_nego[afi][safi] = 1;
-					bgp_announce_route(peer, afi, safi,
-							   false);
+					peer->connection->afc_nego[afi][safi] = 1;
+					bgp_announce_route(peer, afi, safi, false);
 				}
 			} else {
 				peer_notify_config_change(peer->connection);
@@ -2719,7 +2717,7 @@ static bool non_peergroup_deactivate_af(struct peer *peer, afi_t afi,
 
 		if (CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV)) {
 			peer->afc_adv[afi][safi] = 0;
-			peer->afc_nego[afi][safi] = 0;
+			peer->connection->afc_nego[afi][safi] = 0;
 
 			if (peer_active_nego(peer)) {
 				bgp_capability_send(peer, afi, safi,
@@ -4976,19 +4974,19 @@ enum bgp_peer_active peer_active(struct peer_connection *connection)
 /* If peer is negotiated at least one address family return 1. */
 bool peer_active_nego(struct peer *peer)
 {
-	if (peer->afc_nego[AFI_IP][SAFI_UNICAST]
-	    || peer->afc_nego[AFI_IP][SAFI_MULTICAST]
-	    || peer->afc_nego[AFI_IP][SAFI_LABELED_UNICAST]
-	    || peer->afc_nego[AFI_IP][SAFI_MPLS_VPN]
-	    || peer->afc_nego[AFI_IP][SAFI_ENCAP]
-	    || peer->afc_nego[AFI_IP][SAFI_FLOWSPEC]
-	    || peer->afc_nego[AFI_IP6][SAFI_UNICAST]
-	    || peer->afc_nego[AFI_IP6][SAFI_MULTICAST]
-	    || peer->afc_nego[AFI_IP6][SAFI_LABELED_UNICAST]
-	    || peer->afc_nego[AFI_IP6][SAFI_MPLS_VPN]
-	    || peer->afc_nego[AFI_IP6][SAFI_ENCAP]
-	    || peer->afc_nego[AFI_IP6][SAFI_FLOWSPEC]
-	    || peer->afc_nego[AFI_L2VPN][SAFI_EVPN])
+	if (peer->connection->afc_nego[AFI_IP][SAFI_UNICAST] ||
+	    peer->connection->afc_nego[AFI_IP][SAFI_MULTICAST] ||
+	    peer->connection->afc_nego[AFI_IP][SAFI_LABELED_UNICAST] ||
+	    peer->connection->afc_nego[AFI_IP][SAFI_MPLS_VPN] ||
+	    peer->connection->afc_nego[AFI_IP][SAFI_ENCAP] ||
+	    peer->connection->afc_nego[AFI_IP][SAFI_FLOWSPEC] ||
+	    peer->connection->afc_nego[AFI_IP6][SAFI_UNICAST] ||
+	    peer->connection->afc_nego[AFI_IP6][SAFI_MULTICAST] ||
+	    peer->connection->afc_nego[AFI_IP6][SAFI_LABELED_UNICAST] ||
+	    peer->connection->afc_nego[AFI_IP6][SAFI_MPLS_VPN] ||
+	    peer->connection->afc_nego[AFI_IP6][SAFI_ENCAP] ||
+	    peer->connection->afc_nego[AFI_IP6][SAFI_FLOWSPEC] ||
+	    peer->connection->afc_nego[AFI_L2VPN][SAFI_EVPN])
 		return true;
 	return false;
 }
@@ -6280,8 +6278,7 @@ int peer_default_originate_set(struct peer *peer, afi_t afi, safi_t safi,
 	/* Check if handling a regular peer. */
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		/* Update peer route announcements. */
-		if (peer_established(peer->connection) &&
-		    peer->afc_nego[afi][safi]) {
+		if (peer_established(peer->connection) && peer->connection->afc_nego[afi][safi]) {
 			update_group_adjust_peer(peer_af_find(peer, afi, safi));
 			bgp_default_originate(peer, afi, safi, false);
 			bgp_announce_route(peer, afi, safi, false);
@@ -6327,7 +6324,7 @@ int peer_default_originate_set(struct peer *peer, afi_t afi, safi_t safi,
 
 		/* Update peer route announcements. */
 		if (peer_established(member->connection) &&
-		    member->afc_nego[afi][safi]) {
+		    member->connection->afc_nego[afi][safi]) {
 			update_group_adjust_peer(
 				peer_af_find(member, afi, safi));
 			bgp_default_originate(member, afi, safi, false);
@@ -6372,8 +6369,7 @@ int peer_default_originate_unset(struct peer *peer, afi_t afi, safi_t safi)
 	/* Check if handling a regular peer. */
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		/* Update peer route announcements. */
-		if (peer_established(peer->connection) &&
-		    peer->afc_nego[afi][safi]) {
+		if (peer_established(peer->connection) && peer->connection->afc_nego[afi][safi]) {
 			update_group_adjust_peer(peer_af_find(peer, afi, safi));
 			bgp_default_originate(peer, afi, safi, true);
 			bgp_announce_route(peer, afi, safi, false);
@@ -6412,7 +6408,7 @@ int peer_default_originate_unset(struct peer *peer, afi_t afi, safi_t safi)
 
 		/* Update peer route announcements. */
 		if (peer_established(member->connection) &&
-		    member->afc_nego[afi][safi]) {
+		    member->connection->afc_nego[afi][safi]) {
 			update_group_adjust_peer(peer_af_find(member, afi, safi));
 			bgp_default_originate(member, afi, safi, true);
 			bgp_announce_route(member, afi, safi, false);
