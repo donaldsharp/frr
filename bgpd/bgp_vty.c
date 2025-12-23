@@ -7894,10 +7894,10 @@ static int peer_default_originate_set_vty(struct vty *vty, const char *peer_str,
 	if (set) {
 		if (rmap)
 			route_map = route_map_lookup_warn_noexist(vty, rmap);
-		ret = peer_default_originate_set(peer, afi, safi,
-						 rmap, route_map);
+		ret = peer_default_originate_set(peer, peer->connection, afi, safi, rmap,
+						 route_map);
 	} else
-		ret = peer_default_originate_unset(peer, afi, safi);
+		ret = peer_default_originate_unset(peer, peer->connection, afi, safi);
 
 	return bgp_vty_return(vty, ret);
 }

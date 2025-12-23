@@ -6207,8 +6207,8 @@ void peer_update_source_unset(struct peer *peer)
 	}
 }
 
-int peer_default_originate_set(struct peer *peer, afi_t afi, safi_t safi,
-			       const char *rmap, struct route_map *route_map)
+int peer_default_originate_set(struct peer *peer, struct peer_connection *connection, afi_t afi,
+			       safi_t safi, const char *rmap, struct route_map *route_map)
 {
 	struct peer *member;
 	struct listnode *node, *nnode;
@@ -6279,7 +6279,7 @@ int peer_default_originate_set(struct peer *peer, afi_t afi, safi_t safi,
 	/* Check if handling a regular peer. */
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		/* Update peer route announcements. */
-		if (peer_established(peer->connection) && peer->connection->afc_nego[afi][safi]) {
+		if (peer_established(connection) && connection->afc_nego[afi][safi]) {
 			update_group_adjust_peer(peer_af_find(peer, afi, safi));
 			bgp_default_originate(peer, afi, safi, false);
 			bgp_announce_route(peer, afi, safi, false);
@@ -6336,7 +6336,8 @@ int peer_default_originate_set(struct peer *peer, afi_t afi, safi_t safi,
 	return 0;
 }
 
-int peer_default_originate_unset(struct peer *peer, afi_t afi, safi_t safi)
+int peer_default_originate_unset(struct peer *peer, struct peer_connection *connection, afi_t afi,
+				 safi_t safi)
 {
 	struct peer *member;
 	struct listnode *node, *nnode;
@@ -6370,7 +6371,7 @@ int peer_default_originate_unset(struct peer *peer, afi_t afi, safi_t safi)
 	/* Check if handling a regular peer. */
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		/* Update peer route announcements. */
-		if (peer_established(peer->connection) && peer->connection->afc_nego[afi][safi]) {
+		if (peer_established(connection) && connection->afc_nego[afi][safi]) {
 			update_group_adjust_peer(peer_af_find(peer, afi, safi));
 			bgp_default_originate(peer, afi, safi, true);
 			bgp_announce_route(peer, afi, safi, false);

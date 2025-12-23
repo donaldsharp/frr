@@ -2767,10 +2767,11 @@ extern void peer_update_source_addr_set(struct peer *peer,
 					const union sockunion *su);
 extern void peer_update_source_unset(struct peer *peer);
 
-extern int peer_default_originate_set(struct peer *peer, afi_t afi, safi_t safi,
-				      const char *rmap,
+extern int peer_default_originate_set(struct peer *peer, struct peer_connection *connection,
+				      afi_t afi, safi_t safi, const char *rmap,
 				      struct route_map *route_map);
-extern int peer_default_originate_unset(struct peer *peer, afi_t afi, safi_t safi);
+extern int peer_default_originate_unset(struct peer *peer, struct peer_connection *connection,
+					afi_t afi, safi_t safi);
 extern void bgp_tcp_keepalive_set(struct bgp *bgp, uint16_t idle,
 				  uint16_t interval, uint16_t probes);
 extern void bgp_tcp_keepalive_unset(struct bgp *bgp);
