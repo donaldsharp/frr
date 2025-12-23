@@ -359,7 +359,7 @@ static void bgp_process_pending_refresh(struct peer *peer, afi_t afi,
  *
  * @param peer to check for rescheduling
  */
-static void bgp_write_proceed_actions(struct peer *peer)
+static void bgp_write_proceed_actions(struct peer_connection *connection)
 {
 	afi_t afi;
 	safi_t safi;
@@ -367,7 +367,7 @@ static void bgp_write_proceed_actions(struct peer *peer)
 	struct bpacket *next_pkt;
 	struct update_subgroup *subgrp;
 	enum bgp_af_index index;
-	struct peer_connection *connection = peer->connection;
+	struct peer *peer = connection->peer;
 
 	for (index = BGP_AF_START; index < BGP_AF_MAX; index++) {
 		paf = peer->peer_af_array[index];
@@ -468,7 +468,7 @@ void bgp_generate_updgrp_packets(struct event *event)
 	 * already at the limit.
 	 */
 	if (connection->obuf->count >= bm->outq_limit) {
-		bgp_write_proceed_actions(peer);
+		bgp_write_proceed_actions(connection);
 		UNSET_FLAG(peer->sflags, PEER_STATUS_COND_ADV_PENDING);
 		return;
 	}
@@ -618,7 +618,7 @@ void bgp_generate_updgrp_packets(struct event *event)
 
 	UNSET_FLAG(peer->sflags, PEER_STATUS_COND_ADV_PENDING);
 
-	bgp_write_proceed_actions(peer);
+	bgp_write_proceed_actions(connection);
 }
 
 /*
@@ -4287,5 +4287,5 @@ void bgp_send_delayed_eor(struct bgp *bgp)
 
 	/* EOR message sent in bgp_write_proceed_actions */
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
-		bgp_write_proceed_actions(peer);
+		bgp_write_proceed_actions(peer->connection);
 }
