@@ -2690,8 +2690,8 @@ int peer_activate(struct peer *peer, struct peer_connection *connection, afi_t a
 	return ret;
 }
 
-static bool non_peergroup_deactivate_af(struct peer *peer, afi_t afi,
-					safi_t safi)
+static bool non_peergroup_deactivate_af(struct peer *peer, struct peer_connection *connection,
+					afi_t afi, safi_t safi)
 {
 	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		flog_err(EC_BGP_PEER_GROUP, "%s was called for peer-group %s",
@@ -2713,12 +2713,12 @@ static bool non_peergroup_deactivate_af(struct peer *peer, afi_t afi,
 		return true;
 	}
 
-	if (peer_established(peer->connection)) {
+	if (peer_established(connection)) {
 		peer_set_last_reset(peer, PEER_DOWN_NEIGHBOR_DELETE);
 
 		if (CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV)) {
-			peer->connection->afc_adv[afi][safi] = 0;
-			peer->connection->afc_nego[afi][safi] = 0;
+			connection->afc_adv[afi][safi] = 0;
+			connection->afc_nego[afi][safi] = 0;
 
 			if (peer_active_nego(peer)) {
 				bgp_capability_send(peer, afi, safi,
@@ -2727,10 +2727,10 @@ static bool non_peergroup_deactivate_af(struct peer *peer, afi_t afi,
 				bgp_clear_route(peer, afi, safi);
 				peer->pcount[afi][safi] = 0;
 			} else {
-				peer_notify_config_change(peer->connection);
+				peer_notify_config_change(connection);
 			}
 		} else
-			peer_notify_config_change(peer->connection);
+			peer_notify_config_change(connection);
 	}
 
 	return false;
@@ -2756,11 +2756,11 @@ int peer_deactivate(struct peer *peer, afi_t afi, safi_t safi)
 		group = peer->group;
 
 		for (ALL_LIST_ELEMENTS(group->peer, node, nnode, tmp_peer)) {
-			SET_FLAG(ret, non_peergroup_deactivate_af(tmp_peer, afi,
-								  safi));
+			SET_FLAG(ret, non_peergroup_deactivate_af(tmp_peer, tmp_peer->connection,
+								  afi, safi));
 		}
 	} else {
-		SET_FLAG(ret, non_peergroup_deactivate_af(peer, afi, safi));
+		SET_FLAG(ret, non_peergroup_deactivate_af(peer, peer->connection, afi, safi));
 	}
 
 	bgp = peer->bgp;
