@@ -2657,21 +2657,22 @@ bgp_fsm_delayopen_timer_expire(struct peer_connection *connection)
  * previously announced (afi,safi) or doesn't preserve forwarding for them.
  * The clearing of stale routes applies only to a Helper router.
  */
-static void bgp_peer_process_gr_cap_clear_stale(struct peer *peer)
+static void bgp_peer_process_gr_cap_clear_stale(struct peer_connection *connection)
 {
 	afi_t afi;
 	safi_t safi;
 	int nsf_af_count = 0;
+	struct peer *peer = connection->peer;
 
-	if (peer->connection->t_gr_restart) {
-		event_cancel(&peer->connection->t_gr_restart);
+	if (connection->t_gr_restart) {
+		event_cancel(&connection->t_gr_restart);
 		if (bgp_debug_neighbor_events(peer))
 			zlog_debug("%pBP: graceful restart timer stopped", peer);
 	}
 
 	UNSET_FLAG(peer->sflags, PEER_STATUS_NSF_WAIT);
 	FOREACH_AFI_SAFI_NSF (afi, safi) {
-		if (peer->connection->afc_nego[afi][safi] &&
+		if (connection->afc_nego[afi][safi] &&
 		    CHECK_FLAG(peer->cap, PEER_CAP_RESTART_ADV) &&
 		    CHECK_FLAG(peer->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV)) {
 			/*
@@ -2706,8 +2707,8 @@ static void bgp_peer_process_gr_cap_clear_stale(struct peer *peer)
 		SET_FLAG(peer->sflags, PEER_STATUS_NSF_MODE);
 	else {
 		UNSET_FLAG(peer->sflags, PEER_STATUS_NSF_MODE);
-		if (peer->connection->t_gr_stale) {
-			event_cancel(&peer->connection->t_gr_stale);
+		if (connection->t_gr_stale) {
+			event_cancel(&connection->t_gr_stale);
 			if (bgp_debug_neighbor_events(peer))
 				zlog_debug("%s: graceful restart stalepath timer stopped",
 					   peer->host);
@@ -2805,7 +2806,7 @@ bgp_establish(struct peer_connection *connection)
 		event_cancel(&peer->bfd_config->t_hold_timer);
 
 	/* graceful restart handling */
-	bgp_peer_process_gr_cap_clear_stale(peer);
+	bgp_peer_process_gr_cap_clear_stale(connection);
 
 	/* Reset uptime, turn on keepalives, send current table. */
 	if (!peer->v_holdtime)
