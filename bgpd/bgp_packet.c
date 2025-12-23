@@ -3768,7 +3768,7 @@ static void bgp_dynamic_capability_software_version(uint8_t *pnt, int action,
  * @param size size of the packet
  * @return as in summary
  */
-static int bgp_capability_msg_parse(struct peer *peer, uint8_t *pnt,
+static int bgp_capability_msg_parse(struct peer_connection *connection, uint8_t *pnt,
 				    bgp_size_t length)
 {
 	uint8_t *end;
@@ -3780,6 +3780,7 @@ static int bgp_capability_msg_parse(struct peer *peer, uint8_t *pnt,
 	iana_safi_t pkt_safi;
 	safi_t safi;
 	const char *capability;
+	struct peer *peer = connection->peer;
 
 	end = pnt + length;
 
@@ -3789,7 +3790,7 @@ static int bgp_capability_msg_parse(struct peer *peer, uint8_t *pnt,
 		if (pnt + 3 > end) {
 			flog_err(EC_BGP_CAPABILITY_INVALID_LENGTH, "%pBP: Capability length error",
 				 peer);
-			bgp_notify_send(peer->connection, BGP_NOTIFY_CEASE,
+			bgp_notify_send(connection, BGP_NOTIFY_CEASE,
 					BGP_NOTIFY_SUBCODE_UNSPECIFIC);
 			/*
 			 * If we did not return then
@@ -3805,7 +3806,7 @@ static int bgp_capability_msg_parse(struct peer *peer, uint8_t *pnt,
 		    && action != CAPABILITY_ACTION_UNSET) {
 			flog_err(EC_BGP_CAPABILITY_INVALID_DATA,
 				 "%pBP: Capability Action Value error %d", peer, action);
-			bgp_notify_send(peer->connection, BGP_NOTIFY_CEASE,
+			bgp_notify_send(connection, BGP_NOTIFY_CEASE,
 					BGP_NOTIFY_SUBCODE_UNSPECIFIC);
 			goto done;
 		}
@@ -3818,7 +3819,7 @@ static int bgp_capability_msg_parse(struct peer *peer, uint8_t *pnt,
 		if ((pnt + hdr->length + 3) > end) {
 			flog_err(EC_BGP_CAPABILITY_INVALID_LENGTH, "%pBP: Capability length error",
 				 peer);
-			bgp_notify_send(peer->connection, BGP_NOTIFY_CEASE,
+			bgp_notify_send(connection, BGP_NOTIFY_CEASE,
 					BGP_NOTIFY_SUBCODE_UNSPECIFIC);
 			/*
 			 * If we did not return then
@@ -3853,8 +3854,7 @@ static int bgp_capability_msg_parse(struct peer *peer, uint8_t *pnt,
 				zlog_info("%pBP: %s Capability length error: got %u, expected at least %u",
 					  peer, capability, hdr->length,
 					  (unsigned int)cap_minsizes[hdr->code]);
-				bgp_notify_send(peer->connection,
-						BGP_NOTIFY_OPEN_ERR,
+				bgp_notify_send(connection, BGP_NOTIFY_OPEN_ERR,
 						BGP_NOTIFY_OPEN_MALFORMED_ATTR);
 				goto done;
 			}
@@ -3863,8 +3863,7 @@ static int bgp_capability_msg_parse(struct peer *peer, uint8_t *pnt,
 				zlog_info("%pBP %s Capability length error: got %u, expected a multiple of %u",
 					  peer, capability, hdr->length,
 					  (unsigned int)cap_modsizes[hdr->code]);
-				bgp_notify_send(peer->connection,
-						BGP_NOTIFY_OPEN_ERR,
+				bgp_notify_send(connection, BGP_NOTIFY_OPEN_ERR,
 						BGP_NOTIFY_OPEN_MALFORMED_ATTR);
 				goto done;
 			}
@@ -3915,12 +3914,12 @@ static int bgp_capability_msg_parse(struct peer *peer, uint8_t *pnt,
 			if (action == CAPABILITY_ACTION_SET) {
 				peer->afc_recv[afi][safi] = 1;
 				if (peer->afc[afi][safi]) {
-					peer->connection->afc_nego[afi][safi] = 1;
+					connection->afc_nego[afi][safi] = 1;
 					bgp_announce_route(peer, afi, safi, false);
 				}
 			} else {
 				peer->afc_recv[afi][safi] = 0;
-				peer->connection->afc_nego[afi][safi] = 0;
+				connection->afc_nego[afi][safi] = 0;
 
 				if (peer_active_nego(peer))
 					bgp_clear_route(peer, afi, safi);
@@ -4015,7 +4014,7 @@ int bgp_capability_receive(struct peer_connection *connection,
 	}
 
 	/* Parse packet. */
-	return bgp_capability_msg_parse(peer, pnt, size);
+	return bgp_capability_msg_parse(connection, pnt, size);
 }
 
 /**
