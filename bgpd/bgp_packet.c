@@ -270,10 +270,11 @@ void bgp_update_restarted_peers(struct peer *peer)
  * Should be called only when there is a change in the EOR_RECEIVED status
  * for any afi/safi on a peer.
  */
-static void bgp_update_explicit_eors(struct peer *peer)
+static void bgp_update_explicit_eors(struct peer_connection *connection)
 {
 	afi_t afi;
 	safi_t safi;
+	struct peer *peer = connection->peer;
 
 	if (!bgp_update_delay_active(peer->bgp))
 		return; /* BGP update delay has ended */
@@ -284,7 +285,7 @@ static void bgp_update_explicit_eors(struct peer *peer)
 		zlog_debug("Peer %s: Checking explicit EORs", peer->host);
 
 	FOREACH_AFI_SAFI (afi, safi) {
-		if (peer->connection->afc_nego[afi][safi] &&
+		if (connection->afc_nego[afi][safi] &&
 		    !CHECK_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_EOR_RECEIVED)) {
 			if (bgp_debug_neighbor_events(peer))
 				zlog_debug(
@@ -2256,8 +2257,10 @@ static void bgp_refresh_stalepath_timer_expire(struct event *event)
 	bgp_timer_set(peer->connection);
 }
 
-static void bgp_update_receive_eor(struct bgp *bgp, struct peer *peer, afi_t afi, safi_t safi)
+static void bgp_update_receive_eor(struct bgp *bgp, struct peer_connection *connection, afi_t afi,
+				   safi_t safi)
 {
+	struct peer *peer = connection->peer;
 	struct vrf *vrf = vrf_lookup_by_id(bgp->vrf_id);
 
 	zlog_info("%s: rcvd End-of-RIB for %s from %s in vrf %s", __func__,
@@ -2270,7 +2273,7 @@ static void bgp_update_receive_eor(struct bgp *bgp, struct peer *peer, afi_t afi
 		SET_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_EOR_RECEIVED);
 
 		/* update-delay related processing */
-		bgp_update_explicit_eors(peer);
+		bgp_update_explicit_eors(connection);
 
 		/* graceful-restart related processing */
 		UNSET_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_GR_WAIT_EOR);
@@ -2564,7 +2567,7 @@ static int bgp_update_receive(struct peer_connection *connection,
 		}
 
 		if (afi && peer->afc[afi][safi])
-			bgp_update_receive_eor(bgp, peer, afi, safi);
+			bgp_update_receive_eor(bgp, connection, afi, safi);
 	}
 
 	/* Everything is done.  We unintern temporary structures which
