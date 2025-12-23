@@ -438,7 +438,7 @@ void bgp_generate_updgrp_packets(struct event *event)
 	 * if peer is Established and updates are not on hold (as part of
 	 * update-delay processing).
 	 */
-	if (!peer_established(peer->connection))
+	if (!peer_established(connection))
 		return;
 
 	if ((peer->bgp->main_peers_update_hold)
