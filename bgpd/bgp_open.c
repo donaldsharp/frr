@@ -1778,7 +1778,7 @@ uint16_t bgp_open_capability(struct stream *s, struct peer *peer,
 			bgp_map_afi_safi_int2iana(afi, safi, &pkt_afi,
 						  &pkt_safi);
 
-			peer->afc_adv[afi][safi] = 1;
+			connection->afc_adv[afi][safi] = 1;
 			stream_putc(s, BGP_OPEN_OPT_CAP);
 			ext_opt_params
 				? stream_putw(s, CAPABILITY_CODE_MP_LEN + 2)

@@ -2596,7 +2596,7 @@ static int peer_activate_af(struct peer *peer, struct peer_connection *connectio
 
 		if (peer_established(connection)) {
 			if (CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV)) {
-				peer->afc_adv[afi][safi] = 1;
+				connection->afc_adv[afi][safi] = 1;
 				bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_MP,
 						    CAPABILITY_ACTION_SET);
 				if (peer->afc_recv[afi][safi]) {
@@ -2717,7 +2717,7 @@ static bool non_peergroup_deactivate_af(struct peer *peer, afi_t afi,
 		peer_set_last_reset(peer, PEER_DOWN_NEIGHBOR_DELETE);
 
 		if (CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV)) {
-			peer->afc_adv[afi][safi] = 0;
+			peer->connection->afc_adv[afi][safi] = 0;
 			peer->connection->afc_nego[afi][safi] = 0;
 
 			if (peer_active_nego(peer)) {
@@ -5012,7 +5012,7 @@ bool peer_afc_advertised(struct peer *peer)
 	safi_t safi;
 
 	FOREACH_AFI_SAFI (afi, safi)
-		if (peer->afc_adv[afi][safi])
+		if (peer->connection->afc_adv[afi][safi])
 			return true;
 
 	return false;

@@ -16263,20 +16263,17 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 			json_multi = json_object_new_object();
 
 			FOREACH_AFI_SAFI (afi, safi) {
-				if (p->afc_adv[afi][safi] ||
-				    p->afc_recv[afi][safi]) {
+				if (p->connection->afc_adv[afi][safi] || p->afc_recv[afi][safi]) {
 					json_object *json_exten = NULL;
 					json_exten = json_object_new_object();
 
-					if (p->afc_adv[afi][safi] &&
+					if (p->connection->afc_adv[afi][safi] &&
 					    p->afc_recv[afi][safi])
-						json_object_boolean_true_add(
-							json_exten,
-							"advertisedAndReceived");
-					else if (p->afc_adv[afi][safi])
-						json_object_boolean_true_add(
-							json_exten,
-							"advertised");
+						json_object_boolean_true_add(json_exten,
+									     "advertisedAndReceived");
+					else if (p->connection->afc_adv[afi][safi])
+						json_object_boolean_true_add(json_exten,
+									     "advertised");
 					else if (p->afc_recv[afi][safi])
 						json_object_boolean_true_add(
 							json_exten, "received");
@@ -16641,18 +16638,15 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 
 			/* Multiprotocol Extensions */
 			FOREACH_AFI_SAFI (afi, safi)
-				if (p->afc_adv[afi][safi] ||
-				    p->afc_recv[afi][safi]) {
+				if (p->connection->afc_adv[afi][safi] || p->afc_recv[afi][safi]) {
 					vty_out(vty, "    Address Family %s:",
-						get_afi_safi_str(afi, safi,
-								 false));
-					if (p->afc_adv[afi][safi])
+						get_afi_safi_str(afi, safi, false));
+					if (p->connection->afc_adv[afi][safi])
 						vty_out(vty, " advertised");
 					if (p->afc_recv[afi][safi])
 						vty_out(vty, " %sreceived",
-							p->afc_adv[afi][safi]
-								? "and "
-								: "");
+							p->connection->afc_adv[afi][safi] ? "and "
+											  : "");
 					vty_out(vty, "\n");
 				}
 
