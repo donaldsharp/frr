@@ -1720,11 +1720,12 @@ static void bgp_gr_process_peer_up_ignore(struct bgp *bgp, struct peer *peer)
 	}
 }
 
-static void bgp_gr_process_peer_up_include(struct bgp *bgp, struct peer *peer)
+static void bgp_gr_process_peer_up_include(struct bgp *bgp, struct peer_connection *connection)
 {
 	afi_t afi;
 	safi_t safi;
 	struct graceful_restart_info *gr_info;
+	struct peer *peer = connection->peer;
 
 	/*
 	 * If peer has not restarted and is potentially a valid Helper,
@@ -1734,7 +1735,7 @@ static void bgp_gr_process_peer_up_include(struct bgp *bgp, struct peer *peer)
 	 * we need to check if path-selection can proceed.
 	 */
 	FOREACH_AFI_SAFI_NSF (afi, safi) {
-		if (!peer->connection->afc_nego[afi][safi]) {
+		if (!connection->afc_nego[afi][safi]) {
 			UNSET_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_GR_WAIT_EOR);
 			if (bgp_gr_supported_for_afi_safi(afi, safi))
 				bgp_gr_check_path_select(bgp, afi, safi);
@@ -1791,7 +1792,7 @@ static void bgp_gr_process_peer_status_change(struct peer *peer)
 
 			bgp_gr_process_peer_up_ignore(bgp, peer);
 		} else {
-			bgp_gr_process_peer_up_include(bgp, peer);
+			bgp_gr_process_peer_up_include(bgp, peer->connection);
 		}
 	} else if (peer->connection->ostatus == Established) {
 		/*
