@@ -5931,7 +5931,7 @@ DEFUN (neighbor_activate,
 	if (!peer)
 		return CMD_WARNING_CONFIG_FAILED;
 
-	ret = peer_activate(peer, bgp_node_afi(vty), bgp_node_safi(vty));
+	ret = peer_activate(peer, peer->connection, bgp_node_afi(vty), bgp_node_safi(vty));
 	return bgp_vty_return(vty, ret);
 }
 

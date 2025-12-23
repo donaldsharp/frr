@@ -2730,7 +2730,8 @@ extern void peer_group_notify_unconfig(struct peer_group *group);
 
 extern void bgp_zebra_suppress_fib_pending_config_retry(void);
 
-extern int peer_activate(struct peer *peer, afi_t afi, safi_t safi);
+extern int peer_activate(struct peer *peer, struct peer_connection *connection, afi_t afi,
+			 safi_t safi);
 extern int peer_deactivate(struct peer *peer, afi_t afi, safi_t safi);
 
 extern int peer_group_bind(struct bgp *bgp, union sockunion *su, struct peer *peer,

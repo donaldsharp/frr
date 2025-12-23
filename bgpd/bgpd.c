@@ -2558,7 +2558,8 @@ static void peer_group2peer_config_copy_af(struct peer_group *group,
 	}
 }
 
-static int peer_activate_af(struct peer *peer, afi_t afi, safi_t safi)
+static int peer_activate_af(struct peer *peer, struct peer_connection *connection, afi_t afi,
+			    safi_t safi)
 {
 	enum bgp_peer_active active;
 	struct peer *other;
@@ -2582,31 +2583,31 @@ static int peer_activate_af(struct peer *peer, afi_t afi, safi_t safi)
 	if (peer_af_create(peer, afi, safi) == NULL)
 		return 1;
 
-	active = peer_active(peer->connection);
+	active = peer_active(connection);
 	peer->afc[afi][safi] = 1;
 
 	if (peer->group)
 		peer_group2peer_config_copy_af(peer->group, peer, afi, safi);
 
-	if (active != BGP_PEER_ACTIVE && peer_active(peer->connection) == BGP_PEER_ACTIVE) {
-		bgp_timer_set(peer->connection);
+	if (active != BGP_PEER_ACTIVE && peer_active(connection) == BGP_PEER_ACTIVE) {
+		bgp_timer_set(connection);
 	} else {
 		peer_set_last_reset(peer, PEER_DOWN_AF_ACTIVATE);
 
-		if (peer_established(peer->connection)) {
+		if (peer_established(connection)) {
 			if (CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV)) {
 				peer->afc_adv[afi][safi] = 1;
 				bgp_capability_send(peer, afi, safi, CAPABILITY_CODE_MP,
 						    CAPABILITY_ACTION_SET);
 				if (peer->afc_recv[afi][safi]) {
-					peer->connection->afc_nego[afi][safi] = 1;
+					connection->afc_nego[afi][safi] = 1;
 					bgp_announce_route(peer, afi, safi, false);
 				}
 			} else {
-				peer_notify_config_change(peer->connection);
+				peer_notify_config_change(connection);
 			}
 		}
-		peer_notify_config_change(peer->connection);
+		peer_notify_config_change(connection);
 
 		/*
 		 * If we are turning on a AFI/SAFI locally and we've
@@ -2626,7 +2627,7 @@ static int peer_activate_af(struct peer *peer, afi_t afi, safi_t safi)
 }
 
 /* Activate the peer or peer group for specified AFI and SAFI.  */
-int peer_activate(struct peer *peer, afi_t afi, safi_t safi)
+int peer_activate(struct peer *peer, struct peer_connection *connection, afi_t afi, safi_t safi)
 {
 	int ret = 0;
 	struct peer_group *group;
@@ -2657,10 +2658,10 @@ int peer_activate(struct peer *peer, afi_t afi, safi_t safi)
 		group = peer->group;
 
 		for (ALL_LIST_ELEMENTS(group->peer, node, nnode, tmp_peer)) {
-			SET_FLAG(ret, peer_activate_af(tmp_peer, afi, safi));
+			SET_FLAG(ret, peer_activate_af(tmp_peer, tmp_peer->connection, afi, safi));
 		}
 	} else {
-		SET_FLAG(ret, peer_activate_af(peer, afi, safi));
+		SET_FLAG(ret, peer_activate_af(peer, connection, afi, safi));
 	}
 
 	/* If this is the first peer to be activated for this
