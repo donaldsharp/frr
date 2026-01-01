@@ -216,9 +216,9 @@ isis_sr_cfg_prefix_find(struct isis_area *area, union prefixconstptr prefix,
 extern void isis_sr_prefix_cfg2subtlv(const struct sr_prefix_cfg *pcfg,
 				      bool external,
 				      struct isis_prefix_sid *psid);
-extern void sr_adj_sid_add_single(struct isis_adjacency *adj, int family,
-				  bool backup, struct list *nexthops);
-extern struct sr_adjacency *isis_sr_adj_sid_find(struct isis_adjacency *adj,
+extern void sr_adj_sid_add_single(struct isis_adjacency *adj, int family, bool backup,
+				  struct list *nexthops);
+extern struct sr_adjacency *isis_sr_adj_sid_find(const struct isis_adjacency *adj,
 						 int family,
 						 enum sr_adj_type type);
 extern void isis_area_delete_backup_adj_sids(struct isis_area *area, int level);
