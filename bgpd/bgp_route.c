@@ -8029,7 +8029,7 @@ static void bgp_nexthop_reachability_check(afi_t afi, safi_t safi,
 					   struct bgp *bgp_nexthop)
 {
 	/* Nexthop reachability check. */
-	if (safi == SAFI_UNICAST || safi == SAFI_LABELED_UNICAST) {
+	if (safi == SAFI_UNICAST || safi == SAFI_LABELED_UNICAST || safi == SAFI_MULTICAST) {
 		if (CHECK_FLAG(bgp->flags, BGP_FLAG_IMPORT_CHECK)) {
 			if (bgp_find_or_add_nexthop(bgp, bgp_nexthop, afi, safi, bpi, NULL, 0, p,
 						    NULL))
