@@ -68,6 +68,7 @@ struct bgp_nexthop_cache *bnc_new(struct bgp_nexthop_cache_head *tree,
 	bnc->prefix = *prefix;
 	bnc->ifindex_ipv6_ll = ifindex;
 	bnc->srte_color = srte_color;
+	bnc->safi = SAFI_UNICAST;
 	bnc->tree = tree;
 	LIST_INIT(&(bnc->paths));
 	bgp_nexthop_cache_add(tree, bnc);
