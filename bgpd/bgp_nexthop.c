@@ -57,18 +57,21 @@ void bnc_nexthop_free(struct bgp_nexthop_cache *bnc)
 	nexthops_free(bnc->nexthop);
 }
 
-struct bgp_nexthop_cache *bnc_new(struct bgp_nexthop_cache_head *tree, struct prefix *prefix,
-				  uint32_t srte_color, ifindex_t ifindex, safi_t safi)
+struct bgp_nexthop_cache *bnc_new(struct bgp *bgp, afi_t afi, safi_t safi,
+				  struct bgp_nexthop_cache_head *tree, struct prefix *prefix,
+				  uint32_t srte_color, ifindex_t ifindex)
 {
 	struct bgp_nexthop_cache *bnc;
 
 	bnc = XCALLOC(MTYPE_BGP_NEXTHOP_CACHE,
 		      sizeof(struct bgp_nexthop_cache));
-	bnc->prefix = *prefix;
-	bnc->ifindex_ipv6_ll = ifindex;
-	bnc->srte_color = srte_color;
+	bnc->bgp = bgp;
+	bnc->afi = afi;
 	bnc->safi = safi;
 	bnc->tree = tree;
+	bnc->prefix = *prefix;
+	bnc->srte_color = srte_color;
+	bnc->ifindex_ipv6_ll = ifindex;
 	LIST_INIT(&(bnc->paths));
 	bgp_nexthop_cache_add(tree, bnc);
 

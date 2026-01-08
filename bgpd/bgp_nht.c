@@ -397,9 +397,7 @@ int bgp_find_or_add_nexthop(struct bgp *bgp_route, struct bgp *bgp_nexthop, afi_
 
 	bnc = bnc_find(tree, &p, srte_color, ifindex);
 	if (!bnc) {
-		bnc = bnc_new(tree, &p, srte_color, ifindex, safi);
-		bnc->afi = afi;
-		bnc->bgp = bgp_nexthop;
+		bnc = bnc_new(bgp_nexthop, afi, safi, tree, &p, srte_color, ifindex);
 		if (BGP_DEBUG(nht, NHT))
 			zlog_debug("Allocated bnc %pFX(%d)(%u)(%s) peer %p",
 				   &bnc->prefix, bnc->ifindex_ipv6_ll,
