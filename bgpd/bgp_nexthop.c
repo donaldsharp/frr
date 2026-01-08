@@ -1351,10 +1351,13 @@ DEFPY (show_ip_bgp_instance_all_nexthop,
 void bgp_scan_init(struct bgp *bgp)
 {
 	afi_t afi;
+	safi_t safi;
 
 	for (afi = AFI_IP; afi < AFI_MAX; afi++) {
 		bgp_nexthop_cache_init(&bgp->nexthop_cache_table[afi]);
-		bgp_nexthop_cache_init(&bgp->import_check_table[afi]);
+		FOREACH_SAFI (safi) {
+			bgp_nexthop_cache_init(&bgp->import_check_table[afi][safi]);
+		}
 		bgp->connected_table[afi] = bgp_table_init(bgp, afi,
 			SAFI_UNICAST);
 	}
@@ -1370,11 +1373,14 @@ void bgp_scan_vty_init(void)
 void bgp_scan_finish(struct bgp *bgp)
 {
 	afi_t afi;
+	safi_t safi;
 
 	for (afi = AFI_IP; afi < AFI_MAX; afi++) {
 		/* Only the current one needs to be reset. */
 		bgp_nexthop_cache_reset(&bgp->nexthop_cache_table[afi]);
-		bgp_nexthop_cache_reset(&bgp->import_check_table[afi]);
+		FOREACH_SAFI (safi) {
+			bgp_nexthop_cache_reset(&bgp->import_check_table[afi][safi]);
+		}
 
 		bgp->connected_table[afi]->route_table->cleanup =
 			bgp_connected_cleanup;

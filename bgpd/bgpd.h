@@ -785,7 +785,7 @@ struct bgp {
 	struct bgp_nexthop_cache_head nexthop_cache_table[AFI_MAX];
 
 	/* Tree for import-check */
-	struct bgp_nexthop_cache_head import_check_table[AFI_MAX];
+	struct bgp_nexthop_cache_head import_check_table[AFI_MAX][SAFI_MAX];
 
 	struct bgp_table *connected_table[AFI_MAX];
 

@@ -390,7 +390,7 @@ int bgp_find_or_add_nexthop(struct bgp *bgp_route, struct bgp *bgp_nexthop, afi_
 		return 0;
 
 	if (is_bgp_static_route)
-		tree = &bgp_nexthop->import_check_table[afi];
+		tree = &bgp_nexthop->import_check_table[afi][safi];
 	else
 		tree = &bgp_nexthop->nexthop_cache_table[afi];
 
@@ -844,12 +844,12 @@ static void bgp_nht_ifp_handle(struct interface *ifp, bool up)
 
 	bgp_nht_ifp_table_handle(bgp, &bgp->nexthop_cache_table[AFI_IP], ifp,
 				 up);
-	bgp_nht_ifp_table_handle(bgp, &bgp->import_check_table[AFI_IP], ifp,
-				 up);
+	bgp_nht_ifp_table_handle(bgp, &bgp->import_check_table[AFI_IP][SAFI_UNICAST], ifp, up);
+	bgp_nht_ifp_table_handle(bgp, &bgp->import_check_table[AFI_IP][SAFI_MULTICAST], ifp, up);
 	bgp_nht_ifp_table_handle(bgp, &bgp->nexthop_cache_table[AFI_IP6], ifp,
 				 up);
-	bgp_nht_ifp_table_handle(bgp, &bgp->import_check_table[AFI_IP6], ifp,
-				 up);
+	bgp_nht_ifp_table_handle(bgp, &bgp->import_check_table[AFI_IP6][SAFI_UNICAST], ifp, up);
+	bgp_nht_ifp_table_handle(bgp, &bgp->import_check_table[AFI_IP6][SAFI_MULTICAST], ifp, up);
 
 	if (!up)
 		bgp_clearing_batch_end_event_start(bgp);
@@ -953,7 +953,7 @@ void bgp_nexthop_update(struct vrf *vrf, struct prefix *match,
 		zlog_debug("parse nexthop update %pFX(%u)(%s) safi %s: bnc info not found for nexthop cache",
 			   &nhr->prefix, nhr->srte_color, bgp->name_pretty, safi2str(nhr->safi));
 
-	tree = &bgp->import_check_table[afi];
+	tree = &bgp->import_check_table[afi][nhr->safi];
 
 	bnc_import = bnc_find(tree, match, nhr->srte_color, 0);
 	if (bnc_import) {
@@ -1262,8 +1262,7 @@ static void unregister_zebra_rnh(struct bgp_nexthop_cache *bnc)
 		return;
 	}
 
-	import = bnc_find(&bgp->import_check_table[bnc->afi], &bnc->prefix, 0,
-			  0);
+	import = bnc_find(&bgp->import_check_table[bnc->afi][bnc->safi], &bnc->prefix, 0, 0);
 	nexthop = bnc_find(&bgp->nexthop_cache_table[bnc->afi], &bnc->prefix, 0,
 			   0);
 
