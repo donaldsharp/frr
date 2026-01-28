@@ -5979,7 +5979,63 @@ static struct bgp_tcp_ao_key *bgp_tcp_ao_key_lookup(struct bgp_tcp_ao_profile *p
 	return NULL;
 }
 
-static void bgp_tcp_ao_profile_reapply(struct bgp_tcp_ao_profile *profile)
+static void bgp_tcp_ao_profile_set_current(struct bgp_tcp_ao_profile *profile,
+					   struct bgp_tcp_ao_key *current)
+{
+	struct bgp_tcp_ao_key *key;
+
+	frr_each (bgp_tcp_ao_key_list, &profile->keys, key) {
+		key->set_current = (key == current);
+		if (key == current && key->set_rnext)
+			key->set_rnext = false;
+	}
+}
+
+static void bgp_tcp_ao_profile_set_rnext(struct bgp_tcp_ao_profile *profile,
+					 struct bgp_tcp_ao_key *rnext)
+{
+	struct bgp_tcp_ao_key *key;
+
+	frr_each (bgp_tcp_ao_key_list, &profile->keys, key)
+		key->set_rnext = (key == rnext);
+}
+
+static int bgp_tcp_ao_profile_remove_key(struct vty *vty,
+					 struct bgp_tcp_ao_profile *profile,
+					 struct bgp_tcp_ao_key *key)
+{
+	struct bgp *bgp;
+	struct peer *peer;
+	struct listnode *node;
+	struct listnode *pnode;
+	bool was_current = key->set_current;
+	bool was_rnext = key->set_rnext;
+
+	if (was_current || was_rnext) {
+		if (vty)
+			vty_out(vty,
+				"%% Cannot delete key in use as %s. Unset it first.\n",
+				was_current ? "current" : "rnext");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp)) {
+		for (ALL_LIST_ELEMENTS_RO(bgp->peer, pnode, peer)) {
+			if (!peer->tcp_ao_profile_name)
+				continue;
+			if (!strmatch(peer->tcp_ao_profile_name, profile->name))
+				continue;
+			if (BGP_CONNECTION_SU_UNSPEC(peer->connection))
+				continue;
+			bgp_tcp_ao_key_del(peer->connection, key);
+		}
+	}
+
+	return CMD_SUCCESS;
+}
+
+static void bgp_tcp_ao_profile_update_key(struct bgp_tcp_ao_profile *profile,
+					  struct bgp_tcp_ao_key *key)
 {
 	struct bgp *bgp;
 	struct peer *peer;
@@ -5994,10 +6050,54 @@ static void bgp_tcp_ao_profile_reapply(struct bgp_tcp_ao_profile *profile)
 				continue;
 			if (BGP_CONNECTION_SU_UNSPEC(peer->connection))
 				continue;
-			bgp_tcp_ao_unset(peer->connection);
-			bgp_tcp_ao_set(peer->connection);
+			bgp_tcp_ao_key_add(peer->connection, key);
 		}
 	}
+}
+
+static void bgp_tcp_ao_profile_update_key_flags(struct bgp_tcp_ao_profile *profile,
+						struct bgp_tcp_ao_key *key)
+{
+	struct bgp *bgp;
+	struct peer *peer;
+	struct listnode *node;
+	struct listnode *pnode;
+
+	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp)) {
+		for (ALL_LIST_ELEMENTS_RO(bgp->peer, pnode, peer)) {
+			if (!peer->tcp_ao_profile_name)
+				continue;
+			if (!strmatch(peer->tcp_ao_profile_name, profile->name))
+				continue;
+			if (BGP_CONNECTION_SU_UNSPEC(peer->connection))
+				continue;
+			bgp_tcp_ao_set_current_rnext(peer->connection, &profile->keys);
+		}
+	}
+}
+
+static struct bgp_tcp_ao_key *
+bgp_tcp_ao_profile_find_current(struct bgp_tcp_ao_profile *profile)
+{
+	struct bgp_tcp_ao_key *key;
+
+	frr_each (bgp_tcp_ao_key_list, &profile->keys, key)
+		if (key->set_current)
+			return key;
+
+	return NULL;
+}
+
+static struct bgp_tcp_ao_key *
+bgp_tcp_ao_profile_find_rnext(struct bgp_tcp_ao_profile *profile)
+{
+	struct bgp_tcp_ao_key *key;
+
+	frr_each (bgp_tcp_ao_key_list, &profile->keys, key)
+		if (key->set_rnext)
+			return key;
+
+	return NULL;
 }
 
 static void bgp_tcp_ao_profile_detach_peers(struct bgp_tcp_ao_profile *profile)
@@ -6092,9 +6192,10 @@ DEFUN (no_bgp_tcp_ao_key,
 	if (!key)
 		return CMD_WARNING_CONFIG_FAILED;
 
+	if (bgp_tcp_ao_profile_remove_key(vty, profile, key) != CMD_SUCCESS)
+		return CMD_WARNING_CONFIG_FAILED;
 	bgp_tcp_ao_key_list_del(&profile->keys, key);
 	bgp_tcp_ao_key_free(key);
-	bgp_tcp_ao_profile_reapply(profile);
 
 	return CMD_SUCCESS;
 }
@@ -6115,7 +6216,7 @@ DEFUN (bgp_tcp_ao_key_string,
 
 	XFREE(MTYPE_PEER_TCP_AO_KEY, key->key);
 	key->key = XSTRDUP(MTYPE_PEER_TCP_AO_KEY, argv[idx_line]->arg);
-	bgp_tcp_ao_profile_reapply(profile);
+	bgp_tcp_ao_profile_update_key(profile, key);
 	return CMD_SUCCESS;
 }
 
@@ -6130,7 +6231,8 @@ DEFUN (no_bgp_tcp_ao_key_string,
 	VTY_DECLVAR_CONTEXT_SUB(bgp_tcp_ao_key, key);
 
 	XFREE(MTYPE_PEER_TCP_AO_KEY, key->key);
-	bgp_tcp_ao_profile_reapply(profile);
+	if (bgp_tcp_ao_profile_remove_key(vty, profile, key) != CMD_SUCCESS)
+		return CMD_WARNING_CONFIG_FAILED;
 	return CMD_SUCCESS;
 }
 
@@ -6145,7 +6247,7 @@ DEFUN (bgp_tcp_ao_send_id,
 	VTY_DECLVAR_CONTEXT_SUB(bgp_tcp_ao_key, key);
 
 	key->send_id = strtoul(argv[idx_id]->arg, NULL, 10);
-	bgp_tcp_ao_profile_reapply(profile);
+	bgp_tcp_ao_profile_update_key(profile, key);
 	return CMD_SUCCESS;
 }
 
@@ -6160,7 +6262,7 @@ DEFUN (bgp_tcp_ao_recv_id,
 	VTY_DECLVAR_CONTEXT_SUB(bgp_tcp_ao_key, key);
 
 	key->recv_id = strtoul(argv[idx_id]->arg, NULL, 10);
-	bgp_tcp_ao_profile_reapply(profile);
+	bgp_tcp_ao_profile_update_key(profile, key);
 	return CMD_SUCCESS;
 }
 
@@ -6171,9 +6273,19 @@ DEFUN (bgp_tcp_ao_current,
 {
 	VTY_DECLVAR_CONTEXT(bgp_tcp_ao_profile, profile);
 	VTY_DECLVAR_CONTEXT_SUB(bgp_tcp_ao_key, key);
+	struct bgp_tcp_ao_key *old_current = bgp_tcp_ao_profile_find_current(profile);
+	struct bgp_tcp_ao_key *old_rnext = bgp_tcp_ao_profile_find_rnext(profile);
 
-	key->set_current = true;
-	bgp_tcp_ao_profile_reapply(profile);
+	if (old_rnext && old_rnext == key && old_current != key)
+		vty_out(vty,
+			"%% Warning: rnext now equals current; no distinct rnext configured\n");
+
+	bgp_tcp_ao_profile_set_current(profile, key);
+	bgp_tcp_ao_profile_update_key_flags(profile, key);
+	if (old_current && old_current != key)
+		bgp_tcp_ao_profile_update_key_flags(profile, old_current);
+	if (old_rnext && old_rnext != key && old_rnext != old_current)
+		bgp_tcp_ao_profile_update_key_flags(profile, old_rnext);
 	return CMD_SUCCESS;
 }
 
@@ -6187,7 +6299,7 @@ DEFUN (no_bgp_tcp_ao_current,
 	VTY_DECLVAR_CONTEXT_SUB(bgp_tcp_ao_key, key);
 
 	key->set_current = false;
-	bgp_tcp_ao_profile_reapply(profile);
+	bgp_tcp_ao_profile_update_key_flags(profile, key);
 	return CMD_SUCCESS;
 }
 
@@ -6198,9 +6310,12 @@ DEFUN (bgp_tcp_ao_rnext,
 {
 	VTY_DECLVAR_CONTEXT(bgp_tcp_ao_profile, profile);
 	VTY_DECLVAR_CONTEXT_SUB(bgp_tcp_ao_key, key);
+	struct bgp_tcp_ao_key *old_rnext = bgp_tcp_ao_profile_find_rnext(profile);
 
-	key->set_rnext = true;
-	bgp_tcp_ao_profile_reapply(profile);
+	bgp_tcp_ao_profile_set_rnext(profile, key);
+	bgp_tcp_ao_profile_update_key_flags(profile, key);
+	if (old_rnext && old_rnext != key)
+		bgp_tcp_ao_profile_update_key_flags(profile, old_rnext);
 	return CMD_SUCCESS;
 }
 
@@ -6214,7 +6329,7 @@ DEFUN (no_bgp_tcp_ao_rnext,
 	VTY_DECLVAR_CONTEXT_SUB(bgp_tcp_ao_key, key);
 
 	key->set_rnext = false;
-	bgp_tcp_ao_profile_reapply(profile);
+	bgp_tcp_ao_profile_update_key_flags(profile, key);
 	return CMD_SUCCESS;
 }
 
@@ -15804,6 +15919,30 @@ static void bgp_show_peer_gr_info(struct vty *vty, struct peer *p, bool use_json
 	bgp_show_peer_gr_extra_info(vty, p, use_json, json_neigh);
 }
 
+static void bgp_tcp_ao_show_keys(const struct peer *p, const char **current,
+				 const char **rnext)
+{
+	struct bgp_tcp_ao_profile *profile;
+	struct bgp_tcp_ao_key *key;
+
+	*current = NULL;
+	*rnext = NULL;
+
+	if (!p->tcp_ao_profile_name)
+		return;
+
+	profile = bgp_tcp_ao_profile_lookup(p->tcp_ao_profile_name);
+	if (!profile)
+		return;
+
+	frr_each (bgp_tcp_ao_key_list, &profile->keys, key) {
+		if (!*current && key->set_current)
+			*current = key->name;
+		if (!*rnext && key->set_rnext)
+			*rnext = key->name;
+	}
+}
+
 static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bool use_json,
 			  json_object *json)
 {
@@ -15817,6 +15956,8 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 	uint8_t *msg;
 	json_object *json_neigh = NULL;
 	uint32_t sync_tcp_mss;
+	const char *tcp_ao_current = NULL;
+	const char *tcp_ao_rnext = NULL;
 
 	bgp = p->bgp;
 
@@ -17547,6 +17688,17 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 		if (p->password)
 			json_object_int_add(json_neigh, "authenticationEnabled",
 					    1);
+		if (p->tcp_ao_profile_name) {
+			bgp_tcp_ao_show_keys(p, &tcp_ao_current, &tcp_ao_rnext);
+			json_object_string_add(json_neigh, "tcpAoProfile",
+					       p->tcp_ao_profile_name);
+			if (tcp_ao_current)
+				json_object_string_add(json_neigh, "tcpAoCurrentKey",
+						       tcp_ao_current);
+			if (tcp_ao_rnext)
+				json_object_string_add(json_neigh, "tcpAoRnextKey",
+						       tcp_ao_rnext);
+		}
 
 		if (p->connection->t_read)
 			json_object_string_add(json_neigh, "readThread", "on");
@@ -17592,6 +17744,15 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 
 		if (p->password)
 			vty_out(vty, "Peer Authentication Enabled\n");
+		if (p->tcp_ao_profile_name) {
+			bgp_tcp_ao_show_keys(p, &tcp_ao_current, &tcp_ao_rnext);
+			vty_out(vty, "TCP-AO Profile: %s\n",
+				p->tcp_ao_profile_name);
+			vty_out(vty, "TCP-AO Current Key: %s\n",
+				tcp_ao_current ? tcp_ao_current : "none");
+			vty_out(vty, "TCP-AO RNext Key: %s\n",
+				tcp_ao_rnext ? tcp_ao_rnext : "none");
+		}
 
 		vty_out(vty, "Read thread: %s  Write thread: %s  FD used: %d\n",
 			p->connection->t_read ? "on" : "off",
