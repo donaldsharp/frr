@@ -238,6 +238,8 @@ typedef enum {
 	ZEBRA_TC_FILTER_DELETE,
 	ZEBRA_OPAQUE_NOTIFY,
 	ZEBRA_SRV6_SID_NOTIFY,
+	ZEBRA_UNREACHABLE_ADD,
+	ZEBRA_UNREACHABLE_REMOVE,
 } zebra_message_types_t;
 /* Zebra message types. Please update the corresponding
  * command_types array with any changes!
@@ -1187,6 +1189,8 @@ extern int zapi_route_encode(uint8_t cmd, struct stream *s, struct zapi_route *a
 extern int zapi_route_decode(struct stream *s, struct zapi_route *api);
 extern int zapi_nexthop_decode(struct stream *s, struct zapi_nexthop *api_nh,
 			       uint32_t api_flags, uint32_t api_message);
+extern int zapi_unreachable_encode(struct stream *s, const struct prefix *p, struct vrf *vrf,
+				   bool unreachable);
 bool zapi_nhg_notify_decode(struct stream *s, uint32_t *id,
 			    enum zapi_nhg_notify_owner *note);
 bool zapi_route_notify_decode(struct stream *s, struct prefix *p,

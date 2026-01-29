@@ -1845,6 +1845,22 @@ stream_failure:
 	return false;
 }
 
+int zapi_unreachable_encode(struct stream *s, const struct prefix *p, struct vrf *vrf,
+			    bool unreachable)
+{
+	uint16_t cmd = unreachable ? ZEBRA_UNREACHABLE_ADD : ZEBRA_UNREACHABLE_REMOVE;
+
+	stream_reset(s);
+	zclient_create_header(s, cmd, vrf->vrf_id);
+
+	stream_putc(s, p->family);
+	stream_putc(s, p->prefixlen);
+	stream_put(s, &p->u.prefix, prefix_blen(p));
+
+	stream_putw_at(s, 0, stream_get_endp(s));
+	return 0;
+}
+
 static void zapi_encode_sockunion(struct stream *s, const union sockunion *su)
 {
 	int family = sockunion_family(su);

@@ -4071,6 +4071,39 @@ stream_failure:
 	return;
 }
 
+static inline void zread_unreachable(ZAPI_HANDLER_ARGS)
+{
+	struct stream *s;
+	struct prefix p;
+
+	s = msg;
+
+	STREAM_GETC(s, p.family);
+	STREAM_GETC(s, p.prefixlen);
+
+	if (p.family == AF_INET) {
+		if (p.prefixlen > IPV4_MAX_BITLEN)
+			goto stream_failure;
+	} else if (p.family == AF_INET6) {
+		if (p.prefixlen > IPV6_MAX_BITLEN)
+			goto stream_failure;
+	} else {
+		flog_err(EC_ZEBRA_UNKNOWN_FAMILY, "%s: Received unknown family type %d", __func__,
+			 p.family);
+		return;
+	}
+
+	STREAM_GET(&p.u.prefix, s, prefix_blen(&p));
+
+	if (IS_ZEBRA_DEBUG_PACKET && IS_ZEBRA_DEBUG_RECV)
+		zlog_debug("unreachable %s prefix %pFX vrf %u",
+			   hdr->command == ZEBRA_UNREACHABLE_ADD ? "add" : "remove", &p,
+			   zvrf_id(zvrf));
+
+stream_failure:
+	return;
+}
+
 static inline void zebra_gre_source_set(ZAPI_HANDLER_ARGS)
 {
 	struct stream *s;
@@ -4243,6 +4276,8 @@ void (*const zserv_handlers[])(ZAPI_HANDLER_ARGS) = {
 	[ZEBRA_CONFIGURE_ARP] = zebra_configure_arp,
 	[ZEBRA_GRE_GET] = zebra_gre_get,
 	[ZEBRA_GRE_SOURCE_SET] = zebra_gre_source_set,
+	[ZEBRA_UNREACHABLE_ADD] = zread_unreachable,
+	[ZEBRA_UNREACHABLE_REMOVE] = zread_unreachable,
 	[ZEBRA_TC_QDISC_INSTALL] = zread_tc_qdisc,
 	[ZEBRA_TC_QDISC_UNINSTALL] = zread_tc_qdisc,
 	[ZEBRA_TC_CLASS_ADD] = zread_tc_class,
