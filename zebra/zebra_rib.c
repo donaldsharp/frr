@@ -3009,9 +3009,21 @@ static void process_subq_gr_run(struct listnode *lnode)
 static void process_subq_unreachable_run(struct listnode *lnode)
 {
 	struct meta_q_unreachable_run *unreachable = listgetdata(lnode);
+	struct zebra_dplane_ctx *ctx;
 
-	zlog_debug("unreachable %s prefix %pFX vrf %u", unreachable->add ? "add" : "remove",
-		   &unreachable->p, unreachable->vrf_id);
+	if (IS_ZEBRA_DEBUG_RIB_DETAILED)
+		zlog_debug("unreachable %s prefix %pFX vrf %u", unreachable->add ? "add" : "remove",
+			   &unreachable->p, unreachable->vrf_id);
+
+	ctx = dplane_ctx_alloc();
+
+	dplane_ctx_set_op(ctx, DPLANE_OP_UNREACHABLE);
+	dplane_ctx_set_status(ctx, ZEBRA_DPLANE_REQUEST_SUCCESS);
+	dplane_ctx_set_dest(ctx, &unreachable->p);
+	dplane_ctx_set_vrf(ctx, unreachable->vrf_id);
+	dplane_ctx_set_skip_kernel(ctx);
+
+	(void)dplane_unreachable_enqueue_ctx(ctx);
 
 	XFREE(MTYPE_WQ_WRAPPER, unreachable);
 }
@@ -5133,6 +5145,7 @@ static void rib_process_dplane_results(struct event *event)
 			case DPLANE_OP_NEIGH_TABLE_UPDATE:
 			case DPLANE_OP_GRE_SET:
 			case DPLANE_OP_SRV6_ENCAP_SRCADDR_SET:
+			case DPLANE_OP_UNREACHABLE:
 			case DPLANE_OP_NONE:
 				break;
 			case DPLANE_OP_STARTUP_STAGE:

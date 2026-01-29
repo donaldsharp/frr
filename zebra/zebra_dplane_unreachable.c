@@ -45,10 +45,10 @@ static int dplane_unreachable_process(struct zebra_dplane_provider *prov)
 		if (!ctx)
 			break;
 
-		/*
-		 * Do the work here
-		 */
-		zlog_debug("Handling context %p for unreachable module", ctx);
+		if (dplane_ctx_get_op(ctx) == DPLANE_OP_UNREACHABLE)
+			zlog_debug("Handling unreachable %s %pFX",
+				   dplane_ctx_is_update(ctx) ? "remove" : "add",
+				   dplane_ctx_get_dest(ctx));
 
 
 		dplane_provider_enqueue_out_ctx(prov, ctx);

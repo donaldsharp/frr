@@ -881,6 +881,7 @@ static void dplane_ctx_free_internal(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_NEIGH_IP_INSTALL:
 	case DPLANE_OP_NEIGH_IP_DELETE:
 	case DPLANE_OP_NONE:
+	case DPLANE_OP_UNREACHABLE:
 	case DPLANE_OP_IPSET_ADD:
 	case DPLANE_OP_IPSET_DELETE:
 		break;
@@ -1080,6 +1081,8 @@ const char *dplane_op2str(enum dplane_op_e op)
 		return "ROUTE_DELETE";
 	case DPLANE_OP_ROUTE_NOTIFY:
 		return "ROUTE_NOTIFY";
+	case DPLANE_OP_UNREACHABLE:
+		return "UNREACHABLE";
 
 	/* Nexthop update */
 	case DPLANE_OP_NH_INSTALL:
@@ -4914,6 +4917,23 @@ enum zebra_dplane_result dplane_route_delete(struct route_node *rn,
 	return ret;
 }
 
+enum zebra_dplane_result dplane_unreachable_enqueue_ctx(struct zebra_dplane_ctx *ctx)
+{
+	enum zebra_dplane_result result = ZEBRA_DPLANE_REQUEST_FAILURE;
+	int ret;
+
+	if (!ctx)
+		return result;
+
+	ret = dplane_update_enqueue(ctx);
+	if (ret == AOK)
+		result = ZEBRA_DPLANE_REQUEST_QUEUED;
+	else
+		dplane_ctx_free(&ctx);
+
+	return result;
+}
+
 /*
  * Notify the dplane when system/connected routes change.
  */
@@ -6863,6 +6883,11 @@ static void kernel_dplane_log_detail(struct zebra_dplane_ctx *ctx)
 			   ctx, dplane_op2str(dplane_ctx_get_op(ctx)));
 		break;
 
+	case DPLANE_OP_UNREACHABLE:
+		zlog_debug("%u:%pFX Dplane unreachable ctx %p op %s", dplane_ctx_get_vrf(ctx),
+			   dplane_ctx_get_dest(ctx), ctx, dplane_op2str(dplane_ctx_get_op(ctx)));
+		break;
+
 	case DPLANE_OP_NH_INSTALL:
 	case DPLANE_OP_NH_UPDATE:
 	case DPLANE_OP_NH_DELETE:
@@ -7192,6 +7217,7 @@ static void kernel_dplane_handle_result(struct zebra_dplane_ctx *ctx)
 	case DPLANE_OP_ROUTE_NOTIFY:
 	case DPLANE_OP_LSP_NOTIFY:
 	case DPLANE_OP_BR_PORT_UPDATE:
+	case DPLANE_OP_UNREACHABLE:
 		break;
 
 	/* TODO -- error counters for incoming events? */

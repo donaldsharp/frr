@@ -119,6 +119,7 @@ enum dplane_op_e {
 	DPLANE_OP_ROUTE_UPDATE,
 	DPLANE_OP_ROUTE_DELETE,
 	DPLANE_OP_ROUTE_NOTIFY,
+	DPLANE_OP_UNREACHABLE,
 
 	/* Nexthop update */
 	DPLANE_OP_NH_INSTALL,
@@ -899,6 +900,8 @@ enum zebra_dplane_result dplane_route_update(struct route_node *rn,
 
 enum zebra_dplane_result dplane_route_delete(struct route_node *rn,
 					     struct route_entry *re);
+
+enum zebra_dplane_result dplane_unreachable_enqueue_ctx(struct zebra_dplane_ctx *ctx);
 
 /* Notify the dplane when system/connected routes change */
 enum zebra_dplane_result dplane_sys_route_add(struct route_node *rn,
