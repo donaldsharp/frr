@@ -52,6 +52,8 @@ void sharp_zebra_opaque_notif_reg(bool is_reg, uint32_t type);
 extern void sharp_zebra_send_arp(const struct interface *ifp,
 				 const struct prefix *p);
 
+extern int sharp_zebra_send_unreachable(struct vrf *vrf, const struct prefix *p, bool add);
+
 /* Register Link State Opaque messages */
 extern void sharp_zebra_register_te(void);
 

@@ -1136,6 +1136,34 @@ DEFPY (neigh_discover,
 	return CMD_SUCCESS;
 }
 
+DEFPY(sharp_unreachable,
+      sharp_unreachable_cmd,
+      "sharp unreachable [vrf NAME$vrf_name] <add$add|remove$remove> <A.B.C.D/M$prefix|X:X::X:X/M$prefix>",
+      "Sharp routing Protocol\n"
+      "Install or remove unreachable prefixes\n"
+      "The vrf we would like to use if non-default\n"
+      "The NAME of the vrf\n"
+      "Add unreachable prefix\n"
+      "Remove unreachable prefix\n"
+      "IPv4 prefix\n"
+      "IPv6 prefix\n")
+{
+	struct vrf *vrf;
+	bool do_add = (add != NULL);
+
+	vrf = vrf_lookup_by_name(vrf_name ? vrf_name : VRF_DEFAULT_NAME);
+	if (!vrf) {
+		vty_out(vty, "The vrf NAME specified: %s does not exist\n",
+			vrf_name ? vrf_name : VRF_DEFAULT_NAME);
+		return CMD_WARNING;
+	}
+
+	if (sharp_zebra_send_unreachable(vrf, prefix, do_add) != 0)
+		return CMD_WARNING;
+
+	return CMD_SUCCESS;
+}
+
 DEFPY (import_te,
        import_te_cmd,
        "sharp import-te",
@@ -1692,6 +1720,7 @@ void sharp_vty_init(void)
 	install_element(ENABLE_NODE, &send_opaque_reg_cmd);
 	install_element(ENABLE_NODE, &send_opaque_notif_reg_cmd);
 	install_element(ENABLE_NODE, &neigh_discover_cmd);
+	install_element(ENABLE_NODE, &sharp_unreachable_cmd);
 	install_element(ENABLE_NODE, &import_te_cmd);
 
 	install_element(ENABLE_NODE, &show_debugging_sharpd_cmd);

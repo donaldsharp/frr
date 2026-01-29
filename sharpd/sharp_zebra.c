@@ -921,6 +921,20 @@ void sharp_zebra_send_arp(const struct interface *ifp, const struct prefix *p)
 	zclient_send_neigh_discovery_req(g_zclient, ifp, p);
 }
 
+int sharp_zebra_send_unreachable(struct vrf *vrf, const struct prefix *p, bool add)
+{
+	struct stream *s;
+
+	s = g_zclient->obuf;
+	if (zapi_unreachable_encode(s, p, vrf, add) < 0)
+		return -1;
+
+	if (zclient_send_message(g_zclient) == ZCLIENT_SEND_FAILURE)
+		return -1;
+
+	return 0;
+}
+
 static int nhg_notify_owner(ZAPI_CALLBACK_ARGS)
 {
 	enum zapi_nhg_notify_owner note;
