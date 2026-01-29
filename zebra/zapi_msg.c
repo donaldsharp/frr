@@ -4100,6 +4100,8 @@ static inline void zread_unreachable(ZAPI_HANDLER_ARGS)
 			   hdr->command == ZEBRA_UNREACHABLE_ADD ? "add" : "remove", &p,
 			   zvrf_id(zvrf));
 
+	zebra_rib_add_unreachable_run(zvrf_id(zvrf), &p, hdr->command == ZEBRA_UNREACHABLE_ADD);
+
 stream_failure:
 	return;
 }

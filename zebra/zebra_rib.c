@@ -90,6 +90,7 @@ enum meta_queue_indexes {
 	META_QUEUE_BGP,
 	META_QUEUE_OTHER,
 	META_QUEUE_GR_RUN,
+	META_QUEUE_UNREACHABLE_RUN,
 };
 
 /* Each route type's string and default distance value. */
@@ -270,6 +271,8 @@ static const char *subqueue2str(enum meta_queue_indexes index)
 		return "Other Routes";
 	case META_QUEUE_GR_RUN:
 		return "Graceful Restart";
+	case META_QUEUE_UNREACHABLE_RUN:
+		return "Unreachable";
 	}
 
 	return "Unknown";
@@ -2986,6 +2989,12 @@ struct meta_q_gr_run {
 	bool stale_client_cleanup;
 };
 
+struct meta_q_unreachable_run {
+	vrf_id_t vrf_id;
+	struct prefix p;
+	bool add;
+};
+
 static void process_subq_gr_run(struct listnode *lnode)
 {
 	struct meta_q_gr_run *gr_run = listgetdata(lnode);
@@ -2995,6 +3004,16 @@ static void process_subq_gr_run(struct listnode *lnode)
 				gr_run->stale_client_cleanup);
 
 	XFREE(MTYPE_WQ_WRAPPER, gr_run);
+}
+
+static void process_subq_unreachable_run(struct listnode *lnode)
+{
+	struct meta_q_unreachable_run *unreachable = listgetdata(lnode);
+
+	zlog_debug("unreachable %s prefix %pFX vrf %u", unreachable->add ? "add" : "remove",
+		   &unreachable->p, unreachable->vrf_id);
+
+	XFREE(MTYPE_WQ_WRAPPER, unreachable);
 }
 
 /*
@@ -3032,6 +3051,9 @@ static unsigned int process_subq(struct list *subq,
 		break;
 	case META_QUEUE_GR_RUN:
 		process_subq_gr_run(lnode);
+		break;
+	case META_QUEUE_UNREACHABLE_RUN:
+		process_subq_unreachable_run(lnode);
 		break;
 	}
 	frrtrace(1, frr_zebra, rib_process_subq_dequeue, qindex);
@@ -3742,6 +3764,23 @@ static void rib_meta_queue_gr_run_free(struct meta_queue *mq, struct list *l,
 	}
 }
 
+static void rib_meta_queue_unreachable_run_free(struct meta_queue *mq, struct list *l,
+						struct zebra_vrf *zvrf)
+{
+	struct meta_q_unreachable_run *unreachable;
+	struct listnode *node, *nnode;
+
+	for (ALL_LIST_ELEMENTS(l, node, nnode, unreachable)) {
+		if (zvrf && zvrf->vrf->vrf_id != unreachable->vrf_id)
+			continue;
+
+		XFREE(MTYPE_WQ_WRAPPER, unreachable);
+		node->data = NULL;
+		list_delete_node(l, node);
+		mq->size--;
+	}
+}
+
 void meta_queue_free(struct meta_queue *mq, struct zebra_vrf *zvrf)
 {
 	enum meta_queue_indexes i;
@@ -3772,6 +3811,9 @@ void meta_queue_free(struct meta_queue *mq, struct zebra_vrf *zvrf)
 			break;
 		case META_QUEUE_GR_RUN:
 			rib_meta_queue_gr_run_free(mq, mq->subq[i], zvrf);
+			break;
+		case META_QUEUE_UNREACHABLE_RUN:
+			rib_meta_queue_unreachable_run_free(mq, mq->subq[i], zvrf);
 			break;
 		}
 		if (!zvrf)
@@ -4129,6 +4171,28 @@ static int rib_meta_queue_gr_run_add(struct meta_queue *mq, void *data)
 	return 0;
 }
 
+static int rib_meta_queue_unreachable_run_add(struct meta_queue *mq, void *data)
+{
+	uint64_t curr, high;
+
+	listnode_add(mq->subq[META_QUEUE_UNREACHABLE_RUN], data);
+	mq->size++;
+	atomic_fetch_add_explicit(&mq->total_metaq, 1, memory_order_relaxed);
+	atomic_fetch_add_explicit(&mq->total_subq[META_QUEUE_UNREACHABLE_RUN], 1,
+				  memory_order_relaxed);
+	curr = listcount(mq->subq[META_QUEUE_UNREACHABLE_RUN]);
+	high = atomic_load_explicit(&mq->max_subq[META_QUEUE_UNREACHABLE_RUN],
+				    memory_order_relaxed);
+	if (curr > high)
+		atomic_store_explicit(&mq->max_subq[META_QUEUE_UNREACHABLE_RUN], curr,
+				      memory_order_relaxed);
+	high = atomic_load_explicit(&mq->max_metaq, memory_order_relaxed);
+	if (mq->size > high)
+		atomic_store_explicit(&mq->max_metaq, mq->size, memory_order_relaxed);
+
+	return 0;
+}
+
 static int rib_meta_queue_early_route_add(struct meta_queue *mq, void *data)
 {
 	struct zebra_early_route *ere = data;
@@ -4206,6 +4270,18 @@ int rib_add_gr_run(afi_t afi, vrf_id_t vrf_id, uint8_t proto, uint8_t instance,
 	gr_run->stale_client_cleanup = stale_client_cleanup;
 
 	return mq_add_handler(gr_run, rib_meta_queue_gr_run_add);
+}
+
+int zebra_rib_add_unreachable_run(vrf_id_t vrf_id, const struct prefix *p, bool add)
+{
+	struct meta_q_unreachable_run *unreachable;
+
+	unreachable = XCALLOC(MTYPE_WQ_WRAPPER, sizeof(*unreachable));
+	unreachable->vrf_id = vrf_id;
+	unreachable->p = *p;
+	unreachable->add = add;
+
+	return mq_add_handler(unreachable, rib_meta_queue_unreachable_run_add);
 }
 
 struct route_entry *zebra_rib_route_entry_new(vrf_id_t vrf_id, int type,

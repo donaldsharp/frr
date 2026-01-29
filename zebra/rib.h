@@ -191,8 +191,10 @@ struct route_entry {
  * sub-queue 8: iBGP, eBGP
  * sub-queue 9: any other origin (if any) typically those that
  *              don't generate routes
+ * sub-queue 10: graceful restart processing
+ * sub-queue 11: unreachable processing
  */
-#define MQ_SIZE 11
+#define MQ_SIZE 12
 
 /* For checking that an object has already queued in some sub-queue */
 #define MQ_BIT_MASK ((1 << MQ_SIZE) - 1)
@@ -252,7 +254,7 @@ DECLARE_LIST(re_list, struct route_entry, next);
 
 #define RIB_ROUTE_QUEUED(x)	(1 << (x))
 // If MQ_SIZE is modified this value needs to be updated.
-#define RIB_ROUTE_ANY_QUEUED 0x3F
+#define RIB_ROUTE_ANY_QUEUED MQ_BIT_MASK
 
 /*
  * The maximum qindex that can be used.
@@ -618,6 +620,7 @@ extern void zebra_gr_process_client(afi_t afi, vrf_id_t vrf_id, uint8_t proto, u
 extern int rib_add_gr_run(afi_t afi, vrf_id_t vrf_id, uint8_t proto, uint8_t instance,
 			  time_t restart_time, time_t update_pending_time,
 			  bool stale_client_cleanup);
+extern int zebra_rib_add_unreachable_run(vrf_id_t vrf_id, const struct prefix *p, bool add);
 
 extern void zebra_vty_init(void);
 extern uint32_t zebra_rib_dplane_results_count(void);
