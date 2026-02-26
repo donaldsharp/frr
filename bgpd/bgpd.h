@@ -1475,7 +1475,7 @@ struct peer {
 	struct in_addr local_id;
 
 	/* the doppelganger peer structure, due to dual TCP conn setup */
-	struct peer *doppelganger;
+	//struct peer *doppelganger;
 
 	/* FSM events, stored for debug purposes.
 	 * Note: uchar used for reduced memory usage.
@@ -1497,6 +1497,7 @@ struct peer {
 	 * into the connection variable being used.
 	 */
 	struct peer_connection *connection;
+	struct peer_connection *incoming;
 
 	int ttl;	     /* TTL of TCP connection to the peer. */
 	int rtt;	     /* Estimated round-trip-time from TCP_INFO */
@@ -2633,6 +2634,7 @@ extern int peer_remote_as(struct bgp *bgp, union sockunion *su,
 extern int peer_group_remote_as(struct bgp *bgp, const char *peer_str, as_t *as,
 				enum peer_asn_type as_type, const char *as_str);
 extern int peer_delete(struct peer *peer);
+extern void bgp_peer_delete_connection(struct peer_connection *connection);
 extern void peer_notify_unconfig(struct peer_connection *connection);
 extern bool peer_notify_config_change(struct peer_connection *connection);
 extern int peer_group_delete(struct peer_group *group);

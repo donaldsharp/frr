@@ -178,11 +178,11 @@ static int bgp_check_main_socket(bool create, struct bgp *bgp)
 void bgp_session_reset(struct peer_connection *connection)
 {
 	struct peer *peer = connection->peer;
+	struct peer_connection *other = (connection == peer->connection) ? peer->incoming
+									 : peer->connection;
 
-	if (peer->doppelganger &&
-	    (peer->doppelganger->connection->status != Deleted) &&
-	    !(CHECK_FLAG(peer->doppelganger->flags, PEER_FLAG_CONFIG_NODE)))
-		peer_delete(peer->doppelganger);
+	if (other && (other->status != Deleted))
+		bgp_peer_delete_connection(other);
 
 	BGP_EVENT_ADD(connection, BGP_Stop);
 }
@@ -195,22 +195,14 @@ void bgp_session_reset(struct peer_connection *connection)
  */
 void bgp_session_reset_safe(struct peer_connection *connection, struct listnode **nnode)
 {
-	struct listnode *n;
-	struct peer *peer, *npeer;
+	struct peer *peer;
+	struct peer_connection *other;
 
 	peer = connection->peer;
+	other = (connection == peer->connection) ? peer->incoming : peer->connection;
 
-	n = (nnode) ? *nnode : NULL;
-	npeer = (n) ? listgetdata(n) : NULL;
-
-	if (peer->doppelganger &&
-	    (peer->doppelganger->connection->status != Deleted) &&
-	    !(CHECK_FLAG(peer->doppelganger->flags, PEER_FLAG_CONFIG_NODE))) {
-		if (peer->doppelganger == npeer)
-			/* nnode and *nnode are confirmed to be non-NULL here */
-			*nnode = (*nnode)->next;
-		peer_delete(peer->doppelganger);
-	}
+	if (other && (other->status != Deleted))
+		bgp_peer_delete_connection(other);
 
 	BGP_EVENT_ADD(connection, BGP_Stop);
 }
@@ -1257,6 +1249,8 @@ struct peer_connection *bgp_peer_connection_new(struct peer *peer, const union s
 
 	connection->peer = peer;
 	connection->fd = -1;
+	zlog_debug("[BGP_PEER_CONNECTION_NEW] Initialized connection %p fd=%d thread_flags=0x%x for peer %s",
+		   connection, connection->fd, connection->thread_flags, peer->host);
 
 	connection->ibuf = stream_fifo_new();
 	connection->obuf = stream_fifo_new();
@@ -1644,6 +1638,9 @@ struct peer *peer_new(struct bgp *bgp, union sockunion *su)
 	/* Create buffers. */
 	peer->connection = bgp_peer_connection_new(peer, su);
 	peer->connection->dir = CONNECTION_OUTGOING;
+	zlog_debug("[PEER_CREATE] Set connection %p dir=%s fd=%d for peer %s", peer->connection,
+		   bgp_peer_get_connection_direction(peer->connection), peer->connection->fd,
+		   peer->host);
 
 	/* Set default value. */
 	peer->v_start = BGP_INIT_START_TIMER;
@@ -2521,7 +2518,6 @@ static void peer_group2peer_config_copy_af(struct peer_group *group,
 static int peer_activate_af(struct peer *peer, afi_t afi, safi_t safi)
 {
 	enum bgp_peer_active active;
-	struct peer *other;
 
 	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		flog_err(EC_BGP_PEER_GROUP, "%s was called for peer-group %s",
@@ -2579,9 +2575,8 @@ static int peer_activate_af(struct peer *peer, afi_t afi, safi_t safi)
 		 * we resolve we could just overwrite the afi/safi
 		 * activation.
 		 */
-		other = peer->doppelganger;
-		if (other)
-			peer_notify_config_change(other->connection);
+		if (peer->incoming)
+			peer_notify_config_change(peer->incoming);
 	}
 
 	return 0;
@@ -2775,7 +2770,7 @@ void peer_nsf_stop(struct peer *peer)
 	bgp_clear_route_all(peer);
 }
 
-static void bgp_peer_delete_connection(struct peer_connection *connection)
+void bgp_peer_delete_connection(struct peer_connection *connection)
 {
 	struct peer *peer = connection->peer;
 	struct bgp *bgp = peer->bgp;
@@ -2786,6 +2781,9 @@ static void bgp_peer_delete_connection(struct peer_connection *connection)
 	bgp_reads_off(connection);
 	bgp_writes_off(connection);
 	event_cancel_event_ready(bm->master, connection);
+	zlog_debug("[BGP_PEER_DELETE_CONNECTION] Before assert: connection %p thread_flags=0x%x dir=%s fd=%d peer %s",
+		   connection, connection->thread_flags,
+		   bgp_peer_get_connection_direction(connection), connection->fd, peer->host);
 	assert(!CHECK_FLAG(connection->thread_flags, PEER_THREAD_WRITES_ON));
 	assert(!CHECK_FLAG(connection->thread_flags, PEER_THREAD_READS_ON));
 
@@ -2857,6 +2855,8 @@ int peer_delete(struct peer *peer)
 	SET_FLAG(peer->flags, PEER_FLAG_DELETE);
 
 	bgp_peer_delete_connection(peer->connection);
+	if (peer->incoming)
+		bgp_peer_delete_connection(peer->incoming);
 
 	assert(!CHECK_FLAG(peer->thread_flags, PEER_THREAD_KEEPALIVES_ON));
 
@@ -2905,11 +2905,6 @@ int peer_delete(struct peer *peer)
 	 */
 	peer_set_last_reset(peer, PEER_DOWN_NEIGHBOR_DELETE);
 	UNSET_FLAG(peer->flags, PEER_FLAG_DELETE);
-
-	if (peer->doppelganger) {
-		peer->doppelganger->doppelganger = NULL;
-		peer->doppelganger = NULL;
-	}
 
 	UNSET_FLAG(peer->sflags, PEER_STATUS_ACCEPT_PEER);
 
@@ -3193,14 +3188,19 @@ int peer_group_remote_as(struct bgp *bgp, const char *group_name, as_t *as,
 			if (bgp_debug_neighbor_events(peer))
 				zlog_debug("%s peer %s set to as_type %u curr status %s trigger BGP_Start",
 					   __func__, peer->host, peer->as_type,
-					   lookup_msg(bgp_status_msg,
-						      peer->connection->status, NULL));
+					   lookup_msg(bgp_status_msg, peer->connection->status,
+						      NULL));
 			/* Start Peer FSM to form neighbor using new as,
-			 * NOTE: the connection is triggered upon start
-			 * timer expiry.
-			 */
-			if (!BGP_PEER_START_SUPPRESSED(peer))
+		 	* NOTE: the connection is triggered upon start
+		 	* timer expiry.
+		 	*/
+			if (!BGP_PEER_START_SUPPRESSED(peer)) {
+				zlog_debug("[PEER_AS_CHANGE] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+					   peer->connection,
+					   bgp_peer_get_connection_direction(peer->connection),
+					   peer->connection->fd, peer->host);
 				BGP_EVENT_ADD(peer->connection, BGP_Start);
+			}
 		}
 	}
 
@@ -3240,14 +3240,12 @@ static void peer_notify_shutdown(struct peer *peer)
 
 void peer_group_notify_unconfig(struct peer_group *group)
 {
-	struct peer *peer, *other;
+	struct peer *peer;
 	struct listnode *node, *nnode;
 
 	for (ALL_LIST_ELEMENTS(group->peer, node, nnode, peer)) {
-		other = peer->doppelganger;
-		if (other && other->connection->status != Deleted) {
-			other->group = NULL;
-			peer_notify_unconfig(other->connection);
+		if (peer->incoming && peer->incoming->status != Deleted) {
+			peer_notify_unconfig(peer->incoming);
 		}
 		peer_notify_unconfig(peer->connection);
 	}
@@ -3258,23 +3256,16 @@ int peer_group_delete(struct peer_group *group)
 	struct bgp *bgp;
 	struct peer *peer;
 	struct prefix *prefix;
-	struct peer *other;
 	struct listnode *node, *nnode;
 	afi_t afi;
 
 	bgp = group->bgp;
 
 	for (ALL_LIST_ELEMENTS(group->peer, node, nnode, peer)) {
-		other = peer->doppelganger;
-
 		if (CHECK_FLAG(peer->flags, PEER_FLAG_CAPABILITY_ENHE))
 			bgp_zebra_terminate_radv(bgp, peer);
 
 		peer_delete(peer);
-		if (other && other->connection->status != Deleted) {
-			other->group = NULL;
-			peer_delete(other);
-		}
 	}
 	list_delete(&group->peer);
 
@@ -4110,8 +4101,13 @@ void bgp_instance_up(struct bgp *bgp)
 
 	/* Kick off any peers that may have been configured. */
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, next, peer)) {
-		if (!BGP_PEER_START_SUPPRESSED(peer))
+		if (!BGP_PEER_START_SUPPRESSED(peer)) {
+			zlog_debug("[BGP_INSTANCE_UP] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+				   peer->connection,
+				   bgp_peer_get_connection_direction(peer->connection),
+				   peer->connection->fd, peer->host);
 			BGP_EVENT_ADD(peer->connection, BGP_Start);
+		}
 	}
 
 	/* Process any networks that have been configured. */
@@ -5052,11 +5048,8 @@ void peer_change_action(struct peer *peer, afi_t afi, safi_t safi,
 	if (type == peer_change_reset) {
 		/* If we're resetting session, we've to delete both peer struct
 		 */
-		if ((peer->doppelganger) &&
-		    (peer->doppelganger->connection->status != Deleted) &&
-		    (!CHECK_FLAG(peer->doppelganger->flags,
-				 PEER_FLAG_CONFIG_NODE)))
-			peer_delete(peer->doppelganger);
+		if (peer->incoming && peer->incoming->status != Deleted)
+			bgp_peer_delete_connection(peer->incoming);
 
 		peer_notify_config_change(peer->connection);
 	} else if (type == peer_change_reset_in) {
@@ -5064,11 +5057,8 @@ void peer_change_action(struct peer *peer, afi_t afi, safi_t safi,
 			bgp_route_refresh_send(peer, afi, safi, 0, 0, 0,
 					       BGP_ROUTE_REFRESH_NORMAL);
 		else {
-			if ((peer->doppelganger) &&
-			    (peer->doppelganger->connection->status != Deleted) &&
-			    (!CHECK_FLAG(peer->doppelganger->flags,
-					 PEER_FLAG_CONFIG_NODE)))
-				peer_delete(peer->doppelganger);
+			if (peer->incoming && peer->incoming->status != Deleted)
+				bgp_peer_delete_connection(peer->incoming);
 
 			peer_notify_config_change(peer->connection);
 		}
@@ -6692,6 +6682,10 @@ int peer_timers_connect_set(struct peer *peer, uint32_t connect)
 		if (!peer_established(peer->connection)) {
 			if (peer_active(peer->connection) == BGP_PEER_ACTIVE)
 				BGP_EVENT_ADD(peer->connection, BGP_Stop);
+			zlog_debug("[PEER_CONNECT_SET] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+				   peer->connection,
+				   bgp_peer_get_connection_direction(peer->connection),
+				   peer->connection->fd, peer->host);
 			BGP_EVENT_ADD(peer->connection, BGP_Start);
 		}
 		return 0;
@@ -6713,6 +6707,10 @@ int peer_timers_connect_set(struct peer *peer, uint32_t connect)
 		if (!peer_established(member->connection)) {
 			if (peer_active(member->connection) == BGP_PEER_ACTIVE)
 				BGP_EVENT_ADD(member->connection, BGP_Stop);
+			zlog_debug("[PEER_CONNECT_SET] Triggering BGP_Start for member connection %p dir=%s fd=%d peer %s",
+				   member->connection,
+				   bgp_peer_get_connection_direction(member->connection),
+				   member->connection->fd, member->host);
 			BGP_EVENT_ADD(member->connection, BGP_Start);
 		}
 	}
@@ -6746,6 +6744,10 @@ int peer_timers_connect_unset(struct peer *peer)
 		if (!peer_established(peer->connection)) {
 			if (peer_active(peer->connection) == BGP_PEER_ACTIVE)
 				BGP_EVENT_ADD(peer->connection, BGP_Stop);
+			zlog_debug("[PEER_CONNECT_UNSET] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+				   peer->connection,
+				   bgp_peer_get_connection_direction(peer->connection),
+				   peer->connection->fd, peer->host);
 			BGP_EVENT_ADD(peer->connection, BGP_Start);
 		}
 		return 0;
@@ -6767,6 +6769,10 @@ int peer_timers_connect_unset(struct peer *peer)
 		if (!peer_established(member->connection)) {
 			if (peer_active(member->connection) == BGP_PEER_ACTIVE)
 				BGP_EVENT_ADD(member->connection, BGP_Stop);
+			zlog_debug("[PEER_CONNECT_UNSET] Triggering BGP_Start for member connection %p dir=%s fd=%d peer %s",
+				   member->connection,
+				   bgp_peer_get_connection_direction(member->connection),
+				   member->connection->fd, member->host);
 			BGP_EVENT_ADD(member->connection, BGP_Start);
 		}
 	}
@@ -8276,6 +8282,9 @@ static bool peer_maximum_prefix_clear_overflow(struct peer *peer)
 				"%pBP Maximum-prefix restart timer cancelled",
 				peer);
 	}
+	zlog_debug("[PEER_CLEAR_NODE] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+		   peer->connection, bgp_peer_get_connection_direction(peer->connection),
+		   peer->connection->fd, peer->host);
 	BGP_EVENT_ADD(peer->connection, BGP_Start);
 	return true;
 }
@@ -8605,11 +8614,9 @@ int peer_ttl_security_hops_set(struct peer *peer, int gtsm_hops)
 				sockopt_minttl(peer->connection->su.sa.sa_family,
 					       peer->connection->fd,
 					       MAXTTL + 1 - gtsm_hops);
-			if ((peer->connection->status < Established) &&
-			    peer->doppelganger &&
-			    (peer->doppelganger->connection->fd >= 0))
-				sockopt_minttl(peer->connection->su.sa.sa_family,
-					       peer->doppelganger->connection->fd,
+			if ((peer->connection->status < Established) && peer->incoming &&
+			    (peer->incoming->fd >= 0))
+				sockopt_minttl(peer->incoming->su.sa.sa_family, peer->incoming->fd,
 					       MAXTTL + 1 - gtsm_hops);
 		} else {
 			group = peer->group;
@@ -8634,13 +8641,10 @@ int peer_ttl_security_hops_set(struct peer *peer, int gtsm_hops)
 						       connection->fd,
 						       MAXTTL + 1 -
 							       gpeer->gtsm_hops);
-				if ((connection->status < Established) &&
-				    gpeer->doppelganger &&
-				    (gpeer->doppelganger->connection->fd >= 0))
+				if ((connection->status < Established) && gpeer->incoming &&
+				    (gpeer->incoming->fd >= 0))
 					sockopt_minttl(connection->su.sa.sa_family,
-						       gpeer->doppelganger
-							       ->connection->fd,
-						       MAXTTL + 1 - gtsm_hops);
+						       gpeer->incoming->fd, MAXTTL + 1 - gtsm_hops);
 			}
 		}
 	}
@@ -8678,11 +8682,9 @@ int peer_ttl_security_hops_unset(struct peer *peer)
 				sockopt_minttl(peer->connection->su.sa.sa_family,
 					       peer->connection->fd, 0);
 
-			if ((peer->connection->status < Established) &&
-			    peer->doppelganger &&
-			    (peer->doppelganger->connection->fd >= 0))
-				sockopt_minttl(peer->connection->su.sa.sa_family,
-					       peer->doppelganger->connection->fd,
+			if ((peer->connection->status < Established) && peer->incoming &&
+			    (peer->incoming->fd >= 0))
+				sockopt_minttl(peer->incoming->su.sa.sa_family, peer->incoming->fd,
 					       0);
 		}
 	} else {
@@ -8697,14 +8699,10 @@ int peer_ttl_security_hops_unset(struct peer *peer)
 							       .sa_family,
 						       peer->connection->fd, 0);
 
-				if ((peer->connection->status < Established) &&
-				    peer->doppelganger &&
-				    (peer->doppelganger->connection->fd >= 0))
-					sockopt_minttl(peer->connection->su.sa
-							       .sa_family,
-						       peer->doppelganger
-							       ->connection->fd,
-						       0);
+				if ((peer->connection->status < Established) && peer->incoming &&
+				    (peer->incoming->fd >= 0))
+					sockopt_minttl(peer->incoming->su.sa.sa_family,
+						       peer->incoming->fd, 0);
 			}
 		}
 	}
@@ -9104,6 +9102,10 @@ static int peer_unshut_after_cfg(struct bgp *bgp)
 		    peer->connection->status != Established) {
 			if (peer->connection->status != Idle)
 				BGP_EVENT_ADD(peer->connection, BGP_Stop);
+			zlog_debug("[PEER_UNSHUT] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+				   peer->connection,
+				   bgp_peer_get_connection_direction(peer->connection),
+				   peer->connection->fd, peer->host);
 			BGP_EVENT_ADD(peer->connection, BGP_Start);
 		}
 	}
@@ -9378,8 +9380,13 @@ void bgp_gr_start_peers(void)
 
 	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
 		for (ALL_LIST_ELEMENTS(bgp->peer, node2, nnode2, peer)) {
-			if (!BGP_PEER_START_SUPPRESSED(peer))
+			if (!BGP_PEER_START_SUPPRESSED(peer)) {
+				zlog_debug("[BGP_GR_APPLY_CONFIG] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+					   peer->connection,
+					   bgp_peer_get_connection_direction(peer->connection),
+					   peer->connection->fd, peer->host);
 				BGP_EVENT_ADD(peer->connection, BGP_Start);
+			}
 		}
 	}
 }

@@ -45,6 +45,7 @@ static bool validate_header(struct peer_connection *connection);
 void bgp_writes_on(struct peer_connection *connection)
 {
 	struct frr_pthread *fpt = bgp_pth_io;
+	struct peer *peer = connection->peer;
 
 	assert(fpt->running);
 
@@ -56,9 +57,17 @@ void bgp_writes_on(struct peer_connection *connection)
 	assert(!connection->t_connect_check_w);
 	assert(connection->fd);
 
+	zlog_debug("[BGP_WRITES_ON] connection %p thread_flags=0x%x (before SET) dir=%s fd=%d peer %s",
+		   connection, connection->thread_flags,
+		   bgp_peer_get_connection_direction(connection), connection->fd, peer->host);
+
 	event_add_write(fpt->master, bgp_process_writes, connection,
 			connection->fd, &connection->t_write);
 	SET_FLAG(connection->thread_flags, PEER_THREAD_WRITES_ON);
+
+	zlog_debug("[BGP_WRITES_ON] connection %p thread_flags=0x%x (after SET) dir=%s fd=%d peer %s",
+		   connection, connection->thread_flags,
+		   bgp_peer_get_connection_direction(connection), connection->fd, peer->host);
 }
 
 void bgp_writes_off(struct peer_connection *connection)
@@ -67,15 +76,24 @@ void bgp_writes_off(struct peer_connection *connection)
 	struct frr_pthread *fpt = bgp_pth_io;
 	assert(fpt->running);
 
+	zlog_debug("[BGP_WRITES_OFF] connection %p thread_flags=0x%x (before UNSET) dir=%s fd=%d peer %s",
+		   connection, connection->thread_flags,
+		   bgp_peer_get_connection_direction(connection), connection->fd, peer->host);
+
 	event_cancel_async(fpt->master, &connection->t_write, NULL);
 	event_cancel(&connection->t_generate_updgrp_packets);
 
-	UNSET_FLAG(peer->connection->thread_flags, PEER_THREAD_WRITES_ON);
+	UNSET_FLAG(connection->thread_flags, PEER_THREAD_WRITES_ON);
+
+	zlog_debug("[BGP_WRITES_OFF] connection %p thread_flags=0x%x (after UNSET) dir=%s fd=%d peer %s",
+		   connection, connection->thread_flags,
+		   bgp_peer_get_connection_direction(connection), connection->fd, peer->host);
 }
 
 void bgp_reads_on(struct peer_connection *connection)
 {
 	struct frr_pthread *fpt = bgp_pth_io;
+	struct peer *peer = connection->peer;
 	assert(fpt->running);
 
 	assert(connection->status != Deleted);
@@ -87,16 +105,29 @@ void bgp_reads_on(struct peer_connection *connection)
 	assert(!connection->t_connect_check_w);
 	assert(connection->fd);
 
+	zlog_debug("[BGP_READS_ON] connection %p thread_flags=0x%x (before SET) dir=%s fd=%d peer %s",
+		   connection, connection->thread_flags,
+		   bgp_peer_get_connection_direction(connection), connection->fd, peer->host);
+
 	event_add_read(fpt->master, bgp_process_reads, connection,
 		       connection->fd, &connection->t_read);
 
 	SET_FLAG(connection->thread_flags, PEER_THREAD_READS_ON);
+
+	zlog_debug("[BGP_READS_ON] connection %p thread_flags=0x%x (after SET) dir=%s fd=%d peer %s",
+		   connection, connection->thread_flags,
+		   bgp_peer_get_connection_direction(connection), connection->fd, peer->host);
 }
 
 void bgp_reads_off(struct peer_connection *connection)
 {
 	struct frr_pthread *fpt = bgp_pth_io;
+	struct peer *peer = connection->peer;
 	assert(fpt->running);
+
+	zlog_debug("[BGP_READS_OFF] connection %p thread_flags=0x%x (before UNSET) dir=%s fd=%d peer %s",
+		   connection, connection->thread_flags,
+		   bgp_peer_get_connection_direction(connection), connection->fd, peer->host);
 
 	event_cancel_async(fpt->master, &connection->t_read, NULL);
 
@@ -106,6 +137,10 @@ void bgp_reads_off(struct peer_connection *connection)
 	}
 
 	UNSET_FLAG(connection->thread_flags, PEER_THREAD_READS_ON);
+
+	zlog_debug("[BGP_READS_OFF] connection %p thread_flags=0x%x (after UNSET) dir=%s fd=%d peer %s",
+		   connection, connection->thread_flags,
+		   bgp_peer_get_connection_direction(connection), connection->fd, peer->host);
 }
 
 /* Thread internal functions ----------------------------------------------- */

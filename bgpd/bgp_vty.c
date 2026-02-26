@@ -5504,7 +5504,6 @@ DEFUN (no_neighbor,
 	union sockunion su;
 	struct peer_group *group;
 	struct peer *peer;
-	struct peer *other;
 	afi_t afi;
 	int lr_count;
 
@@ -5548,17 +5547,13 @@ DEFUN (no_neighbor,
 				return CMD_WARNING_CONFIG_FAILED;
 			}
 
-			other = peer->doppelganger;
-
 			if (CHECK_FLAG(peer->flags, PEER_FLAG_CAPABILITY_ENHE))
 				bgp_zebra_terminate_radv(peer->bgp, peer);
 
 			peer_notify_unconfig(peer->connection);
+			if (peer->incoming && peer->incoming->status != Deleted)
+				peer_notify_unconfig(peer->incoming);
 			peer_delete(peer);
-			if (other && other->connection->status != Deleted) {
-				peer_notify_unconfig(other->connection);
-				peer_delete(other);
-			}
 		}
 	}
 

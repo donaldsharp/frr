@@ -967,7 +967,7 @@ static int bmp_outgoing_packet(struct peer *peer, uint8_t type, bgp_size_t size,
 
 static int bmp_peer_status_changed(struct peer *peer)
 {
-	struct bmp_bgp_peer *bbpeer, *bbdopp;
+	struct bmp_bgp_peer *bbpeer;
 
 	frrtrace(1, frr_bgp, bmp_peer_status_changed, peer);
 
@@ -986,24 +986,6 @@ static int bmp_peer_status_changed(struct peer *peer)
 	if ((peer->connection->ostatus != OpenConfirm) ||
 	    !(peer_established(peer->connection)))
 		return 0;
-
-	if (peer->doppelganger &&
-	    (peer->doppelganger->connection->status != Deleted)) {
-		bbpeer = bmp_bgp_peer_get(peer);
-		bbdopp = bmp_bgp_peer_find(peer->doppelganger->qobj_node.nid);
-		if (bbdopp) {
-			XFREE(MTYPE_BMP_OPEN, bbpeer->open_tx);
-			XFREE(MTYPE_BMP_OPEN, bbpeer->open_rx);
-
-			bbpeer->open_tx = bbdopp->open_tx;
-			bbpeer->open_tx_len = bbdopp->open_tx_len;
-			bbpeer->open_rx = bbdopp->open_rx;
-			bbpeer->open_rx_len = bbdopp->open_rx_len;
-
-			bmp_peerh_del(&bmp_peerh, bbdopp);
-			XFREE(MTYPE_BMP_PEER, bbdopp);
-		}
-	}
 
 	bmp_send_all_bgp(peer, false);
 	return 0;

@@ -451,6 +451,9 @@ void bgp_connected_add(struct bgp *bgp, struct connected *ifc)
 			connection = peer->connection;
 			if (peer_active(connection) == BGP_PEER_ACTIVE)
 				BGP_EVENT_ADD(connection, BGP_Stop);
+			zlog_debug("[BGP_NEXTHOP_NHT_UPDATE] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+				   connection, bgp_peer_get_connection_direction(connection),
+				   connection->fd, connection->peer->host);
 			BGP_EVENT_ADD(connection, BGP_Start);
 		}
 	}

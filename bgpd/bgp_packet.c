@@ -1620,9 +1620,12 @@ void bgp_capability_send(struct peer *peer, afi_t afi, safi_t safi,
 static int bgp_collision_detect(struct peer_connection *connection,
 				struct peer *new, struct in_addr remote_id)
 {
-	struct peer *peer;
-	struct peer_connection *other;
+	struct peer *peer = connection->peer;
+	struct peer_connection *other = (peer->connection == connection) ? peer->incoming
+									 : peer->connection;
 
+	if (!other)
+		return 0;
 	/*
 	 * Upon receipt of an OPEN message, the local system must examine
 	 * all of its connections that are in the OpenConfirm state.  A BGP
@@ -1633,19 +1636,13 @@ static int bgp_collision_detect(struct peer_connection *connection,
 	 * OPEN message, then the local system performs the following
 	 * collision resolution procedure:
 	 */
-	peer = new->doppelganger;
-	if (peer == NULL)
-		return 0;
-
-	other = peer->connection;
 
 	/*
 	 * Do not accept the new connection in Established or Clearing
 	 * states. Note that a peer GR is handled by closing the existing
 	 * connection upon receipt of new one.
 	 */
-	if (peer_established(other) ||
-	    other->status == Clearing) {
+	if ((peer_established(other) || other->status == Clearing)) {
 		if (bgp_debug_neighbor_events(peer))
 			zlog_debug("New connection starting from %pI4 but a competing connection is already in established or clearing",
 				   &remote_id.s_addr);

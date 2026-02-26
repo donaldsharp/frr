@@ -106,6 +106,10 @@ static void bfd_session_status_update(struct bfd_session_params *bsp,
 	    !peer_established(peer->connection)) {
 		if (!BGP_PEER_START_SUPPRESSED(peer)) {
 			bgp_fsm_nht_update(peer->connection, peer, true);
+			zlog_debug("[BGP_BFD_DEST_UPDATE] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+				   peer->connection,
+				   bgp_peer_get_connection_direction(peer->connection),
+				   peer->connection->fd, peer->host);
 			BGP_EVENT_ADD(peer->connection, BGP_Start);
 		}
 	}

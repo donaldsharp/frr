@@ -183,7 +183,7 @@ void bgp_unlink_nexthop(struct bgp_path_info *path)
 
 void bgp_replace_nexthop_by_peer(struct peer_connection *from, struct peer_connection *to)
 {
-	struct peer *from_peer = from->peer;
+	struct peer *from_peer;
 	struct peer *to_peer = to->peer;
 	struct prefix pp;
 	struct prefix pt;
@@ -191,9 +191,10 @@ void bgp_replace_nexthop_by_peer(struct peer_connection *from, struct peer_conne
 	afi_t afi;
 	ifindex_t ifindex = 0;
 
-	if (!sockunion2hostprefix(&from->su, &pp))
+	if (!from || !sockunion2hostprefix(&from->su, &pp))
 		return;
 
+	from_peer = from->peer;
 	/*
 	 * Gather the ifindex for if up/down events to be
 	 * tagged into this fun

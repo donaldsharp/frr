@@ -2732,6 +2732,9 @@ void bgp_debug_init(void)
 	/* debug bgp conditional advertisement */
 	install_element(ENABLE_NODE, &debug_bgp_cond_adv_cmd);
 	install_element(CONFIG_NODE, &debug_bgp_cond_adv_cmd);
+
+	/* Enable neighbor-events debugging by default */
+	DEBUG_ON(neighbor_events, NEIGHBOR_EVENTS);
 }
 
 /* Return true if this prefix is on the per_prefix_list of prefixes to debug

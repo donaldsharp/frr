@@ -142,6 +142,10 @@ static void bgp_start_interface_nbrs(struct bgp *bgp, struct interface *ifp)
 		    !peer_established(peer->connection)) {
 			if (peer_active(peer->connection) == BGP_PEER_ACTIVE)
 				BGP_EVENT_ADD(peer->connection, BGP_Stop);
+			zlog_debug("[BGP_ZEBRA_ROUTE_NOTIFY_OWNER] Triggering BGP_Start for connection %p dir=%s fd=%d peer %s",
+				   peer->connection,
+				   bgp_peer_get_connection_direction(peer->connection),
+				   peer->connection->fd, peer->host);
 			BGP_EVENT_ADD(peer->connection, BGP_Start);
 		}
 	}
