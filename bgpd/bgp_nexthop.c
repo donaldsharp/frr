@@ -1134,7 +1134,7 @@ static void bgp_show_nexthops(struct vty *vty, struct bgp *bgp, bool import_tabl
 			      afi_t afi, bool detail)
 {
 	struct bgp_nexthop_cache *bnc;
-	struct bgp_nexthop_cache_head(*tree)[AFI_MAX];
+	struct bgp_nexthop_cache_head(*tree)[AFI_MAX][SAFI_MAX];
 	bool found = false;
 	bool firstafi = true;
 	bool firstnh = true;
@@ -1173,7 +1173,7 @@ static void bgp_show_nexthops(struct vty *vty, struct bgp *bgp, bool import_tabl
 				(afi == AFI_IP) ? "\"ipv4\"" : "\"ipv6\"");
 		firstafi = false;
 		firstnh = true;
-		frr_each (bgp_nexthop_cache, &(*tree)[afi], bnc) {
+		frr_each (bgp_nexthop_cache, &(*tree)[afi][SAFI_UNICAST], bnc) {
 			if (uj)
 				vty_out(vty, "%s", firstnh ? "" : ",");
 			bgp_show_nexthop(vty, bgp, bnc, detail, uj);
@@ -1186,7 +1186,7 @@ static void bgp_show_nexthops(struct vty *vty, struct bgp *bgp, bool import_tabl
 }
 
 static int show_ip_bgp_nexthop_table(struct vty *vty, const char *name, const char *nhopip_str,
-				     bool import_table, bool uj, afi_t afi, bool detail)
+				     bool import_table, bool uj, afi_t afi, safi_t safi, bool detail)
 {
 	struct bgp *bgp;
 
@@ -1287,7 +1287,7 @@ DEFPY (show_ip_bgp_nexthop,
 	if (afi)
 		afiz = bgp_vty_afi_from_str(afi);
 
-	rc = show_ip_bgp_nexthop_table(vty, vrf, nhop_str, false, uj, afiz, detail);
+	rc = show_ip_bgp_nexthop_table(vty, vrf, nhop_str, false, uj, afiz, SAFI_UNICAST, detail);
 
 	if (uj)
 		vty_out(vty, "}\n");
@@ -1311,7 +1311,7 @@ DEFPY (show_ip_bgp_import_check,
 	if (uj)
 		vty_out(vty, "{\n");
 
-	rc = show_ip_bgp_nexthop_table(vty, vrf, NULL, true, uj, AFI_UNSPEC, detail);
+	rc = show_ip_bgp_nexthop_table(vty, vrf, NULL, true, uj, AFI_UNSPEC, SAFI_UNSPEC, detail);
 
 	if (uj)
 		vty_out(vty, "}\n");
