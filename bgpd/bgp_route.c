@@ -501,6 +501,8 @@ int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete)
 	struct bgp_path_info *old_pi, *nextpi;
 	bool pi_is_imported_from_evpn = false;
 	bool set_flag = false;
+	bool bgp_timer_running = false;
+	bool evpn_timer_running = false;
 	struct bgp *bgp = NULL;
 	struct bgp_table *table = NULL;
 	afi_t afi = 0;
@@ -575,6 +577,12 @@ int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete)
 		return -1;
 
 	struct bgp *bgp_evpn = bgp_get_evpn();
+	bgp_timer_running =
+		BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(bgp, afi, safi);
+	evpn_timer_running =
+		(pi_is_imported_from_evpn && bgp_evpn != NULL &&
+		 BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(
+			 bgp_evpn, AFI_L2VPN, SAFI_EVPN));
 
 	/* Set the flag BGP_NODE_SELECT_DEFER on prefix/dest if route selection
 	 * deferral timer is active. RFC4724 says that restarting BGP node must
@@ -587,14 +595,17 @@ int bgp_dest_set_defer_flag(struct bgp_dest *dest, bool delete)
 	 * if GR timer for L2VPN EVPN in global table is running. If yes, then
 	 * mark the route as deferred.
 	 */
-	if (BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(bgp, afi, safi) ||
-	    (pi_is_imported_from_evpn && bgp_evpn != NULL &&
-	     BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(bgp_evpn, AFI_L2VPN, SAFI_EVPN))) {
+	if (bgp_timer_running || evpn_timer_running) {
 		if (!CHECK_FLAG(dest->flags, BGP_NODE_SELECT_DEFER))
 			bgp->gr_info[afi][safi].gr_deferred++;
 		SET_FLAG(dest->flags, BGP_NODE_SELECT_DEFER);
 		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-			zlog_debug("%s: Defer route %pBD, dest %p", bgp->name_pretty, dest, dest);
+			zlog_debug(
+				"%s: Defer route %pBD (%s/%s): imported_from_evpn=%d bgp_timer=%d evpn_timer=%d gr_deferred=%u",
+				bgp->name_pretty, dest, afi2str(afi), safi2str(safi),
+				pi_is_imported_from_evpn, bgp_timer_running,
+				evpn_timer_running,
+				bgp->gr_info[afi][safi].gr_deferred);
 		return 0;
 	}
 
@@ -4510,6 +4521,7 @@ static inline void bgp_evpn_handle_deferred_bestpath_for_vrfs(void)
 	struct bgp *bgp_vrf;
 	afi_t tmp_afi = AFI_UNSPEC;
 	safi_t tmp_safi = SAFI_UNICAST;
+	bool timer_running;
 
 	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp_vrf)) {
 		/* NO-OP for default/global VRF */
@@ -4530,10 +4542,25 @@ static inline void bgp_evpn_handle_deferred_bestpath_for_vrfs(void)
 			 * deferred bestapath selection can be done for
 			 * this VRF, AFI, SAFI.
 			 */
+			timer_running = BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(
+				bgp_vrf, tmp_afi, tmp_safi);
 			if (bgp_vrf->gr_info[tmp_afi][tmp_safi].t_route_select ||
-			    BGP_GR_SELECT_DEFERRAL_TIMER_IS_RUNNING(bgp_vrf, tmp_afi, tmp_safi) ||
-			    !bgp_vrf->gr_info[tmp_afi][tmp_safi].gr_deferred)
+			    timer_running ||
+			    !bgp_vrf->gr_info[tmp_afi][tmp_safi].gr_deferred) {
+				if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+					zlog_debug(
+						"%s: Skip deferred path selection trigger for %s (t_route_select=%d timer_running=%d gr_deferred=%u)",
+						bgp_vrf->name_pretty,
+						get_afi_safi_str(tmp_afi, tmp_safi, false),
+						bgp_vrf->gr_info[tmp_afi][tmp_safi]
+							.t_route_select
+							? 1
+							: 0,
+						timer_running,
+						bgp_vrf->gr_info[tmp_afi][tmp_safi]
+							.gr_deferred);
 				continue;
+			}
 
 			if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 				zlog_debug("%s: Starting GR route select timer for %s",

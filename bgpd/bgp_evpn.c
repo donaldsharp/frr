@@ -6023,6 +6023,12 @@ uint16_t bgp_deferred_path_selection(struct bgp *bgp, afi_t afi, safi_t safi,
 
 		UNSET_FLAG(dest->flags, BGP_NODE_SELECT_DEFER);
 		bgp->gr_info[afi][safi].gr_deferred--;
+		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
+			zlog_debug(
+				"%s: Deferred route released %pBD for %s (remaining gr_deferred=%u)",
+				bgp->name_pretty, dest,
+				get_afi_safi_str(afi, safi, false),
+				bgp->gr_info[afi][safi].gr_deferred);
 
 		if (evpn_select) {
 			struct bgp_path_info *pi = bgp_dest_get_bgp_path_info(dest);
