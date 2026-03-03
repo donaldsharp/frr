@@ -1030,10 +1030,10 @@ def test_evpn_es_config_without_bridge():
 def test_evpn_max_esi_type2_behavior():
     """
     Configure MAX-ESI on rack-2 hostbond1 interfaces and verify that
-    rack-1 imports remote Type-2 MAC routes with MAX-ESI.
-
-    This test documents current behavior and can be used to validate future
-    changes around reserved ESI handling.
+    rack-1 handles MAX-ESI as reserved:
+    1) no ES entry is created/learned for MAX-ESI
+    2) Type-2 route is still received in BGP
+    3) zebra installs the remote MAC from Type-2 route alone
     """
     tgen = get_topogen()
 
@@ -1055,13 +1055,11 @@ def test_evpn_max_esi_type2_behavior():
             return "esi %s still present on %s: %s" % (esi, dut.name, es)
         return None
 
-    def check_type2_in_bgp(dut, mac, esi):
+    def check_type2_in_bgp(dut, mac):
         out = dut.vtysh_cmd("show bgp l2vpn evpn route type 2")
         out = out.lower()
         if mac.lower() not in out:
             return "type-2 for MAC %s missing on %s" % (mac, dut.name)
-        if esi.lower() not in out:
-            return "max-esi %s missing in type-2 output on %s" % (esi, dut.name)
         return None
 
     def check_remote_mac_installed_any_esi(dut, vni_id, mac):
@@ -1090,11 +1088,11 @@ def test_evpn_max_esi_type2_behavior():
     # Trigger MAC/IP activity so Type-2 updates are refreshed quickly.
     ping_anycast_gw(tgen)
 
-    # Verify receiver has learned MAX-ESI as a remote ES.
-    test_fn = partial(check_one_es, receiver, max_esi, [])
+    # MAX-ESI is reserved; receiver should not learn/create an ES for it.
+    test_fn = partial(check_es_absent, receiver, max_esi)
     _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
     assertmsg = (
-        f'"{receiver.name}" did not learn remote ES "{max_esi}" after MAX-ESI config'
+        f'"{receiver.name}" still has remote ES "{max_esi}" after MAX-ESI config'
     )
     assert result is None, assertmsg
 
@@ -1135,7 +1133,7 @@ def test_evpn_max_esi_type2_behavior():
     assert result is None, assertmsg
 
     # Type-2 should still be present in BGP.
-    test_fn = partial(check_type2_in_bgp, receiver, hostd21_mac, max_esi)
+    test_fn = partial(check_type2_in_bgp, receiver, hostd21_mac)
     _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
     assertmsg = (
         f'"{receiver.name}" missing Type-2 MAC {hostd21_mac} '
