@@ -3290,7 +3290,10 @@ static int install_evpn_route_entry_in_vrf(struct bgp *bgp_vrf,
 
 	/* Gateway IP nexthop should be resolved */
 	if (bre && bre->type == OVERLAY_INDEX_GATEWAY_IP) {
-		if (bgp_find_or_add_nexthop(bgp_vrf, bgp_vrf, afi, safi, pi, NULL, 0, NULL, NULL))
+		bool nh_valid = bgp_find_or_add_nexthop(
+			bgp_vrf, bgp_vrf, afi, safi, pi, NULL, 0, NULL, NULL);
+
+		if (nh_valid)
 			bgp_path_info_set_flag(dest, pi, BGP_PATH_VALID);
 		else {
 			if (BGP_DEBUG(nht, NHT)) {
@@ -3301,6 +3304,10 @@ static int install_evpn_route_entry_in_vrf(struct bgp *bgp_vrf,
 			}
 			bgp_path_info_unset_flag(dest, pi, BGP_PATH_VALID);
 		}
+		zlog_debug(
+			"%s: EVPN->VRF import validity for %pFX in %s via gateway IP: nh_valid=%d path_valid=%d",
+			__func__, pp, bgp_vrf->name_pretty, nh_valid,
+			CHECK_FLAG(pi->flags, BGP_PATH_VALID) ? 1 : 0);
 	} else {
 		/* as it is an importation, change nexthop */
 		bgp_path_info_set_flag(dest, pi, BGP_PATH_ANNC_NH_SELF);

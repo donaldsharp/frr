@@ -1476,6 +1476,20 @@ void evaluate_paths(struct bgp_nexthop_cache *bnc)
 			vpn_leak_from_vrf_update(bgp_get_default(), bgp_path,
 						 path);
 		else if (old_path_valid != bnc_is_valid_nexthop) {
+			if (IS_PATH_IMPORTED_FROM_EVPN_TABLE(path)) {
+				char bnc_buf[BNC_FLAG_DUMP_SIZE];
+				char chg_buf[BNC_FLAG_DUMP_SIZE];
+
+				zlog_debug(
+					"%s: EVPN-imported path validity transition for %pFX in %s old_valid=%d new_valid=%d bnc_flags=%s bnc_chg=%s",
+					__func__, p, bgp_path->name_pretty,
+					old_path_valid ? 1 : 0,
+					bnc_is_valid_nexthop ? 1 : 0,
+					bgp_nexthop_dump_bnc_flags(
+						bnc, bnc_buf, sizeof(bnc_buf)),
+					bgp_nexthop_dump_bnc_change_flags(
+						bnc, chg_buf, sizeof(chg_buf)));
+			}
 			if (old_path_valid) {
 				/* No longer valid, clear flag; also for EVPN
 				 * routes, unimport from VRFs if needed.
