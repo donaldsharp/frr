@@ -1048,50 +1048,109 @@ def test_evpn_max_esi_type2_behavior():
     vni = 1000
     _, hostd21_mac = compute_host_ip_mac("hostd21")
 
-    try:
-        # Move hostbond1 from type-3 ESI to explicit type-0 MAX-ESI.
-        for tor in senders:
-            tor.vtysh_cmd(
-                "\n".join(
-                    [
-                        "conf",
-                        "interface hostbond1",
-                        f"evpn mh es-id {max_esi}",
-                        "no evpn mh es-sys-mac",
-                    ]
-                )
+    def check_es_absent(dut, esi):
+        out = dut.vtysh_cmd("show bgp l2vp evpn es %s json" % esi)
+        es = json.loads(out)
+        if es:
+            return "esi %s still present on %s: %s" % (esi, dut.name, es)
+        return None
+
+    def check_type2_in_bgp(dut, mac, esi):
+        out = dut.vtysh_cmd("show bgp l2vpn evpn route type 2")
+        out = out.lower()
+        if mac.lower() not in out:
+            return "type-2 for MAC %s missing on %s" % (mac, dut.name)
+        if esi.lower() not in out:
+            return "max-esi %s missing in type-2 output on %s" % (esi, dut.name)
+        return None
+
+    def check_remote_mac_installed_any_esi(dut, vni_id, mac):
+        out = dut.vtysh_cmd("show evpn mac vni %d mac %s json" % (vni_id, mac))
+        mac_js = json.loads(out)
+        info = mac_js.get(mac)
+        if not info:
+            return "MAC %s not installed in zebra on %s" % (mac, dut.name)
+        if info.get("type", "") != "remote":
+            return "MAC %s is not remote on %s: %s" % (mac, dut.name, info)
+        return None
+
+    # Move hostbond1 from type-3 ESI to explicit type-0 MAX-ESI.
+    for tor in senders:
+        tor.vtysh_cmd(
+            "\n".join(
+                [
+                    "conf",
+                    "interface hostbond1",
+                    f"evpn mh es-id {max_esi}",
+                    "no evpn mh es-sys-mac",
+                ]
             )
-
-        # Trigger MAC/IP activity so Type-2 updates are refreshed quickly.
-        ping_anycast_gw(tgen)
-
-        # Verify receiver has learned MAX-ESI as a remote ES.
-        test_fn = partial(check_one_es, receiver, max_esi, [])
-        _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
-        assertmsg = (
-            f'"{receiver.name}" did not learn remote ES "{max_esi}" after MAX-ESI config'
         )
-        assert result is None, assertmsg
 
-        # Verify the remote host MAC is imported with MAX-ESI.
-        test_fn = partial(check_mac, receiver, vni, hostd21_mac, "remote", max_esi, "")
-        _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
-        assertmsg = (
-            f'"{receiver.name}" did not import hostd21 MAC {hostd21_mac} '
-            f'with ESI {max_esi}'
-        )
-        assert result is None, assertmsg
-    finally:
-        # Restore baseline config for rack-2 hostbond1 (type-3 ESI).
-        for tor in senders:
-            tor.vtysh_cmd(
-                """
-                conf
-                interface hostbond1
-                  evpn mh es-id 1
-                  evpn mh es-sys-mac 44:38:39:ff:ff:02
-                """
-            )
+    # Trigger MAC/IP activity so Type-2 updates are refreshed quickly.
+    ping_anycast_gw(tgen)
+
+    # Verify receiver has learned MAX-ESI as a remote ES.
+    test_fn = partial(check_one_es, receiver, max_esi, [])
+    _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
+    assertmsg = (
+        f'"{receiver.name}" did not learn remote ES "{max_esi}" after MAX-ESI config'
+    )
+    assert result is None, assertmsg
+
+    # Verify the remote host MAC is imported with MAX-ESI.
+    test_fn = partial(check_mac, receiver, vni, hostd21_mac, "remote", max_esi, "")
+    _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
+    assertmsg = (
+        f'"{receiver.name}" did not import hostd21 MAC {hostd21_mac} '
+        f'with ESI {max_esi}'
+    )
+    assert result is None, assertmsg
+
+    # Block EAD (type-1) and ES (type-4) on receiver, keep type-2.
+    receiver.vtysh_cmd(
+        """
+        conf
+          route-map RM-BLOCK-ES-EAD deny 10
+            match evpn route-type ead
+          route-map RM-BLOCK-ES-EAD deny 20
+            match evpn route-type es
+          route-map RM-BLOCK-ES-EAD permit 100
+          router bgp 65002
+            address-family l2vpn evpn
+              neighbor 192.168.1.1 route-map RM-BLOCK-ES-EAD in
+              neighbor 192.168.5.1 route-map RM-BLOCK-ES-EAD in
+        """
+    )
+    receiver.vtysh_cmd("clear bgp l2vpn evpn 192.168.1.1 soft in")
+    receiver.vtysh_cmd("clear bgp l2vpn evpn 192.168.5.1 soft in")
+
+    # Re-trigger host traffic to refresh type-2 updates.
+    ping_anycast_gw(tgen)
+
+    # ES (type-4) should now be absent.
+    test_fn = partial(check_es_absent, receiver, max_esi)
+    _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
+    assertmsg = f'"{receiver.name}" still has ES route for {max_esi} after filter'
+    assert result is None, assertmsg
+
+    # Type-2 should still be present in BGP.
+    test_fn = partial(check_type2_in_bgp, receiver, hostd21_mac, max_esi)
+    _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
+    assertmsg = (
+        f'"{receiver.name}" missing Type-2 MAC {hostd21_mac} '
+        f"after EAD/ES filter was applied"
+    )
+    assert result is None, assertmsg
+
+    # Zebra should still install remote MAC from MAC/IP route alone.
+    test_fn = partial(check_remote_mac_installed_any_esi, receiver, vni, hostd21_mac)
+    _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
+    assertmsg = (
+        f'"{receiver.name}" failed to keep MAC {hostd21_mac} installed in zebra '
+        "with only Type-2 available"
+    )
+    assert result is None, assertmsg
 
 
 if __name__ == "__main__":
