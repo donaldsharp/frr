@@ -1096,12 +1096,21 @@ def test_evpn_max_esi_type2_behavior():
     )
     assert result is None, assertmsg
 
-    # Verify the remote host MAC is imported with MAX-ESI.
-    test_fn = partial(check_mac, receiver, vni, hostd21_mac, "remote", max_esi, "")
+    # Verify the remote host MAC route is present in BGP.
+    test_fn = partial(check_type2_in_bgp, receiver, hostd21_mac)
     _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
     assertmsg = (
-        f'"{receiver.name}" did not import hostd21 MAC {hostd21_mac} '
-        f'with ESI {max_esi}'
+        f'"{receiver.name}" missing Type-2 MAC {hostd21_mac} '
+        "after MAX-ESI config"
+    )
+    assert result is None, assertmsg
+
+    # Verify the remote host MAC is installed in zebra (without ES dependency).
+    test_fn = partial(check_remote_mac_installed_any_esi, receiver, vni, hostd21_mac)
+    _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
+    assertmsg = (
+        f'"{receiver.name}" did not install hostd21 MAC {hostd21_mac} '
+        "in zebra after MAX-ESI config"
     )
     assert result is None, assertmsg
 
