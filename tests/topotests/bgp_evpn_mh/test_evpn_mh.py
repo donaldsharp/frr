@@ -1027,6 +1027,73 @@ def test_evpn_es_config_without_bridge():
         )
 
 
+def test_evpn_max_esi_type2_behavior():
+    """
+    Configure MAX-ESI on rack-2 hostbond1 interfaces and verify that
+    rack-1 imports remote Type-2 MAC routes with MAX-ESI.
+
+    This test documents current behavior and can be used to validate future
+    changes around reserved ESI handling.
+    """
+    tgen = get_topogen()
+
+    if tgen.routers_have_failure():
+        pytest.skip(tgen.errors)
+
+    max_esi = "ff:ff:ff:ff:ff:ff:ff:ff:ff:ff"
+    receiver = tgen.gears["torm11"]
+    senders = [tgen.gears["torm21"], tgen.gears["torm22"]]
+
+    # hostd21 is dual-homed via hostbond1 on rack-2 TORs.
+    vni = 1000
+    _, hostd21_mac = compute_host_ip_mac("hostd21")
+
+    try:
+        # Move hostbond1 from type-3 ESI to explicit type-0 MAX-ESI.
+        for tor in senders:
+            tor.vtysh_cmd(
+                "\n".join(
+                    [
+                        "conf",
+                        "interface hostbond1",
+                        f"evpn mh es-id {max_esi}",
+                        "no evpn mh es-sys-mac",
+                    ]
+                )
+            )
+
+        # Trigger MAC/IP activity so Type-2 updates are refreshed quickly.
+        ping_anycast_gw(tgen)
+
+        # Verify receiver has learned MAX-ESI as a remote ES.
+        test_fn = partial(check_one_es, receiver, max_esi, [])
+        _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
+        assertmsg = (
+            f'"{receiver.name}" did not learn remote ES "{max_esi}" after MAX-ESI config'
+        )
+        assert result is None, assertmsg
+
+        # Verify the remote host MAC is imported with MAX-ESI.
+        test_fn = partial(check_mac, receiver, vni, hostd21_mac, "remote", max_esi, "")
+        _, result = topotest.run_and_expect(test_fn, None, count=30, wait=3)
+        assertmsg = (
+            f'"{receiver.name}" did not import hostd21 MAC {hostd21_mac} '
+            f'with ESI {max_esi}'
+        )
+        assert result is None, assertmsg
+    finally:
+        # Restore baseline config for rack-2 hostbond1 (type-3 ESI).
+        for tor in senders:
+            tor.vtysh_cmd(
+                """
+                conf
+                interface hostbond1
+                  evpn mh es-id 1
+                  evpn mh es-sys-mac 44:38:39:ff:ff:02
+                """
+            )
+
+
 if __name__ == "__main__":
     args = ["-s"] + sys.argv[1:]
     sys.exit(pytest.main(args))
