@@ -4064,7 +4064,13 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, saf
 {
 	struct bgp_path_info *new_select;
 	struct bgp_path_info *old_select;
+	struct bgp_path_info *pi_scan;
 	struct bgp_path_info_pair old_and_new;
+	bool has_evpn_imported = false;
+	unsigned int imported_cnt = 0;
+	unsigned int imported_valid = 0;
+	unsigned int imported_selected = 0;
+	unsigned int imported_mpath = 0;
 	int debug = 0;
 
 	/*
@@ -4111,6 +4117,22 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, saf
 			   dest, bgp->name_pretty, afi2str(afi),
 			   safi2str(safi));
 
+	if ((afi == AFI_IP || afi == AFI_IP6) && safi == SAFI_UNICAST) {
+		for (pi_scan = bgp_dest_get_bgp_path_info(dest); pi_scan;
+		     pi_scan = pi_scan->next) {
+			if (!IS_PATH_IMPORTED_FROM_EVPN_TABLE(pi_scan))
+				continue;
+			has_evpn_imported = true;
+			imported_cnt++;
+			if (CHECK_FLAG(pi_scan->flags, BGP_PATH_VALID))
+				imported_valid++;
+			if (CHECK_FLAG(pi_scan->flags, BGP_PATH_SELECTED))
+				imported_selected++;
+			if (CHECK_FLAG(pi_scan->flags, BGP_PATH_MULTIPATH))
+				imported_mpath++;
+		}
+	}
+
 	/* The best path calculation for the route is deferred if
 	 * BGP_NODE_SELECT_DEFER is set
 	 */
@@ -4118,6 +4140,12 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, saf
 		if (BGP_DEBUG(update, UPDATE_OUT))
 			zlog_debug("SELECT_DEFER flag set for route %p(%s)",
 				   dest, bgp->name_pretty);
+		if (has_evpn_imported)
+			zlog_debug(
+				"%s: EVPN-imported unicast route is deferred: p=%pBD(%s) imported=%u valid=%u selected=%u multipath=%u gr_deferred=%u",
+				__func__, dest, bgp->name_pretty, imported_cnt,
+				imported_valid, imported_selected, imported_mpath,
+				bgp->gr_info[afi][safi].gr_deferred);
 		return;
 	}
 
@@ -4148,6 +4176,13 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, saf
 			"%s: p=%pBD(%s) afi=%s, safi=%s, old_select=%p, new_select=%p",
 			__func__, dest, bgp->name_pretty, afi2str(afi),
 			safi2str(safi), old_select, new_select);
+	if (has_evpn_imported)
+		zlog_debug(
+			"%s: EVPN-imported unicast bestpath result: p=%pBD(%s) old_select=%p new_select=%p imported=%u valid=%u selected=%u multipath=%u reason=%s",
+			__func__, dest, bgp->name_pretty, old_select, new_select,
+			imported_cnt, imported_valid, imported_selected,
+			imported_mpath,
+			bgp_path_selection_reason2str(dest->reason));
 
 	/* If best route remains the same and this is not due to user-initiated
 	 * clear, see exactly what needs to be done.
