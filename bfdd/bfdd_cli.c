@@ -1316,7 +1316,7 @@ struct bfd_peer_var_walk_ctx {
 	struct cmd_token *token;
 };
 
-static int bfd_peer_var_walker(struct hash_bucket *hb, void *arg)
+static void bfd_peer_var_walker(struct hash_bucket *hb, void *arg)
 {
 	struct bfd_peer_var_walk_ctx *ctx = arg;
 	struct bfd_session *bs = hb->data;
@@ -1324,22 +1324,20 @@ static int bfd_peer_var_walker(struct hash_bucket *hb, void *arg)
 	enum cmd_token_type match_type;
 
 	if (!CHECK_FLAG(bs->flags, BFD_SESS_FLAG_CONFIG))
-		return HASHWALK_CONTINUE;
+		return;
 
 	if (bs->key.family == AF_INET)
 		match_type = IPV4_TKN;
 	else if (bs->key.family == AF_INET6)
 		match_type = IPV6_TKN;
 	else
-		return HASHWALK_CONTINUE;
+		return;
 
 	if (ctx->token->type != match_type)
-		return HASHWALK_CONTINUE;
+		return;
 
 	if (inet_ntop(bs->key.family, &bs->key.peer, addr_buf, sizeof(addr_buf)))
 		vector_set(ctx->comps, XSTRDUP(MTYPE_COMPLETION, addr_buf));
-
-	return HASHWALK_CONTINUE;
 }
 
 static void bfd_peer_var(vector comps, struct cmd_token *token)
