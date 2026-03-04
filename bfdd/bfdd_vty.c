@@ -11,6 +11,7 @@
 #include "lib/log.h"
 #include "lib/northbound_cli.h"
 #include "lib/vty.h"
+#include "mgmt_be_client.h"
 
 #include "bfd.h"
 #include "bfd_trace.h"
@@ -1431,4 +1432,5 @@ void bfdd_vty_init(void)
 	install_default(BFD_PEER_NODE);
 
 	bfdd_cli_init();
+	mgmt_be_client_lib_vty_init();
 }
