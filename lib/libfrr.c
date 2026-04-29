@@ -825,10 +825,17 @@ struct event_loop *frr_init(void)
 		cmd_init(-1);
 	else {
 		cmd_init(1);
-		if (!(di->flags & FRR_MGMTD_BACKEND)) {
+		if (!(di->flags & FRR_MGMTD_BACKEND))
 			host_cli_init();
-			log_cli_init();
-		}
+		/* log_cli_init() must run in backend daemons too so that
+		 * per-daemon log directives (e.g. `log file bgpd.log` via
+		 * `vtysh -d bgpd`) are accepted and applied to the daemon's
+		 * own zlog state.  Without this, topotest-framework log
+		 * setup silently fails and bgpd's operational messages
+		 * never land in bgpd.log.  Each daemon has its own zlog
+		 * targets, so this does not conflict with mgmtd.
+		 */
+		log_cli_init();
 	}
 
 	vty_init(master, di->log_always);

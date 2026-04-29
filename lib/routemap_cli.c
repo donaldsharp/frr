@@ -1492,7 +1492,7 @@ void route_map_action_show(struct vty *vty, const struct lyd_node *dnode,
 		vty_out(vty, " set ipv6 vpn next-hop %s\n",
 			yang_dnode_get_string(
 				dnode,
-				"./rmap-set-action/frr-bgp-route-map:ipv6-address"));
+				"./rmap-set-action/frr-bgp-route-map:ipv6-vpn-address"));
 	} else if (IS_SET_IPV6_PEER_ADDR(action)) {
 		if (true
 		    == yang_dnode_get_bool(
@@ -1509,7 +1509,7 @@ void route_map_action_show(struct vty *vty, const struct lyd_node *dnode,
 		vty_out(vty, " set ipv4 vpn next-hop %s\n",
 			yang_dnode_get_string(
 				dnode,
-				"./rmap-set-action/frr-bgp-route-map:ipv4-address"));
+				"./rmap-set-action/frr-bgp-route-map:ipv4-vpn-address"));
 	} else if (IS_SET_BGP_IPV4_NH(action)) {
 		vty_out(vty, " set ip next-hop %s\n",
 			yang_dnode_get_string(

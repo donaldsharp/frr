@@ -152,6 +152,12 @@ struct vty {
 	size_t buffer_cmd_count;
 	bool pending_allowed;
 	bool pending_commit;
+
+	/* Set when mgmtd is reading a backend daemon's config file on its
+	 * behalf.  Used to skip daemon-scoped directives (e.g. `log file`)
+	 * that belong to the daemon, not to mgmtd.
+	 */
+	bool backend_config_read;
 	char *pending_cmds_buf;
 	size_t pending_cmds_buflen;
 	size_t pending_cmds_bufpos;

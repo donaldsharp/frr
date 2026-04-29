@@ -211,7 +211,8 @@ extern void _hook_unregister(struct hook *hook, void *funcptr, void *arg,
 	struct hook _hook_##hookname = {                                       \
 		.name = #hookname, .entries = NULL, .reverse = rev,            \
 	};                                                                     \
-	static int hook_call_##hookname HOOK_VOIDIFY arglist                   \
+	static __attribute__((unused)) int                                     \
+	hook_call_##hookname HOOK_VOIDIFY arglist                              \
 	{                                                                      \
 		int hooksum = 0;                                               \
 		struct hookent *he = _hook_##hookname.entries;                 \
