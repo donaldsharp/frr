@@ -1235,7 +1235,18 @@ def modify_bgp_config_when_bgpd_down(tgen, topo, input_dict):
         if result is not True:
             return result
 
-        # Copy bgp config file to /etc/frr
+        # Apply the config delta to both possible config-authority paths so the
+        # helper works across legacy (split-config) and NB/mgmtd-backend builds:
+        #
+        #   1. Append the diff to /etc/frr/bgpd.conf. Legacy bgpd reads this
+        #      file on startup and picks up the delta when restarted.
+        #   2. Push the diff via `vtysh -f` so any commands tagged VTYSH_MGMTD
+        #      land in mgmtd's running datastore. On NB-converted FRR, router
+        #      bgp and its subcommands route to mgmtd; bgpd is down, but mgmtd
+        #      stores the new running state and will push it to bgpd when bgpd
+        #      reconnects on restart. In legacy builds the same commands are
+        #      VTYSH_BGPD and will fail to reach bgpd (down); that is harmless
+        #      noise because path (1) is authoritative there.
         for dut in input_dict.keys():
             router_list = tgen.routers()
             for router, _ in router_list.items():
@@ -1243,11 +1254,15 @@ def modify_bgp_config_when_bgpd_down(tgen, topo, input_dict):
                     continue
 
                 logger.info("Delete BGP config when BGPd is down in {}".format(router))
-                # Reading the config from "rundir" and copy to /etc/frr/bgpd.conf
-                cmd = "cat {}/{}/{} >> /etc/frr/bgpd.conf".format(
-                    tgen.logdir, router, FRRCFG_FILE
+                cfg_path = "{}/{}/{}".format(tgen.logdir, router, FRRCFG_FILE)
+
+                # Path (1): append diff to /etc/frr/bgpd.conf for legacy bgpd.
+                router_list[router].run(
+                    "cat {} >> /etc/frr/bgpd.conf".format(cfg_path)
                 )
-                router_list[router].run(cmd)
+                # Path (2): push via vtysh so VTYSH_MGMTD commands reach mgmtd
+                # and are queued for bgpd on reconnect.
+                router_list[router].run("vtysh -f {}".format(cfg_path))
 
     except Exception as e:
         errormsg = traceback.format_exc()
