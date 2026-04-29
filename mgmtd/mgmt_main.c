@@ -126,6 +126,16 @@ static struct frr_signal_t mgmt_signals[] = {
 #ifdef HAVE_STATICD
 extern const struct frr_yang_module_info frr_staticd_cli_info;
 #endif
+#ifdef HAVE_BGPD
+/* BGP YANG module info is defined in bgpd/bgp_cli.c */
+extern const struct frr_yang_module_info frr_bgp_cli_info;
+extern const struct frr_yang_module_info frr_bgp_types_cli_info;
+extern const struct frr_yang_module_info frr_bgp_route_map_cli_info;
+/* BGP filter YANG module info with cli_show callbacks — defined in bgpd/bgp_filter_cli.c */
+extern const struct frr_yang_module_info frr_bgp_filter_cli_info;
+/* BGP RPKI YANG module info (cli_show only) — defined in bgpd/bgp_rpki_nb.c */
+extern const struct frr_yang_module_info frr_bgp_rpki_cli_info;
+#endif
 
 /*
  * These are modules that are only needed by mgmtd and hence not included into
@@ -147,14 +157,6 @@ const struct frr_yang_module_info zebra_route_map_info = {
 	.ignore_cfg_cbs = true,
 	.nodes = { { .xpath = NULL } },
 };
-
-#ifdef HAVE_MGMTD_TESTC
-static const struct frr_yang_module_info frr_test_config_info = {
-	.name = "frr-test-config",
-	.ignore_cfg_cbs = true,
-	.nodes = { { .xpath = NULL } },
-};
-#endif
 
 /*
  * List of YANG modules to be loaded in the process context of
@@ -193,8 +195,12 @@ static const struct frr_yang_module_info *const mgmt_yang_modules[] = {
 #ifdef HAVE_STATICD
 	&frr_staticd_cli_info,
 #endif
-#ifdef HAVE_MGMTD_TESTC
-	&frr_test_config_info,
+#ifdef HAVE_BGPD
+	&frr_bgp_types_cli_info,
+	&frr_bgp_cli_info,
+	&frr_bgp_route_map_cli_info,
+	&frr_bgp_filter_cli_info,
+	&frr_bgp_rpki_cli_info,
 #endif
 };
 

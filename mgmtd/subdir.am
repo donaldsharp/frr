@@ -108,3 +108,25 @@ nodist_mgmtd_libmgmt_be_nb_la_SOURCES += \
 	# end
 endif
 
+if BGPD
+nodist_mgmtd_mgmtd_SOURCES += \
+	yang/frr-bgp.yang.c \
+	yang/frr-bgp-types.yang.c \
+	yang/frr-bgp-common.yang.c \
+	yang/frr-bgp-common-structure.yang.c \
+	yang/frr-bgp-common-multiprotocol.yang.c \
+	yang/frr-bgp-neighbor.yang.c \
+	yang/frr-bgp-peer-group.yang.c \
+	yang/frr-bgp-filter.yang.c \
+	yang/frr-bgp-route-map.yang.c \
+	yang/frr-bgp-bmp.yang.c \
+	yang/frr-bgp-rpki.yang.c \
+	# end
+mgmtd_libmgmt_be_nb_la_SOURCES += \
+	bgpd/bgp_cli.c \
+	bgpd/bgp_filter_cli.c \
+	bgpd/bgp_routemap.c \
+	bgpd/bgp_rpki_nb.c \
+	# end
+endif
+

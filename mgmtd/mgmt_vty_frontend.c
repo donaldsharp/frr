@@ -36,6 +36,9 @@ char const *const mgmt_daemons[] = {
 #ifdef HAVE_STATICD
 	"staticd",
 #endif
+#ifdef HAVE_BGPD
+	"bgpd",
+#endif
 };
 uint mgmt_daemons_count = array_size(mgmt_daemons);
 
@@ -121,6 +124,13 @@ static bool mgmt_vty_read_configs(void)
 	vty_mgmt_lock_candidate_inline(vty);
 	vty_mgmt_lock_running_inline(vty);
 
+	/* While reading backend daemon configs, skip directives that belong
+	 * to the daemon and not to mgmtd (e.g. `log file bgpd.log`).  Without
+	 * this mgmtd would open the daemon's log file as its own and the
+	 * daemon then fails to open it, losing operational messages.
+	 */
+	vty->backend_config_read = true;
+
 	for (index = 0; index < array_size(mgmt_daemons); index++) {
 		snprintf(path, sizeof(path), "%s/%s.conf", frr_sysconfdir, mgmt_daemons[index]);
 
@@ -136,7 +146,21 @@ static bool mgmt_vty_read_configs(void)
 		count++;
 
 		fclose(confp);
+
+		/* Reset VTY state between config files.  Config files may
+		 * contain exit/end commands that leave the VTY in the
+		 * wrong node or even close config mode (e.g., zebra.conf
+		 * ends with "end" which exits CONFIG_NODE).  Without
+		 * this reset, subsequent config files would fail to parse.
+		 */
+		vty->node = CONFIG_NODE;
+		vty->config = true;
+		vty->xpath_index = 0;
+		vty->status = VTY_NORMAL;
+		vty->candidate_config = vty_shared_candidate_config;
 	}
+
+	vty->backend_config_read = false;
 
 	snprintf(path, sizeof(path), "%s/mgmtd.conf", frr_sysconfdir);
 	confp = vty_open_config(path, config_default);
