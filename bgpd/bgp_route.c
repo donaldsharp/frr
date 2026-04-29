@@ -9078,7 +9078,7 @@ void bgp_purge_static_redist_routes(struct bgp *bgp)
 		bgp_purge_af_static_redist_routes(bgp, afi, safi);
 }
 
-static int bgp_table_map_set(struct vty *vty, afi_t afi, safi_t safi,
+static __attribute__((unused)) int bgp_table_map_set(struct vty *vty, afi_t afi, safi_t safi,
 			     const char *rmap_name)
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
@@ -9103,7 +9103,7 @@ static int bgp_table_map_set(struct vty *vty, afi_t afi, safi_t safi,
 	return CMD_SUCCESS;
 }
 
-static int bgp_table_map_unset(struct vty *vty, afi_t afi, safi_t safi,
+static __attribute__((unused)) int bgp_table_map_unset(struct vty *vty, afi_t afi, safi_t safi,
 			       const char *rmap_name)
 {
 	VTY_DECLVAR_CONTEXT(bgp, bgp);
@@ -9129,87 +9129,8 @@ void bgp_config_write_table_map(struct vty *vty, struct bgp *bgp, afi_t afi,
 	}
 }
 
-DEFUN (bgp_table_map,
-       bgp_table_map_cmd,
-       "table-map WORD",
-       "BGP table to RIB route download filter\n"
-       "Name of the route map\n")
-{
-	int idx_word = 1;
-	return bgp_table_map_set(vty, bgp_node_afi(vty), bgp_node_safi(vty),
-				 argv[idx_word]->arg);
-}
-DEFUN (no_bgp_table_map,
-       no_bgp_table_map_cmd,
-       "no table-map WORD",
-       NO_STR
-       "BGP table to RIB route download filter\n"
-       "Name of the route map\n")
-{
-	int idx_word = 2;
-	return bgp_table_map_unset(vty, bgp_node_afi(vty), bgp_node_safi(vty),
-				   argv[idx_word]->arg);
-}
-
-DEFPY(bgp_network,
-	bgp_network_cmd,
-	"[no] network \
-	<A.B.C.D/M$prefix|A.B.C.D$address [mask A.B.C.D$netmask]> \
-	[{route-map RMAP_NAME$map_name|label-index (0-1048560)$label_index| \
-	backdoor$backdoor}]",
-	NO_STR
-	"Specify a network to announce via BGP\n"
-	"IPv4 prefix\n"
-	"Network number\n"
-	"Network mask\n"
-	"Network mask\n"
-	"Route-map to modify the attributes\n"
-	"Name of the route map\n"
-	"Label index to associate with the prefix\n"
-	"Label index value\n"
-	"Specify a BGP backdoor route\n")
-{
-	char addr_prefix_str[BUFSIZ];
-
-	if (address_str) {
-		int ret;
-
-		ret = netmask_str2prefix_str(address_str, netmask_str,
-					     addr_prefix_str,
-					     sizeof(addr_prefix_str));
-		if (!ret) {
-			vty_out(vty, "%% Inconsistent address and mask\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	}
-
-	return bgp_static_set(vty, no,
-			      address_str ? addr_prefix_str : prefix_str, NULL,
-			      NULL, AFI_IP, bgp_node_safi(vty), map_name,
-			      backdoor ? 1 : 0,
-			      label_index ? (uint32_t)label_index
-					  : BGP_INVALID_LABEL_INDEX,
-			      0, NULL, NULL, NULL, NULL);
-}
-
-DEFPY(ipv6_bgp_network,
-	ipv6_bgp_network_cmd,
-	"[no] network X:X::X:X/M$prefix \
-	[{route-map RMAP_NAME$map_name|label-index (0-1048560)$label_index}]",
-	NO_STR
-	"Specify a network to announce via BGP\n"
-	"IPv6 prefix\n"
-	"Route-map to modify the attributes\n"
-	"Name of the route map\n"
-	"Label index to associate with the prefix\n"
-	"Label index value\n")
-{
-	return bgp_static_set(vty, no, prefix_str, NULL, NULL, AFI_IP6,
-			      bgp_node_safi(vty), map_name, 0,
-			      label_index ? (uint32_t)label_index
-					  : BGP_INVALID_LABEL_INDEX,
-			      0, NULL, NULL, NULL, NULL);
-}
+/* bgp_table_map_cmd and no_bgp_table_map_cmd removed - using table_map_cli_cmd from bgp_cli.c */
+/* bgp_network_cmd and ipv6_bgp_network_cmd removed - using bgp_network_cli_cmd from bgp_cli.c */
 
 static struct bgp_aggregate *bgp_aggregate_new(void)
 {
@@ -9331,11 +9252,13 @@ static bool aggr_unsuppress_path(struct bgp_aggregate *aggregate,
 	return false;
 }
 
-static void bgp_aggregate_install(
-	struct bgp *bgp, afi_t afi, safi_t safi, const struct prefix *p,
-	uint8_t origin, struct aspath *aspath, struct community *community,
-	struct ecommunity *ecommunity, struct lcommunity *lcommunity,
-	uint8_t atomic_aggregate, struct bgp_aggregate *aggregate)
+void bgp_aggregate_install(struct bgp *bgp, afi_t afi, safi_t safi,
+			   const struct prefix *p, uint8_t origin,
+			   struct aspath *aspath, struct community *community,
+			   struct ecommunity *ecommunity,
+			   struct lcommunity *lcommunity,
+			   uint8_t atomic_aggregate,
+			   struct bgp_aggregate *aggregate)
 {
 	struct bgp_dest *dest;
 	struct bgp_table *table;
@@ -10381,7 +10304,7 @@ static bool bgp_aggregate_cmp_params(struct bgp_aggregate *aggregate, const char
 	return true;
 }
 
-static int bgp_aggregate_set(struct vty *vty, const char *prefix_str, afi_t afi,
+static __attribute__((unused)) int bgp_aggregate_set(struct vty *vty, const char *prefix_str, afi_t afi,
 			     safi_t safi, const char *rmap,
 			     uint8_t summary_only, uint8_t as_set,
 			     uint8_t origin, bool match_med,
@@ -10497,69 +10420,7 @@ static int bgp_aggregate_set(struct vty *vty, const char *prefix_str, afi_t afi,
 	return CMD_SUCCESS;
 }
 
-DEFPY(aggregate_addressv4, aggregate_addressv4_cmd,
-      "[no] aggregate-address <A.B.C.D/M$prefix|A.B.C.D$addr A.B.C.D$mask> [{"
-      "as-set$as_set_s"
-      "|summary-only$summary_only"
-      "|route-map RMAP_NAME$rmap_name"
-      "|origin <egp|igp|incomplete>$origin_s"
-      "|matching-MED-only$match_med"
-      "|suppress-map RMAP_NAME$suppress_map"
-      "}]",
-      NO_STR
-      "Configure BGP aggregate entries\n"
-      "Aggregate prefix\n"
-      "Aggregate address\n"
-      "Aggregate mask\n"
-      "Generate AS set path information\n"
-      "Filter more specific routes from updates\n"
-      "Apply route map to aggregate network\n"
-      "Route map name\n"
-      "BGP origin code\n"
-      "Remote EGP\n"
-      "Local IGP\n"
-      "Unknown heritage\n"
-      "Only aggregate routes with matching MED\n"
-      "Suppress the selected more specific routes\n"
-      "Route map with the route selectors\n")
-{
-	const char *prefix_s = NULL;
-	safi_t safi = bgp_node_safi(vty);
-	uint8_t origin = BGP_ORIGIN_UNSPECIFIED;
-	int as_set = AGGREGATE_AS_UNSET;
-	char prefix_buf[PREFIX2STR_BUFFER];
-
-	if (addr_str) {
-		if (netmask_str2prefix_str(addr_str, mask_str, prefix_buf,
-					   sizeof(prefix_buf))
-		    == 0) {
-			vty_out(vty, "%% Inconsistent address and mask\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		prefix_s = prefix_buf;
-	} else
-		prefix_s = prefix_str;
-
-	if (origin_s) {
-		if (strcmp(origin_s, "egp") == 0)
-			origin = BGP_ORIGIN_EGP;
-		else if (strcmp(origin_s, "igp") == 0)
-			origin = BGP_ORIGIN_IGP;
-		else if (strcmp(origin_s, "incomplete") == 0)
-			origin = BGP_ORIGIN_INCOMPLETE;
-	}
-
-	if (as_set_s)
-		as_set = AGGREGATE_AS_SET;
-
-	/* Handle configuration removal, otherwise installation. */
-	if (no)
-		return bgp_aggregate_unset(vty, prefix_s, AFI_IP, safi);
-
-	return bgp_aggregate_set(vty, prefix_s, AFI_IP, safi, rmap_name,
-				 summary_only != NULL, as_set, origin,
-				 match_med != NULL, suppress_map);
-}
+/* aggregate_addressv4_cmd removed - using bgp_aggregate_address_cli_cmd from bgp_cli.c */
 
 void bgp_free_aggregate_info(struct bgp_aggregate *aggregate)
 {
@@ -10589,54 +10450,7 @@ void bgp_free_aggregate_info(struct bgp_aggregate *aggregate)
 	bgp_aggregate_free(aggregate);
 }
 
-DEFPY(aggregate_addressv6, aggregate_addressv6_cmd,
-      "[no] aggregate-address X:X::X:X/M$prefix [{"
-      "as-set$as_set_s"
-      "|summary-only$summary_only"
-      "|route-map RMAP_NAME$rmap_name"
-      "|origin <egp|igp|incomplete>$origin_s"
-      "|matching-MED-only$match_med"
-      "|suppress-map RMAP_NAME$suppress_map"
-      "}]",
-      NO_STR
-      "Configure BGP aggregate entries\n"
-      "Aggregate prefix\n"
-      "Generate AS set path information\n"
-      "Filter more specific routes from updates\n"
-      "Apply route map to aggregate network\n"
-      "Route map name\n"
-      "BGP origin code\n"
-      "Remote EGP\n"
-      "Local IGP\n"
-      "Unknown heritage\n"
-      "Only aggregate routes with matching MED\n"
-      "Suppress the selected more specific routes\n"
-      "Route map with the route selectors\n")
-{
-	uint8_t origin = BGP_ORIGIN_UNSPECIFIED;
-	int as_set = AGGREGATE_AS_UNSET;
-
-	if (origin_s) {
-		if (strcmp(origin_s, "egp") == 0)
-			origin = BGP_ORIGIN_EGP;
-		else if (strcmp(origin_s, "igp") == 0)
-			origin = BGP_ORIGIN_IGP;
-		else if (strcmp(origin_s, "incomplete") == 0)
-			origin = BGP_ORIGIN_INCOMPLETE;
-	}
-
-	if (as_set_s)
-		as_set = AGGREGATE_AS_SET;
-
-	/* Handle configuration removal, otherwise installation. */
-	if (no)
-		return bgp_aggregate_unset(vty, prefix_str, AFI_IP6,
-					   SAFI_UNICAST);
-
-	return bgp_aggregate_set(vty, prefix_str, AFI_IP6, SAFI_UNICAST,
-				 rmap_name, summary_only != NULL, as_set,
-				 origin, match_med != NULL, suppress_map);
-}
+/* aggregate_addressv6_cmd removed - using bgp_aggregate_address_cli_cmd from bgp_cli.c */
 
 /* Redistribute route treatment. */
 void bgp_redistribute_add(struct bgp *bgp, struct prefix *p,
@@ -17908,7 +17722,7 @@ static void bgp_distance_free(struct bgp_distance *bdistance)
 	XFREE(MTYPE_BGP_DISTANCE, bdistance);
 }
 
-static int bgp_distance_set(struct vty *vty, const char *distance_str,
+static __attribute__((unused)) int bgp_distance_set(struct vty *vty, const char *distance_str,
 			    const char *ip_str, const char *access_list_str)
 {
 	int ret;
@@ -17952,7 +17766,7 @@ static int bgp_distance_set(struct vty *vty, const char *distance_str,
 	return CMD_SUCCESS;
 }
 
-static int bgp_distance_unset(struct vty *vty, const char *distance_str,
+static __attribute__((unused)) int bgp_distance_unset(struct vty *vty, const char *distance_str,
 			      const char *ip_str, const char *access_list_str)
 {
 	int ret;
@@ -18100,9 +17914,9 @@ uint8_t bgp_distance_apply(const struct prefix *p, struct bgp_path_info *pinfo,
  * we should tell ZEBRA update the routes for a specific
  * AFI/SAFI to reflect changes in RIB.
  */
-static void bgp_announce_routes_distance_update(struct bgp *bgp,
-						afi_t update_afi,
-						safi_t update_safi)
+void bgp_announce_routes_distance_update(struct bgp *bgp,
+					 afi_t update_afi,
+					 safi_t update_safi)
 {
 	afi_t afi;
 	safi_t safi;
@@ -18122,238 +17936,13 @@ static void bgp_announce_routes_distance_update(struct bgp *bgp,
 	}
 }
 
-DEFUN (bgp_distance,
-       bgp_distance_cmd,
-       "distance bgp (1-255) (1-255) (1-255)",
-       "Define an administrative distance\n"
-       "BGP distance\n"
-       "Distance for routes external to the AS\n"
-       "Distance for routes internal to the AS\n"
-       "Distance for local routes\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_number = 2;
-	int idx_number_2 = 3;
-	int idx_number_3 = 4;
-	int distance_ebgp = atoi(argv[idx_number]->arg);
-	int distance_ibgp = atoi(argv[idx_number_2]->arg);
-	int distance_local = atoi(argv[idx_number_3]->arg);
-	afi_t afi;
-	safi_t safi;
+/* bgp_distance_cmd and no_bgp_distance_cmd removed - using distance_bgp_cli_cmd from bgp_cli.c */
+/* bgp_distance_source_cmd, no_bgp_distance_source_cmd, bgp_distance_source_access_list_cmd,
+ * no_bgp_distance_source_access_list_cmd, ipv6_bgp_distance_source_cmd, no_ipv6_bgp_distance_source_cmd,
+ * ipv6_bgp_distance_source_access_list_cmd, no_ipv6_bgp_distance_source_access_list_cmd
+ * removed - using admin_distance_route_cli_cmd from bgp_cli.c */
 
-	afi = bgp_node_afi(vty);
-	safi = bgp_node_safi(vty);
-
-	if (bgp->distance_ebgp[afi][safi] != distance_ebgp
-	    || bgp->distance_ibgp[afi][safi] != distance_ibgp
-	    || bgp->distance_local[afi][safi] != distance_local) {
-		bgp->distance_ebgp[afi][safi] = distance_ebgp;
-		bgp->distance_ibgp[afi][safi] = distance_ibgp;
-		bgp->distance_local[afi][safi] = distance_local;
-		bgp_announce_routes_distance_update(bgp, afi, safi);
-	}
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_distance,
-       no_bgp_distance_cmd,
-       "no distance bgp [(1-255) (1-255) (1-255)]",
-       NO_STR
-       "Define an administrative distance\n"
-       "BGP distance\n"
-       "Distance for routes external to the AS\n"
-       "Distance for routes internal to the AS\n"
-       "Distance for local routes\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	afi_t afi;
-	safi_t safi;
-
-	afi = bgp_node_afi(vty);
-	safi = bgp_node_safi(vty);
-
-	if (bgp->distance_ebgp[afi][safi] != 0
-	    || bgp->distance_ibgp[afi][safi] != 0
-	    || bgp->distance_local[afi][safi] != 0) {
-		bgp->distance_ebgp[afi][safi] = 0;
-		bgp->distance_ibgp[afi][safi] = 0;
-		bgp->distance_local[afi][safi] = 0;
-		bgp_announce_routes_distance_update(bgp, afi, safi);
-	}
-	return CMD_SUCCESS;
-}
-
-
-DEFUN (bgp_distance_source,
-       bgp_distance_source_cmd,
-       "distance (1-255) A.B.C.D/M",
-       "Define an administrative distance\n"
-       "Administrative distance\n"
-       "IP source prefix\n")
-{
-	int idx_number = 1;
-	int idx_ipv4_prefixlen = 2;
-	bgp_distance_set(vty, argv[idx_number]->arg,
-			 argv[idx_ipv4_prefixlen]->arg, NULL);
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_distance_source,
-       no_bgp_distance_source_cmd,
-       "no distance (1-255) A.B.C.D/M",
-       NO_STR
-       "Define an administrative distance\n"
-       "Administrative distance\n"
-       "IP source prefix\n")
-{
-	int idx_number = 2;
-	int idx_ipv4_prefixlen = 3;
-	bgp_distance_unset(vty, argv[idx_number]->arg,
-			   argv[idx_ipv4_prefixlen]->arg, NULL);
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_distance_source_access_list,
-       bgp_distance_source_access_list_cmd,
-       "distance (1-255) A.B.C.D/M WORD",
-       "Define an administrative distance\n"
-       "Administrative distance\n"
-       "IP source prefix\n"
-       "Access list name\n")
-{
-	int idx_number = 1;
-	int idx_ipv4_prefixlen = 2;
-	int idx_word = 3;
-	bgp_distance_set(vty, argv[idx_number]->arg,
-			 argv[idx_ipv4_prefixlen]->arg, argv[idx_word]->arg);
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_distance_source_access_list,
-       no_bgp_distance_source_access_list_cmd,
-       "no distance (1-255) A.B.C.D/M WORD",
-       NO_STR
-       "Define an administrative distance\n"
-       "Administrative distance\n"
-       "IP source prefix\n"
-       "Access list name\n")
-{
-	int idx_number = 2;
-	int idx_ipv4_prefixlen = 3;
-	int idx_word = 4;
-	bgp_distance_unset(vty, argv[idx_number]->arg,
-			   argv[idx_ipv4_prefixlen]->arg, argv[idx_word]->arg);
-	return CMD_SUCCESS;
-}
-
-DEFUN (ipv6_bgp_distance_source,
-       ipv6_bgp_distance_source_cmd,
-       "distance (1-255) X:X::X:X/M",
-       "Define an administrative distance\n"
-       "Administrative distance\n"
-       "IP source prefix\n")
-{
-	bgp_distance_set(vty, argv[1]->arg, argv[2]->arg, NULL);
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_ipv6_bgp_distance_source,
-       no_ipv6_bgp_distance_source_cmd,
-       "no distance (1-255) X:X::X:X/M",
-       NO_STR
-       "Define an administrative distance\n"
-       "Administrative distance\n"
-       "IP source prefix\n")
-{
-	bgp_distance_unset(vty, argv[2]->arg, argv[3]->arg, NULL);
-	return CMD_SUCCESS;
-}
-
-DEFUN (ipv6_bgp_distance_source_access_list,
-       ipv6_bgp_distance_source_access_list_cmd,
-       "distance (1-255) X:X::X:X/M WORD",
-       "Define an administrative distance\n"
-       "Administrative distance\n"
-       "IP source prefix\n"
-       "Access list name\n")
-{
-	bgp_distance_set(vty, argv[1]->arg, argv[2]->arg, argv[3]->arg);
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_ipv6_bgp_distance_source_access_list,
-       no_ipv6_bgp_distance_source_access_list_cmd,
-       "no distance (1-255) X:X::X:X/M WORD",
-       NO_STR
-       "Define an administrative distance\n"
-       "Administrative distance\n"
-       "IP source prefix\n"
-       "Access list name\n")
-{
-	bgp_distance_unset(vty, argv[2]->arg, argv[3]->arg, argv[4]->arg);
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_damp_set,
-       bgp_damp_set_cmd,
-       "bgp dampening [(1-45) [(1-20000) (1-50000) (1-255)]]",
-       "BGP Specific commands\n"
-       "Enable route-flap dampening\n"
-       "Half-life time for the penalty\n"
-       "Value to start reusing a route\n"
-       "Value to start suppressing a route\n"
-       "Maximum duration to suppress a stable route\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_half_life = 2;
-	int idx_reuse = 3;
-	int idx_suppress = 4;
-	int idx_max_suppress = 5;
-	int half = DEFAULT_HALF_LIFE * 60;
-	int reuse = DEFAULT_REUSE;
-	int suppress = DEFAULT_SUPPRESS;
-	int max = 4 * half;
-
-	if (argc == 6) {
-		half = atoi(argv[idx_half_life]->arg) * 60;
-		reuse = atoi(argv[idx_reuse]->arg);
-		suppress = atoi(argv[idx_suppress]->arg);
-		max = atoi(argv[idx_max_suppress]->arg) * 60;
-	} else if (argc == 3) {
-		half = atoi(argv[idx_half_life]->arg) * 60;
-		max = 4 * half;
-	}
-
-	/*
-	 * These can't be 0 but our SA doesn't understand the
-	 * way our cli is constructed
-	 */
-	assert(reuse);
-	assert(half);
-	if (suppress < reuse) {
-		vty_out(vty,
-			"Suppress value cannot be less than reuse value \n");
-		return 0;
-	}
-
-	return bgp_damp_enable(bgp, bgp_node_afi(vty), bgp_node_safi(vty), half,
-			       reuse, suppress, max);
-}
-
-DEFUN (bgp_damp_unset,
-       bgp_damp_unset_cmd,
-       "no bgp dampening [(1-45) [(1-20000) (1-50000) (1-255)]]",
-       NO_STR
-       "BGP Specific commands\n"
-       "Enable route-flap dampening\n"
-       "Half-life time for the penalty\n"
-       "Value to start reusing a route\n"
-       "Value to start suppressing a route\n"
-       "Maximum duration to suppress a stable route\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	return bgp_damp_disable(bgp, bgp_node_afi(vty), bgp_node_safi(vty));
-}
+/* bgp_damp_set_cmd and bgp_damp_unset_cmd removed - using bgp_dampening_cli_cmd from bgp_cli.c */
 
 /* Display specified route of BGP table. */
 static int bgp_clear_damp_route(struct vty *vty, const char *view_name,
@@ -18809,28 +18398,24 @@ void bgp_route_init(void)
 		bgp_distance_table[afi][safi] = bgp_table_init(NULL, afi, safi);
 
 	/* IPv4 BGP commands. */
-	install_element(BGP_NODE, &bgp_table_map_cmd);
-	install_element(BGP_NODE, &bgp_network_cmd);
-	install_element(BGP_NODE, &no_bgp_table_map_cmd);
+	/* bgp_table_map_cmd removed - using table_map_cli_cmd from bgp_cli.c */
+	/* bgp_network_cmd removed - using bgp_network_cli_cmd from bgp_cli.c */
 
-	install_element(BGP_NODE, &aggregate_addressv4_cmd);
+	/* aggregate_addressv4_cmd removed - using bgp_aggregate_address_cli_cmd from bgp_cli.c */
 
 	/* IPv4 unicast configuration.  */
-	install_element(BGP_IPV4_NODE, &bgp_table_map_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_network_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_table_map_cmd);
-
-	install_element(BGP_IPV4_NODE, &aggregate_addressv4_cmd);
+	/* bgp_table_map_cmd removed - using table_map_cli_cmd from bgp_cli.c */
+	/* bgp_network_cmd removed - using bgp_network_cli_cmd from bgp_cli.c */
+	/* aggregate_addressv4_cmd removed - using bgp_aggregate_address_cli_cmd from bgp_cli.c */
 
 	/* IPv4 multicast configuration.  */
-	install_element(BGP_IPV4M_NODE, &bgp_table_map_cmd);
-	install_element(BGP_IPV4M_NODE, &bgp_network_cmd);
-	install_element(BGP_IPV4M_NODE, &no_bgp_table_map_cmd);
-	install_element(BGP_IPV4M_NODE, &aggregate_addressv4_cmd);
+	/* bgp_table_map_cmd removed - using table_map_cli_cmd from bgp_cli.c */
+	/* bgp_network_cmd removed - using bgp_network_cli_cmd from bgp_cli.c */
+	/* aggregate_addressv4_cmd removed - using bgp_aggregate_address_cli_cmd from bgp_cli.c */
 
 	/* IPv4 labeled-unicast configuration.  */
-	install_element(BGP_IPV4L_NODE, &bgp_network_cmd);
-	install_element(BGP_IPV4L_NODE, &aggregate_addressv4_cmd);
+	/* bgp_network_cmd removed - using bgp_network_cli_cmd from bgp_cli.c */
+	/* aggregate_addressv4_cmd removed - using bgp_aggregate_address_cli_cmd from bgp_cli.c */
 
 	install_element(VIEW_NODE, &show_ip_bgp_instance_all_cmd);
 	install_element(VIEW_NODE, &show_ip_bgp_afi_safi_statistics_cmd);
@@ -18872,69 +18457,20 @@ void bgp_route_init(void)
 #endif /* KEEP_OLD_VPN_COMMANDS */
 
 	/* New config IPv6 BGP commands.  */
-	install_element(BGP_IPV6_NODE, &bgp_table_map_cmd);
-	install_element(BGP_IPV6_NODE, &ipv6_bgp_network_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_table_map_cmd);
+	/* bgp_table_map_cmd removed - using table_map_cli_cmd from bgp_cli.c */
+	/* ipv6_bgp_network_cmd removed - using bgp_network_cli_cmd from bgp_cli.c */
+	/* aggregate_addressv6_cmd removed - using bgp_aggregate_address_cli_cmd from bgp_cli.c */
 
-	install_element(BGP_IPV6_NODE, &aggregate_addressv6_cmd);
-
-	install_element(BGP_IPV6M_NODE, &ipv6_bgp_network_cmd);
+	/* ipv6_bgp_network_cmd removed - using bgp_network_cli_cmd from bgp_cli.c */
 
 	/* IPv6 labeled unicast address family. */
-	install_element(BGP_IPV6L_NODE, &ipv6_bgp_network_cmd);
-	install_element(BGP_IPV6L_NODE, &aggregate_addressv6_cmd);
+	/* ipv6_bgp_network_cmd removed - using bgp_network_cli_cmd from bgp_cli.c */
+	/* aggregate_addressv6_cmd removed - using bgp_aggregate_address_cli_cmd from bgp_cli.c */
 
-	install_element(BGP_NODE, &bgp_distance_cmd);
-	install_element(BGP_NODE, &no_bgp_distance_cmd);
-	install_element(BGP_NODE, &bgp_distance_source_cmd);
-	install_element(BGP_NODE, &no_bgp_distance_source_cmd);
-	install_element(BGP_NODE, &bgp_distance_source_access_list_cmd);
-	install_element(BGP_NODE, &no_bgp_distance_source_access_list_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_distance_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_distance_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_distance_source_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_distance_source_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_distance_source_access_list_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_distance_source_access_list_cmd);
-	install_element(BGP_IPV4M_NODE, &bgp_distance_cmd);
-	install_element(BGP_IPV4M_NODE, &no_bgp_distance_cmd);
-	install_element(BGP_IPV4M_NODE, &bgp_distance_source_cmd);
-	install_element(BGP_IPV4M_NODE, &no_bgp_distance_source_cmd);
-	install_element(BGP_IPV4M_NODE, &bgp_distance_source_access_list_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&no_bgp_distance_source_access_list_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_distance_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_distance_cmd);
-	install_element(BGP_IPV6_NODE, &ipv6_bgp_distance_source_cmd);
-	install_element(BGP_IPV6_NODE, &no_ipv6_bgp_distance_source_cmd);
-	install_element(BGP_IPV6_NODE,
-			&ipv6_bgp_distance_source_access_list_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_ipv6_bgp_distance_source_access_list_cmd);
-	install_element(BGP_IPV6M_NODE, &bgp_distance_cmd);
-	install_element(BGP_IPV6M_NODE, &no_bgp_distance_cmd);
-	install_element(BGP_IPV6M_NODE, &ipv6_bgp_distance_source_cmd);
-	install_element(BGP_IPV6M_NODE, &no_ipv6_bgp_distance_source_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&ipv6_bgp_distance_source_access_list_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&no_ipv6_bgp_distance_source_access_list_cmd);
+	/* bgp_distance_cmd and no_bgp_distance_cmd removed - using distance_bgp_cli_cmd from bgp_cli.c */
+	/* bgp_distance_source_cmd and variants removed - using admin_distance_route_cli_cmd from bgp_cli.c */
 
-	/* BGP dampening */
-	install_element(BGP_NODE, &bgp_damp_set_cmd);
-	install_element(BGP_NODE, &bgp_damp_unset_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_damp_set_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_damp_unset_cmd);
-	install_element(BGP_IPV4M_NODE, &bgp_damp_set_cmd);
-	install_element(BGP_IPV4M_NODE, &bgp_damp_unset_cmd);
-	install_element(BGP_IPV4L_NODE, &bgp_damp_set_cmd);
-	install_element(BGP_IPV4L_NODE, &bgp_damp_unset_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_damp_set_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_damp_unset_cmd);
-	install_element(BGP_IPV6M_NODE, &bgp_damp_set_cmd);
-	install_element(BGP_IPV6M_NODE, &bgp_damp_unset_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_damp_set_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_damp_unset_cmd);
+	/* BGP dampening - bgp_damp_set_cmd and bgp_damp_unset_cmd removed - using bgp_dampening_cli_cmd from bgp_cli.c */
 
 	/* Large Communities */
 	install_element(VIEW_NODE, &show_ip_bgp_large_community_list_cmd);

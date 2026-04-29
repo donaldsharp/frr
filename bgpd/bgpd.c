@@ -9917,3 +9917,93 @@ const char *bgp_martian_type2str(enum bgp_martian_type mt)
 {
 	return lookup_msg(bgp_martian_type_str, mt, "Unknown Martian Type");
 }
+int peer_group_unbind(struct bgp *bgp, struct peer *peer,
+		      struct peer_group *group)
+{
+	struct listnode *pn;
+
+	if (!peer || !group)
+		return -1;
+
+	/* Verify the peer is actually in this group */
+	if (peer->group != group)
+		return -1;
+
+	/* Remove from group's peer list */
+	pn = listnode_lookup(group->peer, peer);
+	if (pn) {
+		list_delete_node(group->peer, pn);
+		peer_unlock(peer); /* group->peer list reference */
+	}
+
+	/* Clear group reference */
+	peer->group = NULL;
+
+	return 0;
+}
+
+void bgp_start_listening(struct bgp *bgp)
+{
+	struct vrf *vrf;
+
+	if (!bgp)
+		return;
+
+	/* Don't listen if already listening or option disabled */
+	if (CHECK_FLAG(bgp->flags, BGP_FLAG_VRF_MAY_LISTEN))
+		return;
+	if (bgp_option_check(BGP_OPT_NO_LISTEN))
+		return;
+
+	SET_FLAG(bgp->flags, BGP_FLAG_VRF_MAY_LISTEN);
+	vrf = bgp_vrf_lookup_by_instance_type(bgp);
+	bgp_handle_socket(bgp, vrf, VRF_UNKNOWN, true);
+}
+
+void bgp_stop_listening_if_empty(struct bgp *bgp)
+{
+	struct listnode *node, *nnode;
+	struct peer_group *group;
+	struct peer *peer;
+	struct vrf *vrf;
+	afi_t afi;
+	bool any_active_peer = false;
+
+	if (!bgp)
+		return;
+
+	/* Check if any peer-group has listen ranges */
+	for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group)) {
+		for (afi = AFI_IP; afi < AFI_MAX; afi++) {
+			if (!list_isempty(group->listen_range[afi]))
+				return;
+		}
+	}
+
+	/* Check if there are any peers with a valid NB config */
+	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
+		if (!CHECK_FLAG(peer->sflags,
+				PEER_STATUS_NB_PENDING_CONFIG)) {
+			any_active_peer = true;
+			break;
+		}
+	}
+	if (any_active_peer)
+		return;
+
+	/* No active peers or listen ranges, stop listening */
+	vrf = bgp_vrf_lookup_by_instance_type(bgp);
+	bgp_handle_socket(bgp, vrf, VRF_UNKNOWN, false);
+	UNSET_FLAG(bgp->flags, BGP_FLAG_VRF_MAY_LISTEN);
+}
+
+struct peer *peer_lookup_active(struct bgp *bgp, union sockunion *su)
+{
+	struct peer *peer = peer_lookup(bgp, su);
+
+	if (peer && CHECK_FLAG(peer->sflags, PEER_STATUS_NB_PENDING_CONFIG))
+		return NULL;
+	return peer;
+}
+
+

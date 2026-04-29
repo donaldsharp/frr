@@ -2105,6 +2105,13 @@ DEFUN(show_bgp_l2vpn_evpn_com,
 	return ret;
 }
 
+/*
+ * All BGP_EVPN_NODE and BGP_EVPN_VNI_NODE config command DEFUNs are
+ * disabled to prevent xref entries in bgpd's binary. These commands
+ * are now handled by DEFPY_YANG in bgp_cli.c (mgmtd).
+ * The DEFUN bodies are preserved for reference during NB conversion.
+ */
+#if 0 /* Legacy EVPN config commands - replaced by NB in bgp_cli.c */
 /* For testing purpose, static route of EVPN RT-5. */
 DEFUN(evpnrt5_network,
       evpnrt5_network_cmd,
@@ -2175,6 +2182,7 @@ DEFUN(no_evpnrt5_network,
 			      0, 0, BGP_EVPN_IP_PREFIX_ROUTE, argv[idx_esi]->arg,
 			      argv[idx_gwip]->arg, argv[idx_ethtag]->arg, NULL);
 }
+#endif /* Legacy evpnrt5 network DEFUNs */
 
 static void evpn_import_rt_delete_auto(struct bgp *bgp, struct bgpevpn *vpn)
 {
@@ -2190,8 +2198,8 @@ static void evpn_export_rt_delete_auto(struct bgp *bgp, struct bgpevpn *vpn)
  * Configure the Import RTs for a VNI (vty handler). Caller expected to
  * check that this is a change.
  */
-static void evpn_configure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
-				     struct ecommunity *ecomadd)
+void evpn_configure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
+			      struct ecommunity *ecomadd)
 {
 	/* If the VNI is "live", we need to uninstall routes using the current
 	 * import RT(s) first before we update the import RT, and subsequently
@@ -2220,8 +2228,8 @@ static void evpn_configure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
 /*
  * Unconfigure Import RT(s) for a VNI (vty handler).
  */
-static void evpn_unconfigure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
-				       struct ecommunity *ecomdel)
+void evpn_unconfigure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				struct ecommunity *ecomdel)
 {
 	struct listnode *node, *nnode, *node_to_del;
 	struct ecommunity *ecom;
@@ -2280,8 +2288,8 @@ static void evpn_unconfigure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
  * allowed for a VNI and any change to configuration is implemented as
  * a "replace" (similar to other configuration).
  */
-static void evpn_configure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
-				     struct ecommunity *ecomadd)
+void evpn_configure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
+			      struct ecommunity *ecomadd)
 {
 	/* If the auto route-target is in use we must remove it */
 	evpn_export_rt_delete_auto(bgp, vpn);
@@ -2296,8 +2304,8 @@ static void evpn_configure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
 /*
  * Unconfigure the Export RT for a VNI (vty handler)
  */
-static void evpn_unconfigure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
-				       struct ecommunity *ecomdel)
+void evpn_unconfigure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				struct ecommunity *ecomdel)
 {
 	struct listnode *node, *nnode, *node_to_del;
 	struct ecommunity *ecom;
@@ -2340,7 +2348,7 @@ static void evpn_unconfigure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
 /*
  * Configure RD for VRF
  */
-static void evpn_configure_vrf_rd(struct bgp *bgp_vrf, struct prefix_rd *rd,
+static __attribute__((unused)) void evpn_configure_vrf_rd(struct bgp *bgp_vrf, struct prefix_rd *rd,
 				  const char *rd_pretty)
 {
 	/* If we have already advertise type-5 routes with a different RD, we
@@ -2365,7 +2373,7 @@ static void evpn_configure_vrf_rd(struct bgp *bgp_vrf, struct prefix_rd *rd,
 /*
  * Unconfigure RD for VRF
  */
-static void evpn_unconfigure_vrf_rd(struct bgp *bgp_vrf)
+static __attribute__((unused)) void evpn_unconfigure_vrf_rd(struct bgp *bgp_vrf)
 {
 	/* If we have already advertise type-5 routes with a different RD, we
 	 * have to delete and withdraw them first
@@ -2386,7 +2394,7 @@ static void evpn_unconfigure_vrf_rd(struct bgp *bgp_vrf)
 /*
  * Configure RD for a VNI (vty handler)
  */
-static void evpn_configure_rd(struct bgp *bgp, struct bgpevpn *vpn,
+static __attribute__((unused)) void evpn_configure_rd(struct bgp *bgp, struct bgpevpn *vpn,
 			      struct prefix_rd *rd, const char *rd_pretty)
 {
 	/* If the VNI is "live", we need to delete and withdraw this VNI's
@@ -2429,7 +2437,7 @@ static void evpn_unconfigure_rd(struct bgp *bgp, struct bgpevpn *vpn)
 /*
  * Create VNI, if not already present (VTY handler). Mark as configured.
  */
-static struct bgpevpn *evpn_create_update_vni(struct bgp *bgp, vni_t vni)
+static __attribute__((unused)) struct bgpevpn *evpn_create_update_vni(struct bgp *bgp, vni_t vni)
 {
 	struct bgpevpn *vpn;
 	struct in_addr mcast_grp = {INADDR_ANY};
@@ -2466,7 +2474,7 @@ static struct bgpevpn *evpn_create_update_vni(struct bgp *bgp, vni_t vni)
  * appropriate action) and the VNI marked as unconfigured; the
  * VNI will continue to exist, purely as a "learnt" entity.
  */
-static void evpn_delete_vni(struct bgp *bgp, struct bgpevpn *vpn)
+static __attribute__((unused)) void evpn_delete_vni(struct bgp *bgp, struct bgpevpn *vpn)
 {
 	if (!is_vni_live(vpn)) {
 		bgp_evpn_free(bgp, vpn);
@@ -3489,7 +3497,7 @@ static void evpn_show_all_vnis(struct vty *vty, struct bgp *bgp,
 /*
  * evpn - enable advertisement of svi MAC-IP
  */
-static void evpn_set_advertise_svi_macip(struct bgp *bgp, struct bgpevpn *vpn,
+static __attribute__((unused)) void evpn_set_advertise_svi_macip(struct bgp *bgp, struct bgpevpn *vpn,
 					 uint32_t set)
 {
 	if (!vpn) {
@@ -3516,7 +3524,7 @@ static void evpn_set_advertise_svi_macip(struct bgp *bgp, struct bgpevpn *vpn,
 /*
  * evpn - enable advertisement of default g/w
  */
-static void evpn_set_advertise_default_gw(struct bgp *bgp, struct bgpevpn *vpn)
+void evpn_set_advertise_default_gw(struct bgp *bgp, struct bgpevpn *vpn)
 {
 	if (!vpn) {
 		if (bgp->advertise_gw_macip)
@@ -3538,7 +3546,7 @@ static void evpn_set_advertise_default_gw(struct bgp *bgp, struct bgpevpn *vpn)
 /*
  * evpn - disable advertisement of default g/w
  */
-static void evpn_unset_advertise_default_gw(struct bgp *bgp,
+void evpn_unset_advertise_default_gw(struct bgp *bgp,
 					    struct bgpevpn *vpn)
 {
 	if (!vpn) {
@@ -3561,7 +3569,7 @@ static void evpn_unset_advertise_default_gw(struct bgp *bgp,
 /*
  * evpn - enable advertisement of default g/w
  */
-static void evpn_process_default_originate_cmd(struct bgp *bgp_vrf,
+static __attribute__((unused)) void evpn_process_default_originate_cmd(struct bgp *bgp_vrf,
 					       afi_t afi, bool add)
 {
 	safi_t safi = SAFI_UNICAST; /* ipv4/ipv6 unicast */
@@ -3596,7 +3604,7 @@ static void evpn_process_default_originate_cmd(struct bgp *bgp_vrf,
 /*
  * evpn - enable advertisement of default g/w
  */
-static void evpn_set_advertise_subnet(struct bgp *bgp,
+static __attribute__((unused)) void evpn_set_advertise_subnet(struct bgp *bgp,
 				      struct bgpevpn *vpn)
 {
 	if (vpn->advertise_subnet)
@@ -3609,7 +3617,7 @@ static void evpn_set_advertise_subnet(struct bgp *bgp,
 /*
  * evpn - disable advertisement of default g/w
  */
-static void evpn_unset_advertise_subnet(struct bgp *bgp, struct bgpevpn *vpn)
+static __attribute__((unused)) void evpn_unset_advertise_subnet(struct bgp *bgp, struct bgpevpn *vpn)
 {
 	if (!vpn->advertise_subnet)
 		return;
@@ -3621,7 +3629,7 @@ static void evpn_unset_advertise_subnet(struct bgp *bgp, struct bgpevpn *vpn)
 /*
  * EVPN (VNI advertisement) enabled. Register with zebra.
  */
-static void evpn_set_advertise_all_vni(struct bgp *bgp)
+void evpn_set_advertise_all_vni(struct bgp *bgp)
 {
 	bgp->advertise_all_vni = 1;
 	bgp_set_evpn(bgp);
@@ -3632,7 +3640,7 @@ static void evpn_set_advertise_all_vni(struct bgp *bgp)
  * EVPN (VNI advertisement) disabled. De-register with zebra. Cleanup VNI
  * cache, EVPN routes (delete and withdraw from peers).
  */
-static void evpn_unset_advertise_all_vni(struct bgp *bgp)
+void evpn_unset_advertise_all_vni(struct bgp *bgp)
 {
 	bgp->advertise_all_vni = 0;
 	bgp_set_evpn(bgp_get_default());
@@ -3641,7 +3649,7 @@ static void evpn_unset_advertise_all_vni(struct bgp *bgp)
 }
 
 /* Set resolve overlay index flag */
-static void bgp_evpn_set_unset_resolve_overlay_index(struct bgp *bgp, bool set)
+void bgp_evpn_set_unset_resolve_overlay_index(struct bgp *bgp, bool set)
 {
 	if (set == bgp->resolve_overlay_index)
 		return;
@@ -3665,7 +3673,7 @@ static void bgp_evpn_set_unset_resolve_overlay_index(struct bgp *bgp, bool set)
 /*
  * EVPN - use RFC8365 to auto-derive RT
  */
-static void evpn_set_advertise_autort_rfc8365(struct bgp *bgp)
+static __attribute__((unused)) void evpn_set_advertise_autort_rfc8365(struct bgp *bgp)
 {
 	bgp->advertise_autort_rfc8365 = 1;
 	bgp_evpn_handle_autort_change(bgp);
@@ -3674,7 +3682,7 @@ static void evpn_set_advertise_autort_rfc8365(struct bgp *bgp)
 /*
  * EVPN - don't use RFC8365 to auto-derive RT
  */
-static void evpn_unset_advertise_autort_rfc8365(struct bgp *bgp)
+static __attribute__((unused)) void evpn_unset_advertise_autort_rfc8365(struct bgp *bgp)
 {
 	bgp->advertise_autort_rfc8365 = 0;
 	bgp_evpn_handle_autort_change(bgp);
@@ -3736,36 +3744,9 @@ static void write_vni_config(struct vty *vty, struct bgpevpn *vpn)
 
 #include "bgpd/bgp_evpn_vty_clippy.c"
 
-DEFPY(bgp_evpn_flood_control,
-      bgp_evpn_flood_control_cmd,
-      "[no$no] flooding <disable$disable|head-end-replication$her>",
-      NO_STR
-      "Specify handling for BUM packets\n"
-      "Do not flood any BUM packets\n"
-      "Flood BUM packets using head-end replication\n")
-{
-	struct bgp *bgp = VTY_GET_CONTEXT(bgp);
-	enum vxlan_flood_control flood_ctrl;
+/* flood_control - replaced by NB conversion in bgp_cli.c */
 
-	if (!bgp)
-		return CMD_WARNING;
-
-	if (disable && !no)
-		flood_ctrl = VXLAN_FLOOD_DISABLED;
-	else if (her || no)
-		flood_ctrl = VXLAN_FLOOD_HEAD_END_REPL;
-	else
-		return CMD_WARNING;
-
-	if (bgp->vxlan_flood_ctrl == flood_ctrl)
-		return CMD_SUCCESS;
-
-	bgp->vxlan_flood_ctrl = flood_ctrl;
-	bgp_evpn_flood_control_change(bgp);
-
-	return CMD_SUCCESS;
-}
-
+#if 0 /* Legacy EVPN config DEFUNs - all replaced by NB in bgp_cli.c */
 DEFUN (bgp_evpn_advertise_default_gw_vni,
        bgp_evpn_advertise_default_gw_vni_cmd,
        "advertise-default-gw",
@@ -4214,6 +4195,8 @@ DEFUN_HIDDEN (no_bgp_evpn_advertise_vni_subnet,
 	return CMD_SUCCESS;
 }
 
+/* Legacy advertise type5 - replaced by DEFPY_YANG in bgp_cli.c */
+#if 0 /* Replaced by NB conversion in bgp_cli.c */
 DEFUN (bgp_evpn_advertise_type5,
        bgp_evpn_advertise_type5_cmd,
        "advertise " BGP_AFI_CMD_STR "" BGP_SAFI_CMD_STR " [gateway-ip] [route-map RMAP_NAME]",
@@ -4429,6 +4412,7 @@ DEFUN (no_bgp_evpn_advertise_type5,
 
 	return CMD_SUCCESS;
 }
+#endif /* Replaced by NB conversion */
 
 DEFPY (bgp_evpn_use_es_l3nhg,
        bgp_evpn_use_es_l3nhg_cmd,
@@ -4626,6 +4610,7 @@ DEFPY (bgp_evpn_advertise_pip_ip_mac,
 
 	return CMD_SUCCESS;
 }
+#endif /* Legacy EVPN config DEFUNs block 1 */
 
 /*
  * Display VNI information - for all or a specific VNI
@@ -6059,6 +6044,7 @@ DEFUN(show_bgp_l2vpn_evpn_import_rt,
 	return CMD_SUCCESS;
 }
 
+#if 0 /* Legacy EVPN test commands - xref prevention */
 DEFPY_HIDDEN(test_es_add,
       test_es_add_cmd,
       "[no$no] test es NAME$esi_str [state NAME$state_str]",
@@ -6152,6 +6138,7 @@ DEFPY_HIDDEN(test_es_vni_add,
 	}
 	return CMD_SUCCESS;
 }
+#endif /* Legacy EVPN test commands */
 
 ALIAS_HIDDEN(show_bgp_l2vpn_evpn_vni, show_bgp_evpn_vni_cmd,
 	     "show bgp evpn vni [" CMD_VNI_RANGE "]", SHOW_STR BGP_STR EVPN_HELP_STR
@@ -6249,44 +6236,8 @@ ALIAS_HIDDEN(show_bgp_l2vpn_evpn_import_rt, show_bgp_evpn_import_rt_cmd,
 	     "show bgp evpn import-rt",
 	     SHOW_STR BGP_STR EVPN_HELP_STR "Show import route target\n")
 
-DEFPY(bgp_evpn_flood_control_vni,
-      bgp_evpn_flood_control_vni_cmd,
-      "[no$no] flooding <disable$disable|head-end-replication$her>",
-      NO_STR
-      "Specify handling for BUM packets\n"
-      "Do not flood any BUM packets\n"
-      "Flood BUM packets using head-end replication\n")
-{
-	struct bgpevpn *evpn = NULL;
-	struct bgp *bgp = VTY_GET_CONTEXT(bgp);
-	enum vxlan_flood_control flood_ctrl = VXLAN_FLOOD_INHERIT_GLOBAL;
-
-	if (vty->node == BGP_EVPN_VNI_NODE)
-		evpn = VTY_GET_CONTEXT_SUB(bgpevpn);
-
-	if (!bgp)
-		return CMD_WARNING;
-
-	if (!evpn)
-		return CMD_WARNING;
-
-	if (no) {
-		flood_ctrl = VXLAN_FLOOD_INHERIT_GLOBAL;
-	} else {
-		if (disable)
-			flood_ctrl = VXLAN_FLOOD_DISABLED;
-		else if (her)
-			flood_ctrl = VXLAN_FLOOD_HEAD_END_REPL;
-	}
-
-	if (evpn->vxlan_flood_ctrl == flood_ctrl)
-		return CMD_SUCCESS;
-
-	evpn->vxlan_flood_ctrl = flood_ctrl;
-	bgp_evpn_flood_control_change(bgp);
-
-	return CMD_SUCCESS;
-}
+#if 0 /* Legacy VNI config DEFUNs - replaced by NB in bgp_cli.c */
+/* bgp_evpn_flood_control_vni - DELETED, now in bgp_cli.c */
 
 DEFUN_NOSH (bgp_evpn_vni,
             bgp_evpn_vni_cmd,
@@ -6354,7 +6305,9 @@ DEFUN_NOSH (exit_vni,
 		vty->node = BGP_EVPN_NODE;
 	return CMD_SUCCESS;
 }
+#endif /* Legacy VNI config DEFUNs block 2 */
 
+#if 0 /* VRF rd - replaced by NB conversion in bgp_cli.c */
 DEFUN (bgp_evpn_vrf_rd,
        bgp_evpn_vrf_rd_cmd,
        "rd ASN:NN_OR_IP-ADDRESS:NN",
@@ -6439,7 +6392,9 @@ DEFUN (no_bgp_evpn_vrf_rd_without_val,
 	evpn_unconfigure_vrf_rd(bgp_vrf);
 	return CMD_SUCCESS;
 }
+#endif /* VRF rd replaced by NB */
 
+#if 0 /* Legacy VNI rd DEFUNs - replaced by NB in bgp_cli.c */
 DEFUN (bgp_evpn_vni_rd,
        bgp_evpn_vni_rd_cmd,
        "rd ASN:NN_OR_IP-ADDRESS:NN",
@@ -6545,12 +6500,13 @@ DEFUN (no_bgp_evpn_vni_rd_without_val,
 	evpn_unconfigure_rd(bgp, vpn);
 	return CMD_SUCCESS;
 }
+#endif /* Legacy VNI rd */
 
 /*
  * Loop over all extended-communities in the route-target list rtl and
  * return 1 if we find ecomtarget
  */
-static bool bgp_evpn_rt_matches_existing(struct list *rtl,
+static __attribute__((unused)) bool bgp_evpn_rt_matches_existing(struct list *rtl,
 					 struct ecommunity *ecomtarget)
 {
 	struct listnode *node;
@@ -6747,7 +6703,7 @@ static int del_rt(struct bgp *bgp, struct ecommunity *ecom, bool is_import)
 	return 0;
 }
 
-static int parse_rtlist(struct bgp *bgp, struct vty *vty, int argc,
+static __attribute__((unused)) int parse_rtlist(struct bgp *bgp, struct vty *vty, int argc,
 			struct cmd_token **argv, int rt_idx, bool is_add,
 			bool is_import)
 {
@@ -6808,6 +6764,7 @@ static int parse_rtlist(struct bgp *bgp, struct vty *vty, int argc,
 	return ret;
 }
 
+#if 0 /* VRF rt - replaced by NB conversion in bgp_cli.c */
 /* import/export rt for l3vni-vrf */
 DEFUN (bgp_evpn_vrf_rt,
        bgp_evpn_vrf_rt_cmd,
@@ -7039,7 +6996,9 @@ DEFPY (no_bgp_evpn_vrf_rt_auto,
 
 	return CMD_SUCCESS;
 }
+#endif /* VRF rt replaced by NB */
 
+#if 0 /* Legacy ead + VNI rt DEFUNs - replaced by NB in bgp_cli.c */
 DEFPY(bgp_evpn_ead_ess_frag_evi_limit, bgp_evpn_ead_es_frag_evi_limit_cmd,
       "[no$no] ead-es-frag evi-limit (1-1000)$limit",
       NO_STR
@@ -7358,6 +7317,7 @@ DEFUN (no_bgp_evpn_vni_rt_without_val,
 		evpn_unconfigure_export_rt(bgp, vpn, NULL);
 	return CMD_SUCCESS;
 }
+#endif /* Legacy ead + VNI rt DEFUNs */
 
 static int vni_cmp(const void **a, const void **b)
 {
@@ -7628,35 +7588,13 @@ void bgp_ethernetvpn_init(void)
 		&show_ip_bgp_l2vpn_evpn_rd_neighbor_advertised_routes_cmd);
 	install_element(VIEW_NODE, &show_ip_bgp_evpn_rd_overlay_cmd);
 	install_element(VIEW_NODE, &show_ip_bgp_l2vpn_evpn_all_overlay_cmd);
-	install_element(BGP_EVPN_NODE, &no_evpnrt5_network_cmd);
-	install_element(BGP_EVPN_NODE, &evpnrt5_network_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_all_vni_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_advertise_all_vni_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_autort_rfc8365_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_advertise_autort_rfc8365_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_default_gw_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_advertise_default_gw_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_svi_ip_cmd);
-	install_element(BGP_EVPN_NODE, &macvrf_soo_global_cmd);
-	install_element(BGP_EVPN_NODE, &no_macvrf_soo_global_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_type5_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_advertise_type5_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_default_originate_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_default_originate_cmd);
-	install_element(BGP_EVPN_NODE, &dup_addr_detection_cmd);
-	install_element(BGP_EVPN_NODE, &dup_addr_detection_auto_recovery_cmd);
-	install_element(BGP_EVPN_NODE, &no_dup_addr_detection_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_flood_control_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_pip_ip_mac_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_use_es_l3nhg_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_evi_rx_disable_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_evi_tx_disable_cmd);
-	install_element(BGP_EVPN_NODE,
-			&bgp_evpn_enable_resolve_overlay_index_cmd);
-
-	/* test commands */
-	install_element(BGP_EVPN_NODE, &test_es_add_cmd);
-	install_element(BGP_EVPN_NODE, &test_es_vni_add_cmd);
+	/*
+	 * All BGP_EVPN_NODE and BGP_EVPN_VNI_NODE config commands are now
+	 * handled via mgmtd/NB (bgp_cli.c). Legacy install_element calls
+	 * removed to prevent xref conflicts that route commands to bgpd
+	 * instead of mgmtd. Commands not yet converted to NB will be added
+	 * to bgp_cli.c as needed.
+	 */
 
 	/* "show bgp l2vpn evpn" commands. */
 	install_element(VIEW_NODE, &show_bgp_l2vpn_evpn_es_cmd);
@@ -7712,32 +7650,4 @@ void bgp_ethernetvpn_init(void)
 	install_element(VIEW_NODE, &show_bgp_l2vpn_evpn_com_cmd);
 	install_element(VIEW_NODE, &show_bgp_l2vpn_evpn_rt_cmd);
 
-	install_element(BGP_EVPN_NODE, &bgp_evpn_vni_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vni_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &exit_vni_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_flood_control_vni_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rd_without_val_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_without_val_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rd_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vrf_rd_cmd);
-	install_element(BGP_NODE, &no_bgp_evpn_vrf_rd_without_val_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vrf_rt_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_auto_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vrf_rt_auto_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_es_rt_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_ead_es_rt_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_es_frag_evi_limit_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_advertise_svi_ip_vni_cmd);
-	install_element(BGP_EVPN_VNI_NODE,
-			&bgp_evpn_advertise_default_gw_vni_cmd);
-	install_element(BGP_EVPN_VNI_NODE,
-			&no_bgp_evpn_advertise_default_gw_vni_cmd);
-	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_advertise_vni_subnet_cmd);
-	install_element(BGP_EVPN_VNI_NODE,
-			&no_bgp_evpn_advertise_vni_subnet_cmd);
 }

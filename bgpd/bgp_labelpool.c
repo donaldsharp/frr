@@ -545,6 +545,11 @@ static void bgp_nh_lp_release(struct bgp_label_per_nexthop_cache *blnc,
 	bgp_lp_release(label, blnc, LP_TYPE_NEXTHOP, true, false);
 }
 
+void bgp_nh_lp_release_by_id(void *labelid_ptr, mpls_label_t label)
+{
+	bgp_lp_release(label, labelid_ptr, LP_TYPE_NEXTHOP, false, false);
+}
+
 /*
  * Public typed release api
  */
@@ -1774,6 +1779,29 @@ bgp_label_per_nexthop_find(struct bgp_label_per_nexthop_cache_head *tree,
 
 	memcpy(&blnc.nexthop, nexthop, sizeof(struct prefix));
 	return bgp_label_per_nexthop_cache_find(tree, &blnc);
+}
+
+/*
+ * Pointer-identity lookup for a per-nexthop cache entry.  Used by async
+ * labelpool callbacks to detect whether their stored blnc context is still
+ * registered in the tree before dereferencing it.  Live entries are always
+ * inserted in _new and removed in _free, so presence here means the memory
+ * is still valid.
+ */
+bool bgp_label_per_nexthop_contains(
+	struct bgp_label_per_nexthop_cache_head *tree,
+	const struct bgp_label_per_nexthop_cache *needle)
+{
+	struct bgp_label_per_nexthop_cache *iter;
+
+	if (!tree || !needle)
+		return false;
+
+	frr_each (bgp_label_per_nexthop_cache, tree, iter) {
+		if (iter == needle)
+			return true;
+	}
+	return false;
 }
 
 void bgp_label_per_nexthop_free(struct bgp_label_per_nexthop_cache *blnc)

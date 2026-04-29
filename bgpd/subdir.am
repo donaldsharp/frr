@@ -42,6 +42,7 @@ bgpd_libbgp_a_SOURCES = \
 	bgpd/bgp_evpn_mh.c \
 	bgpd/bgp_evpn_vty.c \
 	bgpd/bgp_filter.c \
+	bgpd/bgp_filter_nb.c \
 	bgpd/bgp_flowspec.c \
 	bgpd/bgp_flowspec_util.c \
 	bgpd/bgp_flowspec_vty.c \
@@ -77,6 +78,12 @@ bgpd_libbgp_a_SOURCES = \
 	bgpd/bgp_updgrp_packet.c \
 	bgpd/bgp_vpn.c \
 	bgpd/bgp_vty.c \
+	bgpd/bgp_nb.c \
+	bgpd/bgp_nb_config.c \
+	bgpd/bgp_nb_helpers.c \
+	bgpd/bgp_nb_state.c \
+	bgpd/bgp_nb_rpcs.c \
+	bgpd/bgp_rpki_nb.c \
 	bgpd/bgp_zebra.c \
 	bgpd/bgpd.c \
 	bgpd/bgp_trace.c \
@@ -113,6 +120,7 @@ noinst_HEADERS += \
 	bgpd/bgp_attr.h \
 	bgpd/bgp_attr_evpn.h \
 	bgpd/bgp_bfd.h \
+	bgpd/bgp_cli.h \
 	bgpd/bgp_clist.h \
 	bgpd/bgp_community.h \
 	bgpd/bgp_community_alias.h \
@@ -130,6 +138,7 @@ noinst_HEADERS += \
 	bgpd/bgp_evpn_private.h \
 	bgpd/bgp_evpn_vty.h \
 	bgpd/bgp_filter.h \
+	bgpd/bgp_filter_cli.h \
 	bgpd/bgp_flowspec.h \
 	bgpd/bgp_flowspec_private.h \
 	bgpd/bgp_flowspec_util.h \
@@ -229,6 +238,8 @@ clippy_scan += \
         bgpd/bgp_nexthop.c \
 	bgpd/bgp_snmp.c \
 	bgpd/bgp_bfd.c \
+	bgpd/bgp_cli.c \
+	bgpd/bgp_filter_cli.c \
 	# end
 
 nodist_bgpd_bgpd_SOURCES = \
@@ -241,7 +252,7 @@ nodist_bgpd_bgpd_SOURCES = \
 	yang/frr-bgp-peer-group.yang.c \
 	yang/frr-bgp-bmp.yang.c \
 	yang/frr-bgp-rpki.yang.c \
-	yang/frr-deviations-bgp-datacenter.yang.c \
 	yang/frr-bgp-filter.yang.c \
 	yang/frr-bgp-route-map.yang.c \
+	yang/frr-zebra-route-map.yang.c \
 	# end

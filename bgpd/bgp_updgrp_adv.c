@@ -42,6 +42,8 @@
 /********************
  * PRIVATE FUNCTIONS
  ********************/
+static bool subgroup_defer_for_pending_rmap(struct update_subgroup *subgrp);
+
 static int bgp_adj_out_compare(const struct bgp_adj_out *o1,
 			       const struct bgp_adj_out *o2)
 {
@@ -234,6 +236,14 @@ static int group_announce_route_walkcb(struct update_group *updgrp, void *arg)
 			   afi2str(afi), safi2str(safi), ctx->dest);
 
 	UPDGRP_FOREACH_SUBGRP (updgrp, subgrp) {
+		/* If this subgroup's outbound rmap is pending update, don't
+		 * populate adj_out here - TMR-FIRE's FORCE-POLICY-END will
+		 * do the first authoritative send. See
+		 * subgroup_defer_for_pending_rmap() for full rationale.
+		 */
+		if (subgroup_defer_for_pending_rmap(subgrp))
+			goto done;
+
 		/* An update-group that uses addpath */
 		if (addpath_capable) {
 			/* Send withdrawals without waiting for coalesting timer
@@ -821,8 +831,27 @@ void subgroup_announce_table(struct update_subgroup *subgrp,
 
 	if (safi != SAFI_MPLS_VPN && safi != SAFI_ENCAP && safi != SAFI_EVPN
 	    && CHECK_FLAG(peer->af_flags[afi][safi],
-			  PEER_FLAG_DEFAULT_ORIGINATE))
-		subgroup_default_originate(subgrp, false);
+			  PEER_FLAG_DEFAULT_ORIGINATE)) {
+		/*
+		 * If a default-originate evaluation timer is configured, gate
+		 * the initial announce behind it. Arm the timer if not already
+		 * armed; the timer callback will invoke subgroup_default_originate
+		 * for all subgroups when it fires. This honors "bgp
+		 * default-originate timer <N>" across both initial subgroup
+		 * build and subsequent best-path changes.
+		 */
+		if (peer->bgp->rmap_def_originate_eval_timer) {
+			if (!peer->bgp->t_rmap_def_originate_eval)
+				event_add_timer(
+					bm->master,
+					update_group_refresh_default_originate_route_map,
+					peer->bgp,
+					peer->bgp->rmap_def_originate_eval_timer,
+					&peer->bgp->t_rmap_def_originate_eval);
+		} else {
+			subgroup_default_originate(subgrp, false);
+		}
+	}
 
 	subgrp->pscount = 0;
 	SET_FLAG(subgrp->sflags, SUBGRP_STATUS_TABLE_REPARSING);
@@ -1138,6 +1167,41 @@ void subgroup_default_originate(struct update_subgroup *subgrp, bool withdraw)
 }
 
 /*
+ * If the subgroup's outbound route-map is pending processing (marked for
+ * update but not yet resolved via bgp_route_map_update_timer), defer the
+ * initial announce. The pending rmap_update_timer fire will invoke
+ * FORCE-POLICY-END's subgroup_announce_route for this subgroup, which
+ * becomes the first outbound send. Without this gate, NB's commit order
+ * (route-map defined before peer filter) causes the coalesce-fire initial
+ * announce to populate adj_out with correct attrs, and the subsequent
+ * FORCE-POLICY-END re-walk bypasses suppress-duplicates producing
+ * duplicate UPDATEs on the wire. Baseline's sequential-DEFUN config-load
+ * avoids this because peer_route_map_set runs with the rmap still
+ * undefined (filter->map = NULL), filtering the initial walk to DENY.
+ */
+static bool subgroup_defer_for_pending_rmap(struct update_subgroup *subgrp)
+{
+	struct peer *peer = SUBGRP_PEER(subgrp);
+	afi_t afi = SUBGRP_AFI(subgrp);
+	safi_t safi = SUBGRP_SAFI(subgrp);
+	struct bgp_filter *filter;
+	struct route_map *map;
+
+	if (!peer)
+		return false;
+
+	filter = &peer->filter[afi][safi];
+	if (!filter->map[RMAP_OUT].name)
+		return false;
+
+	map = route_map_lookup_by_name(filter->map[RMAP_OUT].name);
+	if (!map)
+		return false;
+
+	return map->to_be_processed;
+}
+
+/*
  * Announce the BGP table to a subgroup.
  *
  * At startup, we try to optimize route announcement by coalescing the
@@ -1149,6 +1213,14 @@ void subgroup_announce_all(struct update_subgroup *subgrp)
 {
 	if (!subgrp)
 		return;
+
+	if (subgroup_defer_for_pending_rmap(subgrp)) {
+		if (bgp_debug_update(NULL, NULL, subgrp->update_group, 0))
+			zlog_debug("u%" PRIu64 ":s%" PRIu64
+				   " deferring announce - outbound rmap pending update",
+				   subgrp->update_group->id, subgrp->id);
+		return;
+	}
 
 	/*
 	 * If coalesce timer value is not set, announce routes immediately.

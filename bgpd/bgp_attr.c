@@ -4010,6 +4010,7 @@ static int bgp_attr_nhc(struct bgp_attr_parser_args *args)
 					 peer, tlv->length, IPV4_MAX_BYTELEN);
 				bgp_nhc_tlv_free(tlv);
 				bgp_nhc_free(nhc);
+				bgp_attr_set_nhc(attr, NULL);
 				return bgp_attr_malformed(args, BGP_NOTIFY_UPDATE_OPT_ATTR_ERR,
 							  args->total);
 			}
@@ -4020,6 +4021,7 @@ static int bgp_attr_nhc(struct bgp_attr_parser_args *args)
 					 peer);
 				bgp_nhc_tlv_free(tlv);
 				bgp_nhc_free(nhc);
+				bgp_attr_set_nhc(attr, NULL);
 				return bgp_attr_malformed(args, BGP_NOTIFY_UPDATE_OPT_ATTR_ERR,
 							  args->total);
 			}
@@ -4851,12 +4853,33 @@ size_t bgp_packet_mpattr_start(struct stream *s, struct peer *peer, afi_t afi,
 		case SAFI_FLOWSPEC:
 			stream_putc(s, 0); /* no nexthop for flowspec */
 			break;
-		case SAFI_BGP_LS:
-			stream_putc(s, attr->mp_nexthop_len);
+		case SAFI_BGP_LS: {
+			/* BGP-LS over an IPv6 BGP session: the length-byte we
+			 * write MUST match the number of nexthop bytes we then
+			 * write (or the receiver will read the length-byte,
+			 * consume that many nexthop bytes, then misalign the
+			 * NLRI section by the difference).
+			 *
+			 * attr->mp_nexthop_len can be inherited from a prior
+			 * IPv4 BGP-LS session (where the path was learned with
+			 * length=4), but the encoder unconditionally writes
+			 * 16 (or 32 with link-local) bytes from
+			 * mp_nexthop_global. Force the length-byte to match
+			 * the bytes-written so the wire is internally
+			 * consistent, regardless of the path's inherited
+			 * mp_nexthop_len.
+			 */
+			uint8_t nh_len =
+				(attr->mp_nexthop_len ==
+				 BGP_ATTR_NHLEN_IPV6_GLOBAL_AND_LL)
+					? BGP_ATTR_NHLEN_IPV6_GLOBAL_AND_LL
+					: IPV6_MAX_BYTELEN;
+			stream_putc(s, nh_len);
 			stream_put(s, &attr->mp_nexthop_global, IPV6_MAX_BYTELEN);
-			if (attr->mp_nexthop_len == BGP_ATTR_NHLEN_IPV6_GLOBAL_AND_LL)
+			if (nh_len == BGP_ATTR_NHLEN_IPV6_GLOBAL_AND_LL)
 				stream_put(s, &attr->mp_nexthop_local, IPV6_MAX_BYTELEN);
 			break;
+		}
 		case SAFI_UNSPEC:
 		case SAFI_MAX:
 			assert(!"SAFI's UNSPEC or MAX being specified are a DEV ESCAPE");

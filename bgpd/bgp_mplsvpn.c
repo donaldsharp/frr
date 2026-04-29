@@ -1494,6 +1494,33 @@ static int bgp_mplsvpn_get_label_per_nexthop_cb(mpls_label_t label,
 	int debug = BGP_DEBUG(vpn, VPN_LEAK_LABEL);
 	struct bgp_path_info *pi;
 	struct bgp_table *table;
+	struct bgp *bgp_iter;
+	struct listnode *node;
+	afi_t afi;
+	bool valid = false;
+
+	/*
+	 * The labelpool work queue dispatches callbacks asynchronously.  If
+	 * the target per-nexthop cache entry was freed (e.g. the last path
+	 * referencing it was unlinked via bgp_mplsvpn_path_nh_label_unlink
+	 * -> bgp_label_per_nexthop_free) between the zebra label request and
+	 * this reply, blnc is dangling and dereferencing blnc->nh SIGSEGVs.
+	 * Re-verify by pointer-identity scan across every live bgp instance's
+	 * per-nexthop trees.  On a stale pointer, release the label back to
+	 * the pool and return without touching blnc.
+	 */
+	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp_iter)) {
+		for (afi = AFI_IP; afi < AFI_MAX && !valid; afi++)
+			valid = bgp_label_per_nexthop_contains(
+				&bgp_iter->mpls_labels_per_nexthop[afi], blnc);
+		if (valid)
+			break;
+	}
+	if (!valid) {
+		if (allocated && label != MPLS_INVALID_LABEL)
+			bgp_nh_lp_release_by_id(context, label);
+		return 0;
+	}
 
 	old_label = blnc->label;
 
@@ -1514,7 +1541,7 @@ static int bgp_mplsvpn_get_label_per_nexthop_cb(mpls_label_t label,
 		return 0; /* no change */
 
 	/* update paths */
-	if (blnc->label != MPLS_INVALID_LABEL)
+	if (blnc->label != MPLS_INVALID_LABEL && blnc->nh)
 		bgp_zebra_send_nexthop_label(ZEBRA_MPLS_LABELS_ADD, blnc->label,
 					     blnc->nh->ifindex,
 					     blnc->nh->vrf_id, ZEBRA_LSP_BGP,
@@ -2114,16 +2141,137 @@ void vpn_leak_from_vrf_update(struct bgp *to_bgp,	     /* to */
 		_vpn_leak_from_vrf_update_leak_attr(&static_attr, to_bgp, from_bgp, afi, safi,
 						    path_vrf, nexthop_self_flag, debug, &label);
 
-	if (vpn_leak_from_vrf_fill_srv6(&static_attr, from_bgp, afi, &label))
-
+	if (vpn_leak_from_vrf_fill_srv6(&static_attr, from_bgp, afi, &label)) {
 		/* SRv6 */
 		_vpn_leak_from_vrf_update_leak_attr(&static_attr, to_bgp, from_bgp, afi, safi,
 						    path_vrf, nexthop_self_flag, debug, &label);
-	else if (label_val == MPLS_LABEL_NONE)
+	} else if (label_val == MPLS_LABEL_NONE) {
+		/*
+		 * SRv6 SID is not filled. Two sub-cases:
+		 *
+		 * (a) Async-pending:  user just configured
+		 *     `segment-routing srv6 / locator loc1` but zebra hasn't
+		 *     returned the locator yet.  bgp->srv6_locator_name is
+		 *     set but bgp->srv6_locator is NULL and no chunks yet.
+		 *     Skip export; bgp_zebra_process_srv6_locator_add will
+		 *     call vpn_leak_postchange_all once the locator arrives,
+		 *     which re-enters this function with the SID filled.
+		 *
+		 * (b) Explicit locator removal:  user ran `no locator` (BGP
+		 *     or zebra) or `no segment-routing srv6`.  Baseline
+		 *     re-exports via the import-vrf path so routes stay in
+		 *     the VPN RIB with label 3 (MPLS implicit-null), marked
+		 *     invalid for zebra-side delete via the deferred
+		 *     bgp_vpn_leak_unset_vrf_schedule.  Fall through.
+		 *
+		 * Distinguisher:  in (a), srv6_locator_chunks is empty AND
+		 * the locator has been *requested* (locator_name set); we
+		 * detect this by checking whether the default has asked zebra
+		 * for the locator.  In (b), the zebra-delete handler already
+		 * released the chunk OR the BGP-side unset cleared
+		 * locator_name too.
+		 */
+		if (is_srv6_vpn_enabled(from_bgp)) {
+			struct bgp *bgp_def = bgp_get_default();
+
+			if (bgp_def && strlen(bgp_def->srv6_locator_name) > 0 &&
+			    bgp_def->srv6_locator &&
+			    !listcount(bgp_def->srv6_locator_chunks)) {
+				/* Async-pending */
+				bgp_attr_flush(&static_attr);
+				return;
+			}
+		}
 		/* import-vrf */
 		_vpn_leak_from_vrf_update_leak_attr(&static_attr, to_bgp, from_bgp, afi, safi,
 						    path_vrf, nexthop_self_flag, debug, &label);
+	}
 	bgp_attr_flush(&static_attr); /* free locally-allocated parts */
+}
+
+/*
+ * After SRv6 SID removal or locator deletion, VPN paths from a VRF may
+ * have been re-exported via vpn_leak_postchange as not-valid.  Clear any
+ * residual selection/removal flags so the paths remain in the RIB as
+ * inactive entries (visible in show output but not selected/valid).
+ */
+void bgp_vpn_leak_unset_vrf_flags(struct bgp *bgp_vrf)
+{
+	struct bgp *bgp_def = bgp_get_default();
+	afi_t a;
+
+	if (!bgp_def)
+		return;
+
+	for (a = AFI_IP; a <= AFI_IP6; a++) {
+		struct bgp_dest *pd;
+		struct bgp_table *vpn_tbl = bgp_def->rib[a][SAFI_MPLS_VPN];
+
+		if (!vpn_tbl)
+			continue;
+		for (pd = bgp_table_top(vpn_tbl); pd;
+		     pd = bgp_route_next(pd)) {
+			struct bgp_table *t =
+				bgp_dest_get_bgp_table_info(pd);
+			struct bgp_dest *bn;
+			struct bgp_path_info *bpi;
+
+			if (!t)
+				continue;
+			for (bn = bgp_table_top(t); bn;
+			     bn = bgp_route_next(bn))
+				for (bpi = bgp_dest_get_bgp_path_info(bn);
+				     bpi; bpi = bpi->next) {
+					if (!bpi->extra ||
+					    !bpi->extra->vrfleak ||
+					    (struct bgp *)bpi->extra->vrfleak
+							    ->bgp_orig !=
+						    bgp_vrf)
+						continue;
+					/* Leave REMOVED paths for
+					 * bgp_process to reap; only
+					 * clear flags on active paths.
+					 */
+					if (CHECK_FLAG(bpi->flags,
+						       BGP_PATH_REMOVED))
+						continue;
+					UNSET_FLAG(bpi->flags,
+						   BGP_PATH_VALID);
+					UNSET_FLAG(bpi->flags,
+						   BGP_PATH_MULTIPATH);
+					UNSET_FLAG(bpi->flags,
+						   BGP_PATH_MULTIPATH_CHG);
+					UNSET_FLAG(bpi->flags,
+						   BGP_PATH_SELECTED);
+				}
+		}
+	}
+}
+
+/*
+ * Deferred callback: after bgp_process work queue items have run and
+ * potentially re-set BGP_PATH_VALID on import-vrf paths, clear the
+ * flags again for VRFs that have no allocated SRv6 SID.
+ */
+static void bgp_vpn_leak_unset_vrf_cb(struct event *event)
+{
+	struct bgp *bgp_vrf;
+	struct listnode *node;
+
+	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp_vrf)) {
+		if (bgp_vrf->inst_type != BGP_INSTANCE_TYPE_VRF)
+			continue;
+		if (!bgp_vrf->tovpn_sid &&
+		    !bgp_vrf->vpn_policy[AFI_IP].tovpn_sid &&
+		    !bgp_vrf->vpn_policy[AFI_IP6].tovpn_sid)
+			bgp_vpn_leak_unset_vrf_flags(bgp_vrf);
+	}
+}
+
+void bgp_vpn_leak_unset_vrf_schedule(void)
+{
+	event_add_event(bm->master, bgp_vpn_leak_unset_vrf_cb,
+			NULL, 0, NULL);
 }
 
 void vpn_leak_from_vrf_withdraw(struct bgp *to_bgp,		/* to */
@@ -3994,12 +4142,10 @@ DEFUN (show_ip_bgp_vpn_rd_neighbor_advertised_routes,
 
 void bgp_mplsvpn_init(void)
 {
-	install_element(BGP_VPNV4_NODE, &vpnv4_network_cmd);
-	install_element(BGP_VPNV4_NODE, &vpnv4_network_route_map_cmd);
-	install_element(BGP_VPNV4_NODE, &no_vpnv4_network_cmd);
-
-	install_element(BGP_VPNV6_NODE, &vpnv6_network_cmd);
-	install_element(BGP_VPNV6_NODE, &no_vpnv6_network_cmd);
+	/* `network A.B.C.D/M rd RD <tag|label> LABEL [route-map NAME]` at
+	 * BGP_VPNV4_NODE / BGP_VPNV6_NODE is installed by bgp_cli.c
+	 * (vpn_network_cli_cmd DEFPY_YANG).
+	 */
 
 	install_element(VIEW_NODE, &show_bgp_ip_vpn_all_rd_cmd);
 	install_element(VIEW_NODE, &show_bgp_ip_vpn_rd_cmd);

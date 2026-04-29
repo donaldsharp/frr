@@ -10,19 +10,6 @@
 #include "stream.h"
 struct bgp;
 
-FRR_CFG_DEFAULT_ULONG(BGP_KEEPALIVE,
-	{ .val_ulong = 3, .match_profile = "datacenter", },
-	{ .val_ulong = BGP_DEFAULT_KEEPALIVE },
-);
-FRR_CFG_DEFAULT_ULONG(BGP_HOLDTIME,
-	{ .val_ulong = 9, .match_profile = "datacenter", },
-	{ .val_ulong = BGP_DEFAULT_HOLDTIME },
-);
-FRR_CFG_DEFAULT_ULONG(BGP_CONNECT_RETRY,
-	{ .val_ulong = 10, .match_profile = "datacenter", },
-	{ .val_ulong = BGP_DEFAULT_CONNECT_RETRY },
-);
-
 #define BGP_INSTANCE_HELP_STR "BGP view\nBGP VRF\nView/VRF name\n"
 #define BGP_INSTANCE_ALL_HELP_STR "BGP view\nBGP VRF\nAll Views/VRFs\n"
 
@@ -64,7 +51,7 @@ FRR_CFG_DEFAULT_ULONG(BGP_CONNECT_RETRY,
 		bgp_show_neighbor_graceful_restart_remote_mode(vty, p, json);                     \
 		bgp_show_neighnor_graceful_restart_flags(vty, p, json);                           \
 		bgp_show_neighbor_graceful_restart_time(vty, p, json);                            \
-		bgp_show_peer_gr_info_afi_safi(vty, p, use_json, json);                           \
+		bgp_show_peer_gr_info_afi_safi(vty, p, (json) != NULL, json);                     \
 	} while (0)
 
 #define VTY_BGP_GR_DEFINE_LOOP_VARIABLE                                        \
@@ -143,6 +130,12 @@ FRR_CFG_DEFAULT_ULONG(BGP_CONNECT_RETRY,
 
 extern void bgp_clear_soft_in(struct bgp *bgp, afi_t afi, safi_t safi);
 
+/* Helper referenced by the BGP_SHOW_PEER_GR_CAPABILITY macro above.
+ * (The other helpers in that macro are static within bgp_vty.c.)
+ */
+extern void bgp_show_peer_gr_info_afi_safi(struct vty *vty, struct peer *p,
+					   bool use_json, json_object *json);
+
 /* Peer show flags */
 /* Value of 0 means show all information */
 #define VTY_BGP_PEER_SHOW_GR_INFO (1 << 0)
@@ -193,9 +186,15 @@ extern int bgp_show_summary_vty(struct vty *vty, const char *name, afi_t afi,
 				safi_t safi, const char *neighbor,
 				enum peer_asn_type as_type, as_t as,
 				uint16_t show_flags);
+extern void bgp_clear_star_soft_out(struct vty *vty, const char *name);
+extern void bgp_clear_star_soft_in(struct vty *vty, const char *name);
 extern bool peergroup_flag_check(struct peer *peer, uint64_t flag);
 extern bool peergroup_af_flag_check(struct peer *peer, afi_t afi, safi_t safi,
 				    uint64_t flag);
 extern void bgp_init_ipv6_nexthop_prefer_global(struct bgp *bgp);
+
+/* Notify BMP (and other hook listeners) of a per-AFI RD change. */
+extern void bgp_route_distinguisher_update_notify(struct bgp *bgp, afi_t afi,
+						  bool preconfig);
 
 #endif /* _QUAGGA_BGP_VTY_H */

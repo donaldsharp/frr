@@ -506,8 +506,13 @@ static void bgp_accept(struct event *event)
 	/* Set TCP keepalive when TCP keepalive is enabled */
 	bgp_update_setsockopt_tcp_keepalive(bgp, bgp_sock);
 
-	/* Check remote IP address */
-	peer = peer_lookup(bgp, &su);
+	/*
+	 * Check remote IP address.  Use peer_lookup_active so that peers
+	 * flagged PEER_STATUS_NB_PENDING_CONFIG (deconfigured via northbound
+	 * but kept alive to dodge the libyang delta-reconfig collapse trap)
+	 * do not accept inbound BGP sessions.
+	 */
+	peer = peer_lookup_active(bgp, &su);
 
 	if (!peer) {
 		struct peer *dynamic_peer = peer_lookup_dynamic_neighbor(bgp, &su);
