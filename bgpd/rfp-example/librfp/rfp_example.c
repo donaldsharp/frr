@@ -102,8 +102,10 @@ static void rfp_vty_install(void)
 	installed = 1;
 	/* example of new cli command */
 	install_element(BGP_NODE, &rfp_example_config_value_cmd);
-	install_element(BGP_NODE, &rfp_holddown_factor_cmd);
-	install_element(BGP_NODE, &rfp_full_table_download_cmd);
+	/* `rfp holddown-factor` and `rfp full-table-download` at BGP_NODE are
+	 * installed via bgp_cli.c DEFPY_YANG (rfp_holddown_factor_cli_cmd /
+	 * rfp_full_table_download_cli_cmd).
+	 */
 }
 
 /***********************************************************************

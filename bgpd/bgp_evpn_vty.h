@@ -31,4 +31,24 @@ extern int bgp_evpn_cli_parse_type(int *type, struct cmd_token **argv,
 extern int bgp_evpn_show_all_routes(struct vty *vty, struct bgp *bgp, int type,
 				    bool use_json, int detail);
 
+/* EVPN NB-callable functions */
+extern void evpn_set_advertise_all_vni(struct bgp *bgp);
+extern void evpn_unset_advertise_all_vni(struct bgp *bgp);
+extern void evpn_set_advertise_default_gw(struct bgp *bgp,
+					  struct bgpevpn *vpn);
+extern void evpn_unset_advertise_default_gw(struct bgp *bgp,
+					    struct bgpevpn *vpn);
+extern void bgp_evpn_set_unset_resolve_overlay_index(struct bgp *bgp,
+						     bool set);
+
+/* Per-VNI configure/unconfigure helpers (for NB callbacks) */
+extern void evpn_configure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				     struct ecommunity *ecomadd);
+extern void evpn_unconfigure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				       struct ecommunity *ecomdel);
+extern void evpn_configure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				     struct ecommunity *ecomadd);
+extern void evpn_unconfigure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				       struct ecommunity *ecomdel);
+
 #endif /* _QUAGGA_BGP_EVPN_VTY_H */
