@@ -6,10 +6,6 @@ submodule frr-bgp-neighbor {
     prefix "bgp";
   }
 
-  include "frr-bgp-common-multiprotocol";
-
-  include "frr-bgp-common-structure";
-
   organization
     "FRRouting";
   contact
@@ -95,6 +91,151 @@ submodule frr-bgp-neighbor {
         "Don't send open messages to this neighbor.";
     }
 
+    leaf rpki-strict {
+      type boolean;
+      default "false";
+      description
+        "Hold the BGP session non-Established while the RPKI cache is not
+         connected. The session may only reach Established once the cache
+         server is reachable and validation state is available.";
+    }
+
+    leaf ebgp-oad {
+      type boolean;
+      default "false";
+      description
+        "Set peering session type to EBGP-OAD (Ordered Aggregation Dispersion).
+         Only applicable to EBGP peers.
+         CLI: [no] neighbor <peer> oad";
+    }
+
+    leaf aigp {
+      type boolean;
+      default "false";
+      description
+        "Enable send and receive of the AIGP attribute for this neighbor.
+         CLI: [no] neighbor <peer> aigp";
+    }
+
+    leaf graceful-shutdown {
+      type boolean;
+      default "false";
+      description
+        "Enable graceful-shutdown mode for this neighbor.
+         When enabled, outbound routes are modified to prefer alternative paths.
+         CLI: [no] neighbor <peer> graceful-shutdown";
+    }
+
+    leaf extended-optional-parameters {
+      type boolean;
+      default "false";
+      description
+        "Force the extended optional parameters format for OPEN messages (RFC 9072).
+         CLI: [no] neighbor <peer> extended-optional-parameters";
+    }
+
+    leaf disable-link-bw-encoding-ieee {
+      type boolean;
+      default "false";
+      description
+        "Disable IEEE floating-point encoding for link bandwidth extended community.
+         CLI: [no] neighbor <peer> disable-link-bw-encoding-ieee";
+    }
+
+    leaf extended-link-bandwidth {
+      type boolean;
+      default "false";
+      description
+        "Use extended 64-bit encoding for link bandwidth extended community.
+         CLI: [no] neighbor <peer> extended-link-bw";
+    }
+
+    leaf send-nexthop-characteristics {
+      type boolean;
+      default "false";
+      description
+        "Send BGP Next Hop Dependent Characteristics Attribute.
+         CLI: [no] neighbor <peer> send-nexthop-characteristics";
+    }
+
+    leaf sender-as-path-loop-detection {
+      type boolean;
+      default "false";
+      description
+        "Detect AS loops before sending routes to this neighbor.
+         CLI: [no] neighbor <peer> sender-as-path-loop-detection";
+    }
+
+    leaf ip-transparent {
+      type boolean;
+      default "false";
+      description
+        "Enable IP_TRANSPARENT socket option on the BGP TCP socket.
+         Allows binding to a non-local address as the source.
+         CLI: [no] neighbor <peer> ip-transparent";
+    }
+
+    container shutdown-rtt {
+      description
+        "Shutdown neighbor if round-trip-time exceeds threshold.";
+      leaf enabled {
+        type boolean;
+        default "false";
+        description
+          "Enable RTT-based shutdown for this neighbor.";
+      }
+      leaf threshold {
+        type uint16 {
+          range "1..65535";
+        }
+        description
+          "Round-trip-time threshold in milliseconds.";
+      }
+      leaf count {
+        type uint8 {
+          range "1..255";
+        }
+        default "1";
+        description
+          "Number of keepalives with higher RTT before shutdown.";
+      }
+    }
+
+    container path-attribute {
+      description
+        "Path attribute manipulation for incoming UPDATE messages.";
+
+      leaf-list discard {
+        type uint8 {
+          range "1..255";
+        }
+        description
+          "Attribute numbers to discard from incoming UPDATE messages.
+           Cannot discard mandatory attributes: ORIGIN(1), AS_PATH(2),
+           NEXT_HOP(3), MED(4), MP_REACH(14), MP_UNREACH(15), EXT_COMMUNITIES(16).
+           CLI: neighbor <peer> path-attribute discard (1-255)...";
+      }
+
+      leaf-list treat-as-withdraw {
+        type uint8 {
+          range "1..255";
+        }
+        description
+          "Attribute numbers that trigger treat-as-withdraw behavior.
+           When these attributes are present, the UPDATE is treated as a withdraw.
+           CLI: neighbor <peer> path-attribute treat-as-withdraw (1-255)...";
+      }
+    }
+
+    leaf tcp-mss {
+      type uint16 {
+        range "1..65535";
+      }
+      description
+        "TCP max segment size for the BGP session.
+         Requires session reset to take effect.";
+    }
+
     uses neighbor-update-source;
 
     uses structure-neighbor-group-ebgp-multihop;
@@ -125,6 +266,15 @@ submodule frr-bgp-neighbor {
           description
             "This leaf indicates whether the IPv4 Unicast AFI, SAFI is
              enabled for the neighbour or group.";
+        }
+
+        leaf addpath-rx-paths-limit {
+          type uint16 {
+            range "1..65535";
+          }
+          description
+            "Paths Limit for Addpath to receive from the peer.
+             CLI: neighbor <peer> addpath-rx-paths-limit (1-65535)";
         }
 
         uses mp-all-afi-safi-list-contents;

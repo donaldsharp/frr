@@ -1400,6 +1400,28 @@ identity set-extcommunity-color {
           "Specify the EVPN gateway IP overlay index IPv6 value";
       }
     }
+    case ipv4-vpn-address {
+      when
+      "derived-from-or-self(../frr-route-map:action, 'frr-bgp-route-map:ipv4-vpn-address')";
+      description
+        "Set IPv4 VPN next-hop address";
+      leaf ipv4-vpn-address {
+        type inet:ipv4-address;
+        description
+          "IPv4 VPN next-hop address";
+      }
+    }
+    case ipv6-vpn-address {
+      when
+      "derived-from-or-self(../frr-route-map:action, 'frr-bgp-route-map:ipv6-vpn-address')";
+      description
+        "Set IPv6 VPN next-hop address";
+      leaf ipv6-vpn-address {
+        type inet:ipv6-address;
+        description
+          "IPv6 VPN next-hop address";
+      }
+    }
     case l3vpn-nexthop-encapsulation {
       when
       "derived-from-or-self(../frr-route-map:action, 'frr-bgp-route-map:set-l3vpn-nexthop-encapsulation')";

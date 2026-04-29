@@ -26,8 +26,6 @@ submodule frr-bgp-common-structure {
     prefix frr-bt;
   }
 
-  include "frr-bgp-common";
-
   organization
     "FRRouting";
   contact
@@ -133,20 +131,24 @@ submodule frr-bgp-common-structure {
         description
           "Do not prepend local-as to updates from IBGP peers.";
       }
+
+      leaf dual-as {
+        type boolean;
+        default "false";
+        description
+          "When set, the peer may use either the global AS or the
+           local-as to establish the peering session.";
+      }
     }
   }
 
   grouping neighbor-bfd-options {
     container bfd-options {
-      leaf enable {
-        type boolean;
-        default "false";
-        description
-          "BFD support.";
-      }
+      presence "BFD is enabled for this neighbor/peer-group";
+      description
+        "BFD options. Presence of this container indicates BFD is enabled.";
 
       leaf detect-multiplier {
-        when "../enable = 'true'";
         type uint8 {
           range "2..255";
         }
@@ -156,7 +158,6 @@ submodule frr-bgp-common-structure {
       }
 
       leaf required-min-rx {
-        when "../enable = 'true'";
         type uint16 {
           range "50..60000";
         }
@@ -167,7 +168,6 @@ submodule frr-bgp-common-structure {
       }
 
       leaf desired-min-tx {
-        when "../enable = 'true'";
         type uint16 {
           range "50..60000";
         }
@@ -178,7 +178,6 @@ submodule frr-bgp-common-structure {
       }
 
       leaf session-type {
-        when "../enable = 'true'";
         type frr-bt:bfd-session-type;
         default "not-configured";
         description
@@ -186,11 +185,35 @@ submodule frr-bgp-common-structure {
       }
 
       leaf check-cp-failure {
-        when "../enable = 'true'";
         type boolean;
         default "false";
         description
           "Link dataplane status with BGP control plane.";
+      }
+
+      leaf profile {
+        type string {
+          length "1..63";
+        }
+        description
+          "BFD profile name.";
+      }
+
+      leaf strict-mode {
+        type boolean;
+        default "false";
+        description
+          "BFD strict mode. When enabled, the BGP session will not
+           come up until BFD session is established.";
+      }
+
+      leaf strict-hold-time {
+        type uint32 {
+          range "1..4294967295";
+        }
+        units "seconds";
+        description
+          "BFD strict mode hold time in seconds.";
       }
     }
   }
@@ -259,6 +282,59 @@ submodule frr-bgp-common-structure {
         description
           "Enable ability to receive multiple path advertisements for
            an NLRI from the neighbor or group.";
+      }
+
+      leaf disable-rx {
+        type boolean;
+        default "false";
+        description
+          "When set to 'true', do not accept additional paths from
+           this neighbor. This disables the addpath receive capability.";
+      }
+
+      leaf tx-best-selected-paths {
+        type uint8 {
+          range "1..6";
+        }
+        description
+          "Number of best paths to advertise using ADD-PATH.
+           CLI: neighbor <peer> addpath-tx-best-selected (1-6)";
+      }
+    }
+  }
+
+  grouping structure-neighbor-conditional-advertise {
+    description
+      "Structural grouping used to include conditional advertisement
+       configuration for both BGP neighbors and peer groups.";
+    container advertise-map {
+      description
+        "Route-map based conditional advertisement configuration.
+         CLI: neighbor <peer> advertise-map RMAP_NAME <exist-map|non-exist-map> RMAP_NAME";
+
+      leaf advertise-map-name {
+        type frr-route-map:route-map-ref;
+        description
+          "Name of the route-map specifying routes to conditionally advertise.";
+      }
+
+      leaf condition-map-name {
+        type frr-route-map:route-map-ref;
+        description
+          "Name of the route-map specifying the condition to check.";
+      }
+
+      leaf condition-type {
+        type enumeration {
+          enum exist-map {
+            description "Advertise routes when condition route-map matches.";
+          }
+          enum non-exist-map {
+            description "Advertise routes when condition route-map does NOT match.";
+          }
+        }
+        description
+          "Type of condition check for conditional advertisement.";
       }
     }
   }
@@ -353,6 +429,62 @@ submodule frr-bgp-common-structure {
         description
           "Overrides the result of Capability Negotiation, ignoring remote
            peer's capability value, when set to 'true'.";
+      }
+
+      leaf software-version-capability {
+        type boolean;
+        description
+          "When set to 'true', advertise software version capability
+           to this peer. Absent leaf inherits from
+           bgp default software-version-capability.";
+      }
+
+      leaf software-version-capability-latest-encoding {
+        type boolean;
+        description
+          "Use the latest-encoding for software version capability.
+           Absent leaf inherits from
+           bgp default software-version-capability latest-encoding.";
+      }
+
+      leaf fqdn-capability {
+        type boolean;
+        default "true";
+        description
+          "When set to 'true', advertise FQDN (Fully Qualified Domain Name)
+           capability to this peer.";
+      }
+
+      leaf link-local-capability {
+        type boolean;
+        default "false";
+        description
+          "When set to 'true', advertise link-local next-hop capability
+           to this peer.";
+      }
+    }
+  }
+
+  grouping structure-neighbor-group-local-role {
+    description
+      "Structural grouping used to include local-role
+       configuration for both BGP neighbors and peer groups.";
+    container local-role {
+      description
+        "BGP Role capability configuration (RFC 9234).";
+      leaf role {
+        type frr-bt:bgp-local-role;
+        description
+          "The local role for this BGP session.";
+      }
+
+      leaf strict-mode {
+        type boolean;
+        default "false";
+        description
+          "When set to 'true', the session is required to have matching
+           roles. If the remote peer does not send a valid Role capability,
+           the session will be reset with Role Mismatch notification.";
       }
     }
   }
@@ -607,6 +739,14 @@ submodule frr-bgp-common-structure {
         description
           "Send large community attribute to this neighbor.";
       }
+
+      leaf send-ext-community-rpki {
+        type boolean;
+        default "false";
+        description
+          "Send RPKI extended community attribute to this neighbor.
+           CLI: neighbor <peer> send-community extended rpki";
+      }
     }
   }
 
@@ -810,6 +950,91 @@ submodule frr-bgp-common-structure {
       uses unsuppress-map-policy-import;
 
       uses unsuppress-map-policy-export;
+    }
+  }
+
+  grouping structure-neighbor-group-soo {
+    description
+      "Structural grouping used to include Site-of-Origin
+       configuration for both BGP neighbors and peer groups.";
+    leaf soo {
+      type string {
+        pattern '([0-9]+:[0-9]+)|([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+)';
+      }
+      description
+        "Site-of-Origin extended community value.
+         Format: ASN:NN (2-byte or 4-byte ASN) or IP-ADDRESS:NN.
+         Used to prevent routing loops in multi-homed VPN sites
+         by tagging routes with their origin site and filtering
+         routes that would loop back to the same site.";
+    }
+  }
+
+  grouping structure-neighbor-route-flap-dampening {
+    description
+      "Structural grouping used to include neighbor-specific
+       route-flap dampening configuration for both BGP neighbors
+       and peer groups.";
+    container dampening {
+      description
+        "Neighbor-specific route-flap dampening configuration.";
+
+      leaf enable {
+        type boolean;
+        default "false";
+        description
+          "Enable neighbor-specific route-flap dampening.
+           CLI: neighbor <peer> dampening";
+      }
+
+      leaf half-life {
+        when "../enable = 'true'";
+        type uint8 {
+          range "1..45";
+        }
+        units "minutes";
+        default "15";
+        description
+          "Half-life time for the penalty in minutes.
+           This value specifies the time desired for the instability
+           metric value to reach one-half of its current value when
+           the route is reachable.";
+      }
+
+      leaf reuse-threshold {
+        when "../enable = 'true'";
+        type uint16 {
+          range "1..20000";
+        }
+        default "750";
+        description
+          "Value to start reusing a route.
+           When the penalty for a route decays to below this value,
+           the route becomes usable again.";
+      }
+
+      leaf suppress-threshold {
+        when "../enable = 'true'";
+        type uint16 {
+          range "1..20000";
+        }
+        default "2000";
+        description
+          "Value to start suppressing a route.
+           When the penalty for a route exceeds this value,
+           the route is suppressed.";
+      }
+
+      leaf max-suppress-time {
+        when "../enable = 'true'";
+        type uint8 {
+          range "1..255";
+        }
+        units "minutes";
+        description
+          "Maximum duration to suppress a stable route in minutes.
+           If not specified, defaults to 4 times the half-life.";
+      }
     }
   }
 }

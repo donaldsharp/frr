@@ -158,6 +158,13 @@ module frr-routing {
   }
 
 
+  identity l2vpn-link-state {
+    base afi-safi-type;
+    description
+      "This identity represents the BGP-LS (RFC 9552) address family.";
+  }
+
+
   identity ipv4-flowspec {
     base afi-safi-type;
     description

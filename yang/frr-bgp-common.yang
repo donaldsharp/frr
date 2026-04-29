@@ -38,6 +38,10 @@ submodule frr-bgp-common {
     prefix frr-interface;
   }
 
+  import frr-routing {
+    prefix frr-rt;
+  }
+
   organization
     "FRRouting";
   contact
@@ -245,6 +249,15 @@ submodule frr-bgp-common {
            with shorter length.";
       }
 
+      leaf bestpath-use-imported-attributes {
+        type boolean;
+        default "false";
+        description
+          "Use imported path's attributes (instead of the source path's
+           ultimate/originating attributes) when comparing leaked paths
+           for best-path selection. Cherry-picked feature.";
+      }
+
       leaf external-compare-router-id {
         type boolean;
         default "false";
@@ -271,6 +284,50 @@ submodule frr-bgp-common {
           "Multi-path with AS-SET, When set to 'true' it adds AS set
            information for aggregate routes, When set to 'false' it
            prevents AS set generation.";
+      }
+
+      leaf compare-aigp {
+        type boolean;
+        default "false";
+        description
+          "When enabled, evaluate the AIGP (Accumulated IGP Metric) attribute
+           during best path selection. AIGP is used to carry IGP metric
+           information across BGP boundaries.";
+      }
+
+      leaf peer-type-multipath-relax {
+        type boolean;
+        default "false";
+        description
+          "Allow load sharing across routes learned from different peer types.
+           When enabled, permits ECMP between iBGP and eBGP learned routes,
+           relaxing the requirement that multipath routes must be from the
+           same peer type.";
+      }
+
+      leaf link-bandwidth-handling {
+        type enumeration {
+          enum ecmp {
+            value 0;
+            description "Equal-cost multipath with weighted bandwidth (default)";
+          }
+          enum ignore {
+            value 1;
+            description "Ignore link bandwidth attribute in path selection";
+          }
+          enum skip-missing {
+            value 2;
+            description "Skip paths without link bandwidth attribute from ECMP";
+          }
+          enum default-weight-for-missing {
+            value 3;
+            description "Use default weight (1) for paths missing bandwidth attribute";
+          }
+        }
+        default "ecmp";
+        description
+          "Configure how the link bandwidth extended community attribute
+           is used in best path selection and weighted ECMP calculation.";
       }
     }
   }
@@ -464,6 +521,219 @@ submodule frr-bgp-common {
         "When set to 'true' BGP show hostname for nexthop in certain
          command outputs.";
     }
+
+    leaf enforce-first-as {
+      type boolean;
+      default "true";
+      description
+        "When set to 'true' BGP will enforce the first AS for EBGP routes.
+         When set to 'false' it will not enforce the first AS.
+         Default changed from false to true in FRR 9.1.";
+    }
+
+    leaf suppress-fib-pending {
+      type boolean;
+      default "false";
+      description
+        "When set to 'true' BGP will suppress FIB pending updates.
+         This means BGP will not advertise routes to peers until the
+         routes have been installed in the FIB (forwarding table).";
+    }
+
+    leaf suppress-fib-pending-delay {
+      type uint16 {
+        range "0..10000";
+      }
+      units "milliseconds";
+      default "1000";
+      description
+        "Delay in milliseconds after FIB installation before BGP advertises
+         routes to peers. Only meaningful when suppress-fib-pending is true.
+         Default 1000 (matches BGP_DEFAULT_SUPPRESS_FIB_ADV_DELAY).";
+    }
+
+    leaf allow-martian-nexthop {
+      type boolean;
+      default "false";
+      description
+        "When set to 'true' BGP will allow Martian nexthops to be
+         received in the NLRI from a peer. Martian addresses are
+         addresses that should not appear in routing (e.g., 0.0.0.0,
+         127.0.0.0/8, etc.).";
+    }
+
+    leaf fast-convergence {
+      type boolean;
+      default "false";
+      description
+        "When set to 'true' BGP will enable fast convergence for
+         BGP sessions. This optimizes the convergence time after
+         topology changes.";
+    }
+
+    leaf minimum-holdtime {
+      type uint16 {
+        range "1..65535";
+      }
+      units "seconds";
+      description
+        "Minimum acceptable hold time from a BGP neighbor. If a
+         neighbor proposes a hold time less than this value, the
+         BGP session will be rejected.";
+    }
+
+    container tcp-keepalive {
+      description
+        "TCP keepalive parameters for BGP sessions.";
+
+      leaf idle {
+        type uint16 {
+          range "1..65535";
+        }
+        units "seconds";
+        description
+          "TCP keepalive idle time in seconds. Time before the
+           first keepalive probe is sent on an idle connection.";
+      }
+
+      leaf interval {
+        type uint16 {
+          range "1..65535";
+        }
+        units "seconds";
+        description
+          "TCP keepalive interval in seconds. Time between
+           consecutive keepalive probes.";
+      }
+
+      leaf probes {
+        type uint8 {
+          range "1..30";
+        }
+        description
+          "Maximum number of TCP keepalive probes before
+           considering the connection dead.";
+      }
+    }
+
+    container admin-shutdown {
+      description
+        "Administrative shutdown of the BGP instance.";
+
+      leaf enable {
+        type boolean;
+        default "false";
+        description
+          "When set to 'true', the BGP instance is administratively
+           shut down. All peers will be notified and sessions closed.";
+      }
+
+      leaf message {
+        type string {
+          length "1..128";
+        }
+        description
+          "Optional shutdown message to send to peers (RFC 8203).";
+      }
+    }
+
+    leaf llgr-stale-time {
+      type uint32 {
+        range "1..16777215";
+      }
+      units "seconds";
+      description
+        "Specifies the maximum time to wait before purging
+         long-lived stale routes for Long-lived Graceful Restart.";
+    }
+
+    leaf-list default-afi-safi {
+      type identityref {
+        base frr-rt:afi-safi-type;
+      }
+      description
+        "List of AFI/SAFI combinations that are activated by default
+         for new peers. By default, ipv4-unicast is enabled. Use
+         'no bgp default ipv4-unicast' to disable automatic activation
+         of IPv4 unicast for peers.";
+    }
+
+    leaf ipv4-unicast-default {
+      type boolean;
+      default "true";
+      description
+        "Controls whether IPv4 unicast is activated by default for new peers.
+         This leaf exists to properly handle the 'no bgp default ipv4-unicast'
+         command which cannot be represented as absence in a leaf-list.
+         When true (default), IPv4 unicast is activated for new peers.
+         When false, IPv4 unicast must be explicitly activated per-peer.";
+    }
+  }
+
+  grouping global-system-config {
+    description
+      "System-level BGP daemon configuration settings.
+       These affect the entire BGP daemon, not just a single instance.";
+
+    container queue-limits {
+      description
+        "Input/output queue limits for peer message handling";
+
+      leaf input-queue-limit {
+        type uint32 {
+          range "1..4294967295";
+        }
+        default "10000";
+        description
+          "Maximum size of input queue for BGP message parsing.
+           CLI: bgp input-queue-limit <1-4294967295>";
+      }
+
+      leaf output-queue-limit {
+        type uint32 {
+          range "1..4294967295";
+        }
+        default "10000";
+        description
+          "Maximum size of output queue for BGP message transmission.
+           CLI: bgp output-queue-limit <1-4294967295>";
+      }
+    }
+
+    leaf session-dscp {
+      type uint8 {
+        range "0..63";
+      }
+      default "48";
+      description
+        "DSCP value for BGP TCP sessions (0-63).
+         Default 48 = CS6 (IPTOS_PREC_INTERNETCONTROL >> 2).
+         CLI: bgp session-dscp <0-63>";
+    }
+
+    leaf ipv6-auto-ra {
+      type boolean;
+      default "true";
+      description
+        "Enable/disable IPv6 ND Router Advertisement for unnumbered neighbors.
+         CLI: [no] bgp ipv6-auto-ra";
+    }
+
+    leaf no-rib {
+      type boolean;
+      default "false";
+      description
+        "Disable BGP route installation to RIB (Zebra).
+         CLI: [no] bgp no-rib";
+    }
+
+    leaf send-extra-data-to-zebra {
+      type boolean;
+      default "true";
+      description
+        "Send extra data to Zebra for display purposes.
+         CLI: [no] bgp send-extra-data zebra";
+    }
   }
 
   grouping global-neighbor-config {
@@ -511,6 +781,108 @@ submodule frr-bgp-common {
           description
             "How many packets to read from peer socket per I/O cycle.";
         }
+      }
+
+      leaf default-software-version-capability {
+        type boolean;
+        default "false";
+        description
+          "When set to 'true', software version capability (old encoding)
+           is advertised to all neighbors by default.
+           CLI: [no] bgp default software-version-capability";
+      }
+
+      leaf default-software-version-capability-latest-encoding {
+        type boolean;
+        default "false";
+        description
+          "When set to 'true', software version capability using the
+           latest encoding (draft-abraitis-bgp-version-capability-15)
+           is advertised to all neighbors by default.
+           CLI: [no] bgp default software-version-capability latest-encoding";
+      }
+
+      leaf default-link-local-capability {
+        type boolean;
+        default "false";
+        description
+          "When set to 'true', link-local next-hop capability is advertised
+           to all neighbors by default.
+           CLI: [no] bgp default link-local-capability";
+      }
+
+      leaf default-dynamic-capability {
+        type boolean;
+        default "false";
+        description
+          "When set to 'true', dynamic capability is advertised
+           to all neighbors by default.
+           CLI: [no] bgp default dynamic-capability";
+      }
+
+      leaf reject-as-sets {
+        type boolean;
+        default "true";
+        description
+          "When set to 'true', routes with AS_SET or AS_CONFED_SET
+           in the AS_PATH will be rejected.
+           CLI: [no] bgp reject-as-sets";
+      }
+
+      leaf hard-administrative-reset {
+        type boolean;
+        default "true";
+        description
+          "When set to 'true', sends Hard Reset CEASE Notification
+           for 'Administrative Reset' events.
+           CLI: [no] bgp hard-administrative-reset";
+      }
+
+      leaf labeled-unicast-explicit-null {
+        type enumeration {
+          enum disabled {
+            value 0;
+            description "Explicit-null labels disabled (default)";
+          }
+          enum ipv4-explicit-null {
+            value 1;
+            description "Use IPv4 explicit-null label for IPv4 prefixes";
+          }
+          enum ipv6-explicit-null {
+            value 2;
+            description "Use IPv6 explicit-null label for IPv6 prefixes";
+          }
+          enum explicit-null {
+            value 3;
+            description "Use explicit-null labels for all prefixes";
+          }
+        }
+        default "disabled";
+        description
+          "Configure explicit-null label usage for labeled-unicast.
+           CLI: [no] bgp labeled-unicast <explicit-null|ipv4-explicit-null|ipv6-explicit-null>";
+      }
+
+      leaf conditional-advertisement-period {
+        type uint16 {
+          range "5..240";
+        }
+        default "60";
+        description
+          "Set period to rescan BGP table to check if conditional
+           advertisement conditions are met.
+           CLI: [no] bgp conditional-advertisement timer (5-240)";
+      }
+
+      leaf default-originate-timer {
+        type uint32 {
+          range "0..65535";
+        }
+        default "5";
+        description
+          "Set period to rescan BGP table to check if default-originate
+           condition is met.
+           CLI: [no] bgp default-originate timer (0-65535)";
       }
     }
   }
@@ -621,6 +993,17 @@ submodule frr-bgp-common {
       reference
         "RFC 4271";
     }
+
+    leaf delay-open-time {
+      type uint16 {
+        range "1..240";
+      }
+      units "seconds";
+      description
+        "Delay BGP OPEN message until the DelayOpenTimer expires.
+         This timer is used in networks where initial connectivity
+         setup may take longer.";
+    }
   }
 
   grouping global-config-timers {
@@ -718,7 +1101,7 @@ submodule frr-bgp-common {
 
     leaf restart-time {
       type uint16 {
-        range "1..3600";
+        range "0..3600";
       }
       units "seconds";
       default "120";
@@ -728,7 +1111,7 @@ submodule frr-bgp-common {
          restart BGP capability.  This is a 12-bit value, referred to
          as Restart Time in RFC4724.  Per RFC4724, the suggested
          default value is <= the hold-time value. This timer is
-         applicable for helper node.";
+         applicable for helper node. Value 0 disables GR restart time.";
       reference
         "RFC 4724: Graceful Restart Mechanism for BGP.";
     }
@@ -773,6 +1156,27 @@ submodule frr-bgp-common {
         "An upper-bound on the time that helper router holds the
          stale routes in Zebra, When this timer gets expired Zebra
          removes the stale routes.";
+    }
+
+    leaf notification {
+      type boolean;
+      default "true";
+      description
+        "Indicate Graceful Restart support for BGP NOTIFICATION messages
+         (RFC 8538). When enabled, the Graceful Restart capability will
+         include the 'N' bit to indicate support for graceful restart
+         on receipt of certain NOTIFICATION messages.";
+      reference
+        "RFC 8538: Notification Message Support for BGP Graceful Restart.";
+    }
+
+    leaf disable-eor {
+      type boolean;
+      default "false";
+      description
+        "Disable End-of-RIB (EOR) marker check during graceful restart.
+         This is a hidden debugging option that disables waiting for
+         EOR markers from graceful restart capable peers.";
     }
   }
 
@@ -1171,11 +1575,18 @@ submodule frr-bgp-common {
       case auto {
         leaf label-auto {
           type boolean;
-          default "false";
           description
             "Automatically assign a label.";
         }
       }
+    }
+
+    leaf label-per-nexthop {
+      type boolean;
+      default "false";
+      description
+        "When true, allocate a label per connected next-hop
+         in the VRF instead of one label for all updates.";
     }
   }
 
