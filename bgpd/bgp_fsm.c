@@ -2860,13 +2860,17 @@ bgp_establish(struct peer_connection *connection)
 	safi_t safi;
 	enum bgp_fsm_state_progress ret = BGP_FSM_SUCCESS;
 	struct peer *other;
+	struct peer_connection *other_connection;
 	struct peer *peer = connection->peer;
 	struct bgp *bgp = peer->bgp;
 	struct vrf *vrf = NULL;
 
 	other = peer->doppelganger;
+	other_connection = bgp_peer_get_other_connection(peer, connection);
 	hash_release(bgp->connectionhash, connection);
-	if (other && other->connection)
+	if (other_connection)
+		hash_release(bgp->connectionhash, other_connection);
+	else if (other && other->connection)
 		hash_release(bgp->connectionhash, other->connection);
 
 	peer = peer_xfer_conn(peer);
@@ -2880,7 +2884,9 @@ bgp_establish(struct peer_connection *connection)
 		 * when a lookup is done
 		 */
 		(void)hash_get(bgp->connectionhash, connection, hash_alloc_intern);
-		if (other && other->connection)
+		if (other_connection)
+			(void)hash_get(bgp->connectionhash, other_connection, hash_alloc_intern);
+		else if (other && other->connection)
 			(void)hash_get(bgp->connectionhash, other->connection, hash_alloc_intern);
 		return BGP_FSM_FAILURE;
 	}
@@ -2981,20 +2987,22 @@ bgp_establish(struct peer_connection *connection)
 		BGP_TIMER_ON(connection->t_routeadv, bgp_routeadv_timer, 0);
 	}
 
-	if (peer->doppelganger &&
-	    (peer->doppelganger->connection->status != Deleted)) {
+	other = peer->doppelganger;
+	other_connection = bgp_peer_get_other_connection(peer, connection);
+	if (other && (other->connection->status != Deleted)) {
+		struct peer_connection *cleanup_connection = other_connection ? other_connection
+									      : other->connection;
+
 		if (bgp_debug_neighbor_events(peer))
 			zlog_debug("[Event] Deleting stub connection for peer %s for %s",
 				   peer->host,
-				   bgp_peer_get_connection_direction_string(
-					   peer->doppelganger->connection));
+				   bgp_peer_get_connection_direction_string(cleanup_connection));
 
-		if (peer->doppelganger->connection->status > Active)
-			bgp_notify_send(peer->doppelganger->connection,
-					BGP_NOTIFY_CEASE,
+		if (cleanup_connection->status > Active)
+			bgp_notify_send(cleanup_connection, BGP_NOTIFY_CEASE,
 					BGP_NOTIFY_CEASE_COLLISION_RESOLUTION);
 		else
-			peer_delete(peer->doppelganger);
+			peer_delete(other);
 	}
 	/*
 	 * If we are replacing the old peer for a doppelganger
