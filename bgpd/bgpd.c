@@ -2968,7 +2968,7 @@ int peer_delete(struct peer *peer)
 			   PEER_THREAD_WRITES_ON));
 	assert(!CHECK_FLAG(peer->connection->thread_flags,
 			   PEER_THREAD_READS_ON));
-	assert(!CHECK_FLAG(peer->thread_flags, PEER_THREAD_KEEPALIVES_ON));
+	assert(!CHECK_FLAG(peer->connection->thread_flags, PEER_THREAD_KEEPALIVES_ON));
 
 	/* Ensure the peer is removed from the connection error list */
 	frr_with_mutex (&bgp->peer_errs_mtx) {

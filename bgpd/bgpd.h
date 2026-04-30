@@ -1486,6 +1486,7 @@ struct peer_connection {
 	_Atomic uint32_t thread_flags;
 #define PEER_THREAD_WRITES_ON (1U << 0)
 #define PEER_THREAD_READS_ON  (1U << 1)
+#define PEER_THREAD_KEEPALIVES_ON (1U << 2)
 
 	/* Packet receive and send buffer. */
 	pthread_mutex_t io_mtx;	  // guards ibuf, obuf
@@ -1994,7 +1995,6 @@ struct peer {
 
 	/* Thread flags. */
 	_Atomic uint32_t thread_flags;
-#define PEER_THREAD_KEEPALIVES_ON (1U << 0)
 #define PEER_THREAD_SUBGRP_ADV_DELAY (1U << 1)
 
 	/* workqueues */

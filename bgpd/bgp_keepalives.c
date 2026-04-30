@@ -245,7 +245,7 @@ void bgp_keepalives_on(struct peer_connection *connection)
 	assert(peerhash_mtx);
 
 	frr_with_mutex (peerhash_mtx) {
-		if (CHECK_FLAG(peer->thread_flags, PEER_THREAD_KEEPALIVES_ON))
+		if (CHECK_FLAG(connection->thread_flags, PEER_THREAD_KEEPALIVES_ON))
 			return;
 
 		holder.peer = peer;
@@ -254,7 +254,7 @@ void bgp_keepalives_on(struct peer_connection *connection)
 			(void)hash_get(peerhash, pkat, hash_alloc_intern);
 			peer_lock(peer);
 		}
-		SET_FLAG(peer->thread_flags, PEER_THREAD_KEEPALIVES_ON);
+		SET_FLAG(connection->thread_flags, PEER_THREAD_KEEPALIVES_ON);
 		/* Force the keepalive thread to wake up */
 		pthread_cond_signal(peerhash_cond);
 	}
@@ -276,7 +276,7 @@ void bgp_keepalives_off(struct peer_connection *connection)
 	assert(peerhash_mtx);
 
 	frr_with_mutex (peerhash_mtx) {
-		if (!CHECK_FLAG(peer->thread_flags, PEER_THREAD_KEEPALIVES_ON))
+		if (!CHECK_FLAG(connection->thread_flags, PEER_THREAD_KEEPALIVES_ON))
 			return;
 
 		holder.peer = peer;
@@ -285,7 +285,7 @@ void bgp_keepalives_off(struct peer_connection *connection)
 			pkat_del(res);
 			peer_unlock(peer);
 		}
-		UNSET_FLAG(peer->thread_flags, PEER_THREAD_KEEPALIVES_ON);
+		UNSET_FLAG(connection->thread_flags, PEER_THREAD_KEEPALIVES_ON);
 	}
 }
 
