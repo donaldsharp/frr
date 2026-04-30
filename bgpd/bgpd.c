@@ -176,9 +176,14 @@ static int bgp_check_main_socket(bool create, struct bgp *bgp)
 
 void bgp_session_reset(struct peer *peer)
 {
-	if (peer->doppelganger && (peer->doppelganger->connection->status != Deleted) &&
-	    !peer_is_config_node(peer->doppelganger))
-		peer_delete(peer->doppelganger);
+	struct peer *other = peer->doppelganger;
+	struct peer_connection *other_connection = bgp_peer_get_other_connection(peer,
+										 peer->connection);
+
+
+	if (other && other_connection && (other_connection->status != Deleted) &&
+	    !peer_is_config_node(other))
+		peer_delete(other);
 
 	BGP_EVENT_ADD(peer->connection, BGP_Stop);
 }
@@ -193,16 +198,19 @@ void bgp_session_reset_safe(struct peer *peer, struct listnode **nnode)
 {
 	struct listnode *n;
 	struct peer *npeer;
+	struct peer *other = peer->doppelganger;
+	struct peer_connection *other_connection = bgp_peer_get_other_connection(peer,
+										 peer->connection);
 
 	n = (nnode) ? *nnode : NULL;
 	npeer = (n) ? listgetdata(n) : NULL;
 
-	if (peer->doppelganger && (peer->doppelganger->connection->status != Deleted) &&
-	    !peer_is_config_node(peer->doppelganger)) {
-		if (peer->doppelganger == npeer)
+	if (other && other_connection && (other_connection->status != Deleted) &&
+	    !peer_is_config_node(other)) {
+		if (other == npeer)
 			/* nnode and *nnode are confirmed to be non-NULL here */
 			*nnode = (*nnode)->next;
-		peer_delete(peer->doppelganger);
+		peer_delete(other);
 	}
 
 	BGP_EVENT_ADD(peer->connection, BGP_Stop);
@@ -5238,6 +5246,8 @@ void peer_change_action(struct peer *peer, afi_t afi, safi_t safi,
 			       enum peer_change_type type)
 {
 	struct peer_af *paf;
+	struct peer *other;
+	struct peer_connection *other_connection;
 
 	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP))
 		return;
@@ -5248,11 +5258,11 @@ void peer_change_action(struct peer *peer, afi_t afi, safi_t safi,
 	if (type == peer_change_reset) {
 		/* If we're resetting session, we've to delete both peer struct
 		 */
-		if ((peer->doppelganger) &&
-		    (peer->doppelganger->connection->status != Deleted) &&
-		    (!CHECK_FLAG(peer->doppelganger->flags,
-				 PEER_FLAG_CONFIG_NODE)))
-			peer_delete(peer->doppelganger);
+		other = peer->doppelganger;
+		other_connection = bgp_peer_get_other_connection(peer, peer->connection);
+		if (other && other_connection && (other_connection->status != Deleted) &&
+		    !CHECK_FLAG(other->flags, PEER_FLAG_CONFIG_NODE))
+			peer_delete(other);
 
 		peer_notify_config_change(peer->connection);
 	} else if (type == peer_change_reset_in) {
@@ -5260,11 +5270,12 @@ void peer_change_action(struct peer *peer, afi_t afi, safi_t safi,
 			bgp_route_refresh_send(peer->connection, afi, safi, 0, 0, 0,
 					       BGP_ROUTE_REFRESH_NORMAL);
 		else {
-			if ((peer->doppelganger) &&
-			    (peer->doppelganger->connection->status != Deleted) &&
-			    (!CHECK_FLAG(peer->doppelganger->flags,
-					 PEER_FLAG_CONFIG_NODE)))
-				peer_delete(peer->doppelganger);
+			other = peer->doppelganger;
+			other_connection = bgp_peer_get_other_connection(peer, peer->connection);
+
+			if (other && other_connection && (other_connection->status != Deleted) &&
+			    !CHECK_FLAG(other->flags, PEER_FLAG_CONFIG_NODE))
+				peer_delete(other);
 
 			peer_notify_config_change(peer->connection);
 		}
@@ -8794,18 +8805,19 @@ int peer_ttl_security_hops_set(struct peer *peer, int gtsm_hops)
 		 * necessary, just set the minttl.
 		 */
 		if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
+			struct peer_connection *other_connection =
+				bgp_peer_get_other_connection(peer, peer->connection);
+
 			peer->gtsm_hops = gtsm_hops;
 
 			if (peer->connection->fd >= 0)
 				sockopt_minttl(peer->connection->su.sa.sa_family,
 					       peer->connection->fd,
 					       MAXTTL + 1 - gtsm_hops);
-			if ((peer->connection->status < Established) &&
-			    peer->doppelganger &&
-			    (peer->doppelganger->connection->fd >= 0))
+			if ((peer->connection->status < Established) && other_connection &&
+			    (other_connection->fd >= 0))
 				sockopt_minttl(peer->connection->su.sa.sa_family,
-					       peer->doppelganger->connection->fd,
-					       MAXTTL + 1 - gtsm_hops);
+					       other_connection->fd, MAXTTL + 1 - gtsm_hops);
 		} else {
 			group = peer->group;
 			group->conf->gtsm_hops = gtsm_hops;
@@ -8813,6 +8825,8 @@ int peer_ttl_security_hops_set(struct peer *peer, int gtsm_hops)
 					       gpeer)) {
 				struct peer_connection *connection =
 					gpeer->connection;
+				struct peer_connection *other_connection =
+					bgp_peer_get_other_connection(gpeer, connection);
 				gpeer->gtsm_hops = group->conf->gtsm_hops;
 
 				/* Change setting of existing peer
@@ -8829,12 +8843,10 @@ int peer_ttl_security_hops_set(struct peer *peer, int gtsm_hops)
 						       connection->fd,
 						       MAXTTL + 1 -
 							       gpeer->gtsm_hops);
-				if ((connection->status < Established) &&
-				    gpeer->doppelganger &&
-				    (gpeer->doppelganger->connection->fd >= 0))
+				if ((connection->status < Established) && other_connection &&
+				    (other_connection->fd >= 0))
 					sockopt_minttl(connection->su.sa.sa_family,
-						       gpeer->doppelganger
-							       ->connection->fd,
+						       other_connection->fd,
 						       MAXTTL + 1 - gtsm_hops);
 			}
 		}
@@ -8861,6 +8873,9 @@ int peer_ttl_security_hops_unset(struct peer *peer)
 		peer->gtsm_hops = BGP_GTSM_HOPS_DISABLED;
 
 	if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
+		struct peer_connection *other_connection =
+			bgp_peer_get_other_connection(peer, peer->connection);
+
 		/* Invoking ebgp_multihop_set will set the TTL back to the
 		 * original
 		 * value as well as restting the NHT and such. The session is
@@ -8873,16 +8888,17 @@ int peer_ttl_security_hops_unset(struct peer *peer)
 				sockopt_minttl(peer->connection->su.sa.sa_family,
 					       peer->connection->fd, 0);
 
-			if ((peer->connection->status < Established) &&
-			    peer->doppelganger &&
-			    (peer->doppelganger->connection->fd >= 0))
+			if ((peer->connection->status < Established) && other_connection &&
+			    (other_connection->fd >= 0))
 				sockopt_minttl(peer->connection->su.sa.sa_family,
-					       peer->doppelganger->connection->fd,
-					       0);
+					       other_connection->fd, 0);
 		}
 	} else {
 		group = peer->group;
 		for (ALL_LIST_ELEMENTS(group->peer, node, nnode, peer)) {
+			struct peer_connection *other_connection =
+				bgp_peer_get_other_connection(peer, peer->connection);
+
 			peer->gtsm_hops = BGP_GTSM_HOPS_DISABLED;
 			if (peer->sort == BGP_PEER_EBGP)
 				ret = peer_ebgp_multihop_unset(peer);
@@ -8892,14 +8908,10 @@ int peer_ttl_security_hops_unset(struct peer *peer)
 							       .sa_family,
 						       peer->connection->fd, 0);
 
-				if ((peer->connection->status < Established) &&
-				    peer->doppelganger &&
-				    (peer->doppelganger->connection->fd >= 0))
-					sockopt_minttl(peer->connection->su.sa
-							       .sa_family,
-						       peer->doppelganger
-							       ->connection->fd,
-						       0);
+				if ((peer->connection->status < Established) && other_connection &&
+				    (other_connection->fd >= 0))
+					sockopt_minttl(peer->connection->su.sa.sa_family,
+						       other_connection->fd, 0);
 			}
 		}
 	}
