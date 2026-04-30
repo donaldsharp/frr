@@ -81,7 +81,7 @@ def print_diag(vrf):
         print(router.vtysh_cmd("show bgp {} neighbor".format(vrf_str(vrf))))
 
 
-@common_config.retry(retry_timeout=190)
+@common_config.retry(retry_timeout=30)
 def _check_neigh_state(router, peer, state, vrf=""):
     "check BGP neighbor state on a router"
 
