@@ -5800,6 +5800,9 @@ DEFUN (no_neighbor,
 	} else {
 		peer = peer_lookup(bgp, &su);
 		if (peer) {
+			struct peer_connection *other_connection =
+				bgp_peer_get_other_connection(peer, peer->connection);
+
 			if (peer_dynamic_neighbor(peer)) {
 				vty_out(vty,
 					"%% Operation not allowed on a dynamic neighbor\n");
@@ -5813,8 +5816,8 @@ DEFUN (no_neighbor,
 
 			peer_notify_unconfig(peer->connection);
 			peer_delete(peer);
-			if (other && other->connection->status != Deleted) {
-				peer_notify_unconfig(other->connection);
+			if (other && other_connection && other_connection->status != Deleted) {
+				peer_notify_unconfig(other_connection);
 				peer_delete(other);
 			}
 		}
