@@ -3388,4 +3388,19 @@ struct srv6_locator *bgp_srv6_locator_lookup(struct bgp *bgp_vrf, struct bgp *bg
 	 CHECK_FLAG(_peer->cap, PEER_CAP_LINK_LOCAL_RCV) &&                                       \
 	 IN6_IS_ADDR_LINKLOCAL(&_peer->nexthop.v6_local))
 
+static inline struct peer_connection *
+bgp_peer_get_other_connection(struct peer *peer, struct peer_connection *connection)
+{
+	if (!CHECK_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE))
+		peer = peer->doppelganger ? peer->doppelganger : peer;
+
+	if (peer->connection == connection)
+		return peer->incoming;
+
+	if (peer->incoming == connection)
+		return peer->connection;
+
+	return NULL;
+}
+
 #endif /* _QUAGGA_BGPD_H */
