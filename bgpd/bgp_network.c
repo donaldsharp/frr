@@ -427,7 +427,7 @@ static void bgp_accept(struct event *event)
 	int accept_sock;
 	union sockunion su;
 	struct bgp_listener *listener = EVENT_ARG(event);
-	struct peer *doppelganger, *peer, *other;
+	struct peer *peer;
 	struct peer_connection *connection, *incoming, *other_connection;
 	char buf[SU_ADDRSTRLEN];
 	struct bgp *bgp = NULL;
@@ -666,43 +666,19 @@ static void bgp_accept(struct event *event)
 		zlog_debug("[Event] connection from %s fd %d, active peer status %d fd %d",
 			   inet_sutop(&su, buf), bgp_sock, connection->status, connection->fd);
 
-	if (peer->doppelganger) {
-		other = peer->doppelganger;
-		other_connection = bgp_peer_get_other_connection(peer, connection);
-
+	other_connection = bgp_peer_get_other_connection(peer, connection);
+	if (other_connection) {
 		/* We have an existing connection. Kill the existing one and run
 		   with this one.
 		*/
 		if (bgp_debug_neighbor_events(peer))
 			zlog_debug("[Event] New active connection from peer %s, Killing previous active connection",
 				   peer->host);
-		if (other_connection && peer->incoming == other_connection)
-			peer->incoming = NULL;
-		if (other)
-			peer_delete(other);
+		peer_delete_connection(bgp, &peer->incoming, false);
 	}
 
-	doppelganger = peer_create(&su, peer->conf_if, bgp, peer->local_as, peer->as,
-				   peer->as_type, NULL, false, NULL, CONNECTION_INCOMING);
-
-	incoming = doppelganger->connection;
+	incoming = bgp_peer_connection_new(peer, &su, CONNECTION_INCOMING);
 	peer->incoming = incoming;
-
-	peer_xfer_config(doppelganger, peer);
-	bgp_peer_gr_flags_update(doppelganger);
-
-	BGP_GR_ROUTER_DETECT_AND_SEND_CAPABILITY_TO_ZEBRA(bgp, bgp->peer);
-
-	if (bgp_peer_gr_mode_get(doppelganger) == PEER_DISABLE) {
-		UNSET_FLAG(doppelganger->sflags, PEER_STATUS_NSF_MODE);
-
-		if (CHECK_FLAG(doppelganger->sflags, PEER_STATUS_NSF_WAIT)) {
-			peer_nsf_stop(doppelganger);
-		}
-	}
-
-	doppelganger->doppelganger = peer;
-	peer->doppelganger = doppelganger;
 
 	incoming->fd = bgp_sock;
 	incoming->su_local = sockunion_getsockname(incoming->fd);
@@ -710,16 +686,16 @@ static void bgp_accept(struct event *event)
 	atomic_store_explicit(&incoming->last_sendq_ok, monotime(NULL), memory_order_relaxed);
 
 	if (bgp_set_socket_ttl(incoming) < 0)
-		if (bgp_debug_neighbor_events(doppelganger))
+		if (bgp_debug_neighbor_events(peer))
 			zlog_debug("[Event] Unable to set min/max TTL on peer %s, Continuing",
-				   doppelganger->host);
+				   peer->host);
 
 	frr_with_privs(&bgpd_privs) {
 		vrf_bind(bgp->vrf_id, bgp_sock, bgp_get_bound_name(incoming));
 	}
 	bgp_peer_connection_reg_with_nht(incoming);
 	bgp_fsm_change_status(incoming, Active);
-	event_cancel(&incoming->t_start); /* created in peer_create() */
+	event_cancel(&incoming->t_start); /* created in bgp_peer_connection_new() */
 
 	/* Make dummy peer until read Open packet. */
 	if (peer_established(connection) && CHECK_FLAG(peer->sflags, PEER_STATUS_NSF_MODE)) {
@@ -739,7 +715,7 @@ static void bgp_accept(struct event *event)
 	}
 
 	if (peer_active(incoming) == BGP_PEER_ACTIVE) {
-		if (CHECK_FLAG(doppelganger->flags, PEER_FLAG_TIMER_DELAYOPEN))
+		if (CHECK_FLAG(peer->flags, PEER_FLAG_TIMER_DELAYOPEN))
 			BGP_EVENT_ADD(incoming, TCP_connection_open_w_delay);
 		else
 			BGP_EVENT_ADD(incoming, TCP_connection_open);
@@ -749,7 +725,7 @@ static void bgp_accept(struct event *event)
 	 * If we are doing nht for a peer that is v6 LL based
 	 * massage the event system to make things happy
 	 */
-	bgp_nht_interface_events(doppelganger);
+	bgp_nht_interface_events(peer);
 }
 
 /* BGP socket bind. */
