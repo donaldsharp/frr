@@ -1625,6 +1625,7 @@ struct peer {
 	 * into the connection variable being used.
 	 */
 	struct peer_connection *connection;
+	struct peer_connection *incoming;
 
 	int ttl;	     /* TTL of TCP connection to the peer. */
 	int rtt;	     /* Estimated round-trip-time from TCP_INFO */

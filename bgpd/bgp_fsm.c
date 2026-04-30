@@ -215,8 +215,11 @@ static struct peer *peer_xfer_conn(struct peer *from_peer)
 	 * otherwise we'll get spurious failures during session establishment.
 	 */
 	peer->connection = keeper;
+	if (peer->incoming == keeper)
+		peer->incoming = NULL;
 	keeper->peer = peer;
 	from_peer->connection = going_away;
+	from_peer->incoming = NULL;
 	going_away->peer = from_peer;
 
 	/*
@@ -2993,7 +2996,6 @@ bgp_establish(struct peer_connection *connection)
 		else
 			peer_delete(peer->doppelganger);
 	}
-
 	/*
 	 * If we are replacing the old peer for a doppelganger
 	 * then switch it around in the bgp->peerhash

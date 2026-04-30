@@ -1487,6 +1487,11 @@ static void peer_free(struct peer *peer)
 	if (peer->as_pretty)
 		XFREE(MTYPE_BGP_NAME, peer->as_pretty);
 
+	if (peer->incoming && peer->incoming != peer->connection && peer->incoming->peer == peer)
+		bgp_peer_connection_free(&peer->incoming);
+	else
+		peer->incoming = NULL;
+
 	bgp_peer_connection_free(&peer->connection);
 
 	bgp_unlock(peer->bgp);
@@ -3027,9 +3032,13 @@ int peer_delete(struct peer *peer)
 	UNSET_FLAG(peer->flags, PEER_FLAG_DELETE);
 
 	if (peer->doppelganger) {
+		if (peer->doppelganger->incoming == peer->connection)
+			peer->doppelganger->incoming = NULL;
 		peer->doppelganger->doppelganger = NULL;
 		peer->doppelganger = NULL;
 	}
+
+	peer->incoming = NULL;
 
 	bgp_fsm_change_status(peer->connection, Deleted);
 

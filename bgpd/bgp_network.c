@@ -673,6 +673,8 @@ static void bgp_accept(struct event *event)
 		if (bgp_debug_neighbor_events(peer))
 			zlog_debug("[Event] New active connection from peer %s, Killing previous active connection",
 				   peer->host);
+		if (peer->incoming == peer->doppelganger->connection)
+			peer->incoming = NULL;
 		peer_delete(peer->doppelganger);
 	}
 
@@ -680,6 +682,7 @@ static void bgp_accept(struct event *event)
 				   peer->as_type, NULL, false, NULL, CONNECTION_INCOMING);
 
 	incoming = doppelganger->connection;
+	peer->incoming = incoming;
 
 	peer_xfer_config(doppelganger, peer);
 	bgp_peer_gr_flags_update(doppelganger);
