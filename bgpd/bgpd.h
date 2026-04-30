@@ -1560,6 +1560,8 @@ extern struct peer_connection *bgp_peer_connection_new(struct peer *peer, const 
 						       enum connection_direction dir);
 extern void bgp_peer_connection_free(struct peer_connection **connection);
 extern void bgp_peer_connection_buffers_free(struct peer_connection *connection);
+extern void peer_delete_connection(struct bgp *bgp, struct peer_connection **connection,
+				   bool unset_md5);
 
 /* BGP neighbor structure. */
 struct peer {

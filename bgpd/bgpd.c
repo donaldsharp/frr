@@ -2985,6 +2985,20 @@ static void peer_delete_connection_finalize(struct peer_connection *connection, 
 	}
 }
 
+void peer_delete_connection(struct bgp *bgp, struct peer_connection **connection, bool unset_md5)
+{
+	struct peer_connection *conn;
+
+	if (!connection || !*connection)
+		return;
+
+	conn = *connection;
+	peer_delete_connection_prepare(bgp, conn);
+	peer_delete_connection_stop(conn);
+	peer_delete_connection_finalize(conn, unset_md5);
+	bgp_peer_connection_free(connection);
+}
+
 /* Delete peer from configuration.
  *
  * The peer is moved to a dead-end "Deleted" neighbour-state, to allow
