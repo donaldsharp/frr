@@ -427,8 +427,8 @@ static void bgp_accept(struct event *event)
 	int accept_sock;
 	union sockunion su;
 	struct bgp_listener *listener = EVENT_ARG(event);
-	struct peer *doppelganger, *peer;
-	struct peer_connection *connection, *incoming;
+	struct peer *doppelganger, *peer, *other;
+	struct peer_connection *connection, *incoming, *other_connection;
 	char buf[SU_ADDRSTRLEN];
 	struct bgp *bgp = NULL;
 	enum bgp_peer_active active;
@@ -667,15 +667,19 @@ static void bgp_accept(struct event *event)
 			   inet_sutop(&su, buf), bgp_sock, connection->status, connection->fd);
 
 	if (peer->doppelganger) {
+		other = peer->doppelganger;
+		other_connection = bgp_peer_get_other_connection(peer, connection);
+
 		/* We have an existing connection. Kill the existing one and run
 		   with this one.
 		*/
 		if (bgp_debug_neighbor_events(peer))
 			zlog_debug("[Event] New active connection from peer %s, Killing previous active connection",
 				   peer->host);
-		if (peer->incoming == peer->doppelganger->connection)
+		if (other_connection && peer->incoming == other_connection)
 			peer->incoming = NULL;
-		peer_delete(peer->doppelganger);
+		if (other)
+			peer_delete(other);
 	}
 
 	doppelganger = peer_create(&su, peer->conf_if, bgp, peer->local_as, peer->as,
