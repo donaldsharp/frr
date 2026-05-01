@@ -20,6 +20,16 @@
 /* Basic logging CLI code. */
 /* ======================= */
 
+/* When mgmtd reads a backend daemon's config on its behalf, daemon-scoped
+ * logging directives like `log file` belong to the daemon, not to mgmtd.
+ * If mgmtd applied them to itself it would open the daemon's log file and
+ * the daemon would then fail to open it.  Skip them silently.
+ */
+static inline bool log_cli_skip_backend_config(struct vty *vty)
+{
+	return vty && vty->backend_config_read;
+}
+
 DEFPY_YANG (config_log_stdout,
 	    config_log_stdout_cmd,
 	    "[no] log stdout [<emergencies|alerts|critical|errors|warnings|notifications|informational|debugging>$levelarg]",
@@ -28,6 +38,9 @@ DEFPY_YANG (config_log_stdout,
 	    "Set stdout logging level\n"
 	    LOG_LEVEL_DESC)
 {
+	if (log_cli_skip_backend_config(vty))
+		return CMD_SUCCESS;
+
 	if (no)
 		nb_cli_enqueue_change(vty, "/frr-logging:logging/stdout", NB_OP_DESTROY, NULL);
 	else {
@@ -50,6 +63,9 @@ DEFPY_HIDDEN (config_log_monitor,
        "Set terminal line (monitor) logging level\n"
        LOG_LEVEL_DESC)
 {
+	if (log_cli_skip_backend_config(vty))
+		return CMD_SUCCESS;
+
 	vty_out(vty, "%% \"log monitor\" is deprecated and does nothing.\n");
 	return CMD_SUCCESS;
 }
@@ -84,6 +100,9 @@ DEFUN_YANG (config_log_dmn_file,
 {
 	char xpath[XPATH_MAXLEN];
 
+	if (log_cli_skip_backend_config(vty))
+		return CMD_SUCCESS;
+
 	snprintf(xpath, sizeof(xpath), "/frr-logging:logging/daemon-file[daemon='%s']/filename",
 		 argv[2]->text);
 	nb_cli_enqueue_change(vty, xpath, NB_OP_MODIFY, argv[4]->arg);
@@ -110,6 +129,9 @@ DEFUN_YANG (no_config_log_dmn_file,
 {
 	char xpath[XPATH_MAXLEN];
 
+	if (log_cli_skip_backend_config(vty))
+		return CMD_SUCCESS;
+
 	snprintf(xpath, sizeof(xpath), "/frr-logging:logging/daemon-file[daemon='%s']",
 		 argv[3]->text);
 	nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
@@ -125,6 +147,9 @@ DEFPY_YANG (config_log_file,
 	    "Logging filename\n"
 	    LOG_LEVEL_DESC)
 {
+	if (log_cli_skip_backend_config(vty))
+		return CMD_SUCCESS;
+
 	if (no)
 		nb_cli_enqueue_change(vty, "/frr-logging:logging/file", NB_OP_DESTROY, NULL);
 	else {
@@ -147,6 +172,9 @@ DEFPY_YANG (config_log_syslog,
        "Set syslog logging level\n"
        LOG_LEVEL_DESC)
 {
+	if (log_cli_skip_backend_config(vty))
+		return CMD_SUCCESS;
+
 	nb_cli_enqueue_change(vty, "/frr-logging:logging/syslog", NB_OP_CREATE, NULL);
 	if (levelarg)
 		nb_cli_enqueue_change(vty, "/frr-logging:logging/syslog/level", NB_OP_MODIFY,
@@ -165,6 +193,9 @@ DEFPY_YANG (no_config_log_syslog,
        "Cancel logging to syslog\n"
        LOG_LEVEL_DESC)
 {
+	if (log_cli_skip_backend_config(vty))
+		return CMD_SUCCESS;
+
 	nb_cli_enqueue_change(vty, "/frr-logging:logging/syslog", NB_OP_DESTROY, NULL);
 	return nb_cli_apply_changes(vty, NULL);
 }

@@ -1194,6 +1194,8 @@ const char *yang_afi_safi_value2identity(afi_t afi, safi_t safi)
 		return "frr-routing:l3vpn-ipv6-unicast";
 	if (afi == AFI_L2VPN && safi == SAFI_EVPN)
 		return "frr-routing:l2vpn-evpn";
+	if (afi == AFI_BGP_LS && safi == SAFI_BGP_LS)
+		return "frr-routing:l2vpn-link-state";
 	if (afi == AFI_IP && safi == SAFI_LABELED_UNICAST)
 		return "frr-routing:ipv4-labeled-unicast";
 	if (afi == AFI_IP6 && safi == SAFI_LABELED_UNICAST)
@@ -1235,6 +1237,9 @@ void yang_afi_safi_identity2value(const char *key, afi_t *afi, safi_t *safi)
 	} else if (strmatch(key, "frr-routing:l2vpn-evpn")) {
 		*afi = AFI_L2VPN;
 		*safi = SAFI_EVPN;
+	} else if (strmatch(key, "frr-routing:l2vpn-link-state")) {
+		*afi = AFI_BGP_LS;
+		*safi = SAFI_BGP_LS;
 	} else if (strmatch(key, "frr-routing:ipv4-flowspec")) {
 		*afi = AFI_IP;
 		*safi = SAFI_FLOWSPEC;
