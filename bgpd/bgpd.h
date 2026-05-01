@@ -1952,6 +1952,11 @@ struct peer {
 #define PEER_STATUS_EXT_OPT_PARAMS_LENGTH	 (1U << 5)
 #define PEER_STATUS_BFD_STRICT_HOLD_TIME_EXPIRED (1U << 6) /* BFD strict hold time expired */
 #define PEER_STATUS_COND_ADV_PENDING		 (1U << 7) /* conditional advertisement pending */
+/*
+ * Northbound bookkeeping: set when the peer's YANG candidate has no AS
+ * source (no own remote-as-type, not bound to a peer-group).
+ */
+#define PEER_STATUS_NB_PENDING_CONFIG		 (1U << 8)
 
 	/* Peer status af flags (reset in bgp_stop) */
 	uint16_t af_sflags[AFI_MAX][SAFI_MAX];
@@ -2314,6 +2319,7 @@ DECLARE_QOBJ_TYPE(peer);
 #define BGP_PEER_START_SUPPRESSED(P)                                                              \
 	(CHECK_FLAG((P)->flags, PEER_FLAG_SHUTDOWN) ||                                            \
 	 CHECK_FLAG((P)->sflags, PEER_STATUS_PREFIX_OVERFLOW) ||                                  \
+	 CHECK_FLAG((P)->sflags, PEER_STATUS_NB_PENDING_CONFIG) ||                                \
 	 CHECK_FLAG((P)->bgp->flags, BGP_FLAG_SHUTDOWN) || (P)->shut_during_cfg ||                \
 	 (bgp_in_graceful_restart() && !CHECK_FLAG(bm->flags, BM_FLAG_CONFIG_LOADED)))
 
@@ -2485,6 +2491,90 @@ struct bgp_nlri {
 /* BGP RFC 4271 DelayOpenTime default value */
 #define BGP_DEFAULT_DELAYOPEN 120
 
+/* BGP default values - profile/version aware */
+FRR_CFG_DEFAULT_ULONG(BGP_KEEPALIVE,
+	{ .val_ulong = 3, .match_profile = "datacenter", },
+	{ .val_ulong = BGP_DEFAULT_KEEPALIVE },
+);
+FRR_CFG_DEFAULT_ULONG(BGP_HOLDTIME,
+	{ .val_ulong = 9, .match_profile = "datacenter", },
+	{ .val_ulong = BGP_DEFAULT_HOLDTIME },
+);
+FRR_CFG_DEFAULT_ULONG(BGP_CONNECT_RETRY,
+	{ .val_ulong = 10, .match_profile = "datacenter", },
+	{ .val_ulong = BGP_DEFAULT_CONNECT_RETRY },
+);
+
+/* BGP boolean defaults - profile/version aware */
+/*
+ * BGP_IMPORT_CHECK: default true for every profile on FRR >= 7.4.
+ *
+ * Prior revision made datacenter default false, which broke
+ * bgp_ipv6_next_hop_self (the test relies on BGP_FLAG_IMPORT_CHECK gating
+ * the self-loop reject in bgp_nht.c so r2's own loopback prefix does not
+ * recursively validate against itself at r1).  Baseline (2fcb0b28) keeps
+ * datacenter on default-true via the catch-all, with only the pre-7.4
+ * traditional profile defaulting to false.  Match that.
+ */
+FRR_CFG_DEFAULT_BOOL(BGP_IMPORT_CHECK,
+	{
+		.val_bool = false,
+		.match_profile = "traditional",
+		.match_version = "< 7.4",
+	},
+	{ .val_bool = true },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_SHOW_HOSTNAME,
+	{ .val_bool = true, .match_profile = "datacenter", },
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_SHOW_NEXTHOP_HOSTNAME,
+	{ .val_bool = true, .match_profile = "datacenter", },
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_LOG_NEIGHBOR_CHANGES,
+	{ .val_bool = true, .match_profile = "datacenter", },
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_DETERMINISTIC_MED,
+	{ .val_bool = true, .match_profile = "datacenter", },
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_EBGP_REQUIRES_POLICY,
+	{ .val_bool = false, .match_profile = "datacenter", },
+	{ .val_bool = true, .match_version = ">= 7.4", },
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_SUPPRESS_DUPLICATES,
+	{ .val_bool = false, .match_profile = "datacenter", },
+	{ .val_bool = true, .match_version = ">= 7.6", },
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_GRACEFUL_NOTIFICATION,
+	{ .val_bool = true },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_HARD_ADMIN_RESET,
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_SOFT_VERSION_CAPABILITY,
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_LINK_LOCAL_CAPABILITY,
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_DYNAMIC_CAPABILITY,
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_ENFORCE_FIRST_AS,
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_RR_ALLOW_OUTBOUND_POLICY,
+	{ .val_bool = false },
+);
+FRR_CFG_DEFAULT_BOOL(BGP_COMPARE_AIGP,
+	{ .val_bool = false },
+);
+
 /* BGP default local preference.  */
 #define BGP_DEFAULT_LOCAL_PREF                 100
 
@@ -2651,6 +2741,15 @@ extern struct bgp *bgp_lookup_by_vrf_id(vrf_id_t vrf_id);
 extern struct bgp *bgp_get_evpn(void);
 extern void bgp_set_evpn(struct bgp *bgp);
 extern struct peer *peer_lookup(struct bgp *bgp, union sockunion *su);
+/*
+ * Like peer_lookup(), but returns NULL for peers flagged
+ * PEER_STATUS_NB_PENDING_CONFIG.  Use from contexts where the semantic is
+ * "is this peer active/visible to the user" (inbound BGP accept, show
+ * commands, clear RPCs, debug filters).  ADMIN callsites that need to
+ * find and possibly re-activate a flagged peer must keep using the
+ * plain peer_lookup().
+ */
+extern struct peer *peer_lookup_active(struct bgp *bgp, union sockunion *su);
 extern struct peer *peer_lookup_by_conf_if(struct bgp *bgp, const char *ifname);
 extern struct peer *peer_lookup_by_hostname(struct bgp *bgp, const char *hostname);
 extern void bgp_peer_conf_if_to_su_update(struct peer_connection *connection);
@@ -2725,6 +2824,8 @@ extern int bgp_delete(struct bgp *bgp);
 
 extern int bgp_handle_socket(struct bgp *bgp, struct vrf *vrf,
 			     vrf_id_t old_vrf_id, bool create);
+extern void bgp_start_listening(struct bgp *bgp);
+extern void bgp_stop_listening_if_empty(struct bgp *bgp);
 
 extern void bgp_router_id_zebra_bump(vrf_id_t vrf_id, const struct prefix *prefix);
 extern void bgp_router_id_static_set(struct bgp *bgp, struct in_addr router_id);
@@ -2788,6 +2889,8 @@ extern int peer_deactivate(struct peer *peer, afi_t afi, safi_t safi);
 
 extern int peer_group_bind(struct bgp *bgp, union sockunion *su, struct peer *peer,
 			   struct peer_group *group, as_t *as);
+extern int peer_group_unbind(struct bgp *bgp, struct peer *peer,
+			     struct peer_group *group);
 
 extern int peer_flag_set(struct peer *peer, uint64_t flag);
 extern int peer_flag_unset(struct peer *peer, uint64_t flag);

@@ -5,6 +5,7 @@
 
 #include <zebra.h>
 
+/* Common includes for both bgpd and mgmtd */
 #include "prefix.h"
 #include "filter.h"
 #include "routemap.h"
@@ -13,8 +14,6 @@
 #include "plist.h"
 #include "memory.h"
 #include "log.h"
-#include "frrlua.h"
-#include "frrscript.h"
 #include "buffer.h"
 #include "sockunion.h"
 #include "hash.h"
@@ -22,6 +21,13 @@
 #include "frrstr.h"
 #include "network.h"
 #include "lib/northbound_cli.h"
+#include "lib/asn.h"
+#include "bgpd/bgp_routemap.h"
+
+#ifndef INCLUDE_MGMTD_CMDDEFS_ONLY
+/* Full includes for bgpd - not needed for mgmtd CLI compilation */
+#include "frrlua.h"
+#include "frrscript.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_table.h"
@@ -54,6 +60,150 @@
 #ifdef ENABLE_BGP_VNC
 #include "bgpd/rfapi/bgp_rfapi_cfg.h"
 #endif
+
+#else /* INCLUDE_MGMTD_CMDDEFS_ONLY */
+/*
+ * Minimal includes and stubs for mgmtd CLI compilation.
+ * mgmtd only needs CLI command definitions to parse config files.
+ * Actual validation happens in bgpd via northbound callbacks.
+ */
+#include "bgpd/bgpd.h"
+
+/* Forward declarations for types used in CLI commands */
+struct community;
+struct ecommunity;
+struct lcommunity;
+
+/* Stub functions for mgmtd - validation is skipped, done by bgpd */
+static inline struct community *community_str2com(const char *str
+						   __attribute__((unused)))
+{
+	return (struct community *)1; /* Return non-NULL to pass checks */
+}
+
+static inline char *community_str(struct community *com __attribute__((unused)),
+				   bool make_json __attribute__((unused)),
+				   bool translate_alias __attribute__((unused)))
+{
+	return NULL;
+}
+
+static inline void community_free(struct community **com
+				   __attribute__((unused)))
+{
+}
+
+static inline struct ecommunity *
+ecommunity_str2com(const char *str __attribute__((unused)),
+		   int type __attribute__((unused)),
+		   int keyword __attribute__((unused)))
+{
+	return (struct ecommunity *)1; /* Return non-NULL to pass checks */
+}
+
+static inline char *ecommunity_ecom2str(struct ecommunity *ecom
+					 __attribute__((unused)),
+					 int format __attribute__((unused)),
+					 int filter __attribute__((unused)))
+{
+	return NULL;
+}
+
+static inline void ecommunity_free(struct ecommunity **ecom
+				    __attribute__((unused)))
+{
+}
+
+static inline struct lcommunity *lcommunity_str2com(const char *str
+						     __attribute__((unused)))
+{
+	return (struct lcommunity *)1; /* Return non-NULL to pass checks */
+}
+
+static inline char *lcommunity_str(struct lcommunity *lcom
+				    __attribute__((unused)),
+				    bool make_json __attribute__((unused)),
+				    bool translate_alias __attribute__((unused)))
+{
+	return NULL;
+}
+
+static inline void lcommunity_free(struct lcommunity **lcom
+				    __attribute__((unused)))
+{
+}
+
+/* ECOMMUNITY format and type constants */
+#define ECOMMUNITY_FORMAT_ROUTE_MAP 0
+#define ECOMMUNITY_FORMAT_COMMUNITY_LIST 1
+#define ECOMMUNITY_FORMAT_DISPLAY 2
+#define ECOMMUNITY_ROUTE_TARGET 0x02
+#define ECOMMUNITY_SITE_ORIGIN 0x03
+
+/* Help string macros used in CLI commands */
+#define EVPN_HELP_STR "Ethernet Virtual Private Network\n"
+
+/* Stub for community_alias - not used in mgmtd, just needs to compile */
+struct community_alias {
+	char community[256];
+	char alias[256];
+};
+
+static inline struct community_alias *
+bgp_ca_alias_lookup(struct community_alias *ca __attribute__((unused)))
+{
+	return NULL;
+}
+
+/* Stub for aspath functions - validates AS path string for mgmtd context */
+struct aspath;
+static inline void *route_aspath_compile(const char *arg)
+{
+	const char *p = arg;
+	as_t asval;
+	bool found;
+
+	if (!arg || !*arg)
+		return NULL;
+
+	/*
+	 * Parse through the AS path string, validating each AS number.
+	 * This handles space-separated AS numbers which can be in plain
+	 * format (65540) or asdot format (1.4).
+	 */
+	while (*p) {
+		/* Skip whitespace */
+		while (*p && isspace((unsigned char)*p))
+			p++;
+
+		if (!*p)
+			break;
+
+		/* Parse the next AS number */
+		p = asn_str2asn_parse(p, &asval, &found);
+		if (!found)
+			return NULL;
+	}
+
+	/* Return a non-NULL value to indicate success */
+	return (void *)1;
+}
+
+static inline void route_aspath_free(void *rule __attribute__((unused)))
+{
+}
+
+/* Stub for argv_find_and_parse_afi */
+static inline int argv_find_and_parse_afi(struct cmd_token **argv
+					   __attribute__((unused)),
+					   int argc __attribute__((unused)),
+					   int *index __attribute__((unused)),
+					   afi_t *afi __attribute__((unused)))
+{
+	return 0;
+}
+
+#endif /* INCLUDE_MGMTD_CMDDEFS_ONLY */
 
 #include "bgpd/bgp_routemap_clippy.c"
 
@@ -109,6 +259,13 @@ o Local extensions
   set as-path exclude     : Done
 
 */
+
+#ifndef INCLUDE_MGMTD_CMDDEFS_ONLY
+/*
+ * Implementation code for bgpd only.
+ * This section contains match/set rule structures and their implementations.
+ * mgmtd doesn't need this - it only needs the CLI command definitions.
+ */
 
 /* generic value manipulation to be shared in multiple rules */
 
@@ -2658,10 +2815,15 @@ route_set_aspath_exclude(void *rule, const struct prefix *dummy, void *object)
 			aspath_filter_exclude(new_path, ase->aspath);
 	else if (ase->exclude_all)
 		path->attr->aspath = aspath_filter_exclude_all(new_path);
-	else if (ase->exclude_aspath_acl)
-		path->attr->aspath =
-			aspath_filter_exclude_acl(new_path,
-						  ase->exclude_aspath_acl);
+	else if (ase->exclude_aspath_acl_name) {
+		struct as_list *acl =
+			as_list_lookup(ase->exclude_aspath_acl_name);
+		if (acl)
+			path->attr->aspath =
+				aspath_filter_exclude_acl(new_path, acl);
+		else
+			aspath_free(new_path);
+	}
 	else
 		aspath_free(new_path);
 
@@ -5113,6 +5275,16 @@ static void bgp_route_map_event(const char *rmap_name)
 
 	route_map_notify_dependencies(rmap_name, RMAP_EVENT_MATCH_ADDED);
 }
+#endif /* INCLUDE_MGMTD_CMDDEFS_ONLY - end of bgpd-only implementation code */
+
+/*
+ * CLI Commands - DEFUN_YANG definitions
+ * These are compiled for mgmtd only (via INCLUDE_MGMTD_CMDDEFS_ONLY).
+ * bgpd does not need these CLI handlers - it receives config from mgmtd
+ * via the backend connection. Having them in bgpd would cause vtysh to
+ * route commands to VTYSH_BGPD|VTYSH_MGMTD instead of VTYSH_MGMTD only.
+ */
+#ifdef INCLUDE_MGMTD_CMDDEFS_ONLY
 
 DEFUN_YANG (match_mac_address,
 	    match_mac_address_cmd,
@@ -5874,12 +6046,17 @@ DEFUN_YANG(match_alias, match_alias_cmd, "match alias ALIAS_NAME",
 	   "BGP community alias name\n")
 {
 	const char *alias = argv[2]->arg;
-	struct community_alias ca1;
-	struct community_alias *lookup_alias;
-
 	const char *xpath =
 		"./match-condition[condition='frr-bgp-route-map:match-alias']";
 	char xpath_value[XPATH_MAXLEN];
+
+#ifndef INCLUDE_MGMTD_CMDDEFS_ONLY
+	/* Validate alias exists - only in bgpd context where the alias
+	 * database is available. In mgmtd context, skip validation since
+	 * the alias will be resolved at runtime in bgpd.
+	 */
+	struct community_alias ca1;
+	struct community_alias *lookup_alias;
 
 	memset(&ca1, 0, sizeof(ca1));
 	strlcpy(ca1.alias, alias, sizeof(ca1.alias));
@@ -5888,6 +6065,7 @@ DEFUN_YANG(match_alias, match_alias_cmd, "match alias ALIAS_NAME",
 		vty_out(vty, "%% BGP alias name '%s' does not exist\n", alias);
 		return CMD_WARNING_CONFIG_FAILED;
 	}
+#endif
 
 	nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
 	snprintf(xpath_value, sizeof(xpath_value),
@@ -6879,7 +7057,9 @@ DEFUN_YANG (set_community,
 	int first = 0;
 	int additive = 0;
 	struct buffer *b;
+#ifndef INCLUDE_MGMTD_CMDDEFS_ONLY
 	struct community *com = NULL;
+#endif
 	char *str;
 	char *argstr = NULL;
 	int ret;
@@ -6944,6 +7124,7 @@ DEFUN_YANG (set_community,
 	str = buffer_getstr(b);
 	buffer_free(b);
 
+#ifndef INCLUDE_MGMTD_CMDDEFS_ONLY
 	if (str)
 		com = community_str2com(str);
 
@@ -6957,6 +7138,7 @@ DEFUN_YANG (set_community,
 
 	/* Set communities attribute string.  */
 	str = community_str(com, false, false);
+#endif /* !INCLUDE_MGMTD_CMDDEFS_ONLY */
 
 	if (additive) {
 		size_t argstr_sz = strlen(str) + strlen(" additive") + 1;
@@ -6971,7 +7153,11 @@ DEFUN_YANG (set_community,
 
 	if (argstr)
 		XFREE(MTYPE_TMP, argstr);
+#ifndef INCLUDE_MGMTD_CMDDEFS_ONLY
 	community_free(&com);
+#else
+	XFREE(MTYPE_TMP, str);
+#endif
 
 	return ret;
 }
@@ -7917,7 +8103,7 @@ DEFUN_YANG (set_vpn_nexthop,
 			nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
 			snprintf(
 				xpath_value, sizeof(xpath_value),
-				"%s/rmap-set-action/frr-bgp-route-map:ipv4-address",
+				"%s/rmap-set-action/frr-bgp-route-map:ipv4-vpn-address",
 				xpath);
 		} else {
 			const char *xpath =
@@ -7926,7 +8112,7 @@ DEFUN_YANG (set_vpn_nexthop,
 			nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
 			snprintf(
 				xpath_value, sizeof(xpath_value),
-				"%s/rmap-set-action/frr-bgp-route-map:ipv6-address",
+				"%s/rmap-set-action/frr-bgp-route-map:ipv6-vpn-address",
 				xpath);
 		}
 
@@ -7982,45 +8168,35 @@ DEFPY_YANG (set_ipx_vpn_nexthop,
 	    "IPv6 address of next hop\n")
 {
 	int idx_ip = 4;
-	afi_t afi;
-	int idx = 0;
 	char xpath_value[XPATH_MAXLEN];
+	const char *xpath;
 
-	if (argv_find_and_parse_afi(argv, argc, &idx, &afi)) {
-		if (afi == AFI_IP) {
-			if (addrv6_str) {
-				vty_out(vty, "%% IPv4 next-hop expected\n");
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-
-			const char *xpath =
-				"./set-action[action='frr-bgp-route-map:ipv4-vpn-address']";
-
-			nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
-			snprintf(
-				xpath_value, sizeof(xpath_value),
-				"%s/rmap-set-action/frr-bgp-route-map:ipv4-address",
-				xpath);
-		} else {
-			if (addrv4_str) {
-				vty_out(vty, "%% IPv6 next-hop expected\n");
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-
-			const char *xpath =
-				"./set-action[action='frr-bgp-route-map:ipv6-vpn-address']";
-
-			nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
-			snprintf(
-				xpath_value, sizeof(xpath_value),
-				"%s/rmap-set-action/frr-bgp-route-map:ipv6-address",
-				xpath);
+	/* Don't use argv_find_and_parse_afi — it's stubbed out in mgmtd. */
+	if (strmatch(argv[1]->text, "ipv4")) {
+		if (addrv6_str) {
+			vty_out(vty, "%% IPv4 next-hop expected\n");
+			return CMD_WARNING_CONFIG_FAILED;
 		}
-		nb_cli_enqueue_change(vty, xpath_value, NB_OP_MODIFY,
-				      argv[idx_ip]->arg);
-		return nb_cli_apply_changes(vty, NULL);
+		xpath = "./set-action[action='frr-bgp-route-map:ipv4-vpn-address']";
+		nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+		snprintf(xpath_value, sizeof(xpath_value),
+			 "%s/rmap-set-action/frr-bgp-route-map:ipv4-vpn-address",
+			 xpath);
+	} else {
+		if (addrv4_str) {
+			vty_out(vty, "%% IPv6 next-hop expected\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		xpath = "./set-action[action='frr-bgp-route-map:ipv6-vpn-address']";
+		nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+		snprintf(xpath_value, sizeof(xpath_value),
+			 "%s/rmap-set-action/frr-bgp-route-map:ipv6-vpn-address",
+			 xpath);
 	}
-	return CMD_SUCCESS;
+
+	nb_cli_enqueue_change(vty, xpath_value, NB_OP_MODIFY,
+			      argv[idx_ip]->arg);
+	return nb_cli_apply_changes(vty, NULL);
 }
 
 DEFUN_YANG (no_set_ipx_vpn_nexthop,
@@ -8035,22 +8211,16 @@ DEFUN_YANG (no_set_ipx_vpn_nexthop,
 	    "IP address of next hop\n"
 	    "IPv6 address of next hop\n")
 {
-	afi_t afi;
-	int idx = 0;
+	const char *xpath;
 
-	if (argv_find_and_parse_afi(argv, argc, &idx, &afi)) {
-		if (afi == AFI_IP) {
-			const char *xpath =
-				"./set-action[action='frr-bgp-route-map:ipv4-vpn-address']";
-			nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
-		} else {
-			const char *xpath =
-				"./set-action[action='frr-bgp-route-map:ipv6-vpn-address']";
-			nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
-		}
-		return nb_cli_apply_changes(vty, NULL);
-	}
-	return CMD_SUCCESS;
+	/* Don't use argv_find_and_parse_afi — stubbed out in mgmtd */
+	if (strmatch(argv[2]->text, "ipv4"))
+		xpath = "./set-action[action='frr-bgp-route-map:ipv4-vpn-address']";
+	else
+		xpath = "./set-action[action='frr-bgp-route-map:ipv6-vpn-address']";
+
+	nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
+	return nb_cli_apply_changes(vty, NULL);
 }
 
 DEFUN_YANG (set_originator_id,
@@ -8112,6 +8282,31 @@ DEFPY_YANG (match_rpki_extcommunity,
 			xpath);
 		nb_cli_enqueue_change(vty, xpath_value, NB_OP_MODIFY,
 				      argv[2]->arg);
+	}
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(match_rpki_cli, match_rpki_cli_cmd,
+	   "[no$no] match rpki <valid|invalid|notfound>$state",
+	   NO_STR MATCH_STR
+	   "BGP RPKI (Origin Validation State)\n"
+	   "Valid prefix\n"
+	   "Invalid prefix\n"
+	   "Prefix not found\n")
+{
+	const char *xpath =
+		"./match-condition[condition='frr-bgp-route-map:rpki']";
+	char xpath_value[XPATH_MAXLEN];
+
+	if (no) {
+		nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
+	} else {
+		nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+		snprintf(xpath_value, sizeof(xpath_value),
+			 "%s/rmap-match-condition/frr-bgp-route-map:rpki",
+			 xpath);
+		nb_cli_enqueue_change(vty, xpath_value, NB_OP_MODIFY, state);
 	}
 
 	return nb_cli_apply_changes(vty, NULL);
@@ -8182,7 +8377,10 @@ DEFPY_YANG (match_vpn_dataplane,
 	return nb_cli_apply_changes(vty, NULL);
 }
 
-/* Initialization of route map. */
+#endif /* INCLUDE_MGMTD_CMDDEFS_ONLY - end of DEFUN_YANG CLI commands */
+
+#ifndef INCLUDE_MGMTD_CMDDEFS_ONLY
+/* Initialization of route map - bgpd only */
 void bgp_route_map_init(void)
 {
 	route_map_init();
@@ -8315,6 +8513,44 @@ void bgp_route_map_init(void)
 	route_map_install_set(&route_set_label_index_cmd);
 	route_map_install_set(&route_set_l3vpn_nexthop_encapsulation_cmd);
 
+	route_map_install_match(&route_match_ipv6_address_cmd);
+	route_map_install_match(&route_match_ipv6_next_hop_cmd);
+	route_map_install_match(&route_match_ipv6_next_hop_address_cmd);
+	route_map_install_match(&route_match_ipv6_next_hop_prefix_list_cmd);
+	route_map_install_match(&route_match_ipv4_next_hop_cmd);
+	route_map_install_match(&route_match_ipv6_address_prefix_list_cmd);
+	route_map_install_match(&route_match_ipv6_next_hop_type_cmd);
+	route_map_install_set(&route_set_ipv6_nexthop_global_cmd);
+	route_map_install_set(&route_set_ipv6_nexthop_prefer_global_cmd);
+	route_map_install_set(&route_set_ipv6_nexthop_local_cmd);
+	route_map_install_set(&route_set_ipv6_nexthop_peer_cmd);
+	route_map_install_match(&route_match_rpki_extcommunity_cmd);
+	route_map_install_match(&route_match_vpn_dataplane_cmd);
+
+	/* NOTE: install_element() calls for route-map match/set commands are
+	 * intentionally NOT here. They are installed only via
+	 * bgp_route_map_cli_init() which is called by mgmtd. This ensures
+	 * vtysh routes these commands to VTYSH_MGMTD only, not VTYSH_BGPD.
+	 */
+}
+#endif /* INCLUDE_MGMTD_CMDDEFS_ONLY - end of bgp_route_map_init */
+
+#ifndef INCLUDE_MGMTD_CMDDEFS_ONLY
+void bgp_route_map_terminate(void)
+{
+	/* ToDo: Cleanup all the used memory */
+	route_map_finish();
+}
+#endif /* INCLUDE_MGMTD_CMDDEFS_ONLY */
+
+/*
+ * CLI-only initialization for mgmtd.
+ * Installs CLI commands without bgpd-specific hooks and match/set rules.
+ * This allows mgmtd to parse BGP route-map configuration.
+ */
+#ifdef INCLUDE_MGMTD_CMDDEFS_ONLY
+void bgp_route_map_cli_init(void)
+{
 	install_element(RMAP_NODE, &match_peer_cmd);
 	install_element(RMAP_NODE, &match_peer_local_cmd);
 	install_element(RMAP_NODE, &match_src_peer_cmd);
@@ -8438,20 +8674,6 @@ void bgp_route_map_init(void)
 	install_element(RMAP_NODE, &no_set_originator_id_cmd);
 	install_element(RMAP_NODE, &set_l3vpn_nexthop_encapsulation_cmd);
 
-	route_map_install_match(&route_match_ipv6_address_cmd);
-	route_map_install_match(&route_match_ipv6_next_hop_cmd);
-	route_map_install_match(&route_match_ipv6_next_hop_address_cmd);
-	route_map_install_match(&route_match_ipv6_next_hop_prefix_list_cmd);
-	route_map_install_match(&route_match_ipv4_next_hop_cmd);
-	route_map_install_match(&route_match_ipv6_address_prefix_list_cmd);
-	route_map_install_match(&route_match_ipv6_next_hop_type_cmd);
-	route_map_install_set(&route_set_ipv6_nexthop_global_cmd);
-	route_map_install_set(&route_set_ipv6_nexthop_prefer_global_cmd);
-	route_map_install_set(&route_set_ipv6_nexthop_local_cmd);
-	route_map_install_set(&route_set_ipv6_nexthop_peer_cmd);
-	route_map_install_match(&route_match_rpki_extcommunity_cmd);
-	route_map_install_match(&route_match_vpn_dataplane_cmd);
-
 	install_element(RMAP_NODE, &match_vpn_dataplane_cmd);
 	install_element(RMAP_NODE, &match_ipv6_next_hop_address_cmd);
 	install_element(RMAP_NODE, &no_match_ipv6_next_hop_address_cmd);
@@ -8466,15 +8688,18 @@ void bgp_route_map_init(void)
 	install_element(RMAP_NODE, &set_ipv6_nexthop_peer_cmd);
 	install_element(RMAP_NODE, &no_set_ipv6_nexthop_peer_cmd);
 	install_element(RMAP_NODE, &match_rpki_extcommunity_cmd);
-	install_element(RMAP_NODE, &match_source_protocol_cmd);
-	install_element(RMAP_NODE, &no_match_source_protocol_cmd);
+	install_element(RMAP_NODE, &match_rpki_cli_cmd);
+	/*
+	 * "match source-protocol" is installed by zebra_cli_init (called earlier
+	 * in mgmtd's startup).  Installing it again here would create two DEFPYs
+	 * with identical CLI strings at RMAP_NODE, and the command-graph merge
+	 * corrupts the match so neither handler fires and the config is silently
+	 * dropped.  The frr-zebra-route-map:source-protocol xpath written by
+	 * zebra's DEFPY is delivered to bgpd via the NB registration in
+	 * frr_zebra_route_map_info (bgp_routemap_nb.c).
+	 */
 #ifdef HAVE_SCRIPTING
 	install_element(RMAP_NODE, &match_script_cmd);
 #endif
 }
-
-void bgp_route_map_terminate(void)
-{
-	/* ToDo: Cleanup all the used memory */
-	route_map_finish();
-}
+#endif /* INCLUDE_MGMTD_CMDDEFS_ONLY - end of bgp_route_map_cli_init */

@@ -3393,26 +3393,23 @@ static int bmp_config_write(struct bgp *bgp, struct vty *vty)
 
 static int bgp_bmp_init(struct event_loop *tm)
 {
+	/*
+	 * Legacy BMP CLI commands are now handled by mgmtd via bgp_cli.c.
+	 * The BMP_NODE and install_element calls are done in bgp_cli_init().
+	 * We still need to install the show command and the node for bgpd
+	 * (in case bgpd needs the node for VTY_PUSH_CONTEXT_SUB).
+	 */
 	install_node(&bmp_node);
 	install_default(BMP_NODE);
 
 	cmd_variable_handler_register(bmp_targets_var_handlers);
 
-	install_element(BGP_NODE, &bmp_targets_cmd);
-	install_element(BGP_NODE, &no_bmp_targets_cmd);
-
-	install_element(BMP_NODE, &bmp_listener_cmd);
-	install_element(BMP_NODE, &no_bmp_listener_cmd);
-	install_element(BMP_NODE, &bmp_connect_cmd);
-	install_element(BMP_NODE, &bmp_acl_cmd);
-	install_element(BMP_NODE, &bmp_stats_send_experimental_cmd);
-	install_element(BMP_NODE, &bmp_stats_cmd);
-	install_element(BMP_NODE, &bmp_monitor_cmd);
-	install_element(BMP_NODE, &bmp_mirror_cmd);
-	install_element(BMP_NODE, &bmp_import_vrf_cmd);
-
-	install_element(BGP_NODE, &bmp_mirror_limit_cmd);
-	install_element(BGP_NODE, &no_bmp_mirror_limit_cmd);
+	/* BMP config commands (bmp targets, bmp listener, bmp connect, bmp
+	 * monitor, bmp mirror, bmp acl, bmp stats, bmp import-vrf-view, bmp
+	 * mirror buffer-limit) are installed by bgp_cli.c (DEFPY_YANG) at
+	 * BGP_NODE / BMP_NODE. Data callbacks dispatch to this module via
+	 * the bmp_nb_cb function table registered in bgp_bmp_module_init().
+	 */
 
 	install_element(VIEW_NODE, &show_bmp_cmd);
 
@@ -3673,8 +3670,280 @@ static int bmp_vrf_itf_state_changed(struct bgp *bgp, struct interface *itf)
 	return 0;
 }
 
+/*
+ * NB ops implementations - called from bgp_nb_config.c via bmp_nb_cb pointer.
+ * These run inside bgpd where the BMP module is loaded.
+ */
+static void *bmp_nb_targets_create(struct bgp *bgp, const char *name)
+{
+	return bmp_targets_get(bgp, name);
+}
+
+static void bmp_nb_targets_destroy(struct bgp *bgp, const char *name)
+{
+	struct bmp_targets *bt = bmp_targets_find1(bgp, name);
+
+	if (bt)
+		bmp_targets_put(bt);
+}
+
+static void *bmp_nb_targets_find(struct bgp *bgp, const char *name)
+{
+	return bmp_targets_find1(bgp, name);
+}
+
+static void bmp_nb_listener_create(void *targets, const char *addr,
+				   uint16_t port)
+{
+	struct bmp_targets *bt = targets;
+	union sockunion su;
+	struct bmp_listener *bl;
+
+	if (str2sockunion(addr, &su) < 0)
+		return;
+	bl = bmp_listener_get(bt, &su, port);
+	if (bl->sock == -1)
+		bmp_listener_start(bl);
+}
+
+static void bmp_nb_listener_destroy(void *targets, const char *addr,
+				    uint16_t port)
+{
+	struct bmp_targets *bt = targets;
+	union sockunion su;
+	struct bmp_listener *bl;
+
+	if (str2sockunion(addr, &su) < 0)
+		return;
+	bl = bmp_listener_find(bt, &su, port);
+	if (bl) {
+		bmp_listener_stop(bl);
+		bmp_listener_put(bl);
+	}
+}
+
+static void bmp_nb_connect_create(void *targets, const char *hostname,
+				  uint16_t port, uint32_t min_retry,
+				  uint32_t max_retry)
+{
+	struct bmp_targets *bt = targets;
+	struct bmp_active *ba;
+
+	ba = bmp_active_get(bt, hostname, port);
+	ba->minretry = min_retry;
+	ba->maxretry = max_retry;
+	ba->curretry = ba->minretry;
+	bmp_active_setup(ba);
+}
+
+static void bmp_nb_connect_destroy(void *targets, const char *hostname,
+				   uint16_t port)
+{
+	struct bmp_targets *bt = targets;
+	struct bmp_active *ba;
+
+	ba = bmp_active_find(bt, hostname, port);
+	if (ba)
+		bmp_active_put(ba);
+}
+
+static void bmp_nb_connect_min_retry(void *targets, const char *hostname,
+				     uint16_t port, uint32_t val)
+{
+	struct bmp_targets *bt = targets;
+	struct bmp_active *ba;
+
+	ba = bmp_active_find(bt, hostname, port);
+	if (ba)
+		ba->minretry = val;
+}
+
+static void bmp_nb_connect_max_retry(void *targets, const char *hostname,
+				     uint16_t port, uint32_t val)
+{
+	struct bmp_targets *bt = targets;
+	struct bmp_active *ba;
+
+	ba = bmp_active_find(bt, hostname, port);
+	if (ba)
+		ba->maxretry = val;
+}
+
+static void bmp_nb_monitor_set(void *targets, afi_t afi, safi_t safi,
+			       uint8_t flag, bool enable)
+{
+	struct bmp_targets *bt = targets;
+	struct bmp *bmp;
+	uint8_t prev;
+
+	prev = bt->afimon[afi][safi];
+	if (enable)
+		SET_FLAG(bt->afimon[afi][safi], flag);
+	else
+		UNSET_FLAG(bt->afimon[afi][safi], flag);
+
+	if (prev != bt->afimon[afi][safi])
+		frr_each (bmp_session, &bt->sessions, bmp)
+			bmp_update_syncro(bmp, afi, safi, NULL);
+}
+
+static void bmp_nb_mirror_set(void *targets, bool enable)
+{
+	struct bmp_targets *bt = targets;
+	struct bmp *bmp;
+
+	if (bt->mirror == enable)
+		return;
+
+	bt->mirror = enable;
+	if (!bt->mirror) {
+		frr_each (bmp_session, &bt->sessions, bmp) {
+			struct bmp_mirrorq *bmq;
+
+			while ((bmq = bmp_pull_mirror(bmp)))
+				if (!bmq->refcount)
+					XFREE(MTYPE_BMP_MIRRORQ, bmq);
+		}
+	}
+}
+
+static void bmp_nb_stats_set(void *targets, uint32_t interval_ms)
+{
+	struct bmp_targets *bt = targets;
+
+	event_cancel(&bt->t_stats);
+	bt->stat_msec = interval_ms;
+	if (bt->stat_msec)
+		event_add_timer_msec(bm->master, bmp_stats, bt, bt->stat_msec,
+				     &bt->t_stats);
+}
+
+static void bmp_nb_stats_send_experimental_set(void *targets, bool enable)
+{
+	struct bmp_targets *bt = targets;
+
+	bt->stats_send_experimental = enable;
+}
+
+static void bmp_nb_acl_set(void *targets, int af, const char *name)
+{
+	struct bmp_targets *bt = targets;
+	char **what;
+
+	if (af == AF_INET6)
+		what = &bt->acl6_name;
+	else
+		what = &bt->acl_name;
+
+	XFREE(MTYPE_BMP_ACLNAME, *what);
+	if (name)
+		*what = XSTRDUP(MTYPE_BMP_ACLNAME, name);
+}
+
+static void bmp_nb_mirror_limit_set(struct bgp *bgp, size_t limit)
+{
+	struct bmp_bgp *bmpbgp = bmp_bgp_get(bgp);
+
+	bmpbgp->mirror_qsizelimit = limit;
+}
+
+static void bmp_nb_mirror_limit_unset(struct bgp *bgp)
+{
+	struct bmp_bgp *bmpbgp = bmp_bgp_get(bgp);
+
+	bmpbgp->mirror_qsizelimit = ~0UL;
+}
+
+/*
+ * Add a VRF/view to the list of instances whose BGP data this target imports.
+ * Mirrors the apply path of the legacy `bmp import-vrf-view VRFNAME` DEFPY,
+ * minus the vty-only error paths — those become NB validation decisions.
+ */
+static void bmp_nb_import_vrf_create(void *targets, const char *vrfname)
+{
+	struct bmp_targets *bt = targets;
+	struct bmp_imported_bgp *bib;
+	struct bgp *bgp;
+	struct bmp *bmp;
+	afi_t afi;
+	safi_t safi;
+
+	if (!bt->bgp)
+		return;
+
+	/* Self-import is a no-op at the daemon layer. */
+	if ((bt->bgp->name == NULL && vrfname == NULL) ||
+	    (bt->bgp->name && vrfname && strmatch(vrfname, bt->bgp->name)))
+		return;
+
+	/* Idempotent: same vrf already imported. */
+	if (bmp_imported_bgp_find(bt, (char *)vrfname))
+		return;
+
+	bib = bmp_imported_bgp_get(bt, (char *)vrfname);
+	bgp = bgp_lookup_by_name(bib->name);
+	if (!bgp)
+		return;
+
+	frr_each (bmp_session, &bt->sessions, bmp) {
+		if (bmp->state != BMP_PeerUp && bmp->state != BMP_Run)
+			continue;
+		bmp_send_peerup_per_instance(bmp, bgp);
+		bmp_send_peerup_vrf_per_instance(bmp, &bib->vrf_state, bgp);
+		FOREACH_AFI_SAFI (afi, safi)
+			bmp_update_syncro(bmp, afi, safi, bgp);
+	}
+}
+
+static void bmp_nb_import_vrf_destroy(void *targets, const char *vrfname)
+{
+	struct bmp_targets *bt = targets;
+	struct bmp_imported_bgp *bib;
+	struct bgp *bgp;
+
+	if (!bt->bgp)
+		return;
+
+	bib = bmp_imported_bgp_find(bt, (char *)vrfname);
+	if (!bib)
+		return;
+
+	bgp = bgp_lookup_by_name(bib->name);
+	if (!bgp) {
+		bmp_imported_bgp_put(bt, bib);
+		return;
+	}
+
+	bmp_send_peerdown_vrf_per_instance(bt, bgp);
+	bmp_imported_bgp_put(bt, bib);
+}
+
+static struct bmp_nb_ops bmp_nb_ops_impl = {
+	.targets_create = bmp_nb_targets_create,
+	.targets_destroy = bmp_nb_targets_destroy,
+	.targets_find = bmp_nb_targets_find,
+	.listener_create = bmp_nb_listener_create,
+	.listener_destroy = bmp_nb_listener_destroy,
+	.connect_create = bmp_nb_connect_create,
+	.connect_destroy = bmp_nb_connect_destroy,
+	.connect_min_retry = bmp_nb_connect_min_retry,
+	.connect_max_retry = bmp_nb_connect_max_retry,
+	.monitor_set = bmp_nb_monitor_set,
+	.mirror_set = bmp_nb_mirror_set,
+	.stats_set = bmp_nb_stats_set,
+	.stats_send_experimental_set = bmp_nb_stats_send_experimental_set,
+	.acl_set = bmp_nb_acl_set,
+	.mirror_limit_set = bmp_nb_mirror_limit_set,
+	.mirror_limit_unset = bmp_nb_mirror_limit_unset,
+	.import_vrf_create = bmp_nb_import_vrf_create,
+	.import_vrf_destroy = bmp_nb_import_vrf_destroy,
+};
+
 static int bgp_bmp_module_init(void)
 {
+	/* Register NB ops so bgp_nb_config.c can call into us */
+	bmp_nb_cb = &bmp_nb_ops_impl;
+
 	hook_register(bgp_packet_dump, bmp_mirror_packet);
 	hook_register(bgp_packet_send, bmp_outgoing_packet);
 	hook_register(peer_status_changed, bmp_peer_status_changed);

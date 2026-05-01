@@ -1776,6 +1776,8 @@ static int updgrp_policy_update_walkcb(struct update_group *updgrp, void *arg)
 			subgroup_announce_route(subgrp);
 		}
 		if (def_changed) {
+			struct bgp *bgp = UPDGRP_INST(updgrp);
+
 			if (bgp_debug_update(NULL, NULL, updgrp, 0))
 				zlog_debug(
 					"u%" PRIu64 ":s%" PRIu64" announcing default upon default routemap %s change",
@@ -1794,7 +1796,26 @@ static int updgrp_policy_update_walkcb(struct update_group *updgrp, void *arg)
 				 */
 				UNSET_FLAG(subgrp->sflags,
 					   SUBGRP_STATUS_DEFAULT_ORIGINATE);
-				subgroup_default_originate(subgrp, false);
+				/*
+				 * Gate this re-evaluation behind the configured
+				 * "bgp default-originate timer". If a timer is
+				 * set, arm it and let the timer callback do the
+				 * actual evaluation. This prevents the 5-second
+				 * rmap_update_timer path from bypassing the
+				 * user-requested default-originate timer.
+				 */
+				if (bgp->rmap_def_originate_eval_timer) {
+					if (!bgp->t_rmap_def_originate_eval)
+						event_add_timer(
+							bm->master,
+							update_group_refresh_default_originate_route_map,
+							bgp,
+							bgp->rmap_def_originate_eval_timer,
+							&bgp->t_rmap_def_originate_eval);
+				} else {
+					subgroup_default_originate(subgrp,
+								   false);
+				}
 			} else {
 				/*
 				 * This is a explicit withdraw, since the

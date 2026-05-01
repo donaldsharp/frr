@@ -411,7 +411,7 @@ static void bgp_peer_remove_bfd(struct peer *p)
 	XFREE(MTYPE_BFD_CONFIG, p->bfd_config);
 }
 
-static void bgp_group_configure_bfd(struct peer *p)
+void bgp_group_configure_bfd(struct peer *p)
 {
 	struct listnode *n;
 	struct peer *pn;
@@ -677,38 +677,6 @@ DEFPY (neighbor_bfd_strict_hold_time,
 	return CMD_SUCCESS;
 }
 
-DEFUN (neighbor_bfd_check_controlplane_failure,
-       neighbor_bfd_check_controlplane_failure_cmd,
-       "[no] neighbor <A.B.C.D|X:X::X:X|WORD> bfd check-control-plane-failure",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BFD support\n"
-       "Link dataplane status with BGP controlplane\n")
-{
-	const char *no = strmatch(argv[0]->text, "no") ? "no" : NULL;
-	int idx_peer = 0;
-	struct peer *peer;
-
-	if (no)
-		idx_peer = 2;
-	else
-		idx_peer = 1;
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP))
-		bgp_group_configure_bfd(peer);
-	else
-		bgp_peer_configure_bfd(peer, true);
-
-	peer->bfd_config->cbit = no == NULL;
-	bgp_peer_config_apply(peer, peer->group);
-
-	return CMD_SUCCESS;
- }
-
 #if HAVE_BFDD > 0
 DEFUN (no_neighbor_bfd,
        no_neighbor_bfd_cmd,
@@ -826,16 +794,16 @@ void bgp_bfd_init(struct event_loop *tm)
 	/* Initialize BFD client functions */
 	bfd_protocol_integration_init(bgp_zclient, tm);
 
-	/* "neighbor bfd" commands. */
-	install_element(BGP_NODE, &neighbor_bfd_cmd);
-	install_element(BGP_NODE, &neighbor_bfd_param_cmd);
-	install_element(BGP_NODE, &neighbor_bfd_check_controlplane_failure_cmd);
-	install_element(BGP_NODE, &neighbor_bfd_strict_cmd);
-	install_element(BGP_NODE, &neighbor_bfd_strict_hold_time_cmd);
-	install_element(BGP_NODE, &no_neighbor_bfd_cmd);
-
-#if HAVE_BFDD > 0
-	install_element(BGP_NODE, &neighbor_bfd_profile_cmd);
-	install_element(BGP_NODE, &no_neighbor_bfd_profile_cmd);
-#endif /* HAVE_BFDD */
+	/*
+	 * Legacy `neighbor X bfd[ ...]` and `neighbor X bfd profile ...`
+	 * DEFUNs are intentionally NOT installed here. Their DEFPY_YANG
+	 * replacements live in bgp_cli.c and are installed by mgmtd. Leaving
+	 * the legacy install_element() calls in place also registers the
+	 * same-syntax legacy commands in vtysh (via DEFSH VTYSH_BGPD), which
+	 * conflict with the VTYSH_MGMTD versions — vtysh ends up routing
+	 * `neighbor X bfd` to bgpd instead of mgmtd, so mgmtd never sees it
+	 * and the NB callback never fires (bfd_options never created).
+	 * The legacy DEFUNs remain in this file only so their xrefs resolve;
+	 * they're unreachable without install_element.
+	 */
 }

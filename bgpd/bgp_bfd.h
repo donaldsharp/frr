@@ -50,6 +50,16 @@ extern void bgp_peer_config_apply(struct peer *p, struct peer_group *pg);
 extern void bgp_peer_configure_bfd(struct peer *p, bool manual);
 
 /**
+ * Allocates and configures BFD settings for a peer group.
+ * This only allocates the configuration structure - it doesn't create
+ * BFD sessions. Sessions are created for individual peers in the group.
+ *
+ * Always call `bgp_peer_config_apply` afterwards if you need the changes
+ * immediately applied to group members.
+ */
+extern void bgp_group_configure_bfd(struct peer *p);
+
+/**
  * Removes BFD configuration from either peer or peer group.
  */
 extern void bgp_peer_remove_bfd_config(struct peer *p);
