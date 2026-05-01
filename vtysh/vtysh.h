@@ -64,7 +64,7 @@ extern struct event_loop *master;
 
 #define VTYSH_AFFMAP VTYSH_ISISD | VTYSH_MGMTD
 #define VTYSH_RMAP_CONFIG                                                      \
-	VTYSH_OSPFD | VTYSH_OSPF6D | VTYSH_BGPD | VTYSH_ISISD |  \
+	VTYSH_OSPFD | VTYSH_OSPF6D | VTYSH_ISISD |  \
 		VTYSH_PIMD | VTYSH_PIM6D | VTYSH_EIGRPD | VTYSH_FABRICD | VTYSH_MGMTD
 #define VTYSH_RMAP_SHOW                                                        \
 	VTYSH_ZEBRA | VTYSH_RIPD | VTYSH_RIPNGD | VTYSH_OSPFD | VTYSH_OSPF6D | \
@@ -91,7 +91,7 @@ extern struct event_loop *master;
 #define VTYSH_SR          VTYSH_ZEBRA|VTYSH_PATHD
 #define VTYSH_DPDK VTYSH_ZEBRA
 #define VTYSH_MGMT_BACKEND                                                     \
-	VTYSH_RIPD | VTYSH_RIPNGD | VTYSH_STATICD | VTYSH_ZEBRA
+	VTYSH_RIPD | VTYSH_RIPNGD | VTYSH_STATICD | VTYSH_ZEBRA | VTYSH_BGPD
 #define VTYSH_MGMT_FRONTEND VTYSH_MGMTD
 
 #define VTYSH_NON_MGMTD ((VTYSH_ALL) & ~(VTYSH_MGMT_BACKEND))
