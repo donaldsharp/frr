@@ -338,4 +338,59 @@ enum {
 
 DECLARE_MGROUP(BMP);
 
+/*
+ * NB callback operations - registered by BMP module at load time.
+ * bgp_nb_config.c calls through these pointers; if the module isn't
+ * loaded, the pointer is NULL and NB callbacks are no-ops.
+ */
+struct bmp_nb_ops {
+	/* target-list create/destroy - returns opaque pointer to bmp_targets */
+	void *(*targets_create)(struct bgp *bgp, const char *name);
+	void (*targets_destroy)(struct bgp *bgp, const char *name);
+
+	/* listener create/destroy */
+	void (*listener_create)(void *targets, const char *addr, uint16_t port);
+	void (*listener_destroy)(void *targets, const char *addr, uint16_t port);
+
+	/* outgoing connect create/destroy */
+	void (*connect_create)(void *targets, const char *hostname,
+			       uint16_t port, uint32_t min_retry,
+			       uint32_t max_retry);
+	void (*connect_destroy)(void *targets, const char *hostname,
+				uint16_t port);
+	void (*connect_min_retry)(void *targets, const char *hostname,
+				  uint16_t port, uint32_t val);
+	void (*connect_max_retry)(void *targets, const char *hostname,
+				  uint16_t port, uint32_t val);
+
+	/* monitor set/clear per afi/safi/flag */
+	void (*monitor_set)(void *targets, afi_t afi, safi_t safi,
+			    uint8_t flag, bool enable);
+
+	/* mirror enable/disable */
+	void (*mirror_set)(void *targets, bool enable);
+
+	/* stats interval */
+	void (*stats_set)(void *targets, uint32_t interval_ms);
+
+	/* stats-send-experimental */
+	void (*stats_send_experimental_set)(void *targets, bool enable);
+
+	/* ACL set/clear (af: AF_INET or AF_INET6) */
+	void (*acl_set)(void *targets, int af, const char *name);
+
+	/* mirror buffer limit (global per bgp) */
+	void (*mirror_limit_set)(struct bgp *bgp, size_t limit);
+	void (*mirror_limit_unset)(struct bgp *bgp);
+
+	/* find targets by name - returns opaque pointer */
+	void *(*targets_find)(struct bgp *bgp, const char *name);
+
+	/* imported VRF/view create/destroy */
+	void (*import_vrf_create)(void *targets, const char *vrfname);
+	void (*import_vrf_destroy)(void *targets, const char *vrfname);
+};
+
+extern struct bmp_nb_ops *bmp_nb_cb;
+
 #endif /*_BGP_BMP_H_*/

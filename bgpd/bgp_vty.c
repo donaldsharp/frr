@@ -30,6 +30,9 @@
 #include "frrstr.h"
 #include "asn.h"
 #include "frregex_real.h"
+#include "lib/northbound.h"
+#include "lib/northbound_cli.h"
+#include "lib/yang.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr_evpn.h"
@@ -66,77 +69,12 @@
 #include "bgpd/bgp_mac.h"
 #include "bgpd/bgp_flowspec.h"
 #include "bgpd/bgp_conditional_adv.h"
-#include "bgpd/bgp_srv6.h"
+#include "bgpd/bgp_filter_cli.h"
+#include "bgpd/bgp_nb_helpers.h"
 #ifdef ENABLE_BGP_VNC
 #include "bgpd/rfapi/bgp_rfapi_cfg.h"
 #endif
 #include "bgpd/bgp_ls.h"
-
-FRR_CFG_DEFAULT_BOOL(BGP_IMPORT_CHECK,
-	{
-		.val_bool = false,
-			.match_profile = "traditional",
-			.match_version = "< 7.4",
-	},
-	{ .val_bool = true },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_SHOW_HOSTNAME,
-	{ .val_bool = true, .match_profile = "datacenter", },
-	{ .val_bool = false },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_SHOW_NEXTHOP_HOSTNAME,
-	{ .val_bool = true, .match_profile = "datacenter", },
-	{ .val_bool = false },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_LOG_NEIGHBOR_CHANGES,
-	{ .val_bool = true, .match_profile = "datacenter", },
-	{ .val_bool = false },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_DETERMINISTIC_MED,
-	{ .val_bool = true, .match_profile = "datacenter", },
-	{ .val_bool = false },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_EBGP_REQUIRES_POLICY,
-	{ .val_bool = false, .match_profile = "datacenter", },
-	{ .val_bool = false, .match_version = "< 7.4", },
-	{ .val_bool = true },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_SUPPRESS_DUPLICATES,
-	{ .val_bool = false, .match_version = "< 7.6", },
-	{ .val_bool = true },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_GRACEFUL_NOTIFICATION,
-	{ .val_bool = false, .match_version = "< 8.3", },
-	{ .val_bool = true },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_HARD_ADMIN_RESET,
-	{ .val_bool = false, .match_version = "< 8.3", },
-	{ .val_bool = true },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_SOFT_VERSION_CAPABILITY_OLD,
-	{ .val_bool = true, .match_profile = "datacenter", },
-	{ .val_bool = false },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_SOFT_VERSION_CAPABILITY_NEW,
-	{ .val_bool = false },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_LINK_LOCAL_CAPABILITY,
-	{ .val_bool = false },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_DYNAMIC_CAPABILITY,
-	{ .val_bool = true, .match_profile = "datacenter", },
-	{ .val_bool = false },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_ENFORCE_FIRST_AS,
-	{ .val_bool = false, .match_version = "< 9.1", },
-	{ .val_bool = true },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_RR_ALLOW_OUTBOUND_POLICY,
-	{ .val_bool = false },
-);
-FRR_CFG_DEFAULT_BOOL(BGP_COMPARE_AIGP,
-	{ .val_bool = false },
-);
 
 FRR_CFG_DEFAULT_BOOL(BGP_IPV6_NEXTHOP_PREFER_GLOBAL,
 	{ .val_bool = false },
@@ -151,8 +89,17 @@ DEFINE_HOOK(bgp_snmp_traps_config_write, (struct vty * vty), (vty));
 DEFINE_HOOK(bgp_route_distinguisher_update, (struct bgp *bgp, afi_t afi, bool preconfig),
 	    (bgp, afi, preconfig));
 
-static struct peer_group *listen_range_exists(struct bgp *bgp,
-					      struct prefix *range, int exact);
+/*
+ * hook_call expands to a static helper in the TU that owns DEFINE_HOOK, so
+ * other .c files (e.g. bgp_nb_config.c) can't invoke it directly. Export a
+ * thin wrapper so NB callbacks can notify listeners (BMP) when an RD
+ * changes.
+ */
+void bgp_route_distinguisher_update_notify(struct bgp *bgp, afi_t afi,
+					   bool preconfig)
+{
+	hook_call(bgp_route_distinguisher_update, bgp, afi, preconfig);
+}
 
 /* Show BGP peer's information. */
 enum show_type {
@@ -164,64 +111,12 @@ enum show_type {
 	show_ipv6_peer
 };
 
-static enum node_type bgp_node_type(afi_t afi, safi_t safi)
-{
-	switch (afi) {
-	case AFI_IP:
-		switch (safi) {
-		case SAFI_UNICAST:
-			return BGP_IPV4_NODE;
-		case SAFI_MULTICAST:
-			return BGP_IPV4M_NODE;
-		case SAFI_LABELED_UNICAST:
-			return BGP_IPV4L_NODE;
-		case SAFI_MPLS_VPN:
-			return BGP_VPNV4_NODE;
-		case SAFI_FLOWSPEC:
-			return BGP_FLOWSPECV4_NODE;
-		case SAFI_BGP_LS:
-		case SAFI_UNSPEC:
-		case SAFI_ENCAP:
-		case SAFI_EVPN:
-		case SAFI_MAX:
-			/* not expected */
-			return BGP_IPV4_NODE;
-		}
-		break;
-	case AFI_IP6:
-		switch (safi) {
-		case SAFI_UNICAST:
-			return BGP_IPV6_NODE;
-		case SAFI_MULTICAST:
-			return BGP_IPV6M_NODE;
-		case SAFI_LABELED_UNICAST:
-			return BGP_IPV6L_NODE;
-		case SAFI_MPLS_VPN:
-			return BGP_VPNV6_NODE;
-		case SAFI_FLOWSPEC:
-			return BGP_FLOWSPECV6_NODE;
-		case SAFI_BGP_LS:
-		case SAFI_UNSPEC:
-		case SAFI_ENCAP:
-		case SAFI_EVPN:
-		case SAFI_MAX:
-			/* not expected and the return value seems wrong */
-			return BGP_IPV4_NODE;
-		}
-		break;
-	case AFI_L2VPN:
-		return BGP_EVPN_NODE;
-	case AFI_BGP_LS:
-		return BGP_LS_NODE;
-	case AFI_UNSPEC:
-	case AFI_MAX:
-		// We should never be here but to clarify the switch statement..
-		return BGP_IPV4_NODE;
-	}
+static void bgp_show_global_graceful_restart_mode_vty(struct vty *vty,
+						      struct bgp *bgp);
 
-	// Impossible to happen
-	return BGP_IPV4_NODE;
-}
+static int bgp_show_neighbor_graceful_restart_afi_all(struct vty *vty, struct bgp *bgp,
+						      enum show_type type, const char *ip_str,
+						      afi_t afi, bool use_json);
 
 static const char *get_afi_safi_vty_str(afi_t afi, safi_t safi)
 {
@@ -256,7 +151,7 @@ static const char *get_afi_safi_vty_str(afi_t afi, safi_t safi)
 			return "L2VPN EVPN";
 	} else if (afi == AFI_BGP_LS) {
 		if (safi == SAFI_BGP_LS)
-			return "Link-State Link-State";
+			return "Link-State";
 	}
 
 	return "Unknown";
@@ -307,140 +202,7 @@ static const char *get_afi_safi_json_str(afi_t afi, safi_t safi)
 	return "Unknown";
 }
 
-static void bgp_srv6_sids_unset(struct bgp *bgp)
-{
-	struct listnode *node, *nnode;
-	struct srv6_locator_chunk *chunk;
-	struct bgp_srv6_function *func;
-	struct bgp *bgp_vrf;
-	struct srv6_sid_ctx ctx = {};
-
-	/* withdraw srv6 unicast and refresh srv6 unicast sid locator */
-	if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT) {
-		if (is_srv6_unicast_enabled(bgp, AFI_IP)) {
-			bgp_srv6_unicast_withdraw(bgp, AFI_IP);
-			bgp_srv6_unicast_sid_withdraw(bgp, AFI_IP);
-			/* locator deleted after this call, free the sid */
-			XFREE(MTYPE_BGP_SRV6_SID, bgp->srv6_unicast[AFI_IP].sid);
-			srv6_locator_free(bgp->srv6_unicast[AFI_IP].sid_locator);
-			bgp->srv6_unicast[AFI_IP].sid_locator = NULL;
-		}
-		if (is_srv6_unicast_enabled(bgp, AFI_IP6)) {
-			bgp_srv6_unicast_withdraw(bgp, AFI_IP6);
-			bgp_srv6_unicast_sid_withdraw(bgp, AFI_IP6);
-			/* locator deleted after this call, free the sid */
-			XFREE(MTYPE_BGP_SRV6_SID, bgp->srv6_unicast[AFI_IP6].sid);
-			srv6_locator_free(bgp->srv6_unicast[AFI_IP6].sid_locator);
-			bgp->srv6_unicast[AFI_IP6].sid_locator = NULL;
-		}
-	}
-
-	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp_vrf)) {
-		if (bgp_vrf->inst_type != BGP_INSTANCE_TYPE_VRF)
-			continue;
-
-		if (bgp->inst_type == BGP_INSTANCE_TYPE_VRF && bgp_vrf != bgp)
-			continue;
-
-		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT && bgp != bgp_vrf &&
-		    bgp_vrf->srv6_locator)
-			/* bgp_vrf has an active locator, we have to keep it */
-			continue;
-
-		if (bgp_vrf->vpn_policy[AFI_IP].tovpn_sid || bgp_vrf->tovpn_sid)
-			vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP, bgp_get_default(),
-					   bgp_vrf);
-		if (bgp_vrf->vpn_policy[AFI_IP6].tovpn_sid || bgp_vrf->tovpn_sid)
-			vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP6, bgp_get_default(),
-					   bgp_vrf);
-	}
-
-	/* refresh chunks */
-	for (ALL_LIST_ELEMENTS(bgp->srv6_locator_chunks, node, nnode, chunk)) {
-		listnode_delete(bgp->srv6_locator_chunks, chunk);
-		srv6_locator_chunk_free(&chunk);
-	}
-
-	/* refresh functions */
-	for (ALL_LIST_ELEMENTS(bgp->srv6_functions, node, nnode, func)) {
-		listnode_delete(bgp->srv6_functions, func);
-		srv6_function_free(func);
-	}
-
-	/* refresh tovpn_sid */
-	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp_vrf)) {
-		if (bgp->inst_type == BGP_INSTANCE_TYPE_VRF && bgp_vrf != bgp)
-			continue;
-
-		if (bgp_vrf->inst_type != BGP_INSTANCE_TYPE_VRF)
-			/* TODO: accept SRv6 entries on default VRF */
-			continue;
-
-		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT && bgp != bgp_vrf &&
-		    bgp_vrf->srv6_locator)
-			/* bgp_vrf has an active locator, we have to keep it */
-			continue;
-
-		ctx.vrf_id = bgp_vrf->vrf_id;
-
-		if (bgp_vrf->vpn_policy[AFI_IP].tovpn_sid) {
-			/* release vpnv4 tovpn_sid */
-			ctx.behavior = ZEBRA_SEG6_LOCAL_ACTION_END_DT4;
-			bgp_zebra_release_srv6_sid(&ctx, bgp_vrf->vpn_policy[AFI_IP]
-								 .tovpn_sid_locator->name);
-			/* refresh vpnv4 tovpn_sid */
-			XFREE(MTYPE_BGP_SRV6_SID, bgp_vrf->vpn_policy[AFI_IP].tovpn_sid);
-		}
-
-		if (bgp_vrf->vpn_policy[AFI_IP6].tovpn_sid) {
-			/* release vpnv6 tovpn_sid */
-			ctx.behavior = ZEBRA_SEG6_LOCAL_ACTION_END_DT6;
-			bgp_zebra_release_srv6_sid(&ctx, bgp_vrf->vpn_policy[AFI_IP6]
-								 .tovpn_sid_locator->name);
-			/* refresh vpnv6 tovpn_sid */
-			XFREE(MTYPE_BGP_SRV6_SID, bgp_vrf->vpn_policy[AFI_IP6].tovpn_sid);
-		}
-
-		if (bgp_vrf->tovpn_sid) {
-			/* release vpnvx tovpn_sid */
-			ctx.behavior = ZEBRA_SEG6_LOCAL_ACTION_END_DT46;
-			bgp_zebra_release_srv6_sid(&ctx, bgp_vrf->tovpn_sid_locator->name);
-			/* refresh per-vrf tovpn_sid */
-			XFREE(MTYPE_BGP_SRV6_SID, bgp_vrf->tovpn_sid);
-		}
-
-		/* refresh vpnv4 tovpn_sid_locator */
-		srv6_locator_free(bgp_vrf->vpn_policy[AFI_IP].tovpn_sid_locator);
-		bgp_vrf->vpn_policy[AFI_IP].tovpn_sid_locator = NULL;
-
-		/* refresh vpnv6 tovpn_sid_locator */
-		srv6_locator_free(
-			bgp_vrf->vpn_policy[AFI_IP6].tovpn_sid_locator);
-		bgp_vrf->vpn_policy[AFI_IP6].tovpn_sid_locator = NULL;
-
-		/* refresh per-vrf tovpn_sid_locator */
-		srv6_locator_free(bgp_vrf->tovpn_sid_locator);
-		bgp_vrf->tovpn_sid_locator = NULL;
-	}
-}
-
 /* unset srv6 locator */
-static int bgp_srv6_locator_unset(struct bgp *bgp)
-{
-	/* clear function, sids */
-	bgp_srv6_sids_unset(bgp);
-
-	/* clear locator name */
-	memset(bgp->srv6_locator_name, 0, sizeof(bgp->srv6_locator_name));
-
-	/* clear SRv6 locator */
-	if (bgp->srv6_locator) {
-		srv6_locator_free(bgp->srv6_locator);
-		bgp->srv6_locator = NULL;
-	}
-	vpn_leak_postchange_all();
-	return 0;
-}
 
 /* Utility function to get address family from current node.  */
 afi_t bgp_node_afi(struct vty *vty)
@@ -594,154 +356,12 @@ int argv_find_and_parse_safi(struct cmd_token **argv, int argc, int *index,
 	return ret;
 }
 
-/*
- * Convert an afi_t/safi_t pair to matching BGP_DEFAULT_AF* flag.
- *
- * afi
- *    address-family identifier
- *
- * safi
- *    subsequent address-family identifier
- *
- * Returns:
- *    default_af string corresponding to the supplied afi/safi pair.
- *    If afi/safi is invalid or if flag for afi/safi doesn't exist,
- *    return -1.
- */
-static const char *get_bgp_default_af_flag(afi_t afi, safi_t safi)
-{
-	switch (afi) {
-	case AFI_IP:
-		switch (safi) {
-		case SAFI_UNICAST:
-			return "ipv4-unicast";
-		case SAFI_MULTICAST:
-			return "ipv4-multicast";
-		case SAFI_MPLS_VPN:
-			return "ipv4-vpn";
-		case SAFI_ENCAP:
-			return "ipv4-encap";
-		case SAFI_LABELED_UNICAST:
-			return "ipv4-labeled-unicast";
-		case SAFI_FLOWSPEC:
-			return "ipv4-flowspec";
-		case SAFI_BGP_LS:
-		case SAFI_UNSPEC:
-		case SAFI_EVPN:
-		case SAFI_MAX:
-			return "unknown-afi/safi";
-		}
-		break;
-	case AFI_IP6:
-		switch (safi) {
-		case SAFI_UNICAST:
-			return "ipv6-unicast";
-		case SAFI_MULTICAST:
-			return "ipv6-multicast";
-		case SAFI_MPLS_VPN:
-			return "ipv6-vpn";
-		case SAFI_ENCAP:
-			return "ipv6-encap";
-		case SAFI_LABELED_UNICAST:
-			return "ipv6-labeled-unicast";
-		case SAFI_FLOWSPEC:
-			return "ipv6-flowspec";
-		case SAFI_BGP_LS:
-		case SAFI_UNSPEC:
-		case SAFI_EVPN:
-		case SAFI_MAX:
-			return "unknown-afi/safi";
-		}
-		break;
-	case AFI_L2VPN:
-		switch (safi) {
-		case SAFI_EVPN:
-			return "l2vpn-evpn";
-		case SAFI_BGP_LS:
-		case SAFI_UNICAST:
-		case SAFI_MULTICAST:
-		case SAFI_MPLS_VPN:
-		case SAFI_ENCAP:
-		case SAFI_LABELED_UNICAST:
-		case SAFI_FLOWSPEC:
-		case SAFI_UNSPEC:
-		case SAFI_MAX:
-			return "unknown-afi/safi";
-		}
-		break;
-	case AFI_BGP_LS:
-		switch (safi) {
-		case SAFI_BGP_LS:
-			return "link-state";
-		case SAFI_UNICAST:
-		case SAFI_MULTICAST:
-		case SAFI_MPLS_VPN:
-		case SAFI_ENCAP:
-		case SAFI_LABELED_UNICAST:
-		case SAFI_FLOWSPEC:
-		case SAFI_EVPN:
-		case SAFI_UNSPEC:
-		case SAFI_MAX:
-			return "unknown-afi/safi";
-		}
-		break;
-	case AFI_UNSPEC:
-	case AFI_MAX:
-		return "unknown-afi/safi";
-	}
-	/* all AFIs are accounted for above, so this shouldn't happen */
-
-	assert(!"Reached end of function where we did not expect to");
-	return "DEV ESCAPE";
-}
-
 int bgp_get_vty(struct bgp **bgp, as_t *as, const char *name,
 		enum bgp_instance_type inst_type, const char *as_pretty,
 		enum asnotation_mode asnotation)
 {
-	int ret = bgp_get(bgp, as, name, inst_type, as_pretty, asnotation);
-
-	if (ret == BGP_CREATED) {
-		bgp_timers_set(NULL, *bgp, DFLT_BGP_KEEPALIVE, DFLT_BGP_HOLDTIME,
-			       DFLT_BGP_CONNECT_RETRY, BGP_DEFAULT_DELAYOPEN);
-
-		if (DFLT_BGP_IMPORT_CHECK)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_IMPORT_CHECK);
-		if (DFLT_BGP_SHOW_HOSTNAME)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_SHOW_HOSTNAME);
-		if (DFLT_BGP_SHOW_NEXTHOP_HOSTNAME)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_SHOW_NEXTHOP_HOSTNAME);
-		if (DFLT_BGP_LOG_NEIGHBOR_CHANGES)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_LOG_NEIGHBOR_CHANGES);
-		if (DFLT_BGP_DETERMINISTIC_MED)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_DETERMINISTIC_MED);
-		if (DFLT_BGP_EBGP_REQUIRES_POLICY)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_EBGP_REQUIRES_POLICY);
-		if (DFLT_BGP_SUPPRESS_DUPLICATES)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_SUPPRESS_DUPLICATES);
-		if (DFLT_BGP_GRACEFUL_NOTIFICATION)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_GRACEFUL_NOTIFICATION);
-		if (DFLT_BGP_HARD_ADMIN_RESET)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_HARD_ADMIN_RESET);
-		if (DFLT_BGP_SOFT_VERSION_CAPABILITY_OLD)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_OLD);
-		if (DFLT_BGP_SOFT_VERSION_CAPABILITY_NEW)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_NEW);
-		if (DFLT_BGP_LINK_LOCAL_CAPABILITY)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_LINK_LOCAL_CAPABILITY);
-		if (DFLT_BGP_DYNAMIC_CAPABILITY)
-			SET_FLAG((*bgp)->flags,
-				 BGP_FLAG_DYNAMIC_CAPABILITY);
-		if (DFLT_BGP_ENFORCE_FIRST_AS)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_ENFORCE_FIRST_AS);
-		if (DFLT_BGP_RR_ALLOW_OUTBOUND_POLICY)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY);
-		if (DFLT_BGP_COMPARE_AIGP)
-			SET_FLAG((*bgp)->flags, BGP_FLAG_COMPARE_AIGP);
-
-		ret = BGP_SUCCESS;
-	}
-	return ret;
+	return bgp_instance_create(bgp, as, name, inst_type, as_pretty,
+				   asnotation);
 }
 
 /*
@@ -849,6 +469,17 @@ int bgp_vty_find_and_parse_afi_safi_bgp(struct vty *vty,
 		if (strmatch(vrf_name, "all"))
 			*bgp = NULL;
 		else {
+			/*
+			 * Explicit "show ... vrf NAME" must resolve the
+			 * implied/auto-created VRF instances that EVPN creates
+			 * via bgp_evpn_local_l3vni_add (e.g. bgp_evpn_rt5_implied
+			 * test).  Prior refactor replaced the
+			 * bgp_lookup_by_name_filter(..., false) call with the
+			 * filter_auto=true wrapper, making explicit-name lookups
+			 * return NULL for BGP_VRF_AUTO instances.  Mirror the
+			 * baseline behavior: do not filter auto for an
+			 * explicit-name show.
+			 */
 			*bgp = bgp_lookup_by_name_filter(vrf_name, false);
 			if (!*bgp) {
 				if (use_json) {
@@ -892,83 +523,7 @@ int bgp_vty_find_and_parse_afi_safi_bgp(struct vty *vty,
 	return *idx;
 }
 
-static bool peer_address_self_check(struct bgp *bgp, union sockunion *su)
-{
-	struct interface *ifp = NULL;
-	struct listnode *node;
-	struct bgp_listener *listener;
-	union sockunion all_su;
-
-	if (su->sa.sa_family == AF_INET) {
-		(void)str2sockunion("0.0.0.0", &all_su);
-		ifp = if_lookup_by_ipv4_exact(&su->sin.sin_addr, bgp->vrf_id);
-	} else if (su->sa.sa_family == AF_INET6) {
-		(void)str2sockunion("::", &all_su);
-		ifp = if_lookup_by_ipv6_exact(&su->sin6.sin6_addr,
-					      su->sin6.sin6_scope_id,
-					      bgp->vrf_id);
-	}
-
-	if (ifp) {
-		for (ALL_LIST_ELEMENTS_RO(bm->listen_sockets, node, listener)) {
-			if (sockunion_family(su) !=
-			    sockunion_family(&listener->su))
-				continue;
-
-			/* If 0.0.0.0/:: is a listener, then treat as self and
-			 * reject.
-			 */
-			if (!sockunion_cmp(&listener->su, su) ||
-			    !sockunion_cmp(&listener->su, &all_su))
-				return true;
-		}
-	}
-
-	return false;
-}
-
 /* Utility function for looking up peer from VTY.  */
-/* This is used only for configuration, so disallow if attempted on
- * a dynamic neighbor.
- */
-static struct peer *peer_lookup_vty(struct vty *vty, const char *ip_str)
-{
-	struct bgp *bgp = VTY_GET_CONTEXT(bgp);
-	int ret;
-	union sockunion su;
-	struct peer *peer;
-
-	if (!bgp) {
-		return NULL;
-	}
-
-	ret = str2sockunion(ip_str, &su);
-	if (ret < 0) {
-		peer = peer_lookup_by_conf_if(bgp, ip_str);
-		if (!peer) {
-			if ((peer = peer_lookup_by_hostname(bgp, ip_str))
-			    == NULL) {
-				vty_out(vty,
-					"%% Malformed address or name: %s\n",
-					ip_str);
-				return NULL;
-			}
-		}
-	} else {
-		peer = peer_lookup(bgp, &su);
-		if (!peer) {
-			vty_out(vty,
-				"%% Specify remote-as or peer-group commands first\n");
-			return NULL;
-		}
-		if (peer_dynamic_neighbor(peer)) {
-			vty_out(vty,
-				"%% Operation not allowed on a dynamic neighbor\n");
-			return NULL;
-		}
-	}
-	return peer;
-}
 
 /* Utility function for looking up peer or peer group.  */
 /* This is used only for configuration, so disallow if attempted on
@@ -1326,7 +881,6 @@ static int bgp_clear(struct vty *vty, struct bgp *bgp, afi_t afi, safi_t safi,
 			}
 		}
 
-		bgp_peer_gr_flags_update(peer);
 		VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
 		VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
 
@@ -1485,7 +1039,7 @@ static int bgp_clear_vty(struct vty *vty, const char *name, afi_t afi,
 }
 
 /* clear soft inbound */
-static void bgp_clear_star_soft_in(struct vty *vty, const char *name)
+void bgp_clear_star_soft_in(struct vty *vty, const char *name)
 {
 	afi_t afi;
 	safi_t safi;
@@ -1496,7 +1050,7 @@ static void bgp_clear_star_soft_in(struct vty *vty, const char *name)
 }
 
 /* clear soft outbound */
-static void bgp_clear_star_soft_out(struct vty *vty, const char *name)
+void bgp_clear_star_soft_out(struct vty *vty, const char *name)
 {
 	afi_t afi;
 	safi_t safi;
@@ -1505,7 +1059,6 @@ static void bgp_clear_star_soft_out(struct vty *vty, const char *name)
 		bgp_clear_vty(vty, name, afi, safi, clear_all,
 			      BGP_CLEAR_SOFT_OUT, NULL);
 }
-
 
 void bgp_clear_soft_in(struct bgp *bgp, afi_t afi, safi_t safi)
 {
@@ -1553,24 +1106,6 @@ static int peer_flag_unset_vty(struct vty *vty, const char *ip_str,
 			       uint64_t flag)
 {
 	return peer_flag_modify_vty(vty, ip_str, flag, 0);
-}
-
-static void bgp_need_listening(struct bgp *bgp, struct vty *vty)
-{
-	struct listnode *node;
-	struct bgp_listener *listener = NULL;
-
-	for (ALL_LIST_ELEMENTS_RO(bm->listen_sockets, node, listener)) {
-		if (listener->bgp == bgp)
-			break;
-	}
-	if (listener == NULL) {
-		struct vrf *vrf;
-
-		SET_FLAG(bgp->flags, BGP_FLAG_VRF_MAY_LISTEN);
-		vrf = bgp_vrf_lookup_by_instance_type(bgp);
-		bgp_handle_socket(bgp, vrf, VRF_UNKNOWN, true);
-	}
 }
 
 #include "bgpd/bgp_vty_clippy.c"
@@ -1658,506 +1193,14 @@ DEFUN_HIDDEN (no_bgp_local_mac,
 }
 
 /* "router bgp" commands. */
-DEFUN_NOSH (router_bgp,
-       router_bgp_cmd,
-       "router bgp [ASNUM$instasn [<view|vrf> VIEWVRFNAME] [as-notation <dot|dot+|plain>]]",
-       ROUTER_STR
-       BGP_STR
-       AS_STR
-       BGP_INSTANCE_HELP_STR
-       "Force the AS notation output\n"
-       "use 'AA.BB' format for AS 4 byte values\n"
-       "use 'AA.BB' format for all AS values\n"
-       "use plain format for all AS values\n")
-{
-	int idx_asn = 2;
-	int idx_view_vrf = 3;
-	int idx_vrf = 4;
-	int idx_asnotation = 3;
-	int idx_asnotation_kind = 4;
-	enum asnotation_mode asnotation = ASNOTATION_UNDEFINED;
-	int ret;
-	as_t as = 0;
-	struct bgp *bgp = NULL;
-	const char *name = NULL;
-	enum bgp_instance_type inst_type;
-
-	// "router bgp" without an ASN
-	if (argc == 2) {
-		// Pending: Make VRF option available for ASN less config
-		bgp = bgp_get_default();
-
-		if (bgp == NULL) {
-			vty_out(vty, "%% No BGP process is configured\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		if (listcount(bm->bgp) > 1) {
-			vty_out(vty, "%% Please specify ASN and VRF\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	}
-
-	// "router bgp X"
-	else {
-		if (!asn_str2asn(argv[idx_asn]->arg, &as)) {
-			vty_out(vty, "%% BGP: No such AS %s\n",
-				argv[idx_asn]->arg);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		if (as == BGP_PRIVATE_AS_MAX || as == BGP_AS4_MAX)
-			vty_out(vty, "Reserved AS used (%u|%u); AS is %u\n",
-				BGP_PRIVATE_AS_MAX, BGP_AS4_MAX, as);
-
-		inst_type = BGP_INSTANCE_TYPE_DEFAULT;
-
-		if (argv_find(argv, argc, "VIEWVRFNAME", &idx_vrf)) {
-			idx_view_vrf = idx_vrf - 1;
-			if (argv[idx_view_vrf]->text) {
-				name = argv[idx_vrf]->arg;
-
-				if (!strcmp(argv[idx_view_vrf]->text, "vrf")) {
-					if (strmatch(name, VRF_DEFAULT_NAME))
-						name = NULL;
-					else
-						inst_type =
-							BGP_INSTANCE_TYPE_VRF;
-				} else if (!strcmp(argv[idx_view_vrf]->text,
-						   "view"))
-					inst_type = BGP_INSTANCE_TYPE_VIEW;
-			}
-		}
-		if (argv_find(argv, argc, "as-notation", &idx_asnotation)) {
-			idx_asnotation_kind = idx_asnotation + 1;
-			if (strmatch(argv[idx_asnotation_kind]->text, "dot+"))
-				asnotation = ASNOTATION_DOTPLUS;
-			else if (strmatch(argv[idx_asnotation_kind]->text,
-					  "dot"))
-				asnotation = ASNOTATION_DOT;
-			else if (strmatch(argv[idx_asnotation_kind]->text,
-					  "plain"))
-				asnotation = ASNOTATION_PLAIN;
-		}
-
-		ret = bgp_lookup_by_as_name_type(&bgp, &as, argv[idx_asn]->arg, asnotation, name,
-						 inst_type, true);
-		if (bgp && ret == BGP_INSTANCE_EXISTS)
-			ret = CMD_SUCCESS;
-		else if (bgp == NULL && ret == CMD_SUCCESS)
-			/* SUCCESS and bgp is NULL */
-			ret = bgp_get_vty(&bgp, &as, name, inst_type, argv[idx_asn]->arg,
-					  asnotation);
-		switch (ret) {
-		case BGP_ERR_AS_MISMATCH:
-			vty_out(vty, "BGP is already running; AS is %s\n",
-				bgp ? bgp->as_pretty : "unknown");
-			return CMD_WARNING_CONFIG_FAILED;
-		case BGP_ERR_INSTANCE_MISMATCH:
-			vty_out(vty,
-				"BGP instance name and AS number mismatch\n");
-			vty_out(vty, "BGP instance is already running; AS is %s\n",
-				bgp ? bgp->as_pretty : "unknown");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		if (!bgp) {
-			vty_out(vty, "BGP instance not found\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		/*
-		 * If we just instantiated the default instance, complete
-		 * any pending VRF-VPN leaking that was configured via
-		 * earlier "router bgp X vrf FOO" blocks.
-		 */
-		if (inst_type == BGP_INSTANCE_TYPE_DEFAULT) {
-			bgp_need_listening(bgp, vty);
-			vpn_leak_postchange_all();
-		}
-
-		if (inst_type == BGP_INSTANCE_TYPE_VRF || IS_BGP_INSTANCE_HIDDEN(bgp)) {
-			bgp_vpn_leak_export(bgp);
-			UNSET_FLAG(bgp->flags, BGP_FLAG_INSTANCE_HIDDEN);
-			UNSET_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS);
-		}
-		/* Pending: handle when user tries to change a view to vrf n vv.
-		 */
-		/* for pre-existing bgp instance,
-		 * - update as_pretty
-		 * - update asnotation if explicitly mentioned
-		 */
-		if (CHECK_FLAG(bgp->vrf_flags, BGP_VRF_AUTO)) {
-			XFREE(MTYPE_BGP_NAME, bgp->as_pretty);
-			bgp->as_pretty = XSTRDUP(MTYPE_BGP_NAME,
-						 argv[idx_asn]->arg);
-			if (!CHECK_FLAG(bgp->config, BGP_CONFIG_ASNOTATION) &&
-			    asnotation != ASNOTATION_UNDEFINED) {
-				SET_FLAG(bgp->config, BGP_CONFIG_ASNOTATION);
-				bgp->asnotation = asnotation;
-			}
-		}
-	}
-
-	/* unset the auto created flag as the user config is now present */
-	UNSET_FLAG(bgp->vrf_flags, BGP_VRF_AUTO);
-	VTY_PUSH_CONTEXT(BGP_NODE, bgp);
-
-	return CMD_SUCCESS;
-}
 
 /* "no router bgp" commands. */
-DEFUN (no_router_bgp,
-       no_router_bgp_cmd,
-       "no router bgp [ASNUM$instasn [<view|vrf> VIEWVRFNAME] [as-notation <dot|dot+|plain>]]",
-       NO_STR
-       ROUTER_STR
-       BGP_STR
-       AS_STR
-       BGP_INSTANCE_HELP_STR
-       "Force the AS notation output\n"
-       "use 'AA.BB' format for AS 4 byte values\n"
-       "use 'AA.BB' format for all AS values\n"
-       "use plain format for all AS values\n")
-{
-	int idx_asn = 3;
-	int idx_vrf = 5;
-	as_t as = 0;
-	struct bgp *bgp = NULL;
-	const char *name = NULL;
-
-	// "no router bgp" without an ASN
-	if (argc == 3) {
-		// Pending: Make VRF option available for ASN less config
-		bgp = bgp_get_default();
-
-		if (bgp == NULL) {
-			vty_out(vty, "%% No BGP process is configured\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		if (listcount(bm->bgp) > 1) {
-			vty_out(vty, "%% Please specify ASN and VRF\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		if (bgp->l3vni) {
-			vty_out(vty, "%% Please unconfigure l3vni %u\n",
-				bgp->l3vni);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	} else {
-		if (!asn_str2asn(argv[idx_asn]->arg, &as)) {
-			vty_out(vty, "%% BGP: No such AS %s\n",
-				argv[idx_asn]->arg);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		if (argc > 4 && (strmatch(argv[4]->arg, "vrf") || strmatch(argv[4]->arg, "view"))) {
-			name = argv[idx_vrf]->arg;
-			if (strmatch(argv[idx_vrf - 1]->text, "vrf")
-			    && strmatch(name, VRF_DEFAULT_NAME))
-				name = NULL;
-		}
-
-		/* Lookup bgp structure. */
-		bgp = bgp_lookup(as, name);
-		if (!bgp) {
-			vty_out(vty, "%% Can't find BGP instance\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		if (bgp->l3vni) {
-			vty_out(vty, "%% Please unconfigure l3vni %u\n", bgp->l3vni);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		/* Cannot delete default instance if vrf instances exist */
-		if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT) {
-			struct listnode *node, *nnode;
-			struct bgp *tmp_bgp;
-
-			for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, tmp_bgp)) {
-				if (tmp_bgp->inst_type != BGP_INSTANCE_TYPE_VRF)
-					continue;
-
-				if (CHECK_FLAG(tmp_bgp->vrf_flags,
-					       BGP_VRF_AUTO)) {
-					bgp_delete(tmp_bgp);
-					continue;
-				}
-
-				if (CHECK_FLAG(
-					    tmp_bgp->af_flags[AFI_IP]
-							     [SAFI_UNICAST],
-					    BGP_CONFIG_MPLSVPN_TO_VRF_IMPORT) ||
-				    CHECK_FLAG(
-					    tmp_bgp->af_flags[AFI_IP6]
-							     [SAFI_UNICAST],
-					    BGP_CONFIG_MPLSVPN_TO_VRF_IMPORT) ||
-				    CHECK_FLAG(
-					    tmp_bgp->af_flags[AFI_IP]
-							     [SAFI_UNICAST],
-					    BGP_CONFIG_VRF_TO_MPLSVPN_EXPORT) ||
-				    CHECK_FLAG(
-					    tmp_bgp->af_flags[AFI_IP6]
-							     [SAFI_UNICAST],
-					    BGP_CONFIG_VRF_TO_MPLSVPN_EXPORT) ||
-				    CHECK_FLAG(tmp_bgp->af_flags[AFI_IP]
-								[SAFI_UNICAST],
-					       BGP_CONFIG_VRF_TO_VRF_EXPORT) ||
-				    CHECK_FLAG(tmp_bgp->af_flags[AFI_IP6]
-								[SAFI_UNICAST],
-					       BGP_CONFIG_VRF_TO_VRF_EXPORT) ||
-				    (bgp == bgp_get_evpn() &&
-				     (CHECK_FLAG(
-					      tmp_bgp->af_flags[AFI_L2VPN]
-							       [SAFI_EVPN],
-					      BGP_L2VPN_EVPN_ADV_IPV4_UNICAST) ||
-				      CHECK_FLAG(
-					      tmp_bgp->af_flags[AFI_L2VPN]
-							       [SAFI_EVPN],
-					      BGP_L2VPN_EVPN_ADV_IPV4_UNICAST_GW_IP) ||
-				      CHECK_FLAG(
-					      tmp_bgp->af_flags[AFI_L2VPN]
-							       [SAFI_EVPN],
-					      BGP_L2VPN_EVPN_ADV_IPV6_UNICAST) ||
-				      CHECK_FLAG(
-					      tmp_bgp->af_flags[AFI_L2VPN]
-							       [SAFI_EVPN],
-					      BGP_L2VPN_EVPN_ADV_IPV6_UNICAST_GW_IP))) ||
-				    (tmp_bgp->l3vni)) {
-					vty_out(vty,
-						"%% Cannot delete default BGP instance. Dependent VRF instances exist\n");
-					return CMD_WARNING_CONFIG_FAILED;
-				}
-			}
-		}
-	}
-
-	bgp_delete(bgp);
-
-	return CMD_SUCCESS;
-}
 
 /* bgp session-dscp */
 
-DEFPY (bgp_session_dscp,
-       bgp_session_dscp_cmd,
-       "bgp session-dscp (0-63)$dscp",
-       BGP_STR
-       "Override default (CS6) DSCP for BGP connections\n"
-       "Manually configured DSCP value\n")
-{
-	bm->ip_tos = dscp << 2;
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (no_bgp_session_dscp,
-       no_bgp_session_dscp_cmd,
-       "no bgp session-dscp [(0-63)]",
-       NO_STR
-       BGP_STR
-       "Override default (CS6) DSCP for BGP connections\n"
-       "Manually configured DSCP value\n")
-{
-	bm->ip_tos = IPTOS_PREC_INTERNETCONTROL;
-
-	return CMD_SUCCESS;
-}
-
 /* BGP router-id.  */
 
-DEFPY (bgp_router_id,
-       bgp_router_id_cmd,
-       "bgp router-id A.B.C.D",
-       BGP_STR
-       "Override configured router identifier\n"
-       "Manually configured router identifier\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp_router_id_static_set(bgp, router_id);
-	return CMD_SUCCESS;
-}
-
-DEFPY (no_bgp_router_id,
-       no_bgp_router_id_cmd,
-       "no bgp router-id [A.B.C.D]",
-       NO_STR
-       BGP_STR
-       "Override configured router identifier\n"
-       "Manually configured router identifier\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (router_id_str) {
-		if (!IPV4_ADDR_SAME(&bgp->router_id_static, &router_id)) {
-			vty_out(vty, "%% BGP router-id doesn't match\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	}
-
-	router_id.s_addr = 0;
-	bgp_router_id_static_set(bgp, router_id);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(bgp_community_alias, bgp_community_alias_cmd,
-      "[no$no] bgp community alias WORD$community ALIAS_NAME$alias_name",
-      NO_STR BGP_STR
-      "Add community specific parameters\n"
-      "Create an alias for a community\n"
-      "Community (AA:BB or AA:BB:CC)\n"
-      "Alias name\n")
-{
-	struct community_alias ca = {};
-	struct community_alias *lookup_community;
-	struct community_alias *lookup_alias;
-	struct community *comm;
-	struct lcommunity *lcomm;
-	uint8_t invalid = 0;
-
-	comm = community_str2com(community);
-	if (!comm)
-		invalid++;
-	community_free(&comm);
-
-	lcomm = lcommunity_str2com(community);
-	if (!lcomm)
-		invalid++;
-	lcommunity_free(&lcomm);
-
-	if (invalid > 1) {
-		vty_out(vty, "Invalid community format\n");
-		return CMD_WARNING;
-	}
-
-	strlcpy(ca.community, community, sizeof(ca.community));
-	strlcpy(ca.alias, alias_name, sizeof(ca.alias));
-
-	lookup_community = bgp_ca_community_lookup(&ca);
-	lookup_alias = bgp_ca_alias_lookup(&ca);
-
-	if (no) {
-		bgp_ca_alias_delete(&ca);
-		bgp_ca_community_delete(&ca);
-	} else {
-		if (lookup_alias) {
-			/* Lookup if community hash table has an item
-			 * with the same alias name.
-			 */
-			strlcpy(ca.community, lookup_alias->community,
-				sizeof(ca.community));
-			if (bgp_ca_community_lookup(&ca)) {
-				vty_out(vty,
-					"community (%s) already has this alias (%s)\n",
-					lookup_alias->community,
-					lookup_alias->alias);
-				return CMD_WARNING;
-			}
-			bgp_ca_alias_delete(&ca);
-		}
-
-		if (lookup_community) {
-			/* Lookup if alias hash table has an item
-			 * with the same community.
-			 */
-			strlcpy(ca.alias, lookup_community->alias,
-				sizeof(ca.alias));
-			if (bgp_ca_alias_lookup(&ca)) {
-				vty_out(vty,
-					"alias (%s) already has this community (%s)\n",
-					lookup_community->alias,
-					lookup_community->community);
-				return CMD_WARNING;
-			}
-			bgp_ca_community_delete(&ca);
-		}
-
-		bgp_ca_alias_insert(&ca);
-		bgp_ca_community_insert(&ca);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_global_suppress_fib_pending,
-       bgp_global_suppress_fib_pending_cmd,
-       "[no] bgp suppress-fib-pending [(0-10000)$delay]",
-       NO_STR
-       BGP_STR
-       "Advertise only routes that are programmed in kernel to peers globally\n"
-       "Advertisement delay in milliseconds after FIB installation (default 1000)\n")
-{
-	uint16_t adv_delay = BGP_DEFAULT_SUPPRESS_FIB_ADV_DELAY;
-
-	if (!no && delay_str)
-		adv_delay = delay;
-
-	bm_wait_for_fib_set(!no, adv_delay);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_suppress_fib_pending,
-       bgp_suppress_fib_pending_cmd,
-       "[no] bgp suppress-fib-pending [(0-10000)$delay]",
-       NO_STR
-       BGP_STR
-       "Advertise only routes that are programmed in kernel to peers\n"
-       "Advertisement delay in milliseconds after FIB installation (default 1000)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	uint16_t adv_delay = BGP_DEFAULT_SUPPRESS_FIB_ADV_DELAY;
-
-	if (!no && delay_str)
-		adv_delay = delay;
-
-	bgp_suppress_fib_pending_set(bgp, !no, adv_delay);
-	return CMD_SUCCESS;
-}
-
 /* BGP Cluster ID.  */
-DEFUN (bgp_cluster_id,
-       bgp_cluster_id_cmd,
-       "bgp cluster-id <A.B.C.D|(1-4294967295)>",
-       BGP_STR
-       "Configure Route-Reflector Cluster-id\n"
-       "Route-Reflector Cluster-id in IP address format\n"
-       "Route-Reflector Cluster-id as 32 bit quantity\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_ipv4 = 2;
-	int ret;
-	struct in_addr cluster;
-
-	ret = inet_aton(argv[idx_ipv4]->arg, &cluster);
-	if (!ret) {
-		vty_out(vty, "%% Malformed bgp cluster identifier\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_cluster_id_set(bgp, &cluster);
-	bgp_clear_star_soft_out(vty, bgp->name);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_cluster_id,
-       no_bgp_cluster_id_cmd,
-       "no bgp cluster-id [<A.B.C.D|(1-4294967295)>]",
-       NO_STR
-       BGP_STR
-       "Configure Route-Reflector Cluster-id\n"
-       "Route-Reflector Cluster-id in IP address format\n"
-       "Route-Reflector Cluster-id as 32 bit quantity\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp_cluster_id_unset(bgp);
-	bgp_clear_star_soft_out(vty, bgp->name);
-
-	return CMD_SUCCESS;
-}
 
 DEFPY (bgp_norib,
        bgp_norib_cmd,
@@ -2194,376 +1237,11 @@ DEFPY (no_bgp_norib,
 	return CMD_SUCCESS;
 }
 
-DEFPY (no_bgp_send_extra_data,
-       no_bgp_send_extra_data_cmd,
-       "[no] bgp send-extra-data zebra",
-       NO_STR
-       BGP_STR
-       "Extra data to Zebra for display/use\n"
-       "To zebra\n")
-{
-	if (no)
-		UNSET_FLAG(bm->flags, BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA);
-	else
-		SET_FLAG(bm->flags, BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_confederation_identifier,
-       bgp_confederation_identifier_cmd,
-       "bgp confederation identifier ASNUM",
-       BGP_STR
-       "AS confederation parameters\n"
-       "Set routing domain confederation AS\n"
-       AS_STR)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_number = 3;
-	as_t as = 0;
-
-	if (!asn_str2asn(argv[idx_number]->arg, &as)) {
-		vty_out(vty, "%% BGP: No such AS %s\n", argv[idx_number]->arg);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_confederation_id_set(bgp, as, argv[idx_number]->arg);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_confederation_identifier,
-       no_bgp_confederation_identifier_cmd,
-       "no bgp confederation identifier [ASNUM]",
-       NO_STR
-       BGP_STR
-       "AS confederation parameters\n"
-       "Set routing domain confederation AS\n"
-       AS_STR)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp_confederation_id_unset(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_confederation_peers,
-       bgp_confederation_peers_cmd,
-       "bgp confederation peers ASNUM...",
-       BGP_STR
-       "AS confederation parameters\n"
-       "Peer ASs in BGP confederation\n"
-       AS_STR)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_asn = 3;
-	as_t as = 0;
-	int i;
-
-	for (i = idx_asn; i < argc; i++) {
-		if (!asn_str2asn(argv[i]->arg, &as)) {
-			vty_out(vty, "%% Invalid confed peer AS value: %s\n",
-				argv[i]->arg);
-			continue;
-		}
-
-		bgp_confederation_peers_add(bgp, as, argv[i]->arg);
-	}
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_confederation_peers,
-       no_bgp_confederation_peers_cmd,
-       "no bgp confederation peers ASNUM...",
-       NO_STR
-       BGP_STR
-       "AS confederation parameters\n"
-       "Peer ASs in BGP confederation\n"
-       AS_STR)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_asn = 4;
-	as_t as = 0;
-	int i;
-
-	for (i = idx_asn; i < argc; i++) {
-		if (!asn_str2asn(argv[i]->arg, &as)) {
-			vty_out(vty, "%% Invalid confed peer AS value: %s\n",
-				argv[i]->arg);
-			continue;
-		}
-		bgp_confederation_peers_remove(bgp, as);
-	}
-	return CMD_SUCCESS;
-}
-
 /**
  * Central routine for maximum-paths configuration.
  * @peer_type: BGP_PEER_EBGP or BGP_PEER_IBGP
  * @set: 1 for setting values, 0 for removing the max-paths config.
  */
-static int bgp_maxpaths_config_vty(struct vty *vty, int peer_type,
-				   const char *mpaths, uint16_t options,
-				   int set)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	uint16_t maxpaths = 0;
-	int ret;
-	afi_t afi;
-	safi_t safi;
-
-	afi = bgp_node_afi(vty);
-	safi = bgp_node_safi(vty);
-
-	if (set) {
-		maxpaths = strtol(mpaths, NULL, 10);
-		if (maxpaths > multipath_num) {
-			vty_out(vty,
-				"%% Maxpaths Specified: %d is > than multipath num specified on bgp command line %d",
-				maxpaths, multipath_num);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		ret = bgp_maximum_paths_set(bgp, afi, safi, peer_type, maxpaths,
-					    options);
-	} else
-		ret = bgp_maximum_paths_unset(bgp, afi, safi, peer_type);
-
-	if (ret < 0) {
-		vty_out(vty,
-			"%% Failed to %sset maximum-paths %s %u for afi %u, safi %u\n",
-			(set == 1) ? "" : "un",
-			(peer_type == BGP_PEER_EBGP) ? "ebgp" : "ibgp",
-			maxpaths, afi, safi);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_maxmed_admin,
-       bgp_maxmed_admin_cmd,
-       "bgp max-med administrative ",
-       BGP_STR
-       "Advertise routes with max-med\n"
-       "Administratively applied, for an indefinite period\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp->v_maxmed_admin = 1;
-	bgp->maxmed_admin_value = BGP_MAXMED_VALUE_DEFAULT;
-
-	bgp_maxmed_update(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_maxmed_admin_medv,
-       bgp_maxmed_admin_medv_cmd,
-       "bgp max-med administrative (0-4294967295)",
-       BGP_STR
-       "Advertise routes with max-med\n"
-       "Administratively applied, for an indefinite period\n"
-       "Max MED value to be used\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_number = 3;
-
-	bgp->v_maxmed_admin = 1;
-	bgp->maxmed_admin_value = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	bgp_maxmed_update(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_maxmed_admin,
-       no_bgp_maxmed_admin_cmd,
-       "no bgp max-med administrative [(0-4294967295)]",
-       NO_STR
-       BGP_STR
-       "Advertise routes with max-med\n"
-       "Administratively applied, for an indefinite period\n"
-       "Max MED value to be used\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp->v_maxmed_admin = BGP_MAXMED_ADMIN_UNCONFIGURED;
-	bgp->maxmed_admin_value = BGP_MAXMED_VALUE_DEFAULT;
-	bgp_maxmed_update(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_maxmed_onstartup,
-       bgp_maxmed_onstartup_cmd,
-       "bgp max-med on-startup (5-86400) [(0-4294967295)]",
-       BGP_STR
-       "Advertise routes with max-med\n"
-       "Effective on a startup\n"
-       "Time (seconds) period for max-med\n"
-       "Max MED value to be used\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx = 0;
-
-	if (argv_find(argv, argc, "(5-86400)", &idx))
-		bgp->v_maxmed_onstartup = strtoul(argv[idx]->arg, NULL, 10);
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		bgp->maxmed_onstartup_value = strtoul(argv[idx]->arg, NULL, 10);
-	else
-		bgp->maxmed_onstartup_value = BGP_MAXMED_VALUE_DEFAULT;
-
-	bgp_maxmed_update(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_maxmed_onstartup,
-       no_bgp_maxmed_onstartup_cmd,
-       "no bgp max-med on-startup [(5-86400) [(0-4294967295)]]",
-       NO_STR
-       BGP_STR
-       "Advertise routes with max-med\n"
-       "Effective on a startup\n"
-       "Time (seconds) period for max-med\n"
-       "Max MED value to be used\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	/* Cancel max-med onstartup if its on */
-	if (bgp->t_maxmed_onstartup) {
-		event_cancel(&bgp->t_maxmed_onstartup);
-		bgp->maxmed_onstartup_over = 1;
-	}
-
-	bgp->v_maxmed_onstartup = BGP_MAXMED_ONSTARTUP_UNCONFIGURED;
-	bgp->maxmed_onstartup_value = BGP_MAXMED_VALUE_DEFAULT;
-
-	bgp_maxmed_update(bgp);
-
-	return CMD_SUCCESS;
-}
-
-static int bgp_global_update_delay_config_vty(struct vty *vty,
-					      uint16_t update_delay,
-					      uint16_t establish_wait)
-{
-	struct listnode *node, *nnode;
-	struct bgp *bgp;
-	bool vrf_cfg = false;
-
-	/*
-	 * See if update-delay is set per-vrf and warn user to delete it
-	 * Note that we only need to check this if this is the first time
-	 * setting the global config.
-	 */
-	if (bm->v_update_delay == BGP_UPDATE_DELAY_DEFAULT) {
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-			if (bgp->v_update_delay != BGP_UPDATE_DELAY_DEFAULT) {
-				vty_out(vty,
-					"%% update-delay configuration found in vrf %s\n",
-					bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
-						? VRF_DEFAULT_NAME
-						: bgp->name);
-				vrf_cfg = true;
-			}
-		}
-	}
-
-	if (vrf_cfg) {
-		vty_out(vty,
-			"%%Failed: global update-delay config not permitted\n");
-		return CMD_WARNING;
-	}
-
-	if (!establish_wait) { /* update-delay <delay> */
-		bm->v_update_delay = update_delay;
-		bm->v_establish_wait = bm->v_update_delay;
-	} else {
-		/* update-delay <delay> <establish-wait> */
-		if (update_delay < establish_wait) {
-			vty_out(vty,
-				"%%Failed: update-delay less than the establish-wait!\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		bm->v_update_delay = update_delay;
-		bm->v_establish_wait = establish_wait;
-	}
-
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-		bgp->v_update_delay = bm->v_update_delay;
-		bgp->v_establish_wait = bm->v_establish_wait;
-	}
-
-	return CMD_SUCCESS;
-}
-
-static int bgp_global_update_delay_deconfig_vty(struct vty *vty)
-{
-	struct listnode *node, *nnode;
-	struct bgp *bgp;
-
-	bm->v_update_delay = BGP_UPDATE_DELAY_DEFAULT;
-	bm->v_establish_wait = bm->v_update_delay;
-
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-		bgp->v_update_delay = bm->v_update_delay;
-		bgp->v_establish_wait = bm->v_establish_wait;
-	}
-
-	return CMD_SUCCESS;
-}
-
-static int bgp_update_delay_config_vty(struct vty *vty, uint16_t update_delay,
-				       uint16_t establish_wait)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	/* if configured globally, per-instance config is not allowed */
-	if (bm->v_update_delay) {
-		vty_out(vty,
-			"%%Failed: per-vrf update-delay config not permitted with global update-delay\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-
-	if (!establish_wait) /* update-delay <delay> */
-	{
-		bgp->v_update_delay = update_delay;
-		bgp->v_establish_wait = bgp->v_update_delay;
-		return CMD_SUCCESS;
-	}
-
-	/* update-delay <delay> <establish-wait> */
-	if (update_delay < establish_wait) {
-		vty_out(vty,
-			"%%Failed: update-delay less than the establish-wait!\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp->v_update_delay = update_delay;
-	bgp->v_establish_wait = establish_wait;
-
-	return CMD_SUCCESS;
-}
-
-static int bgp_update_delay_deconfig_vty(struct vty *vty)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	/* If configured globally, cannot remove from one bgp instance */
-	if (bm->v_update_delay) {
-		vty_out(vty,
-			"%%Failed: bgp update-delay configured globally. Delete per-vrf not permitted\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	bgp->v_update_delay = BGP_UPDATE_DELAY_DEFAULT;
-	bgp->v_establish_wait = bgp->v_update_delay;
-
-	return CMD_SUCCESS;
-}
 
 void bgp_config_write_update_delay(struct vty *vty, struct bgp *bgp)
 {
@@ -2584,164 +1262,12 @@ void bgp_config_write_advertisement_delay(struct vty *vty, struct bgp *bgp)
 }
 
 /* Global update-delay configuration */
-DEFPY (bgp_global_update_delay,
-       bgp_global_update_delay_cmd,
-       "bgp update-delay (0-3600)$delay [(1-3600)$wait]",
-       BGP_STR
-       "Force initial delay for best-path and updates for all bgp instances\n"
-       "Max delay in seconds\n"
-       "Establish wait in seconds\n")
-{
-	return bgp_global_update_delay_config_vty(vty, delay, wait);
-}
 
 /* Global update-delay deconfiguration */
-DEFPY (no_bgp_global_update_delay,
-       no_bgp_global_update_delay_cmd,
-       "no bgp update-delay [(0-3600) [(1-3600)]]",
-       NO_STR
-       BGP_STR
-       "Force initial delay for best-path and updates\n"
-       "Max delay in seconds\n"
-       "Establish wait in seconds\n")
-{
-	return bgp_global_update_delay_deconfig_vty(vty);
-}
 
 /* Update-delay configuration */
 
-DEFPY (bgp_update_delay,
-       bgp_update_delay_cmd,
-       "update-delay (0-3600)$delay [(1-3600)$wait]",
-       "Force initial delay for best-path and updates\n"
-       "Max delay in seconds\n"
-       "Establish wait in seconds\n")
-{
-	return bgp_update_delay_config_vty(vty, delay, wait);
-}
-
 /* Update-delay deconfiguration */
-DEFPY (no_bgp_update_delay,
-       no_bgp_update_delay_cmd,
-       "no update-delay [(0-3600) [(1-3600)]]",
-       NO_STR
-       "Force initial delay for best-path and updates\n"
-       "Max delay in seconds\n"
-       "Establish wait in seconds\n")
-{
-	return bgp_update_delay_deconfig_vty(vty);
-}
-
-/* Global advertisement-delay configuration */
-DEFPY(bgp_global_advertisement_delay, bgp_global_advertisement_delay_cmd,
-      "bgp advertisement-delay (1-3600)$delay",
-      BGP_STR
-      "Hold route advertisements to peers for configured seconds after first peer establishes\n"
-      "Delay in seconds\n")
-{
-	struct listnode *node, *nnode;
-	struct bgp *bgp;
-
-	bm->v_advertisement_delay = delay;
-
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-		bgp->v_advertisement_delay = bm->v_advertisement_delay;
-
-	return CMD_SUCCESS;
-}
-
-/* Global advertisement-delay deconfiguration */
-DEFPY(no_bgp_global_advertisement_delay, no_bgp_global_advertisement_delay_cmd,
-      "no bgp advertisement-delay [(1-3600)]",
-      NO_STR BGP_STR
-      "Hold route advertisements to peers for configured seconds after first peer establishes\n"
-      "Delay in seconds\n")
-{
-	struct listnode *node, *nnode;
-	struct bgp *bgp;
-
-	bm->v_advertisement_delay = BGP_ADVERTISEMENT_DELAY_DEFAULT;
-
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-		bgp->v_advertisement_delay = BGP_ADVERTISEMENT_DELAY_DEFAULT;
-		if (bgp->advertisement_delay_started && !bgp->advertisement_delay_over) {
-			event_cancel(&bgp->t_advertisement_delay);
-			bgp->advertisement_delay_started = 0;
-			bgp->advertisement_delay_over = 0;
-			if (!bgp_update_delay_active(bgp) && !bgp->main_zebra_update_hold) {
-				bgp->main_peers_update_hold = 0;
-				bgp_start_routeadv(bgp);
-			}
-		} else {
-			event_cancel(&bgp->t_advertisement_delay);
-			bgp->advertisement_delay_started = 0;
-			bgp->advertisement_delay_over = 0;
-		}
-	}
-
-	return CMD_SUCCESS;
-}
-
-/* Per-instance advertisement-delay configuration */
-DEFPY(bgp_advertisement_delay, bgp_advertisement_delay_cmd, "advertisement-delay (1-3600)$delay",
-      "Hold route advertisements to peers for configured seconds after first peer establishes\n"
-      "Delay in seconds\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp->v_advertisement_delay = delay;
-
-	return CMD_SUCCESS;
-}
-
-/* Per-instance advertisement-delay deconfiguration */
-DEFPY(no_bgp_advertisement_delay, no_bgp_advertisement_delay_cmd,
-      "no advertisement-delay [(1-3600)]",
-      NO_STR
-      "Hold route advertisements to peers for configured seconds after first peer establishes\n"
-      "Delay in seconds\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp->v_advertisement_delay = BGP_ADVERTISEMENT_DELAY_DEFAULT;
-	if (bgp->advertisement_delay_started && !bgp->advertisement_delay_over) {
-		event_cancel(&bgp->t_advertisement_delay);
-		bgp->advertisement_delay_started = 0;
-		bgp->advertisement_delay_over = 0;
-		if (!bgp_update_delay_active(bgp) && !bgp->main_zebra_update_hold) {
-			bgp->main_peers_update_hold = 0;
-			bgp_start_routeadv(bgp);
-		}
-	} else {
-		event_cancel(&bgp->t_advertisement_delay);
-		bgp->advertisement_delay_started = 0;
-		bgp->advertisement_delay_over = 0;
-	}
-
-	return CMD_SUCCESS;
-}
-
-static int bgp_wpkt_quanta_config_vty(struct vty *vty, uint32_t quanta,
-				      bool set)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	quanta = set ? quanta : BGP_WRITE_PACKET_MAX;
-	atomic_store_explicit(&bgp->wpkt_quanta, quanta, memory_order_relaxed);
-
-	return CMD_SUCCESS;
-}
-
-static int bgp_rpkt_quanta_config_vty(struct vty *vty, uint32_t quanta,
-				      bool set)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	quanta = set ? quanta : BGP_READ_PACKET_MAX;
-	atomic_store_explicit(&bgp->rpkt_quanta, quanta, memory_order_relaxed);
-
-	return CMD_SUCCESS;
-}
 
 void bgp_config_write_wpkt_quanta(struct vty *vty, struct bgp *bgp)
 {
@@ -2767,25 +1293,6 @@ void bgp_config_write_rpkt_quanta(struct vty *vty, struct bgp *bgp)
  * Furthermore, the maximums used here should correspond to
  * BGP_WRITE_PACKET_MAX and BGP_READ_PACKET_MAX.
  */
-DEFPY (bgp_wpkt_quanta,
-       bgp_wpkt_quanta_cmd,
-       "[no] write-quanta (1-64)$quanta",
-       NO_STR
-       "How many packets to write to peer socket per run\n"
-       "Number of packets\n")
-{
-	return bgp_wpkt_quanta_config_vty(vty, quanta, !no);
-}
-
-DEFPY (bgp_rpkt_quanta,
-       bgp_rpkt_quanta_cmd,
-       "[no] read-quanta (1-10)$quanta",
-       NO_STR
-       "How many packets to read from peer socket per I/O cycle\n"
-       "Number of packets\n")
-{
-	return bgp_rpkt_quanta_config_vty(vty, quanta, !no);
-}
 
 void bgp_config_write_coalesce_time(struct vty *vty, struct bgp *bgp)
 {
@@ -2793,172 +1300,7 @@ void bgp_config_write_coalesce_time(struct vty *vty, struct bgp *bgp)
 		vty_out(vty, " coalesce-time %u\n", bgp->coalesce_time);
 }
 
-/* BGP TCP keepalive */
-static void bgp_config_tcp_keepalive(struct vty *vty, struct bgp *bgp)
-{
-	if (bgp->tcp_keepalive_idle) {
-		vty_out(vty, " bgp tcp-keepalive %u %u %u\n",
-			bgp->tcp_keepalive_idle, bgp->tcp_keepalive_intvl,
-			bgp->tcp_keepalive_probes);
-	}
-}
-
-DEFUN (bgp_coalesce_time,
-       bgp_coalesce_time_cmd,
-       "coalesce-time (0-4294967295)",
-       "Subgroup coalesce timer\n"
-       "Subgroup coalesce timer value (in ms)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	int idx = 0;
-
-	bgp->heuristic_coalesce = false;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		bgp->coalesce_time = strtoul(argv[idx]->arg, NULL, 10);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_coalesce_time,
-       no_bgp_coalesce_time_cmd,
-       "no coalesce-time (0-4294967295)",
-       NO_STR
-       "Subgroup coalesce timer\n"
-       "Subgroup coalesce timer value (in ms)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp->heuristic_coalesce = true;
-	bgp->coalesce_time = BGP_DEFAULT_SUBGROUP_COALESCE_TIME;
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_use_underlying_nexthop_weight,
-       bgp_use_underlying_nexthop_weight_cmd,
-       "[no] use-underlays-nexthop-weight",
-       NO_STR
-       "Tell Zebra when resolving a route to use the underlays nexthop weight for when nexthops are resolved\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (no)
-		UNSET_FLAG(bgp->flags, BGP_WECMP_BEHAVIOR_USE_RECURSIVE_VALUE);
-	else
-		SET_FLAG(bgp->flags, BGP_FLAG_USE_RECURSIVE_WEIGHT);
-
-	return CMD_SUCCESS;
-}
-
 /* Maximum-paths configuration */
-DEFUN (bgp_maxpaths,
-       bgp_maxpaths_cmd,
-       "maximum-paths " CMD_RANGE_STR(1, MULTIPATH_NUM),
-       "Forward packets over multiple paths\n"
-       "Number of paths\n")
-{
-	int idx_number = 1;
-	return bgp_maxpaths_config_vty(vty, BGP_PEER_EBGP,
-				       argv[idx_number]->arg, 0, 1);
-}
-
-ALIAS_HIDDEN(bgp_maxpaths, bgp_maxpaths_hidden_cmd,
-	     "maximum-paths " CMD_RANGE_STR(1, MULTIPATH_NUM),
-	     "Forward packets over multiple paths\n"
-	     "Number of paths\n")
-
-DEFUN (bgp_maxpaths_ibgp,
-       bgp_maxpaths_ibgp_cmd,
-       "maximum-paths ibgp " CMD_RANGE_STR(1, MULTIPATH_NUM),
-       "Forward packets over multiple paths\n"
-       "iBGP-multipath\n"
-       "Number of paths\n")
-{
-	int idx_number = 2;
-	return bgp_maxpaths_config_vty(vty, BGP_PEER_IBGP,
-				       argv[idx_number]->arg, 0, 1);
-}
-
-ALIAS_HIDDEN(bgp_maxpaths_ibgp, bgp_maxpaths_ibgp_hidden_cmd,
-	     "maximum-paths ibgp " CMD_RANGE_STR(1, MULTIPATH_NUM),
-	     "Forward packets over multiple paths\n"
-	     "iBGP-multipath\n"
-	     "Number of paths\n")
-
-DEFUN (bgp_maxpaths_ibgp_cluster,
-       bgp_maxpaths_ibgp_cluster_cmd,
-       "maximum-paths ibgp " CMD_RANGE_STR(1, MULTIPATH_NUM) " equal-cluster-length",
-       "Forward packets over multiple paths\n"
-       "iBGP-multipath\n"
-       "Number of paths\n"
-       "Match the cluster length\n")
-{
-	int idx_number = 2;
-	return bgp_maxpaths_config_vty(vty, BGP_PEER_IBGP,
-				       argv[idx_number]->arg, true, 1);
-}
-
-ALIAS_HIDDEN(bgp_maxpaths_ibgp_cluster, bgp_maxpaths_ibgp_cluster_hidden_cmd,
-	     "maximum-paths ibgp " CMD_RANGE_STR(
-		     1, MULTIPATH_NUM) " equal-cluster-length",
-	     "Forward packets over multiple paths\n"
-	     "iBGP-multipath\n"
-	     "Number of paths\n"
-	     "Match the cluster length\n")
-
-DEFUN (no_bgp_maxpaths,
-       no_bgp_maxpaths_cmd,
-       "no maximum-paths [" CMD_RANGE_STR(1, MULTIPATH_NUM) "]",
-       NO_STR
-       "Forward packets over multiple paths\n"
-       "Number of paths\n")
-{
-	return bgp_maxpaths_config_vty(vty, BGP_PEER_EBGP, NULL, 0, 0);
-}
-
-ALIAS_HIDDEN(no_bgp_maxpaths, no_bgp_maxpaths_hidden_cmd,
-	     "no maximum-paths [" CMD_RANGE_STR(1, MULTIPATH_NUM) "]", NO_STR
-	     "Forward packets over multiple paths\n"
-	     "Number of paths\n")
-
-DEFUN (no_bgp_maxpaths_ibgp,
-       no_bgp_maxpaths_ibgp_cmd,
-       "no maximum-paths ibgp [" CMD_RANGE_STR(1, MULTIPATH_NUM) " [equal-cluster-length]]",
-       NO_STR
-       "Forward packets over multiple paths\n"
-       "iBGP-multipath\n"
-       "Number of paths\n"
-       "Match the cluster length\n")
-{
-	return bgp_maxpaths_config_vty(vty, BGP_PEER_IBGP, NULL, 0, 0);
-}
-
-ALIAS_HIDDEN(no_bgp_maxpaths_ibgp, no_bgp_maxpaths_ibgp_hidden_cmd,
-	     "no maximum-paths ibgp [" CMD_RANGE_STR(
-		     1, MULTIPATH_NUM) " [equal-cluster-length]]",
-	     NO_STR
-	     "Forward packets over multiple paths\n"
-	     "iBGP-multipath\n"
-	     "Number of paths\n"
-	     "Match the cluster length\n")
-
-static void bgp_config_write_maxpaths(struct vty *vty, struct bgp *bgp,
-				      afi_t afi, safi_t safi)
-{
-	if (bgp->maxpaths[afi][safi].maxpaths_ebgp != multipath_num) {
-		vty_out(vty, "  maximum-paths %d\n",
-			bgp->maxpaths[afi][safi].maxpaths_ebgp);
-	}
-
-	if (bgp->maxpaths[afi][safi].maxpaths_ibgp != multipath_num) {
-		vty_out(vty, "  maximum-paths ibgp %d",
-			bgp->maxpaths[afi][safi].maxpaths_ibgp);
-		if (bgp->maxpaths[afi][safi].same_clusterlen)
-			vty_out(vty, " equal-cluster-length");
-		vty_out(vty, "\n");
-	}
-}
 
 /*
  * nexthop prefer-global configuration command handler.
@@ -2990,226 +1332,9 @@ DEFPY (bgp_af_nexthop_prefer_global,
 
 /* BGP timers.  */
 
-DEFUN (bgp_timers,
-       bgp_timers_cmd,
-       "timers bgp (0-65535) (0-65535)",
-       "Adjust routing timers\n"
-       "BGP timers\n"
-       "Keepalive interval\n"
-       "Holdtime\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_number = 2;
-	int idx_number_2 = 3;
-	unsigned long keepalive = 0;
-	unsigned long holdtime = 0;
-
-	keepalive = strtoul(argv[idx_number]->arg, NULL, 10);
-	holdtime = strtoul(argv[idx_number_2]->arg, NULL, 10);
-
-	/* Holdtime value check. */
-	if (holdtime < 3 && holdtime != 0) {
-		vty_out(vty,
-			"%% hold time value must be either 0 or greater than 3\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_timers_set(vty, bgp, keepalive, holdtime, DFLT_BGP_CONNECT_RETRY,
-		       BGP_DEFAULT_DELAYOPEN);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_timers,
-       no_bgp_timers_cmd,
-       "no timers bgp [(0-65535) (0-65535)]",
-       NO_STR
-       "Adjust routing timers\n"
-       "BGP timers\n"
-       "Keepalive interval\n"
-       "Holdtime\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp_timers_set(vty, bgp, DFLT_BGP_KEEPALIVE, DFLT_BGP_HOLDTIME,
-		       DFLT_BGP_CONNECT_RETRY, BGP_DEFAULT_DELAYOPEN);
-
-	return CMD_SUCCESS;
-}
-
 /* BGP minimum holdtime.  */
 
-DEFUN(bgp_minimum_holdtime, bgp_minimum_holdtime_cmd,
-      "bgp minimum-holdtime (1-65535)",
-      "BGP specific commands\n"
-      "BGP minimum holdtime\n"
-      "Seconds\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_number = 2;
-	unsigned long min_holdtime;
-
-	min_holdtime = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	bgp->default_min_holdtime = min_holdtime;
-
-	return CMD_SUCCESS;
-}
-
-DEFUN(no_bgp_minimum_holdtime, no_bgp_minimum_holdtime_cmd,
-      "no bgp minimum-holdtime [(1-65535)]",
-      NO_STR
-      "BGP specific commands\n"
-      "BGP minimum holdtime\n"
-      "Seconds\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp->default_min_holdtime = 0;
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(bgp_tcp_keepalive, bgp_tcp_keepalive_cmd,
-      "bgp tcp-keepalive (1-65535)$idle (1-65535)$intvl (1-30)$probes",
-      BGP_STR
-      "TCP keepalive parameters\n"
-      "TCP keepalive idle time (seconds)\n"
-      "TCP keepalive interval (seconds)\n"
-      "TCP keepalive maximum probes\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp_tcp_keepalive_set(bgp, (uint16_t)idle, (uint16_t)intvl,
-			      (uint16_t)probes);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(no_bgp_tcp_keepalive, no_bgp_tcp_keepalive_cmd,
-      "no bgp tcp-keepalive [(1-65535) (1-65535) (1-30)]",
-      NO_STR
-      BGP_STR
-      "TCP keepalive parameters\n"
-      "TCP keepalive idle time (seconds)\n"
-      "TCP keepalive interval (seconds)\n"
-      "TCP keepalive maximum probes\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp_tcp_keepalive_unset(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_client_to_client_reflection,
-       bgp_client_to_client_reflection_cmd,
-       "bgp client-to-client reflection",
-       BGP_STR
-       "Configure client to client route reflection\n"
-       "reflection of routes allowed\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_NO_CLIENT_TO_CLIENT);
-	bgp_clear_star_soft_out(vty, bgp->name);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_client_to_client_reflection,
-       no_bgp_client_to_client_reflection_cmd,
-       "no bgp client-to-client reflection",
-       NO_STR
-       BGP_STR
-       "Configure client to client route reflection\n"
-       "reflection of routes allowed\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_NO_CLIENT_TO_CLIENT);
-	bgp_clear_star_soft_out(vty, bgp->name);
-
-	return CMD_SUCCESS;
-}
-
 /* "bgp always-compare-med" configuration. */
-DEFUN (bgp_always_compare_med,
-       bgp_always_compare_med_cmd,
-       "bgp always-compare-med",
-       BGP_STR
-       "Allow comparing MED from different neighbors\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_ALWAYS_COMPARE_MED);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_always_compare_med,
-       no_bgp_always_compare_med_cmd,
-       "no bgp always-compare-med",
-       NO_STR
-       BGP_STR
-       "Allow comparing MED from different neighbors\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_ALWAYS_COMPARE_MED);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
-
-
-DEFUN(bgp_ebgp_requires_policy, bgp_ebgp_requires_policy_cmd,
-      "bgp ebgp-requires-policy",
-      BGP_STR
-      "Require in and out policy for eBGP peers (RFC8212)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_EBGP_REQUIRES_POLICY);
-	return CMD_SUCCESS;
-}
-
-DEFUN(no_bgp_ebgp_requires_policy, no_bgp_ebgp_requires_policy_cmd,
-      "no bgp ebgp-requires-policy",
-      NO_STR
-      BGP_STR
-      "Require in and out policy for eBGP peers (RFC8212)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_EBGP_REQUIRES_POLICY);
-	return CMD_SUCCESS;
-}
-
-DEFPY(bgp_enforce_first_as,
-      bgp_enforce_first_as_cmd,
-      "[no] bgp enforce-first-as",
-      NO_STR
-      BGP_STR
-      "Enforce the first AS for EBGP routes\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct listnode *node;
-	struct peer *peer;
-	afi_t afi;
-	safi_t safi;
-
-	if (no) {
-		if (!CHECK_FLAG(bgp->flags, BGP_FLAG_ENFORCE_FIRST_AS))
-			return CMD_SUCCESS;
-		UNSET_FLAG(bgp->flags, BGP_FLAG_ENFORCE_FIRST_AS);
-	} else {
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_ENFORCE_FIRST_AS))
-			return CMD_SUCCESS;
-		SET_FLAG(bgp->flags, BGP_FLAG_ENFORCE_FIRST_AS);
-	}
-
-	for (ALL_LIST_ELEMENTS_RO(bgp->peer, node, peer)) {
-		FOREACH_AFI_SAFI (afi, safi)
-			peer_on_policy_change(peer, afi, safi, 0);
-	}
-
-	return CMD_SUCCESS;
-}
 
 DEFPY(bgp_lu_uses_explicit_null, bgp_lu_uses_explicit_null_cmd,
       "[no] bgp labeled-unicast <explicit-null|ipv4-explicit-null|ipv6-explicit-null>$value",
@@ -3236,588 +1361,7 @@ DEFPY(bgp_lu_uses_explicit_null, bgp_lu_uses_explicit_null_cmd,
 	return CMD_SUCCESS;
 }
 
-DEFUN(bgp_suppress_duplicates, bgp_suppress_duplicates_cmd,
-      "bgp suppress-duplicates",
-      BGP_STR
-      "Suppress duplicate updates if the route actually not changed\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_DUPLICATES);
-	return CMD_SUCCESS;
-}
-
-DEFUN(no_bgp_suppress_duplicates, no_bgp_suppress_duplicates_cmd,
-      "no bgp suppress-duplicates",
-      NO_STR
-      BGP_STR
-      "Suppress duplicate updates if the route actually not changed\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_DUPLICATES);
-	return CMD_SUCCESS;
-}
-
-DEFUN(bgp_reject_as_sets, bgp_reject_as_sets_cmd,
-      "bgp reject-as-sets",
-      BGP_STR
-      "Reject routes with AS_SET or AS_CONFED_SET flag\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct listnode *node, *nnode;
-	struct peer *peer;
-
-	bgp->reject_as_sets = true;
-
-	/* Reset existing BGP sessions to reject routes
-	 * with aspath containing AS_SET or AS_CONFED_SET.
-	 */
-	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-		peer_set_last_reset(peer, PEER_DOWN_AS_SETS_REJECT);
-		peer_notify_config_change(peer->connection);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN(no_bgp_reject_as_sets, no_bgp_reject_as_sets_cmd,
-      "no bgp reject-as-sets",
-      NO_STR
-      BGP_STR
-      "Reject routes with AS_SET or AS_CONFED_SET flag\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct listnode *node, *nnode;
-	struct peer *peer;
-
-	bgp->reject_as_sets = false;
-
-	/* Reset existing BGP sessions to reject routes
-	 * with aspath containing AS_SET or AS_CONFED_SET.
-	 */
-	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-		peer_set_last_reset(peer, PEER_DOWN_AS_SETS_REJECT);
-		peer_notify_config_change(peer->connection);
-	}
-
-	return CMD_SUCCESS;
-}
-
-/* "bgp deterministic-med" configuration. */
-DEFUN (bgp_deterministic_med,
-       bgp_deterministic_med_cmd,
-       "bgp deterministic-med",
-       BGP_STR
-       "Pick the best-MED path among paths advertised from the neighboring AS\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (!CHECK_FLAG(bgp->flags, BGP_FLAG_DETERMINISTIC_MED)) {
-		SET_FLAG(bgp->flags, BGP_FLAG_DETERMINISTIC_MED);
-		bgp_recalculate_all_bestpaths(bgp);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_deterministic_med,
-       no_bgp_deterministic_med_cmd,
-       "no bgp deterministic-med",
-       NO_STR
-       BGP_STR
-       "Pick the best-MED path among paths advertised from the neighboring AS\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int bestpath_per_as_used;
-	afi_t afi;
-	safi_t safi;
-	struct peer *peer;
-	struct listnode *node, *nnode;
-
-	if (CHECK_FLAG(bgp->flags, BGP_FLAG_DETERMINISTIC_MED)) {
-		bestpath_per_as_used = 0;
-
-		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-			FOREACH_AFI_SAFI (afi, safi)
-				if (bgp_addpath_dmed_required(
-					peer->addpath_type[afi][safi])) {
-					bestpath_per_as_used = 1;
-					break;
-				}
-
-			if (bestpath_per_as_used)
-				break;
-		}
-
-		if (bestpath_per_as_used) {
-			vty_out(vty,
-				"bgp deterministic-med cannot be disabled while addpath-tx-bestpath-per-AS is in use\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		} else {
-			UNSET_FLAG(bgp->flags, BGP_FLAG_DETERMINISTIC_MED);
-			bgp_recalculate_all_bestpaths(bgp);
-		}
-	}
-
-	return CMD_SUCCESS;
-}
-
-static int bgp_inst_gr_config_vty(struct vty *vty, struct bgp *bgp, bool on,
-				  bool disable)
-{
-	int ret = BGP_GR_FAILURE;
-
-	/*
-	 * Reset gr_select_defer_evaluated if startup timer is running
-	 * so that deferred path selection can be reevaluated once
-	 * sessions come back up after BGP session reset
-	 */
-	if (event_is_scheduled(bgp->t_startup))
-		bgp->gr_select_defer_evaluated = false;
-
-	/*
-	 * Update the instance and all its peers, if appropriate.
-	 * Then, inform zebra of BGP's GR capabilities, if needed.
-	 */
-	if (disable)
-		ret = bgp_gr_update_all(bgp, on ? GLOBAL_DISABLE_CMD
-						: NO_GLOBAL_DISABLE_CMD);
-	else
-		ret = bgp_gr_update_all(bgp,
-					on ? GLOBAL_GR_CMD : NO_GLOBAL_GR_CMD);
-
-	VTY_BGP_GR_ROUTER_DETECT_AND_SEND_CAPABILITY_TO_ZEBRA(bgp, bgp->peer,
-							      ret);
-	return ret;
-}
-
-static int bgp_global_gr_config_vty(struct vty *vty, bool on, bool disable)
-{
-	struct listnode *node, *nnode;
-	struct bgp *bgp;
-	bool vrf_cfg = false;
-	int ret = BGP_GR_FAILURE;
-
-	if (disable) {
-		if ((on && CHECK_FLAG(bm->flags, BM_FLAG_GR_DISABLED)) ||
-		    (!on && !CHECK_FLAG(bm->flags, BM_FLAG_GR_DISABLED)))
-			return CMD_SUCCESS;
-	} else {
-		if ((on && CHECK_FLAG(bm->flags, BM_FLAG_GR_RESTARTER)) ||
-		    (!on && !CHECK_FLAG(bm->flags, BM_FLAG_GR_RESTARTER)))
-			return CMD_SUCCESS;
-	}
-
-	/* See if GR is set per-vrf and warn user to delete */
-	if (!CHECK_FLAG(bm->flags, BM_FLAG_GR_CONFIGURED)) {
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-			enum global_mode gr_mode = bgp_global_gr_mode_get(bgp);
-
-			if (gr_mode != GLOBAL_HELPER) {
-				vty_out(vty,
-					"%% graceful-restart configuration found in %s, mode %d\n",
-					bgp->name_pretty, gr_mode);
-				vrf_cfg = true;
-			}
-		}
-	}
-
-	if (vrf_cfg) {
-		vty_out(vty,
-			"%%Failed: global graceful-restart not permitted with per-vrf configuration\n");
-		return CMD_WARNING;
-	}
-
-	/* Set flag globally */
-	if (on) {
-		if (disable) {
-			UNSET_FLAG(bm->flags, BM_FLAG_GR_RESTARTER);
-			SET_FLAG(bm->flags, BM_FLAG_GR_DISABLED);
-		} else {
-			SET_FLAG(bm->flags, BM_FLAG_GR_RESTARTER);
-			UNSET_FLAG(bm->flags, BM_FLAG_GR_DISABLED);
-		}
-	} else {
-		if (disable)
-			UNSET_FLAG(bm->flags, BM_FLAG_GR_DISABLED);
-		else
-			UNSET_FLAG(bm->flags, BM_FLAG_GR_RESTARTER);
-	}
-
-	/* Initiate processing for all BGP instances. */
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-		ret = bgp_inst_gr_config_vty(vty, bgp, on, disable);
-		if (ret != BGP_GR_SUCCESS)
-			vty_out(vty,
-				"%% Applying global graceful-restart %s config to vrf %s failed, error %d\n",
-				(disable) ? "disable" : "",
-				bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
-					? "Default"
-					: bgp->name,
-				ret);
-	}
-
-	vty_out(vty,
-		"Graceful restart configuration changed, reset all peers to take effect\n");
-	return bgp_vty_return(vty, ret);
-}
-
 /* "bgp graceful-restart mode" configuration. */
-DEFUN (bgp_graceful_restart,
-	bgp_graceful_restart_cmd,
-	"bgp graceful-restart",
-	BGP_STR
-	GR_CMD
-      )
-{
-	if (vty->node == CONFIG_NODE)
-		return bgp_global_gr_config_vty(vty, true, false);
-
-	int ret = BGP_GR_FAILURE;
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	ret = bgp_inst_gr_config_vty(vty, bgp, true, false);
-	if (ret == BGP_GR_SUCCESS) {
-		vty_out(vty,
-			"Graceful restart configuration changed, reset all peers to take effect\n");
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (no_bgp_graceful_restart,
-	no_bgp_graceful_restart_cmd,
-	"no bgp graceful-restart",
-	NO_STR
-	BGP_STR
-	NO_GR_CMD
-      )
-{
-	if (vty->node == CONFIG_NODE)
-		return bgp_global_gr_config_vty(vty, false, false);
-
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int ret = BGP_GR_FAILURE;
-
-	ret = bgp_inst_gr_config_vty(vty, bgp, false, false);
-	if (ret == BGP_GR_SUCCESS) {
-		VTY_BGP_GR_ROUTER_DETECT_AND_SEND_CAPABILITY_TO_ZEBRA(bgp,
-								      bgp->peer,
-								      ret);
-		vty_out(vty,
-			"Graceful restart configuration changed, reset all peers to take effect\n");
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (bgp_graceful_restart_stalepath_time,
-	bgp_graceful_restart_stalepath_time_cmd,
-	"bgp graceful-restart stalepath-time (1-4095)",
-	BGP_STR
-	"Graceful restart capability parameters\n"
-	"Set the max time to hold onto restarting peer's stale paths\n"
-	"Delay value (seconds)\n")
-{
-	int idx_number = 3;
-	uint32_t stalepath;
-
-	stalepath = strtoul(argv[idx_number]->arg, NULL, 10);
-	if (vty->node == CONFIG_NODE) {
-		struct listnode *node, *nnode;
-		struct bgp *bgp;
-
-		bm->stalepath_time = stalepath;
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-			bgp->stalepath_time = stalepath;
-	} else {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		bgp->stalepath_time = stalepath;
-	}
-	return CMD_SUCCESS;
-}
-
-/*
- * Reset the BGP session since there's a change
- * in GR capability
- */
-static void bgp_update_graceful_restart_capability(struct peer *peer)
-{
-	enum peer_mode peer_gr_mode;
-	enum global_mode global_gr_mode;
-
-	global_gr_mode = bgp_global_gr_mode_get(peer->bgp);
-
-	peer_gr_mode = bgp_peer_gr_mode_get(peer);
-
-	/*
-	 * Skip if peer is not in graceful restart mode
-	 */
-	if (!((peer_gr_mode == PEER_GR) ||
-	      (peer_gr_mode == PEER_GLOBAL_INHERIT && global_gr_mode == GLOBAL_GR)))
-		return;
-
-	if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
-		zlog_debug("Resetting session for %s: Peer GR mode %s, Global GR mode %s",
-			   peer->host, print_peer_gr_mode(peer_gr_mode),
-			   print_global_gr_mode(global_gr_mode));
-
-	/*
-	 * Reset the session so that the updated capability can be
-	 * exchanged again
-	 */
-	if (BGP_IS_VALID_STATE_FOR_NOTIF(peer->connection->status)) {
-		peer_set_last_reset(peer, PEER_DOWN_CAPABILITY_CHANGE);
-		bgp_notify_send(peer->connection, BGP_NOTIFY_CEASE, BGP_NOTIFY_CEASE_CONFIG_CHANGE);
-	}
-}
-
-DEFUN (bgp_graceful_restart_restart_time,
-	bgp_graceful_restart_restart_time_cmd,
-	"bgp graceful-restart restart-time (0-4095)",
-	BGP_STR
-	"Graceful restart capability parameters\n"
-	"Set the time to wait to delete stale routes before a BGP open message is received\n"
-	"Delay value (seconds)\n")
-{
-	int idx_number = 3;
-	uint32_t restart;
-	struct listnode *node, *nnode;
-	struct peer *peer;
-
-	restart = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	if (vty->node == CONFIG_NODE) {
-		struct bgp *bgp;
-
-		bm->restart_time = restart;
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-			bgp->restart_time = restart;
-			for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-				if (!CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV) ||
-				    !CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_ADV))
-					bgp_update_graceful_restart_capability(peer);
-				else
-					bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
-							    CAPABILITY_CODE_RESTART,
-							    CAPABILITY_ACTION_SET);
-			}
-		}
-	} else {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		bgp->restart_time = restart;
-		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-			if (!CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV) ||
-			    !CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_ADV))
-				bgp_update_graceful_restart_capability(peer);
-			else
-				bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
-						    CAPABILITY_CODE_RESTART, CAPABILITY_ACTION_SET);
-		}
-	}
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_graceful_restart_select_defer_time,
-       bgp_graceful_restart_select_defer_time_cmd,
-       "bgp graceful-restart select-defer-time (0-3600)",
-       BGP_STR
-       "Graceful restart capability parameters\n"
-       "Set the time to defer the BGP route selection after restart\n"
-       "Delay value (seconds, 0 - disable)\n")
-{
-	int idx_number = 3;
-	uint32_t defer_time;
-
-	defer_time = strtoul(argv[idx_number]->arg, NULL, 10);
-	if (vty->node == CONFIG_NODE) {
-		struct listnode *node, *nnode;
-		struct bgp *bgp;
-
-		bm->select_defer_time = defer_time;
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-			bgp->select_defer_time = defer_time;
-			if (defer_time == 0)
-				SET_FLAG(bgp->flags,
-					 BGP_FLAG_SELECT_DEFER_DISABLE);
-			else
-				UNSET_FLAG(bgp->flags,
-					   BGP_FLAG_SELECT_DEFER_DISABLE);
-		}
-	} else {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		bgp->select_defer_time = defer_time;
-		if (defer_time == 0)
-			SET_FLAG(bgp->flags, BGP_FLAG_SELECT_DEFER_DISABLE);
-		else
-			UNSET_FLAG(bgp->flags, BGP_FLAG_SELECT_DEFER_DISABLE);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_graceful_restart_stalepath_time,
-	no_bgp_graceful_restart_stalepath_time_cmd,
-	"no bgp graceful-restart stalepath-time [(1-4095)]",
-	NO_STR
-	BGP_STR
-	"Graceful restart capability parameters\n"
-	"Set the max time to hold onto restarting peer's stale paths\n"
-	"Delay value (seconds)\n")
-{
-	if (vty->node == CONFIG_NODE) {
-		struct listnode *node, *nnode;
-		struct bgp *bgp;
-
-		bm->stalepath_time = BGP_DEFAULT_STALEPATH_TIME;
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-			bgp->stalepath_time = BGP_DEFAULT_STALEPATH_TIME;
-	} else {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		bgp->stalepath_time = BGP_DEFAULT_STALEPATH_TIME;
-	}
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_graceful_restart_restart_time,
-	no_bgp_graceful_restart_restart_time_cmd,
-	"no bgp graceful-restart restart-time [(0-4095)]",
-	NO_STR
-	BGP_STR
-	"Graceful restart capability parameters\n"
-	"Set the time to wait to delete stale routes before a BGP open message is received\n"
-	"Delay value (seconds)\n")
-{
-	struct listnode *node, *nnode;
-	struct peer *peer;
-
-	if (vty->node == CONFIG_NODE) {
-		struct bgp *bgp;
-
-		bm->restart_time = BGP_DEFAULT_RESTART_TIME;
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-			bgp->restart_time = BGP_DEFAULT_RESTART_TIME;
-
-			for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-				if (!CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV) ||
-				    !CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_ADV))
-					bgp_update_graceful_restart_capability(peer);
-				else
-					bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
-							    CAPABILITY_CODE_RESTART,
-							    CAPABILITY_ACTION_UNSET);
-			}
-		}
-	} else {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		bgp->restart_time = BGP_DEFAULT_RESTART_TIME;
-
-		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-			if (!CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_RCV) ||
-			    !CHECK_FLAG(peer->cap, PEER_CAP_DYNAMIC_ADV))
-				bgp_update_graceful_restart_capability(peer);
-			else
-				bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
-						    CAPABILITY_CODE_RESTART,
-						    CAPABILITY_ACTION_UNSET);
-		}
-	}
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_graceful_restart_select_defer_time,
-       no_bgp_graceful_restart_select_defer_time_cmd,
-       "no bgp graceful-restart select-defer-time [(0-3600)]",
-       NO_STR
-       BGP_STR
-       "Graceful restart capability parameters\n"
-       "Set the time to defer the BGP route selection after restart\n"
-       "Delay value (seconds)\n")
-{
-	if (vty->node == CONFIG_NODE) {
-		struct listnode *node, *nnode;
-		struct bgp *bgp;
-
-		bm->select_defer_time = BGP_DEFAULT_SELECT_DEFERRAL_TIME;
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-			bgp->select_defer_time =
-				BGP_DEFAULT_SELECT_DEFERRAL_TIME;
-			UNSET_FLAG(bgp->flags, BGP_FLAG_SELECT_DEFER_DISABLE);
-		}
-	} else {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		bgp->select_defer_time = BGP_DEFAULT_SELECT_DEFERRAL_TIME;
-		UNSET_FLAG(bgp->flags, BGP_FLAG_SELECT_DEFER_DISABLE);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_graceful_restart_preserve_fw,
-	bgp_graceful_restart_preserve_fw_cmd,
-	"bgp graceful-restart preserve-fw-state",
-	BGP_STR
-	"Graceful restart capability parameters\n"
-	"Sets F-bit indication that fib is preserved while doing Graceful Restart\n")
-{
-	if (vty->node == CONFIG_NODE) {
-		struct listnode *node, *nnode;
-		struct bgp *bgp;
-
-		SET_FLAG(bm->flags, BM_FLAG_GR_PRESERVE_FWD);
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-			SET_FLAG(bgp->flags, BGP_FLAG_GR_PRESERVE_FWD);
-	} else {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		SET_FLAG(bgp->flags, BGP_FLAG_GR_PRESERVE_FWD);
-	}
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_graceful_restart_preserve_fw,
-	no_bgp_graceful_restart_preserve_fw_cmd,
-	"no bgp graceful-restart preserve-fw-state",
-	NO_STR
-	BGP_STR
-	"Graceful restart capability parameters\n"
-	"Unsets F-bit indication that fib is preserved while doing Graceful Restart\n")
-{
-	if (vty->node == CONFIG_NODE) {
-		struct listnode *node, *nnode;
-		struct bgp *bgp;
-
-		UNSET_FLAG(bm->flags, BM_FLAG_GR_PRESERVE_FWD);
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-			UNSET_FLAG(bgp->flags, BGP_FLAG_GR_PRESERVE_FWD);
-	} else {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		UNSET_FLAG(bgp->flags, BGP_FLAG_GR_PRESERVE_FWD);
-	}
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_graceful_restart_notification,
-	bgp_graceful_restart_notification_cmd,
-	"[no$no] bgp graceful-restart notification",
-	NO_STR
-	BGP_STR
-	"Graceful restart capability parameters\n"
-	"Indicate Graceful Restart support for BGP NOTIFICATION messages\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct listnode *node, *nnode;
-	struct peer *peer;
-
-	if (no)
-		UNSET_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_NOTIFICATION);
-	else
-		SET_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_NOTIFICATION);
-
-	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
-		bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
-				    CAPABILITY_CODE_RESTART, CAPABILITY_ACTION_SET);
-
-	return CMD_SUCCESS;
-}
 
 DEFPY (bgp_administrative_reset,
 	bgp_administrative_reset_cmd,
@@ -3836,416 +1380,13 @@ DEFPY (bgp_administrative_reset,
 	return CMD_SUCCESS;
 }
 
-DEFUN (bgp_graceful_restart_disable,
-	bgp_graceful_restart_disable_cmd,
-	"bgp graceful-restart-disable",
-	BGP_STR
-	GR_DISABLE)
-{
-	if (vty->node == CONFIG_NODE)
-		return bgp_global_gr_config_vty(vty, true, true);
-
-	int ret = BGP_GR_FAILURE;
-	struct listnode *node, *nnode;
-	struct peer *peer;
-
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	ret = bgp_inst_gr_config_vty(vty, bgp, true, true);
-	if (ret == BGP_GR_SUCCESS) {
-		vty_out(vty,
-			"Graceful restart configuration changed, reset all peers to take effect\n");
-
-		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-			bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
-					    CAPABILITY_CODE_RESTART, CAPABILITY_ACTION_UNSET);
-			bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST,
-					    CAPABILITY_CODE_LLGR, CAPABILITY_ACTION_UNSET);
-		}
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (no_bgp_graceful_restart_disable,
-	no_bgp_graceful_restart_disable_cmd,
-	"no bgp graceful-restart-disable",
-	NO_STR
-	BGP_STR
-	NO_GR_DISABLE
-      )
-{
-	if (vty->node == CONFIG_NODE)
-		return bgp_global_gr_config_vty(vty, false, true);
-
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int ret = BGP_GR_FAILURE;
-
-	ret = bgp_inst_gr_config_vty(vty, bgp, false, true);
-	if (ret == BGP_GR_SUCCESS) {
-		vty_out(vty,
-			"Graceful restart configuration changed, reset all peers to take effect\n");
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (bgp_neighbor_graceful_restart_set,
-	bgp_neighbor_graceful_restart_set_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> graceful-restart",
-	NEIGHBOR_STR
-	NEIGHBOR_ADDR_STR2
-	GR_NEIGHBOR_CMD
-      )
-{
-	int idx_peer = 1;
-	struct peer *peer;
-	int result = BGP_GR_FAILURE, ret = BGP_GR_SUCCESS;
-
-	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	result = bgp_neighbor_graceful_restart(peer, PEER_GR_CMD);
-	if (result == BGP_GR_SUCCESS) {
-		VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
-		VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-		vty_out(vty,
-			"Graceful restart configuration changed, reset this peer to take effect\n");
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (no_bgp_neighbor_graceful_restart,
-	no_bgp_neighbor_graceful_restart_set_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> graceful-restart",
-	NO_STR
-	NEIGHBOR_STR
-	NEIGHBOR_ADDR_STR2
-	NO_GR_NEIGHBOR_CMD
-      )
-{
-	int idx_peer = 2;
-	int result = BGP_GR_FAILURE, ret = BGP_GR_SUCCESS;
-	struct peer *peer;
-
-	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	result = bgp_neighbor_graceful_restart(peer, NO_PEER_GR_CMD);
-	if (ret == BGP_GR_SUCCESS) {
-		VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
-		VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-		vty_out(vty,
-			"Graceful restart configuration changed, reset this peer to take effect\n");
-	}
-
-	return bgp_vty_return(vty, result);
-}
-
-DEFUN (bgp_neighbor_graceful_restart_helper_set,
-	bgp_neighbor_graceful_restart_helper_set_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> graceful-restart-helper",
-	NEIGHBOR_STR
-	NEIGHBOR_ADDR_STR2
-	GR_NEIGHBOR_HELPER_CMD
-      )
-{
-	int idx_peer = 1;
-	struct peer *peer;
-	int ret = BGP_GR_FAILURE;
-
-	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = bgp_neighbor_graceful_restart(peer, PEER_HELPER_CMD);
-	if (ret == BGP_GR_SUCCESS) {
-		VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
-		VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-		vty_out(vty,
-			"Graceful restart configuration changed, reset this peer to take effect\n");
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (no_bgp_neighbor_graceful_restart_helper,
-	no_bgp_neighbor_graceful_restart_helper_set_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> graceful-restart-helper",
-	NO_STR
-	NEIGHBOR_STR
-	NEIGHBOR_ADDR_STR2
-	NO_GR_NEIGHBOR_HELPER_CMD
-      )
-{
-	int idx_peer = 2;
-	int ret = BGP_GR_FAILURE;
-	struct peer *peer;
-
-	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = bgp_neighbor_graceful_restart(peer, NO_PEER_HELPER_CMD);
-	if (ret == BGP_GR_SUCCESS) {
-		VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
-		VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-		vty_out(vty,
-			"Graceful restart configuration changed, reset this peer to take effect\n");
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (bgp_neighbor_graceful_restart_disable_set,
-	bgp_neighbor_graceful_restart_disable_set_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> graceful-restart-disable",
-	NEIGHBOR_STR
-	NEIGHBOR_ADDR_STR2
-	GR_NEIGHBOR_DISABLE_CMD
-      )
-{
-	int idx_peer = 1;
-	struct peer *peer;
-	int ret = BGP_GR_FAILURE;
-
-	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = bgp_neighbor_graceful_restart(peer, PEER_DISABLE_CMD);
-	if (ret == BGP_GR_SUCCESS) {
-		if (peer->bgp->t_startup || bgp_in_graceful_restart())
-			bgp_peer_gr_flags_update(peer);
-
-		VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
-		VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (no_bgp_neighbor_graceful_restart_disable,
-	no_bgp_neighbor_graceful_restart_disable_set_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> graceful-restart-disable",
-	NO_STR
-	NEIGHBOR_STR
-	NEIGHBOR_ADDR_STR2
-	NO_GR_NEIGHBOR_DISABLE_CMD
-      )
-{
-	int idx_peer = 2;
-	int ret = BGP_GR_FAILURE;
-	struct peer *peer;
-
-	VTY_BGP_GR_DEFINE_LOOP_VARIABLE;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = bgp_neighbor_graceful_restart(peer, NO_PEER_DISABLE_CMD);
-	if (ret == BGP_GR_SUCCESS) {
-		VTY_BGP_GR_ROUTER_DETECT(bgp, peer, peer->bgp->peer);
-		VTY_SEND_BGP_GR_CAPABILITY_TO_ZEBRA(peer->bgp, ret);
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
 /*
  * Function to announce route to peer
  */
-static void bgp_peer_announce_routes(struct peer *peer)
-{
-	afi_t afi;
-	safi_t safi;
-	struct peer_af *paf = NULL;
-
-	FOREACH_AFI_SAFI (afi, safi) {
-		if (!peer->afc[afi][safi])
-			continue;
-		paf = peer_af_find(peer, afi, safi);
-		if (paf) {
-			update_group_adjust_peer(paf);
-			bgp_announce_route(peer, afi, safi, false);
-		}
-	}
-}
 
 /*
  * Function to perform a soft reset of BGP neighborship on a peer or peer group
  */
-static int bgp_peer_soft_reset(struct vty *vty, const char *peer_str, struct peer *peer, enum clear_sort sort)
-{
-	struct listnode *node, *nnode;
-	struct peer_group *group;
-
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp_clear(vty, bgp, AFI_UNSPEC, SAFI_UNSPEC, sort, BGP_CLEAR_SOFT_IN, peer_str);
-
-	if (sort == clear_group) {
-		group = peer->group;
-		for (ALL_LIST_ELEMENTS(group->peer, node, nnode, peer))
-			bgp_peer_announce_routes(peer);
-	} else {
-		bgp_peer_announce_routes(peer);
-	}
-	return CMD_SUCCESS;
-}
-
-DEFPY (neighbor_graceful_shutdown,
-       neighbor_graceful_shutdown_cmd,
-       "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor_str graceful-shutdown",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Graceful shutdown\n")
-{
-	int ret;
-	struct peer *peer = NULL;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (no)
-		ret = peer_flag_unset_vty(vty, neighbor_str, PEER_FLAG_GRACEFUL_SHUTDOWN);
-	else
-		ret = peer_flag_set_vty(vty, neighbor_str, PEER_FLAG_GRACEFUL_SHUTDOWN);
-
-	if (ret == 0) {
-		if (!CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP))
-			ret = bgp_peer_soft_reset(vty, neighbor_str, peer, clear_peer);
-		else
-			ret = bgp_peer_soft_reset(vty, neighbor_str, peer, clear_group);
-	}
-	return ret;
-}
-
-DEFUN_HIDDEN (bgp_graceful_restart_disable_eor,
-              bgp_graceful_restart_disable_eor_cmd,
-              "bgp graceful-restart disable-eor",
-              BGP_STR
-              "Graceful restart configuration parameters\n"
-              "Disable EOR Check\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_GR_DISABLE_EOR);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN_HIDDEN (no_bgp_graceful_restart_disable_eor,
-              no_bgp_graceful_restart_disable_eor_cmd,
-              "no bgp graceful-restart disable-eor",
-              NO_STR
-              BGP_STR
-              "Graceful restart configuration parameters\n"
-              "Disable EOR Check\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_GR_DISABLE_EOR);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_graceful_restart_rib_stale_time,
-       bgp_graceful_restart_rib_stale_time_cmd,
-       "bgp graceful-restart rib-stale-time (1-3600)",
-       BGP_STR
-       "Graceful restart configuration parameters\n"
-       "Specify the stale route removal timer in rib\n"
-       "Delay value (seconds)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_number = 3;
-	uint32_t stale_time;
-
-	stale_time = strtoul(argv[idx_number]->arg, NULL, 10);
-	bgp->rib_stale_time = stale_time;
-	/* Send the stale timer update message to RIB */
-	if (bgp_zebra_stale_timer_update(bgp))
-		return CMD_WARNING;
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_graceful_restart_rib_stale_time,
-       no_bgp_graceful_restart_rib_stale_time_cmd,
-       "no bgp graceful-restart rib-stale-time [(1-3600)]",
-       NO_STR
-       BGP_STR
-       "Graceful restart configuration parameters\n"
-       "Specify the stale route removal timer in rib\n"
-       "Delay value (seconds)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp->rib_stale_time = BGP_DEFAULT_RIB_STALE_TIME;
-	/* Send the stale timer update message to RIB */
-	if (bgp_zebra_stale_timer_update(bgp))
-		return CMD_WARNING;
-
-	return CMD_SUCCESS;
-}
-
-DEFUN(bgp_llgr_stalepath_time, bgp_llgr_stalepath_time_cmd,
-      "bgp long-lived-graceful-restart stale-time (1-16777215)",
-      BGP_STR
-      "Enable Long-lived Graceful Restart\n"
-      "Specifies maximum time to wait before purging long-lived stale routes\n"
-      "Stale time value (seconds)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	uint32_t llgr_stale_time;
-	struct listnode *node, *nnode;
-	struct peer *peer;
-
-	llgr_stale_time = strtoul(argv[3]->arg, NULL, 10);
-	bgp->llgr_stale_time = llgr_stale_time;
-
-	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
-		bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_LLGR,
-				    CAPABILITY_ACTION_SET);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN(no_bgp_llgr_stalepath_time, no_bgp_llgr_stalepath_time_cmd,
-      "no bgp long-lived-graceful-restart stale-time [(1-16777215)]",
-      NO_STR BGP_STR
-      "Enable Long-lived Graceful Restart\n"
-      "Specifies maximum time to wait before purging long-lived stale routes\n"
-      "Stale time value (seconds)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct listnode *node, *nnode;
-	struct peer *peer;
-
-	bgp->llgr_stale_time = BGP_DEFAULT_LLGR_STALE_TIME;
-
-	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
-		bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_LLGR,
-				    CAPABILITY_ACTION_UNSET);
-
-	return CMD_SUCCESS;
-}
 
 static inline void bgp_initiate_graceful_shut_unshut(struct vty *vty,
 						     struct bgp *bgp)
@@ -4256,219 +1397,13 @@ static inline void bgp_initiate_graceful_shut_unshut(struct vty *vty,
 	bgp_clear_star_soft_in(vty, bgp->name);
 }
 
-static int bgp_global_graceful_shutdown_config_vty(struct vty *vty)
-{
-	struct listnode *node, *nnode;
-	struct bgp *bgp;
-	bool vrf_cfg = false;
-
-	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN))
-		return CMD_SUCCESS;
-
-	/* See if graceful-shutdown is set per-vrf and warn user to delete */
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN)) {
-			vty_out(vty,
-				"%% graceful-shutdown configuration found in vrf %s\n",
-				bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT ?
-					VRF_DEFAULT_NAME : bgp->name);
-			vrf_cfg = true;
-		}
-	}
-
-	if (vrf_cfg) {
-		vty_out(vty,
-			"%%Failed: global graceful-shutdown not permitted\n");
-		return CMD_WARNING;
-	}
-
-	/* Set flag globally */
-	SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN);
-
-	/* Initiate processing for all BGP instances. */
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-		bgp_initiate_graceful_shut_unshut(vty, bgp);
-
-	return CMD_SUCCESS;
-}
-
-static int bgp_global_graceful_shutdown_deconfig_vty(struct vty *vty)
-{
-	struct listnode *node, *nnode;
-	struct bgp *bgp;
-
-	if (!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN))
-		return CMD_SUCCESS;
-
-	/* Unset flag globally */
-	UNSET_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN);
-
-	/* Initiate processing for all BGP instances. */
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-		bgp_initiate_graceful_shut_unshut(vty, bgp);
-
-	return CMD_SUCCESS;
-}
-
 /* "bgp graceful-shutdown" configuration */
-DEFUN (bgp_graceful_shutdown,
-       bgp_graceful_shutdown_cmd,
-       "bgp graceful-shutdown",
-       BGP_STR
-       "Graceful shutdown parameters\n")
-{
-	if (vty->node == CONFIG_NODE)
-		return bgp_global_graceful_shutdown_config_vty(vty);
-
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	/* if configured globally, per-instance config is not allowed */
-	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN)) {
-		vty_out(vty,
-			"%%Failed: per-vrf graceful-shutdown config not permitted with global graceful-shutdown\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (!CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN)) {
-		SET_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN);
-		bgp_initiate_graceful_shut_unshut(vty, bgp);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_graceful_shutdown,
-       no_bgp_graceful_shutdown_cmd,
-       "no bgp graceful-shutdown",
-       NO_STR
-       BGP_STR
-       "Graceful shutdown parameters\n")
-{
-	if (vty->node == CONFIG_NODE)
-		return bgp_global_graceful_shutdown_deconfig_vty(vty);
-
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	/* If configured globally, cannot remove from one bgp instance */
-	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN)) {
-		vty_out(vty,
-			"%%Failed: bgp graceful-shutdown configured globally. Delete per-vrf not permitted\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN)) {
-		UNSET_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN);
-		bgp_initiate_graceful_shut_unshut(vty, bgp);
-	}
-
-	return CMD_SUCCESS;
-}
 
 /* "bgp fast-external-failover" configuration. */
-DEFUN (bgp_fast_external_failover,
-       bgp_fast_external_failover_cmd,
-       "bgp fast-external-failover",
-       BGP_STR
-       "Immediately reset session if a link to a directly connected external peer goes down\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_NO_FAST_EXT_FAILOVER);
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_fast_external_failover,
-       no_bgp_fast_external_failover_cmd,
-       "no bgp fast-external-failover",
-       NO_STR
-       BGP_STR
-       "Immediately reset session if a link to a directly connected external peer goes down\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_NO_FAST_EXT_FAILOVER);
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_bestpath_aigp,
-       bgp_bestpath_aigp_cmd,
-       "[no$no] bgp bestpath aigp",
-       NO_STR
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "Evaluate the AIGP attribute during the best path selection process\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (no)
-		UNSET_FLAG(bgp->flags, BGP_FLAG_COMPARE_AIGP);
-	else
-		SET_FLAG(bgp->flags, BGP_FLAG_COMPARE_AIGP);
-
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
 
 /* "bgp bestpath compare-routerid" configuration.  */
-DEFUN (bgp_bestpath_compare_router_id,
-       bgp_bestpath_compare_router_id_cmd,
-       "bgp bestpath compare-routerid",
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "Compare router-id for identical EBGP paths\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_COMPARE_ROUTER_ID);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_bestpath_compare_router_id,
-       no_bgp_bestpath_compare_router_id_cmd,
-       "no bgp bestpath compare-routerid",
-       NO_STR
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "Compare router-id for identical EBGP paths\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_COMPARE_ROUTER_ID);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
 
 /* "bgp bestpath as-path ignore" configuration.  */
-DEFUN (bgp_bestpath_aspath_ignore,
-       bgp_bestpath_aspath_ignore_cmd,
-       "bgp bestpath as-path ignore",
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "AS-path attribute\n"
-       "Ignore as-path length in selecting a route\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_ASPATH_IGNORE);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_bestpath_aspath_ignore,
-       no_bgp_bestpath_aspath_ignore_cmd,
-       "no bgp bestpath as-path ignore",
-       NO_STR
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "AS-path attribute\n"
-       "Ignore as-path length in selecting a route\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_ASPATH_IGNORE);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
 
 /* "bgp bestpath use-imported-attributes" configuration. */
 DEFPY (bgp_bestpath_use_imported_attrs,
@@ -4497,791 +1432,22 @@ DEFPY (bgp_bestpath_use_imported_attrs,
 }
 
 /* "bgp bestpath as-path confed" configuration.  */
-DEFUN (bgp_bestpath_aspath_confed,
-       bgp_bestpath_aspath_confed_cmd,
-       "bgp bestpath as-path confed",
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "AS-path attribute\n"
-       "Compare path lengths including confederation sets & sequences in selecting a route\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_ASPATH_CONFED);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_bestpath_aspath_confed,
-       no_bgp_bestpath_aspath_confed_cmd,
-       "no bgp bestpath as-path confed",
-       NO_STR
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "AS-path attribute\n"
-       "Compare path lengths including confederation sets & sequences in selecting a route\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_ASPATH_CONFED);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
 
 /* "bgp bestpath as-path multipath-relax" configuration.  */
-DEFUN (bgp_bestpath_aspath_multipath_relax,
-       bgp_bestpath_aspath_multipath_relax_cmd,
-       "bgp bestpath as-path multipath-relax [<as-set|no-as-set>]",
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "AS-path attribute\n"
-       "Allow load sharing across routes that have different AS paths (but same length)\n"
-       "Generate an AS_SET\n"
-       "Do not generate an AS_SET\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx = 0;
-	SET_FLAG(bgp->flags, BGP_FLAG_ASPATH_MULTIPATH_RELAX);
-
-	/* no-as-set is now the default behavior so we can silently
-	 * ignore it */
-	if (argv_find(argv, argc, "as-set", &idx))
-		SET_FLAG(bgp->flags, BGP_FLAG_MULTIPATH_RELAX_AS_SET);
-	else
-		UNSET_FLAG(bgp->flags, BGP_FLAG_MULTIPATH_RELAX_AS_SET);
-
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_bestpath_aspath_multipath_relax,
-       no_bgp_bestpath_aspath_multipath_relax_cmd,
-       "no bgp bestpath as-path multipath-relax [<as-set|no-as-set>]",
-       NO_STR
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "AS-path attribute\n"
-       "Allow load sharing across routes that have different AS paths (but same length)\n"
-       "Generate an AS_SET\n"
-       "Do not generate an AS_SET\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_ASPATH_MULTIPATH_RELAX);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_MULTIPATH_RELAX_AS_SET);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
 
 /* "bgp bestpath peer-type multipath-relax" configuration. */
-DEFUN(bgp_bestpath_peer_type_multipath_relax,
-      bgp_bestpath_peer_type_multipath_relax_cmd,
-      "bgp bestpath peer-type multipath-relax",
-      BGP_STR
-      "Change the default bestpath selection\n"
-      "Peer type\n"
-      "Allow load sharing across routes learned from different peer types\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_PEERTYPE_MULTIPATH_RELAX);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN(no_bgp_bestpath_peer_type_multipath_relax,
-      no_bgp_bestpath_peer_type_multipath_relax_cmd,
-      "no bgp bestpath peer-type multipath-relax",
-      NO_STR BGP_STR
-      "Change the default bestpath selection\n"
-      "Peer type\n"
-      "Allow load sharing across routes learned from different peer types\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_PEERTYPE_MULTIPATH_RELAX);
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
 
 /* "bgp log-neighbor-changes" configuration.  */
-DEFUN (bgp_log_neighbor_changes,
-       bgp_log_neighbor_changes_cmd,
-       "bgp log-neighbor-changes",
-       BGP_STR
-       "Log neighbor up/down and reset reason\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_LOG_NEIGHBOR_CHANGES);
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_log_neighbor_changes,
-       no_bgp_log_neighbor_changes_cmd,
-       "no bgp log-neighbor-changes",
-       NO_STR
-       BGP_STR
-       "Log neighbor up/down and reset reason\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_LOG_NEIGHBOR_CHANGES);
-	return CMD_SUCCESS;
-}
 
 /* "bgp bestpath med" configuration. */
-DEFUN (bgp_bestpath_med,
-       bgp_bestpath_med_cmd,
-       "bgp bestpath med <confed [missing-as-worst]|missing-as-worst [confed]>",
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "MED attribute\n"
-       "Compare MED among confederation paths\n"
-       "Treat missing MED as the least preferred one\n"
-       "Treat missing MED as the least preferred one\n"
-       "Compare MED among confederation paths\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	int idx = 0;
-	if (argv_find(argv, argc, "confed", &idx))
-		SET_FLAG(bgp->flags, BGP_FLAG_MED_CONFED);
-	idx = 0;
-	if (argv_find(argv, argc, "missing-as-worst", &idx))
-		SET_FLAG(bgp->flags, BGP_FLAG_MED_MISSING_AS_WORST);
-
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_bestpath_med,
-       no_bgp_bestpath_med_cmd,
-       "no bgp bestpath med <confed [missing-as-worst]|missing-as-worst [confed]>",
-       NO_STR
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "MED attribute\n"
-       "Compare MED among confederation paths\n"
-       "Treat missing MED as the least preferred one\n"
-       "Treat missing MED as the least preferred one\n"
-       "Compare MED among confederation paths\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	int idx = 0;
-	if (argv_find(argv, argc, "confed", &idx))
-		UNSET_FLAG(bgp->flags, BGP_FLAG_MED_CONFED);
-	idx = 0;
-	if (argv_find(argv, argc, "missing-as-worst", &idx))
-		UNSET_FLAG(bgp->flags, BGP_FLAG_MED_MISSING_AS_WORST);
-
-	bgp_recalculate_all_bestpaths(bgp);
-
-	return CMD_SUCCESS;
-}
 
 /* "bgp bestpath bandwidth" configuration. */
-DEFPY (bgp_bestpath_bw,
-       bgp_bestpath_bw_cmd,
-       "bgp bestpath bandwidth <ignore|skip-missing|default-weight-for-missing>$bw_cfg",
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "Link Bandwidth attribute\n"
-       "Ignore link bandwidth (i.e., do regular ECMP, not weighted)\n"
-       "Ignore paths without link bandwidth for ECMP (if other paths have it)\n"
-       "Assign a low default weight (value 1) to paths not having link bandwidth\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	afi_t afi;
-	safi_t safi;
-
-	if (!bw_cfg) {
-		vty_out(vty, "%% Bandwidth configuration must be specified\n");
-		return CMD_ERR_INCOMPLETE;
-	}
-	if (!strcmp(bw_cfg, "ignore"))
-		bgp->lb_handling = BGP_LINK_BW_IGNORE_BW;
-	else if (!strcmp(bw_cfg, "skip-missing"))
-		bgp->lb_handling = BGP_LINK_BW_SKIP_MISSING;
-	else if (!strcmp(bw_cfg, "default-weight-for-missing"))
-		bgp->lb_handling = BGP_LINK_BW_DEFWT_4_MISSING;
-	else
-		return CMD_ERR_NO_MATCH;
-
-	/* This config is used in route install, so redo that. */
-	FOREACH_AFI_SAFI (afi, safi) {
-		if (!bgp_fibupd_safi(safi))
-			continue;
-		bgp_zebra_announce_table(bgp, afi, safi);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (no_bgp_bestpath_bw,
-       no_bgp_bestpath_bw_cmd,
-       "no bgp bestpath bandwidth [<ignore|skip-missing|default-weight-for-missing>$bw_cfg]",
-       NO_STR
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "Link Bandwidth attribute\n"
-       "Ignore link bandwidth (i.e., do regular ECMP, not weighted)\n"
-       "Ignore paths without link bandwidth for ECMP (if other paths have it)\n"
-       "Assign a low default weight (value 1) to paths not having link bandwidth\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	afi_t afi;
-	safi_t safi;
-
-	bgp->lb_handling = BGP_LINK_BW_ECMP;
-
-	/* This config is used in route install, so redo that. */
-	FOREACH_AFI_SAFI (afi, safi) {
-		if (!bgp_fibupd_safi(safi))
-			continue;
-		bgp_zebra_announce_table(bgp, afi, safi);
-	}
-	return CMD_SUCCESS;
-}
-
-DEFPY(bgp_default_afi_safi, bgp_default_afi_safi_cmd,
-      "[no] bgp default <ipv4-unicast|"
-      "ipv4-multicast|"
-      "ipv4-vpn|"
-      "ipv4-labeled-unicast|"
-      "ipv4-flowspec|"
-      "ipv6-unicast|"
-      "ipv6-multicast|"
-      "ipv6-vpn|"
-      "ipv6-labeled-unicast|"
-      "ipv6-flowspec|"
-      "l2vpn-evpn>$afi_safi",
-      NO_STR
-      BGP_STR
-      "Configure BGP defaults\n"
-      "Activate ipv4-unicast for a peer by default\n"
-      "Activate ipv4-multicast for a peer by default\n"
-      "Activate ipv4-vpn for a peer by default\n"
-      "Activate ipv4-labeled-unicast for a peer by default\n"
-      "Activate ipv4-flowspec for a peer by default\n"
-      "Activate ipv6-unicast for a peer by default\n"
-      "Activate ipv6-multicast for a peer by default\n"
-      "Activate ipv6-vpn for a peer by default\n"
-      "Activate ipv6-labeled-unicast for a peer by default\n"
-      "Activate ipv6-flowspec for a peer by default\n"
-      "Activate l2vpn-evpn for a peer by default\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	char afi_safi_str[strlen(afi_safi) + 1];
-	char *afi_safi_str_tok;
-
-	strlcpy(afi_safi_str, afi_safi, sizeof(afi_safi_str));
-	char *afi_str = strtok_r(afi_safi_str, "-", &afi_safi_str_tok);
-	char *safi_str = strtok_r(NULL, "-", &afi_safi_str_tok);
-	afi_t afi = bgp_vty_afi_from_str(afi_str);
-	safi_t safi;
-
-	/*
-	 * Impossible situation but making coverity happy
-	 */
-	assert(afi != AFI_MAX);
-
-	if (strmatch(safi_str, "labeled"))
-		safi = bgp_vty_safi_from_str("labeled-unicast");
-	else
-		safi = bgp_vty_safi_from_str(safi_str);
-
-	assert(safi != SAFI_MAX);
-	if (no)
-		bgp->default_af[afi][safi] = false;
-	else {
-		if ((safi == SAFI_LABELED_UNICAST
-		     && bgp->default_af[afi][SAFI_UNICAST])
-		    || (safi == SAFI_UNICAST
-			&& bgp->default_af[afi][SAFI_LABELED_UNICAST]))
-			bgp_vty_return(vty, BGP_ERR_PEER_SAFI_CONFLICT);
-		else
-			bgp->default_af[afi][safi] = true;
-	}
-
-	return CMD_SUCCESS;
-}
 
 /* Display hostname in certain command outputs */
-DEFUN (bgp_default_show_hostname,
-       bgp_default_show_hostname_cmd,
-       "bgp default show-hostname",
-       BGP_STR
-       "Configure BGP defaults\n"
-       "Show hostname in certain command outputs\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_SHOW_HOSTNAME);
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_default_show_hostname,
-       no_bgp_default_show_hostname_cmd,
-       "no bgp default show-hostname",
-       NO_STR
-       BGP_STR
-       "Configure BGP defaults\n"
-       "Show hostname in certain command outputs\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_SHOW_HOSTNAME);
-	return CMD_SUCCESS;
-}
 
 /* Display hostname in certain command outputs */
-DEFUN (bgp_default_show_nexthop_hostname,
-       bgp_default_show_nexthop_hostname_cmd,
-       "bgp default show-nexthop-hostname",
-       BGP_STR
-       "Configure BGP defaults\n"
-       "Show hostname for nexthop in certain command outputs\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_SHOW_NEXTHOP_HOSTNAME);
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_default_show_nexthop_hostname,
-       no_bgp_default_show_nexthop_hostname_cmd,
-       "no bgp default show-nexthop-hostname",
-       NO_STR
-       BGP_STR
-       "Configure BGP defaults\n"
-       "Show hostname for nexthop in certain command outputs\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_SHOW_NEXTHOP_HOSTNAME);
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_default_software_version_capability,
-       bgp_default_software_version_capability_cmd,
-       "[no] bgp default software-version-capability [latest-encoding$latest_encoding]",
-       NO_STR
-       BGP_STR
-       "Configure BGP defaults\n"
-       "Advertise software version capability for all neighbors\n"
-       "Use the latest-encoding defined in draft-abraitis-bgp-version-capability-15\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	uint64_t encoding = latest_encoding ? BGP_FLAG_SOFT_VERSION_CAPABILITY_NEW
-					    : BGP_FLAG_SOFT_VERSION_CAPABILITY_OLD;
-
-	if (no)
-		UNSET_FLAG(bgp->flags, encoding);
-	else
-		SET_FLAG(bgp->flags, encoding);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_default_link_local_capability,
-       bgp_default_link_local_capability_cmd,
-       "[no] bgp default link-local-capability",
-       NO_STR
-       BGP_STR
-       "Configure BGP defaults\n"
-       "Advertise Link-Local Next Hop capability for all neighbors\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (no)
-		UNSET_FLAG(bgp->flags, BGP_FLAG_LINK_LOCAL_CAPABILITY);
-	else
-		SET_FLAG(bgp->flags, BGP_FLAG_LINK_LOCAL_CAPABILITY);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_default_dynamic_capability,
-       bgp_default_dynamic_capability_cmd,
-       "[no] bgp default dynamic-capability",
-       NO_STR
-       BGP_STR
-       "Configure BGP defaults\n"
-       "Advertise dynamic capability for all neighbors\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (no)
-		UNSET_FLAG(bgp->flags, BGP_FLAG_DYNAMIC_CAPABILITY);
-	else
-		SET_FLAG(bgp->flags, BGP_FLAG_DYNAMIC_CAPABILITY);
-
-	return CMD_SUCCESS;
-}
 
 /* "bgp network import-check" configuration.  */
-DEFUN (bgp_network_import_check,
-       bgp_network_import_check_cmd,
-       "bgp network import-check",
-       BGP_STR
-       "BGP network command\n"
-       "Check BGP network route exists in IGP\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	if (!CHECK_FLAG(bgp->flags, BGP_FLAG_IMPORT_CHECK)) {
-		SET_FLAG(bgp->flags, BGP_FLAG_IMPORT_CHECK);
-		bgp_static_redo_import_check(bgp);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_network_import_check,
-       no_bgp_network_import_check_cmd,
-       "no bgp network import-check",
-       NO_STR
-       BGP_STR
-       "BGP network command\n"
-       "Check BGP network route exists in IGP\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	if (CHECK_FLAG(bgp->flags, BGP_FLAG_IMPORT_CHECK)) {
-		UNSET_FLAG(bgp->flags, BGP_FLAG_IMPORT_CHECK);
-		bgp_static_redo_import_check(bgp);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_default_local_preference,
-       bgp_default_local_preference_cmd,
-       "bgp default local-preference (0-4294967295)",
-       BGP_STR
-       "Configure BGP defaults\n"
-       "local preference (higher=more preferred)\n"
-       "Configure default local preference value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_number = 3;
-	uint32_t local_pref;
-
-	local_pref = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	bgp_default_local_preference_set(bgp, local_pref);
-	bgp_clear_star_soft_in(vty, bgp->name);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_default_local_preference,
-       no_bgp_default_local_preference_cmd,
-       "no bgp default local-preference [(0-4294967295)]",
-       NO_STR
-       BGP_STR
-       "Configure BGP defaults\n"
-       "local preference (higher=more preferred)\n"
-       "Configure default local preference value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp_default_local_preference_unset(bgp);
-	bgp_clear_star_soft_in(vty, bgp->name);
-
-	return CMD_SUCCESS;
-}
-
-
-DEFUN (bgp_default_subgroup_pkt_queue_max,
-       bgp_default_subgroup_pkt_queue_max_cmd,
-       "bgp default subgroup-pkt-queue-max (20-100)",
-       BGP_STR
-       "Configure BGP defaults\n"
-       "subgroup-pkt-queue-max\n"
-       "Configure subgroup packet queue max\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_number = 3;
-	uint32_t max_size;
-
-	max_size = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	bgp_default_subgroup_pkt_queue_max_set(bgp, max_size);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_default_subgroup_pkt_queue_max,
-       no_bgp_default_subgroup_pkt_queue_max_cmd,
-       "no bgp default subgroup-pkt-queue-max [(20-100)]",
-       NO_STR
-       BGP_STR
-       "Configure BGP defaults\n"
-       "subgroup-pkt-queue-max\n"
-       "Configure subgroup packet queue max\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp_default_subgroup_pkt_queue_max_unset(bgp);
-	return CMD_SUCCESS;
-}
-
-
-DEFUN (bgp_rr_allow_outbound_policy,
-       bgp_rr_allow_outbound_policy_cmd,
-       "bgp route-reflector allow-outbound-policy",
-       BGP_STR
-       "Allow modifications made by out route-map\n"
-       "on ibgp neighbors\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (!CHECK_FLAG(bgp->flags, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY)) {
-		SET_FLAG(bgp->flags, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY);
-		update_group_announce_rrclients(bgp);
-		bgp_clear_star_soft_out(vty, bgp->name);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_rr_allow_outbound_policy,
-       no_bgp_rr_allow_outbound_policy_cmd,
-       "no bgp route-reflector allow-outbound-policy",
-       NO_STR
-       BGP_STR
-       "Allow modifications made by out route-map\n"
-       "on ibgp neighbors\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (CHECK_FLAG(bgp->flags, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY)) {
-		UNSET_FLAG(bgp->flags, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY);
-		update_group_announce_rrclients(bgp);
-		bgp_clear_star_soft_out(vty, bgp->name);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_listen_limit,
-       bgp_listen_limit_cmd,
-       "bgp listen limit (1-65535)",
-       BGP_STR
-       "BGP Dynamic Neighbors listen commands\n"
-       "Maximum number of BGP Dynamic Neighbors that can be created\n"
-       "Configure Dynamic Neighbors listen limit value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_number = 3;
-	int listen_limit;
-
-	listen_limit = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	bgp_listen_limit_set(bgp, listen_limit);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_listen_limit,
-       no_bgp_listen_limit_cmd,
-       "no bgp listen limit [(1-65535)]",
-       NO_STR
-       BGP_STR
-       "BGP Dynamic Neighbors listen commands\n"
-       "Maximum number of BGP Dynamic Neighbors that can be created\n"
-       "Configure Dynamic Neighbors listen limit value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp_listen_limit_unset(bgp);
-	return CMD_SUCCESS;
-}
-
-
-/*
- * Check if this listen range is already configured. Check for exact
- * match or overlap based on input.
- */
-static struct peer_group *listen_range_exists(struct bgp *bgp,
-					      struct prefix *range, int exact)
-{
-	struct listnode *node, *nnode;
-	struct listnode *node1, *nnode1;
-	struct peer_group *group;
-	struct prefix *lr;
-	afi_t afi;
-	int match;
-
-	afi = family2afi(range->family);
-	for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group)) {
-		for (ALL_LIST_ELEMENTS(group->listen_range[afi], node1, nnode1,
-				       lr)) {
-			if (exact)
-				match = prefix_same(range, lr);
-			else
-				match = (prefix_match(range, lr)
-					 || prefix_match(lr, range));
-			if (match)
-				return group;
-		}
-	}
-
-	return NULL;
-}
-
-/*
- * Check if there is no neighbors nor listening range on bgp
- */
-static void bgp_may_stop_listening(struct bgp *bgp, struct vty *vty)
-{
-	struct listnode *node, *nnode;
-	struct peer_group *group;
-	struct vrf *vrf;
-	afi_t afi;
-
-	if (bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT)
-		return;
-
-	for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group)) {
-		for (afi = AFI_IP; afi < AFI_MAX; afi++) {
-			if (!list_isempty(group->listen_range[afi]))
-				return;
-		}
-	}
-
-	if (!list_isempty(bgp->peer))
-		return;
-
-	vrf = bgp_vrf_lookup_by_instance_type(bgp);
-	bgp_handle_socket(bgp, vrf, VRF_UNKNOWN, false);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_VRF_MAY_LISTEN);
-}
-
-DEFUN (bgp_listen_range,
-       bgp_listen_range_cmd,
-       "bgp listen range <A.B.C.D/M|X:X::X:X/M> peer-group PGNAME",
-       BGP_STR
-       "Configure BGP dynamic neighbors listen range\n"
-       "Configure BGP dynamic neighbors listen range\n"
-       NEIGHBOR_ADDR_STR
-       "Member of the peer-group\n"
-       "Peer-group name\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct prefix range;
-	struct peer_group *group, *existing_group;
-	afi_t afi;
-	int ret;
-	int idx = 0;
-
-	argv_find(argv, argc, "A.B.C.D/M", &idx);
-	argv_find(argv, argc, "X:X::X:X/M", &idx);
-	char *prefix = argv[idx]->arg;
-	argv_find(argv, argc, "PGNAME", &idx);
-	char *peergroup = argv[idx]->arg;
-
-	/* Convert IP prefix string to struct prefix. */
-	ret = str2prefix(prefix, &range);
-	if (!ret) {
-		vty_out(vty, "%% Malformed listen range\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	afi = family2afi(range.family);
-
-	if (afi == AFI_IP6 && IN6_IS_ADDR_LINKLOCAL(&range.u.prefix6)) {
-		vty_out(vty,
-			"%% Malformed listen range (link-local address)\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	apply_mask(&range);
-
-	/* Check if same listen range is already configured. */
-	existing_group = listen_range_exists(bgp, &range, 1);
-	if (existing_group) {
-		if (strcmp(existing_group->name, peergroup) == 0)
-			return CMD_SUCCESS;
-		else {
-			vty_out(vty,
-				"%% Same listen range is attached to peer-group %s\n",
-				existing_group->name);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	}
-
-	/* Check if an overlapping listen range exists. */
-	if (listen_range_exists(bgp, &range, 0)) {
-		vty_out(vty,
-			"%% Listen range overlaps with existing listen range\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	group = peer_group_lookup(bgp, peergroup);
-	if (!group) {
-		vty_out(vty, "%% Configure the peer-group first\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	/* if need start listening */
-	bgp_need_listening(bgp, vty);
-
-	ret = peer_group_listen_range_add(group, &range);
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (no_bgp_listen_range,
-       no_bgp_listen_range_cmd,
-       "no bgp listen range <A.B.C.D/M|X:X::X:X/M> peer-group PGNAME",
-       NO_STR
-       BGP_STR
-       "Unconfigure BGP dynamic neighbors listen range\n"
-       "Unconfigure BGP dynamic neighbors listen range\n"
-       NEIGHBOR_ADDR_STR
-       "Member of the peer-group\n"
-       "Peer-group name\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct prefix range;
-	struct peer_group *group;
-	afi_t afi;
-	int ret;
-	int idx = 0;
-
-	argv_find(argv, argc, "A.B.C.D/M", &idx);
-	argv_find(argv, argc, "X:X::X:X/M", &idx);
-	char *prefix = argv[idx]->arg;
-	argv_find(argv, argc, "PGNAME", &idx);
-	char *peergroup = argv[idx]->arg;
-
-	/* Convert IP prefix string to struct prefix. */
-	ret = str2prefix(prefix, &range);
-	if (!ret) {
-		vty_out(vty, "%% Malformed listen range\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	afi = family2afi(range.family);
-
-	if (afi == AFI_IP6 && IN6_IS_ADDR_LINKLOCAL(&range.u.prefix6)) {
-		vty_out(vty,
-			"%% Malformed listen range (link-local address)\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	apply_mask(&range);
-
-	group = peer_group_lookup(bgp, peergroup);
-	if (!group) {
-		vty_out(vty, "%% Peer-group does not exist\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	ret = peer_group_listen_range_del(group, &range);
-
-	/*
-	 * if need stop listening
-	 */
-	bgp_may_stop_listening(bgp, vty);
-
-	return bgp_vty_return(vty, ret);
-}
 
 void bgp_config_write_listen(struct vty *vty, struct bgp *bgp)
 {
@@ -5306,1341 +1472,26 @@ void bgp_config_write_listen(struct vty *vty, struct bgp *bgp)
 	}
 }
 
-
-DEFUN (bgp_disable_connected_route_check,
-       bgp_disable_connected_route_check_cmd,
-       "bgp disable-ebgp-connected-route-check",
-       BGP_STR
-       "Disable checking if nexthop is connected on ebgp sessions\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	SET_FLAG(bgp->flags, BGP_FLAG_DISABLE_NH_CONNECTED_CHK);
-	bgp_clear_star_soft_in(vty, bgp->name);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_disable_connected_route_check,
-       no_bgp_disable_connected_route_check_cmd,
-       "no bgp disable-ebgp-connected-route-check",
-       NO_STR
-       BGP_STR
-       "Disable checking if nexthop is connected on ebgp sessions\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	UNSET_FLAG(bgp->flags, BGP_FLAG_DISABLE_NH_CONNECTED_CHK);
-	bgp_clear_star_soft_in(vty, bgp->name);
-
-	return CMD_SUCCESS;
-}
-
-
-static int peer_remote_as_vty(struct vty *vty, const char *peer_str,
-			      const char *as_str)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int ret;
-	as_t as = 0;
-	enum peer_asn_type as_type = AS_SPECIFIED;
-	union sockunion su;
-
-	if (as_str[0] == 'i') {
-		as = 0;
-		as_type = AS_INTERNAL;
-	} else if (as_str[0] == 'e') {
-		as = 0;
-		as_type = AS_EXTERNAL;
-	} else if (as_str[0] == 'a') {
-		as = 0;
-		as_type = AS_AUTO;
-	} else if (!asn_str2asn(as_str, &as))
-		as_type = AS_UNSPECIFIED;
-
-	if (as_type == AS_UNSPECIFIED) {
-		vty_out(vty, "%% Invalid peer AS: %s\n", as_str);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	/* If peer is peer group or interface peer, call proper function. */
-	ret = str2sockunion(peer_str, &su);
-	if (ret < 0) {
-		struct peer *peer;
-
-		/* Check if existing interface peer */
-		peer = peer_lookup_by_conf_if(bgp, peer_str);
-
-		ret = peer_remote_as(bgp, NULL, peer_str, &as, as_type, as_str);
-
-		/* if not interface peer, check peer-group settings */
-		if (ret < 0 && !peer) {
-			ret = peer_group_remote_as(bgp, peer_str, &as, as_type,
-						   as_str);
-			if (ret < 0) {
-				vty_out(vty,
-					"%% Create the peer-group or interface first\n");
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-			/* if need start listening */
-			bgp_need_listening(bgp, vty);
-			return CMD_SUCCESS;
-		}
-	} else {
-		if (peer_address_self_check(bgp, &su)) {
-			vty_out(vty,
-				"%% Can not configure the local system as neighbor\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		/* if need start listening */
-		bgp_need_listening(bgp, vty);
-		ret = peer_remote_as(bgp, &su, NULL, &as, as_type, as_str);
-	}
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (bgp_default_shutdown,
-       bgp_default_shutdown_cmd,
-       "[no] bgp default shutdown",
-       NO_STR
-       BGP_STR
-       "Configure BGP defaults\n"
-       "Apply administrative shutdown to newly configured peers\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp->autoshutdown = !strmatch(argv[0]->text, "no");
-	return CMD_SUCCESS;
-}
-
-DEFPY(bgp_shutdown_msg, bgp_shutdown_msg_cmd, "bgp shutdown message MSG...",
-      BGP_STR
-      "Administrative shutdown of the BGP instance\n"
-      "Add a shutdown message (RFC 8203)\n"
-      "Shutdown message\n")
-{
-	char *msgstr = NULL;
-
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (argc > 3)
-		msgstr = argv_concat(argv, argc, 3);
-
-	if (msgstr && strlen(msgstr) > BGP_ADMIN_SHUTDOWN_MSG_LEN) {
-		vty_out(vty, "%% Shutdown message size exceeded %d\n",
-			BGP_ADMIN_SHUTDOWN_MSG_LEN);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_shutdown_enable(bgp, msgstr);
-	XFREE(MTYPE_TMP, msgstr);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(bgp_shutdown, bgp_shutdown_cmd, "bgp shutdown",
-      BGP_STR "Administrative shutdown of the BGP instance\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp_shutdown_enable(bgp, NULL);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(no_bgp_shutdown, no_bgp_shutdown_cmd, "no bgp shutdown",
-      NO_STR BGP_STR "Administrative shutdown of the BGP instance\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp_shutdown_disable(bgp);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS(no_bgp_shutdown, no_bgp_shutdown_msg_cmd,
-      "no bgp shutdown message MSG...", NO_STR BGP_STR
-      "Administrative shutdown of the BGP instance\n"
-      "Add a shutdown message (RFC 8203)\n" "Shutdown message\n")
-
-DEFUN (neighbor_remote_as,
-       neighbor_remote_as_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> remote-as <ASNUM|internal|external|auto>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Specify a BGP neighbor\n"
-       AS_STR
-       "Internal BGP peer\n"
-       "External BGP peer\n"
-       "Automatically detect remote ASN\n")
-{
-	int idx_peer = 1;
-	int idx_remote_as = 3;
-	return peer_remote_as_vty(vty, argv[idx_peer]->arg,
-				  argv[idx_remote_as]->arg);
-}
-
-DEFPY (bgp_allow_martian,
-       bgp_allow_martian_cmd,
-       "[no]$no bgp allow-martian-nexthop",
-       NO_STR
-       BGP_STR
-       "Allow Martian nexthops to be received in the NLRI from a peer\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (no)
-		bgp->allow_martian = false;
-	else
-		bgp->allow_martian = true;
-
-	return CMD_SUCCESS;
-}
-
 /* Enable fast convergence of bgp sessions. If this is enabled, bgp
  * sessions do not wait for hold timer expiry to bring down the sessions
  * when nexthop becomes unreachable
  */
-DEFUN(bgp_fast_convergence, bgp_fast_convergence_cmd, "bgp fast-convergence",
-      BGP_STR "Fast convergence for bgp sessions\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp->fast_convergence = true;
-
-	return CMD_SUCCESS;
-}
-
-DEFUN(no_bgp_fast_convergence, no_bgp_fast_convergence_cmd,
-      "no bgp fast-convergence",
-      NO_STR BGP_STR "Fast convergence for bgp sessions\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	bgp->fast_convergence = false;
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_ipv6_auto_ra,
-       bgp_ipv6_auto_ra_cmd,
-       "[no] bgp ipv6-auto-ra",
-       NO_STR
-       BGP_STR
-       "Allow enabling IPv6 ND RA sending\n")
-{
-	if (vty->node == CONFIG_NODE) {
-		struct listnode *node, *nnode;
-		struct bgp *bgp;
-
-		COND_FLAG(bm->flags, BM_FLAG_IPV6_NO_AUTO_RA, no);
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-			COND_FLAG(bgp->flags, BGP_FLAG_IPV6_NO_AUTO_RA, no);
-	} else {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		COND_FLAG(bgp->flags, BGP_FLAG_IPV6_NO_AUTO_RA, no);
-	}
-	return CMD_SUCCESS;
-}
-
-static int peer_conf_interface_get(struct vty *vty, const char *conf_if,
-				   int v6only,
-				   const char *peer_group_name,
-				   const char *as_str)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	as_t as = 0;
-	enum peer_asn_type as_type = AS_UNSPECIFIED;
-	struct peer *peer;
-	struct peer_group *group;
-	int ret = 0;
-
-	group = peer_group_lookup(bgp, conf_if);
-
-	if (group) {
-		vty_out(vty, "%% Name conflict with peer-group \n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (as_str) {
-		if (as_str[0] == 'i') {
-			as_type = AS_INTERNAL;
-		} else if (as_str[0] == 'e') {
-			as_type = AS_EXTERNAL;
-		} else if (as_str[0] == 'a') {
-			as_type = AS_AUTO;
-		} else {
-			/* Get AS number.  */
-			if (asn_str2asn(as_str, &as))
-				as_type = AS_SPECIFIED;
-		}
-	}
-
-	peer = peer_lookup_by_conf_if(bgp, conf_if);
-	if (peer) {
-		if (as_str)
-			ret = peer_remote_as(bgp, NULL, conf_if, &as, as_type,
-					     as_str);
-	} else {
-		peer = peer_create(NULL, conf_if, bgp, bgp->as, as, as_type, NULL, true, as_str,
-				   CONNECTION_OUTGOING);
-
-		if (!peer) {
-			vty_out(vty, "%% BGP failed to create peer\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		if (v6only)
-			peer_flag_set(peer, PEER_FLAG_IFPEER_V6ONLY);
-
-		/* Request zebra to initiate IPv6 RAs on this interface. We do
-		 * this
-		 * any unnumbered peer in order to not worry about run-time
-		 * transitions
-		 * (e.g., peering is initially IPv4, but the IPv4 /30 or /31
-		 * address
-		 * gets deleted later etc.)
-		 */
-		if (peer->ifp)
-			bgp_zebra_initiate_radv(bgp, peer);
-	}
-
-	if ((v6only && !CHECK_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY))
-	    || (!v6only && CHECK_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY))) {
-		if (v6only)
-			peer_flag_set(peer, PEER_FLAG_IFPEER_V6ONLY);
-		else
-			peer_flag_unset(peer, PEER_FLAG_IFPEER_V6ONLY);
-
-		peer_set_last_reset(peer, PEER_DOWN_V6ONLY_CHANGE);
-
-		/* v6only flag changed. Reset bgp seession */
-		if (!peer_notify_config_change(peer->connection))
-			bgp_session_reset(peer);
-	}
-
-	if (!CHECK_FLAG(peer->flags_invert, PEER_FLAG_CAPABILITY_ENHE)) {
-		SET_FLAG(peer->flags, PEER_FLAG_CAPABILITY_ENHE);
-		SET_FLAG(peer->flags_invert, PEER_FLAG_CAPABILITY_ENHE);
-		SET_FLAG(peer->flags_override, PEER_FLAG_CAPABILITY_ENHE);
-	}
-
-	if (peer_group_name) {
-		group = peer_group_lookup(bgp, peer_group_name);
-		if (!group) {
-			vty_out(vty, "%% Configure the peer-group first\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		ret = peer_group_bind(bgp, NULL, peer, group, &as);
-	}
-
-	/* if need start listening */
-	bgp_need_listening(bgp, vty);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_interface_config,
-       neighbor_interface_config_cmd,
-       "neighbor WORD interface [peer-group PGNAME]",
-       NEIGHBOR_STR
-       "Interface name or neighbor tag\n"
-       "Enable BGP on interface\n"
-       "Member of the peer-group\n"
-       "Peer-group name\n")
-{
-	int idx_word = 1;
-	int idx_peer_group_word = 4;
-
-	if (argc > idx_peer_group_word)
-		return peer_conf_interface_get(
-			vty, argv[idx_word]->arg, 0,
-			argv[idx_peer_group_word]->arg, NULL);
-	else
-		return peer_conf_interface_get(vty, argv[idx_word]->arg, 0,
-					       NULL, NULL);
-}
-
-DEFUN (neighbor_interface_config_v6only,
-       neighbor_interface_config_v6only_cmd,
-       "neighbor WORD interface v6only [peer-group PGNAME]",
-       NEIGHBOR_STR
-       "Interface name or neighbor tag\n"
-       "Enable BGP on interface\n"
-       "Enable BGP with v6 link-local only\n"
-       "Member of the peer-group\n"
-       "Peer-group name\n")
-{
-	int idx_word = 1;
-	int idx_peer_group_word = 5;
-
-	if (argc > idx_peer_group_word)
-		return peer_conf_interface_get(
-			vty, argv[idx_word]->arg, 1,
-			argv[idx_peer_group_word]->arg, NULL);
-
-	return peer_conf_interface_get(vty, argv[idx_word]->arg, 1, NULL, NULL);
-}
-
-
-DEFUN (neighbor_interface_config_remote_as,
-       neighbor_interface_config_remote_as_cmd,
-       "neighbor WORD interface remote-as <ASNUM|internal|external|auto>",
-       NEIGHBOR_STR
-       "Interface name or neighbor tag\n"
-       "Enable BGP on interface\n"
-       "Specify a BGP neighbor\n"
-       AS_STR
-       "Internal BGP peer\n"
-       "External BGP peer\n"
-       "Automatically detect remote ASN\n")
-{
-	int idx_word = 1;
-	int idx_remote_as = 4;
-	return peer_conf_interface_get(vty, argv[idx_word]->arg, 0, NULL,
-				       argv[idx_remote_as]->arg);
-}
-
-DEFUN (neighbor_interface_v6only_config_remote_as,
-       neighbor_interface_v6only_config_remote_as_cmd,
-       "neighbor WORD interface v6only remote-as <ASNUM|internal|external|auto>",
-       NEIGHBOR_STR
-       "Interface name or neighbor tag\n"
-       "Enable BGP with v6 link-local only\n"
-       "Enable BGP on interface\n"
-       "Specify a BGP neighbor\n"
-       AS_STR
-       "Internal BGP peer\n"
-       "External BGP peer\n"
-       "Automatically detect remote ASN\n")
-{
-	int idx_word = 1;
-	int idx_remote_as = 5;
-	return peer_conf_interface_get(vty, argv[idx_word]->arg, 1, NULL,
-				       argv[idx_remote_as]->arg);
-}
-
-DEFUN (neighbor_peer_group,
-       neighbor_peer_group_cmd,
-       "neighbor WORD peer-group",
-       NEIGHBOR_STR
-       "Interface name or neighbor tag\n"
-       "Configure peer-group\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_word = 1;
-	struct peer *peer;
-	struct peer_group *group;
-
-	peer = peer_lookup_by_conf_if(bgp, argv[idx_word]->arg);
-	if (peer) {
-		vty_out(vty, "%% Name conflict with interface: \n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	group = peer_group_get(bgp, argv[idx_word]->arg);
-	if (!group) {
-		vty_out(vty, "%% BGP failed to find or create peer-group\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_neighbor,
-       no_neighbor_cmd,
-       "no neighbor <WORD|<A.B.C.D|X:X::X:X> [remote-as <ASNUM|internal|external|auto>]>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Specify a BGP neighbor\n"
-       AS_STR
-       "Internal BGP peer\n"
-       "External BGP peer\n"
-       "Automatically detect remote ASN\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_peer = 2;
-	int ret;
-	union sockunion su;
-	struct peer_group *group;
-	struct peer *peer;
-	struct peer *other;
-	afi_t afi;
-	int lr_count;
-
-	ret = str2sockunion(argv[idx_peer]->arg, &su);
-	if (ret < 0) {
-		/* look up for neighbor by interface name config. */
-		peer = peer_lookup_by_conf_if(bgp, argv[idx_peer]->arg);
-		if (peer) {
-			/* Request zebra to terminate IPv6 RAs on this
-			 * interface. */
-			if (peer->ifp)
-				bgp_zebra_terminate_radv(peer->bgp, peer);
-			peer_notify_unconfig(peer->connection);
-			peer_delete(peer);
-			return CMD_SUCCESS;
-		}
-
-		group = peer_group_lookup(bgp, argv[idx_peer]->arg);
-		if (group) {
-			for (afi = AFI_IP; afi < AFI_MAX; afi++) {
-				lr_count = listcount(group->listen_range[afi]);
-				if (lr_count) {
-					vty_out(vty,
-						"%%Peer-group %s is attached to %d listen-range(s), delete them first\n",
-						group->name, lr_count);
-					return CMD_WARNING_CONFIG_FAILED;
-				}
-			}
-			peer_group_notify_unconfig(group);
-			peer_group_delete(group);
-		} else {
-			vty_out(vty, "%% Create the peer-group first\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	} else {
-		peer = peer_lookup(bgp, &su);
-		if (peer) {
-			if (peer_dynamic_neighbor(peer)) {
-				vty_out(vty,
-					"%% Operation not allowed on a dynamic neighbor\n");
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-
-			other = peer->doppelganger;
-
-			if (CHECK_FLAG(peer->flags, PEER_FLAG_CAPABILITY_ENHE))
-				bgp_zebra_terminate_radv(peer->bgp, peer);
-
-			peer_notify_unconfig(peer->connection);
-			peer_delete(peer);
-			if (other && other->connection->status != Deleted) {
-				peer_notify_unconfig(other->connection);
-				peer_delete(other);
-			}
-		}
-	}
-
-	/*
-	 * if need stop listening
-	 */
-	bgp_may_stop_listening(bgp, vty);
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_neighbor_interface_config,
-       no_neighbor_interface_config_cmd,
-       "no neighbor WORD interface [v6only] [peer-group PGNAME] [remote-as <ASNUM|internal|external|auto>]",
-       NO_STR
-       NEIGHBOR_STR
-       "Interface name\n"
-       "Configure BGP on interface\n"
-       "Enable BGP with v6 link-local only\n"
-       "Member of the peer-group\n"
-       "Peer-group name\n"
-       "Specify a BGP neighbor\n"
-       AS_STR
-       "Internal BGP peer\n"
-       "External BGP peer\n"
-       "Automatically detect remote ASN\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_word = 2;
-	struct peer *peer;
-
-	/* look up for neighbor by interface name config. */
-	peer = peer_lookup_by_conf_if(bgp, argv[idx_word]->arg);
-	if (peer) {
-		/* Request zebra to terminate IPv6 RAs on this interface. */
-		if (peer->ifp)
-			bgp_zebra_terminate_radv(peer->bgp, peer);
-		peer_notify_unconfig(peer->connection);
-		peer_delete(peer);
-	} else {
-		vty_out(vty, "%% Create the bgp interface first\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_neighbor_peer_group,
-       no_neighbor_peer_group_cmd,
-       "no neighbor WORD peer-group",
-       NO_STR
-       NEIGHBOR_STR
-       "Neighbor tag\n"
-       "Configure peer-group\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_word = 2;
-	struct peer_group *group;
-	afi_t afi;
-	int lr_count;
-
-	group = peer_group_lookup(bgp, argv[idx_word]->arg);
-	if (group) {
-		for (afi = AFI_IP; afi < AFI_MAX; afi++) {
-			lr_count = listcount(group->listen_range[afi]);
-			if (lr_count) {
-				vty_out(vty,
-					"%%Peer-group %s is attached to %d listen-range(s), delete them first\n",
-					group->name, lr_count);
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-		}
-		peer_group_notify_unconfig(group);
-		peer_group_delete(group);
-		/*
-		 * if need stop listening
-		 */
-		bgp_may_stop_listening(bgp, vty);
-	} else {
-		vty_out(vty, "%% Create the peer-group first\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_neighbor_interface_peer_group_remote_as,
-       no_neighbor_interface_peer_group_remote_as_cmd,
-       "no neighbor WORD remote-as <ASNUM|internal|external|auto>",
-       NO_STR
-       NEIGHBOR_STR
-       "Interface name or neighbor tag\n"
-       "Specify a BGP neighbor\n"
-       AS_STR
-       "Internal BGP peer\n"
-       "External BGP peer\n"
-       "Automatically detect remote ASN\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_word = 2;
-	struct peer_group *group;
-	struct peer *peer;
-
-	/* look up for neighbor by interface name config. */
-	peer = peer_lookup_by_conf_if(bgp, argv[idx_word]->arg);
-	if (peer) {
-		peer_as_change(peer, 0, AS_UNSPECIFIED, NULL);
-		return CMD_SUCCESS;
-	}
-
-	group = peer_group_lookup(bgp, argv[idx_word]->arg);
-	if (group)
-		peer_group_remote_as_delete(group);
-	else {
-		vty_out(vty, "%% Create the peer-group or interface first\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	return CMD_SUCCESS;
-}
-
-DEFUN (neighbor_local_as,
-       neighbor_local_as_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> local-as ASNUM",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Specify a local-as number\n"
-       "AS number expressed in dotted or plain format used as local AS\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	struct peer *peer;
-	int ret;
-	as_t as = 0;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (!asn_str2asn(argv[idx_number]->arg, &as)) {
-		vty_out(vty, "%% Invalid neighbor local-as value: %s\n",
-			argv[idx_number]->arg);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	ret = peer_local_as_set(peer, as, 0, 0, 0, argv[idx_number]->arg);
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_local_as_no_prepend,
-       neighbor_local_as_no_prepend_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> local-as ASNUM no-prepend",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Specify a local-as number\n"
-       "AS number expressed in dotted or plain format used as local AS\n"
-       "Do not prepend local-as to updates from ebgp peers\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	struct peer *peer;
-	int ret;
-	as_t as = 0;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (!asn_str2asn(argv[idx_number]->arg, &as)) {
-		vty_out(vty, "%% Invalid neighbor local-as value: %s\n",
-			argv[idx_number]->arg);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	ret = peer_local_as_set(peer, as, 1, 0, 0, argv[idx_number]->arg);
-	return bgp_vty_return(vty, ret);
-}
-
-DEFPY (neighbor_local_as_no_prepend_replace_as,
-       neighbor_local_as_no_prepend_replace_as_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> local-as ASNUM no-prepend replace-as [dual-as$dual_as]",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Specify a local-as number\n"
-       "AS number expressed in dotted or plain format used as local AS\n"
-       "Do not prepend local-as to updates from ebgp peers\n"
-       "Do not prepend local-as to updates from ibgp peers\n"
-       "Allow peering with a global AS number or local-as number\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	struct peer *peer;
-	int ret;
-	as_t as = 0;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (!asn_str2asn(argv[idx_number]->arg, &as)) {
-		vty_out(vty, "%% Invalid neighbor local-as value: %s\n",
-			argv[idx_number]->arg);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	ret = peer_local_as_set(peer, as, 1, 1, dual_as, argv[idx_number]->arg);
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (no_neighbor_local_as,
-       no_neighbor_local_as_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> local-as [ASNUM [no-prepend [replace-as] [dual-as]]]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Specify a local-as number\n"
-       "AS number expressed in dotted or plain format used as local AS\n"
-       "Do not prepend local-as to updates from ebgp peers\n"
-       "Do not prepend local-as to updates from ibgp peers\n"
-       "Allow peering with a global AS number or local-as number\n")
-{
-	int idx_peer = 2;
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_local_as_unset(peer);
-	return bgp_vty_return(vty, ret);
-}
-
-
-DEFUN (neighbor_solo,
-       neighbor_solo_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> solo",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Solo peer - part of its own update group\n")
-{
-	int idx_peer = 1;
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = update_group_adjust_soloness(peer, 1);
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (no_neighbor_solo,
-       no_neighbor_solo_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> solo",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Solo peer - part of its own update group\n")
-{
-	int idx_peer = 2;
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = update_group_adjust_soloness(peer, 0);
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_password,
-       neighbor_password_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> password LINE",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Set a password\n"
-       "The password\n")
-{
-	int idx_peer = 1;
-	int idx_line = 3;
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_password_set(peer, argv[idx_line]->arg);
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (no_neighbor_password,
-       no_neighbor_password_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> password [LINE]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Set a password\n"
-       "The password\n")
-{
-	int idx_peer = 2;
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_password_unset(peer);
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_activate,
-       neighbor_activate_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> activate",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Enable the Address Family for this Neighbor\n")
-{
-	int idx_peer = 1;
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_activate(peer, bgp_node_afi(vty), bgp_node_safi(vty));
-	return bgp_vty_return(vty, ret);
-}
-
-ALIAS_HIDDEN(neighbor_activate, neighbor_activate_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> activate",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Enable the Address Family for this Neighbor\n")
-
-DEFUN (no_neighbor_activate,
-       no_neighbor_activate_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> activate",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Enable the Address Family for this Neighbor\n")
-{
-	int idx_peer = 2;
-	int ret;
-	struct peer *peer;
-
-	/* Lookup peer. */
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_deactivate(peer, bgp_node_afi(vty), bgp_node_safi(vty));
-	return bgp_vty_return(vty, ret);
-}
-
-ALIAS_HIDDEN(no_neighbor_activate, no_neighbor_activate_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> activate",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Enable the Address Family for this Neighbor\n")
-
-DEFUN (neighbor_set_peer_group,
-       neighbor_set_peer_group_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> peer-group PGNAME",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Member of the peer-group\n"
-       "Peer-group name\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_peer = 1;
-	int idx_word = 3;
-	int ret;
-	as_t as = 0;
-	union sockunion su;
-	struct peer *peer;
-	struct peer_group *group;
-
-	ret = str2sockunion(argv[idx_peer]->arg, &su);
-	if (ret < 0) {
-		peer = peer_lookup_by_conf_if(bgp, argv[idx_peer]->arg);
-		if (!peer) {
-			vty_out(vty, "%% Malformed address or name: %s\n",
-				argv[idx_peer]->arg);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	} else {
-		if (peer_address_self_check(bgp, &su)) {
-			vty_out(vty,
-				"%% Can not configure the local system as neighbor\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		/* Disallow for dynamic neighbor. */
-		peer = peer_lookup(bgp, &su);
-		if (peer && peer_dynamic_neighbor(peer)) {
-			vty_out(vty,
-				"%% Operation not allowed on a dynamic neighbor\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	}
-
-	group = peer_group_lookup(bgp, argv[idx_word]->arg);
-	if (!group) {
-		vty_out(vty, "%% Configure the peer-group first\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	ret = peer_group_bind(bgp, &su, peer, group, &as);
-
-	return bgp_vty_return(vty, ret);
-}
-
-ALIAS_HIDDEN(neighbor_set_peer_group, neighbor_set_peer_group_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> peer-group PGNAME",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Member of the peer-group\n"
-	     "Peer-group name\n")
-
-DEFUN (no_neighbor_set_peer_group,
-       no_neighbor_set_peer_group_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> peer-group PGNAME",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Member of the peer-group\n"
-       "Peer-group name\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_peer = 2;
-	int idx_word = 4;
-	int ret;
-	struct peer *peer;
-	struct peer_group *group;
-
-	peer = peer_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	group = peer_group_lookup(bgp, argv[idx_word]->arg);
-	if (!group) {
-		vty_out(vty, "%% Configure the peer-group first\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (CHECK_FLAG(peer->flags, PEER_FLAG_CAPABILITY_ENHE))
-		bgp_zebra_terminate_radv(peer->bgp, peer);
-
-	peer_notify_unconfig(peer->connection);
-	ret = peer_delete(peer);
-
-	/*
-	 * if need stop listening
-	 */
-	bgp_may_stop_listening(bgp, vty);
-
-	return bgp_vty_return(vty, ret);
-}
-
-ALIAS_HIDDEN(no_neighbor_set_peer_group, no_neighbor_set_peer_group_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> peer-group PGNAME",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Member of the peer-group\n"
-	     "Peer-group name\n")
 
 /* neighbor passive. */
-DEFUN (neighbor_passive,
-       neighbor_passive_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> passive",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Don't send open messages to this neighbor\n")
-{
-	int idx_peer = 1;
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg, PEER_FLAG_PASSIVE);
-}
-
-DEFUN (no_neighbor_passive,
-       no_neighbor_passive_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> passive",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Don't send open messages to this neighbor\n")
-{
-	int idx_peer = 2;
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg, PEER_FLAG_PASSIVE);
-}
 
 /* neighbor shutdown. */
-DEFUN (neighbor_shutdown_msg,
-       neighbor_shutdown_msg_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> shutdown message MSG...",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Administratively shut down this neighbor\n"
-       "Add a shutdown message (RFC 8203)\n"
-       "Shutdown message\n")
-{
-	int idx_peer = 1;
-
-	if (argc >= 5) {
-		struct peer *peer =
-			peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-		char *message;
-
-		if (!peer)
-			return CMD_WARNING_CONFIG_FAILED;
-		message = argv_concat(argv, argc, 4);
-		peer_tx_shutdown_message_set(peer, message);
-		XFREE(MTYPE_TMP, message);
-	}
-
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg, PEER_FLAG_SHUTDOWN);
-}
-
-ALIAS(neighbor_shutdown_msg, neighbor_shutdown_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD> shutdown",
-      NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-      "Administratively shut down this neighbor\n")
-
-DEFUN (no_neighbor_shutdown_msg,
-       no_neighbor_shutdown_msg_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> shutdown message MSG...",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Administratively shut down this neighbor\n"
-       "Remove a shutdown message (RFC 8203)\n"
-       "Shutdown message\n")
-{
-	int idx_peer = 2;
-
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_SHUTDOWN);
-}
-
-ALIAS(no_neighbor_shutdown_msg, no_neighbor_shutdown_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD> shutdown",
-      NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-      "Administratively shut down this neighbor\n")
-
-DEFUN(neighbor_shutdown_rtt,
-      neighbor_shutdown_rtt_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD> shutdown rtt (1-65535) [count (1-255)]",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Administratively shut down this neighbor\n"
-      "Shutdown if round-trip-time is higher than expected\n"
-      "Round-trip-time in milliseconds\n"
-      "Specify the number of keepalives before shutdown\n"
-      "The number of keepalives with higher RTT to shutdown\n")
-{
-	int idx_peer = 1;
-	int idx_rtt = 4;
-	int idx_count = 0;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	peer->rtt_expected = strtol(argv[idx_rtt]->arg, NULL, 10);
-
-	if (argv_find(argv, argc, "count", &idx_count))
-		peer->rtt_keepalive_conf =
-			strtol(argv[idx_count + 1]->arg, NULL, 10);
-
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg,
-				 PEER_FLAG_RTT_SHUTDOWN);
-}
-
-DEFUN(no_neighbor_shutdown_rtt,
-      no_neighbor_shutdown_rtt_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD> shutdown rtt [(1-65535) [count (1-255)]]",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Administratively shut down this neighbor\n"
-      "Shutdown if round-trip-time is higher than expected\n"
-      "Round-trip-time in milliseconds\n"
-      "Specify the number of keepalives before shutdown\n"
-      "The number of keepalives with higher RTT to shutdown\n")
-{
-	int idx_peer = 2;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	peer->rtt_expected = 0;
-	peer->rtt_keepalive_conf = 1;
-
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_RTT_SHUTDOWN);
-}
 
 /* neighbor capability dynamic. */
-DEFUN (neighbor_capability_dynamic,
-       neighbor_capability_dynamic_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> capability dynamic",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Advertise capability to the peer\n"
-       "Advertise dynamic capability to this neighbor\n")
-{
-	int idx_peer = 1;
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg,
-				 PEER_FLAG_DYNAMIC_CAPABILITY);
-}
-
-DEFUN (no_neighbor_capability_dynamic,
-       no_neighbor_capability_dynamic_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> capability dynamic",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Advertise capability to the peer\n"
-       "Advertise dynamic capability to this neighbor\n")
-{
-	int idx_peer = 2;
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_DYNAMIC_CAPABILITY);
-}
 
 /* neighbor dont-capability-negotiate */
-DEFUN (neighbor_dont_capability_negotiate,
-       neighbor_dont_capability_negotiate_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> dont-capability-negotiate",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Do not perform capability negotiation\n")
-{
-	int idx_peer = 1;
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg,
-				 PEER_FLAG_DONT_CAPABILITY);
-}
-
-DEFUN (no_neighbor_dont_capability_negotiate,
-       no_neighbor_dont_capability_negotiate_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> dont-capability-negotiate",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Do not perform capability negotiation\n")
-{
-	int idx_peer = 2;
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_DONT_CAPABILITY);
-}
 
 /* neighbor capability fqdn */
-DEFPY (neighbor_capability_fqdn,
-       neighbor_capability_fqdn_cmd,
-       "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor capability fqdn",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Advertise capability to the peer\n"
-       "Advertise fqdn capability to the peer\n")
-{
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (no)
-		ret = peer_flag_unset_vty(vty, neighbor,
-					  PEER_FLAG_CAPABILITY_FQDN);
-	else
-		ret = peer_flag_set_vty(vty, neighbor,
-					PEER_FLAG_CAPABILITY_FQDN);
-
-	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_FQDN,
-			    no ? CAPABILITY_ACTION_UNSET : CAPABILITY_ACTION_SET);
-
-	return ret;
-}
 
 /* neighbor capability extended next hop encoding */
-DEFUN (neighbor_capability_enhe,
-       neighbor_capability_enhe_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> capability extended-nexthop",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Advertise capability to the peer\n"
-       "Advertise extended next-hop capability to the peer\n")
-{
-	int idx_peer = 1;
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (peer && peer->conf_if)
-		return CMD_SUCCESS;
-
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_flag_set_vty(vty, argv[idx_peer]->arg, PEER_FLAG_CAPABILITY_ENHE);
-
-	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ENHE,
-			    CAPABILITY_ACTION_SET);
-
-	return ret;
-}
-
-DEFUN (no_neighbor_capability_enhe,
-       no_neighbor_capability_enhe_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> capability extended-nexthop",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Advertise capability to the peer\n"
-       "Advertise extended next-hop capability to the peer\n")
-{
-	int idx_peer = 2;
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (peer && peer->conf_if) {
-		vty_out(vty,
-			"Peer %s cannot have capability extended-nexthop turned off\n",
-			argv[idx_peer]->arg);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_flag_unset_vty(vty, argv[idx_peer]->arg, PEER_FLAG_CAPABILITY_ENHE);
-
-	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ENHE,
-			    CAPABILITY_ACTION_UNSET);
-
-	return ret;
-}
 
 /* neighbor capability software-version */
-DEFPY(neighbor_capability_software_version,
-      neighbor_capability_software_version_cmd,
-      "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor capability software-version [latest-encoding$latest_encoding]",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Advertise capability to the peer\n"
-      "Advertise Software Version capability to the peer\n"
-      "Use the latest-encoding defined in draft-abraitis-bgp-version-capability-15\n")
-{
-	struct peer *peer;
-	int ret;
-	uint64_t encoding = latest_encoding ? PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW
-					    : PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (no)
-		ret = peer_flag_unset_vty(vty, neighbor, encoding);
-	else
-		ret = peer_flag_set_vty(vty, neighbor, encoding);
-
-	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_SOFT_VERSION,
-			    no ? CAPABILITY_ACTION_UNSET : CAPABILITY_ACTION_SET);
-
-	return ret;
-}
 
 /* neighbor capability link-local */
-DEFPY(neighbor_capability_link_local,
-      neighbor_capability_link_local_cmd,
-      "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor capability link-local",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Advertise capability to the peer\n"
-      "Advertise Link-Local Next Hop capability to the peer\n")
-{
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (no)
-		ret = peer_flag_unset_vty(vty, neighbor, PEER_FLAG_CAPABILITY_LINK_LOCAL);
-	else
-		ret = peer_flag_set_vty(vty, neighbor, PEER_FLAG_CAPABILITY_LINK_LOCAL);
-
-	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_LINK_LOCAL,
-			    no ? CAPABILITY_ACTION_UNSET : CAPABILITY_ACTION_SET);
-
-	return ret;
-}
-
-/* RPKI strict mode */
-DEFPY(neighbor_rpki_strict,
-      neighbor_rpki_strict_cmd,
-      "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor rpki strict",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "RPKI configuration\n"
-      "Strict mode\n")
-{
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (no)
-		return peer_flag_unset(peer, PEER_FLAG_RPKI_STRICT);
-
-	return peer_flag_set(peer, PEER_FLAG_RPKI_STRICT);
-}
 
 static int peer_af_flag_modify_vty(struct vty *vty, const char *peer_str,
 				   afi_t afi, safi_t safi, uint64_t flag,
@@ -6674,604 +1525,18 @@ static int peer_af_flag_unset_vty(struct vty *vty, const char *peer_str,
 }
 
 /* neighbor capability orf prefix-list. */
-DEFUN (neighbor_capability_orf_prefix,
-       neighbor_capability_orf_prefix_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> capability orf prefix-list <both|send|receive>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Advertise capability to the peer\n"
-       "Advertise ORF capability to the peer\n"
-       "Advertise prefixlist ORF capability to this neighbor\n"
-       "Capability to SEND and RECEIVE the ORF to/from this neighbor\n"
-       "Capability to RECEIVE the ORF from this neighbor\n"
-       "Capability to SEND the ORF to this neighbor\n")
-{
-	int idx_send_recv = 5;
-	char *peer_str = argv[1]->arg;
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (strmatch(argv[idx_send_recv]->text, "send")) {
-		ret = peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					   PEER_FLAG_ORF_PREFIX_SM);
-		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
-				    CAPABILITY_ACTION_SET);
-		return ret;
-	}
-
-	if (strmatch(argv[idx_send_recv]->text, "receive")) {
-		ret = peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					   PEER_FLAG_ORF_PREFIX_RM);
-		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
-				    CAPABILITY_ACTION_SET);
-		return ret;
-	}
-
-	if (strmatch(argv[idx_send_recv]->text, "both")) {
-		ret = peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					   PEER_FLAG_ORF_PREFIX_SM) |
-		      peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					   PEER_FLAG_ORF_PREFIX_RM);
-		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
-				    CAPABILITY_ACTION_SET);
-		return ret;
-	}
-
-	return CMD_WARNING_CONFIG_FAILED;
-}
-
-ALIAS_HIDDEN(
-	neighbor_capability_orf_prefix,
-	neighbor_capability_orf_prefix_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> capability orf prefix-list <both|send|receive>",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Advertise capability to the peer\n"
-	"Advertise ORF capability to the peer\n"
-	"Advertise prefixlist ORF capability to this neighbor\n"
-	"Capability to SEND and RECEIVE the ORF to/from this neighbor\n"
-	"Capability to RECEIVE the ORF from this neighbor\n"
-	"Capability to SEND the ORF to this neighbor\n")
-
-DEFUN (no_neighbor_capability_orf_prefix,
-       no_neighbor_capability_orf_prefix_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> capability orf prefix-list <both|send|receive>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Advertise capability to the peer\n"
-       "Advertise ORF capability to the peer\n"
-       "Advertise prefixlist ORF capability to this neighbor\n"
-       "Capability to SEND and RECEIVE the ORF to/from this neighbor\n"
-       "Capability to RECEIVE the ORF from this neighbor\n"
-       "Capability to SEND the ORF to this neighbor\n")
-{
-	int idx_send_recv = 6;
-	char *peer_str = argv[2]->arg;
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (strmatch(argv[idx_send_recv]->text, "send")) {
-		ret = peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					     PEER_FLAG_ORF_PREFIX_SM);
-		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
-				    CAPABILITY_ACTION_UNSET);
-		return ret;
-	}
-
-	if (strmatch(argv[idx_send_recv]->text, "receive")) {
-		ret = peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					     PEER_FLAG_ORF_PREFIX_RM);
-		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
-				    CAPABILITY_ACTION_UNSET);
-		return ret;
-	}
-
-	if (strmatch(argv[idx_send_recv]->text, "both")) {
-		ret = peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					     PEER_FLAG_ORF_PREFIX_SM) |
-		      peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					     PEER_FLAG_ORF_PREFIX_RM);
-		bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_ORF,
-				    CAPABILITY_ACTION_UNSET);
-		return ret;
-	}
-
-	return CMD_WARNING_CONFIG_FAILED;
-}
-
-ALIAS_HIDDEN(
-	no_neighbor_capability_orf_prefix,
-	no_neighbor_capability_orf_prefix_hidden_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> capability orf prefix-list <both|send|receive>",
-	NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Advertise capability to the peer\n"
-	"Advertise ORF capability to the peer\n"
-	"Advertise prefixlist ORF capability to this neighbor\n"
-	"Capability to SEND and RECEIVE the ORF to/from this neighbor\n"
-	"Capability to RECEIVE the ORF from this neighbor\n"
-	"Capability to SEND the ORF to this neighbor\n")
 
 /* neighbor next-hop-self. */
-DEFUN (neighbor_nexthop_self,
-       neighbor_nexthop_self_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Disable the next hop calculation for this neighbor\n")
-{
-	int idx_peer = 1;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty), PEER_FLAG_NEXTHOP_SELF);
-}
-
-ALIAS_HIDDEN(neighbor_nexthop_self, neighbor_nexthop_self_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Disable the next hop calculation for this neighbor\n")
 
 /* neighbor next-hop-self. */
-DEFUN (neighbor_nexthop_self_force,
-       neighbor_nexthop_self_force_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self force",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Disable the next hop calculation for this neighbor\n"
-       "Set the next hop to self for reflected routes\n")
-{
-	int idx_peer = 1;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_FORCE_NEXTHOP_SELF);
-}
-
-ALIAS_HIDDEN(neighbor_nexthop_self_force,
-	     neighbor_nexthop_self_force_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self force",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Disable the next hop calculation for this neighbor\n"
-	     "Set the next hop to self for reflected routes\n")
-
-ALIAS_HIDDEN(neighbor_nexthop_self_force,
-	     neighbor_nexthop_self_all_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self all",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Disable the next hop calculation for this neighbor\n"
-	     "Set the next hop to self for reflected routes\n")
-
-DEFUN (no_neighbor_nexthop_self,
-       no_neighbor_nexthop_self_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Disable the next hop calculation for this neighbor\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_NEXTHOP_SELF);
-}
-
-ALIAS_HIDDEN(no_neighbor_nexthop_self, no_neighbor_nexthop_self_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Disable the next hop calculation for this neighbor\n")
-
-DEFUN (no_neighbor_nexthop_self_force,
-       no_neighbor_nexthop_self_force_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self force",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Disable the next hop calculation for this neighbor\n"
-       "Set the next hop to self for reflected routes\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_FORCE_NEXTHOP_SELF);
-}
-
-ALIAS_HIDDEN(no_neighbor_nexthop_self_force,
-	     no_neighbor_nexthop_self_force_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self force",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Disable the next hop calculation for this neighbor\n"
-	     "Set the next hop to self for reflected routes\n")
-
-ALIAS_HIDDEN(no_neighbor_nexthop_self_force,
-	     no_neighbor_nexthop_self_all_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> next-hop-self all",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Disable the next hop calculation for this neighbor\n"
-	     "Set the next hop to self for reflected routes\n")
 
 /* neighbor as-override */
-DEFUN (neighbor_as_override,
-       neighbor_as_override_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> as-override",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Override ASNs in outbound updates if aspath equals remote-as\n")
-{
-	int idx_peer = 1;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty), PEER_FLAG_AS_OVERRIDE);
-}
-
-ALIAS_HIDDEN(neighbor_as_override, neighbor_as_override_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> as-override",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Override ASNs in outbound updates if aspath equals remote-as\n")
-
-DEFUN (no_neighbor_as_override,
-       no_neighbor_as_override_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> as-override",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Override ASNs in outbound updates if aspath equals remote-as\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_AS_OVERRIDE);
-}
-
-ALIAS_HIDDEN(no_neighbor_as_override, no_neighbor_as_override_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> as-override",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Override ASNs in outbound updates if aspath equals remote-as\n")
 
 /* neighbor remove-private-AS. */
-DEFUN (neighbor_remove_private_as,
-       neighbor_remove_private_as_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Remove private ASNs in outbound updates\n")
-{
-	int idx_peer = 1;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_REMOVE_PRIVATE_AS);
-}
-
-ALIAS_HIDDEN(neighbor_remove_private_as, neighbor_remove_private_as_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Remove private ASNs in outbound updates\n")
-
-DEFUN (neighbor_remove_private_as_all,
-       neighbor_remove_private_as_all_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS all",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Remove private ASNs in outbound updates\n"
-       "Apply to all AS numbers\n")
-{
-	int idx_peer = 1;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_REMOVE_PRIVATE_AS_ALL);
-}
-
-ALIAS_HIDDEN(neighbor_remove_private_as_all,
-	     neighbor_remove_private_as_all_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS all",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Remove private ASNs in outbound updates\n"
-	     "Apply to all AS numbers\n")
-
-DEFUN (neighbor_remove_private_as_replace_as,
-       neighbor_remove_private_as_replace_as_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS replace-AS",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Remove private ASNs in outbound updates\n"
-       "Replace private ASNs with our ASN in outbound updates\n")
-{
-	int idx_peer = 1;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_REMOVE_PRIVATE_AS_REPLACE);
-}
-
-ALIAS_HIDDEN(neighbor_remove_private_as_replace_as,
-	     neighbor_remove_private_as_replace_as_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS replace-AS",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Remove private ASNs in outbound updates\n"
-	     "Replace private ASNs with our ASN in outbound updates\n")
-
-DEFUN (neighbor_remove_private_as_all_replace_as,
-       neighbor_remove_private_as_all_replace_as_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS all replace-AS",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Remove private ASNs in outbound updates\n"
-       "Apply to all AS numbers\n"
-       "Replace private ASNs with our ASN in outbound updates\n")
-{
-	int idx_peer = 1;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_REMOVE_PRIVATE_AS_ALL_REPLACE);
-}
-
-ALIAS_HIDDEN(
-	neighbor_remove_private_as_all_replace_as,
-	neighbor_remove_private_as_all_replace_as_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS all replace-AS",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Remove private ASNs in outbound updates\n"
-	"Apply to all AS numbers\n"
-	"Replace private ASNs with our ASN in outbound updates\n")
-
-DEFUN (no_neighbor_remove_private_as,
-       no_neighbor_remove_private_as_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Remove private ASNs in outbound updates\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_REMOVE_PRIVATE_AS);
-}
-
-ALIAS_HIDDEN(no_neighbor_remove_private_as,
-	     no_neighbor_remove_private_as_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Remove private ASNs in outbound updates\n")
-
-DEFUN (no_neighbor_remove_private_as_all,
-       no_neighbor_remove_private_as_all_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS all",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Remove private ASNs in outbound updates\n"
-       "Apply to all AS numbers\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_REMOVE_PRIVATE_AS_ALL);
-}
-
-ALIAS_HIDDEN(no_neighbor_remove_private_as_all,
-	     no_neighbor_remove_private_as_all_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS all",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Remove private ASNs in outbound updates\n"
-	     "Apply to all AS numbers\n")
-
-DEFUN (no_neighbor_remove_private_as_replace_as,
-       no_neighbor_remove_private_as_replace_as_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS replace-AS",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Remove private ASNs in outbound updates\n"
-       "Replace private ASNs with our ASN in outbound updates\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_REMOVE_PRIVATE_AS_REPLACE);
-}
-
-ALIAS_HIDDEN(no_neighbor_remove_private_as_replace_as,
-	     no_neighbor_remove_private_as_replace_as_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS replace-AS",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Remove private ASNs in outbound updates\n"
-	     "Replace private ASNs with our ASN in outbound updates\n")
-
-DEFUN (no_neighbor_remove_private_as_all_replace_as,
-       no_neighbor_remove_private_as_all_replace_as_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS all replace-AS",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Remove private ASNs in outbound updates\n"
-       "Apply to all AS numbers\n"
-       "Replace private ASNs with our ASN in outbound updates\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_REMOVE_PRIVATE_AS_ALL_REPLACE);
-}
-
-ALIAS_HIDDEN(
-	no_neighbor_remove_private_as_all_replace_as,
-	no_neighbor_remove_private_as_all_replace_as_hidden_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> remove-private-AS all replace-AS",
-	NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Remove private ASNs in outbound updates\n"
-	"Apply to all AS numbers\n"
-	"Replace private ASNs with our ASN in outbound updates\n")
-
 
 /* neighbor send-community. */
-DEFUN (neighbor_send_community,
-       neighbor_send_community_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> send-community",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Send Community attribute to this neighbor\n")
-{
-	int idx_peer = 1;
-
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_SEND_COMMUNITY);
-}
-
-ALIAS_HIDDEN(neighbor_send_community, neighbor_send_community_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> send-community",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Send Community attribute to this neighbor\n")
-
-DEFUN (no_neighbor_send_community,
-       no_neighbor_send_community_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> send-community",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Send Community attribute to this neighbor\n")
-{
-	int idx_peer = 2;
-
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_SEND_COMMUNITY);
-}
-
-ALIAS_HIDDEN(no_neighbor_send_community, no_neighbor_send_community_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> send-community",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Send Community attribute to this neighbor\n")
 
 /* neighbor send-community extended. */
-DEFUN (neighbor_send_community_type,
-       neighbor_send_community_type_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> send-community <both|all|extended|standard|large>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Send Community attribute to this neighbor\n"
-       "Send Standard and Extended Community attributes\n"
-       "Send Standard, Large and Extended Community attributes\n"
-       "Send Extended Community attributes\n"
-       "Send Standard Community attributes\n"
-       "Send Large Community attributes\n")
-{
-	const char *type = argv[argc - 1]->text;
-	char *peer_str = argv[1]->arg;
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (strmatch(type, "standard"))
-		return peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					    PEER_FLAG_SEND_COMMUNITY);
-
-	if (strmatch(type, "extended"))
-		return peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					    PEER_FLAG_SEND_EXT_COMMUNITY);
-
-	if (strmatch(type, "large"))
-		return peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					    PEER_FLAG_SEND_LARGE_COMMUNITY);
-
-	if (strmatch(type, "both")) {
-		return peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					    PEER_FLAG_SEND_COMMUNITY)
-		       | peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					      PEER_FLAG_SEND_EXT_COMMUNITY);
-	}
-	return peer_af_flag_set_vty(vty, peer_str, afi, safi,
-				    PEER_FLAG_SEND_COMMUNITY)
-	       | peer_af_flag_set_vty(vty, peer_str, afi, safi,
-				      PEER_FLAG_SEND_EXT_COMMUNITY)
-	       | peer_af_flag_set_vty(vty, peer_str, afi, safi,
-				      PEER_FLAG_SEND_LARGE_COMMUNITY);
-}
-
-ALIAS_HIDDEN(
-	neighbor_send_community_type, neighbor_send_community_type_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> send-community <both|all|extended|standard|large>",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Send Community attribute to this neighbor\n"
-	"Send Standard and Extended Community attributes\n"
-	"Send Standard, Large and Extended Community attributes\n"
-	"Send Extended Community attributes\n"
-	"Send Standard Community attributes\n"
-	"Send Large Community attributes\n")
-
-DEFUN (no_neighbor_send_community_type,
-       no_neighbor_send_community_type_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> send-community <both|all|extended|standard|large>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Send Community attribute to this neighbor\n"
-       "Send Standard and Extended Community attributes\n"
-       "Send Standard, Large and Extended Community attributes\n"
-       "Send Extended Community attributes\n"
-       "Send Standard Community attributes\n"
-       "Send Large Community attributes\n")
-{
-	const char *type = argv[argc - 1]->text;
-	char *peer_str = argv[2]->arg;
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (strmatch(type, "standard"))
-		return peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					      PEER_FLAG_SEND_COMMUNITY);
-
-	if (strmatch(type, "extended"))
-		return peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					      PEER_FLAG_SEND_EXT_COMMUNITY);
-
-	if (strmatch(type, "large"))
-		return peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					      PEER_FLAG_SEND_LARGE_COMMUNITY);
-
-	if (strmatch(type, "both")) {
-
-		return peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					      PEER_FLAG_SEND_COMMUNITY)
-		       | peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-						PEER_FLAG_SEND_EXT_COMMUNITY);
-	}
-
-	return peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-				      PEER_FLAG_SEND_COMMUNITY)
-	       | peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					PEER_FLAG_SEND_EXT_COMMUNITY)
-	       | peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					PEER_FLAG_SEND_LARGE_COMMUNITY);
-}
-
-ALIAS_HIDDEN(
-	no_neighbor_send_community_type,
-	no_neighbor_send_community_type_hidden_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> send-community <both|all|extended|standard|large>",
-	NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Send Community attribute to this neighbor\n"
-	"Send Standard and Extended Community attributes\n"
-	"Send Standard, Large and Extended Community attributes\n"
-	"Send Extended Community attributes\n"
-	"Send Standard Community attributes\n"
-	"Send Large Community attributes\n")
 
 DEFPY (neighbor_ecommunity_rpki,
        neighbor_ecommunity_rpki_cmd,
@@ -7300,587 +1565,14 @@ DEFPY (neighbor_ecommunity_rpki,
 }
 
 /* neighbor soft-reconfig. */
-DEFUN (neighbor_soft_reconfiguration,
-       neighbor_soft_reconfiguration_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> soft-reconfiguration inbound",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Per neighbor soft reconfiguration\n"
-       "Allow inbound soft reconfiguration for this neighbor\n")
-{
-	int idx_peer = 1;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_SOFT_RECONFIG);
-}
-
-ALIAS_HIDDEN(neighbor_soft_reconfiguration,
-	     neighbor_soft_reconfiguration_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> soft-reconfiguration inbound",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Per neighbor soft reconfiguration\n"
-	     "Allow inbound soft reconfiguration for this neighbor\n")
-
-DEFUN (no_neighbor_soft_reconfiguration,
-       no_neighbor_soft_reconfiguration_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> soft-reconfiguration inbound",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Per neighbor soft reconfiguration\n"
-       "Allow inbound soft reconfiguration for this neighbor\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_SOFT_RECONFIG);
-}
-
-ALIAS_HIDDEN(no_neighbor_soft_reconfiguration,
-	     no_neighbor_soft_reconfiguration_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> soft-reconfiguration inbound",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Per neighbor soft reconfiguration\n"
-	     "Allow inbound soft reconfiguration for this neighbor\n")
-
-DEFUN (neighbor_route_reflector_client,
-       neighbor_route_reflector_client_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> route-reflector-client",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Configure a neighbor as Route Reflector client\n")
-{
-	int idx_peer = 1;
-	struct peer *peer;
-
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_REFLECTOR_CLIENT);
-}
-
-ALIAS_HIDDEN(neighbor_route_reflector_client,
-	     neighbor_route_reflector_client_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> route-reflector-client",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Configure a neighbor as Route Reflector client\n")
-
-DEFUN (no_neighbor_route_reflector_client,
-       no_neighbor_route_reflector_client_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> route-reflector-client",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Configure a neighbor as Route Reflector client\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_REFLECTOR_CLIENT);
-}
-
-ALIAS_HIDDEN(no_neighbor_route_reflector_client,
-	     no_neighbor_route_reflector_client_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> route-reflector-client",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Configure a neighbor as Route Reflector client\n")
 
 /* neighbor route-server-client. */
-DEFUN (neighbor_route_server_client,
-       neighbor_route_server_client_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> route-server-client",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Configure a neighbor as Route Server client\n")
-{
-	int idx_peer = 1;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_RSERVER_CLIENT);
-}
-
-ALIAS_HIDDEN(neighbor_route_server_client,
-	     neighbor_route_server_client_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> route-server-client",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Configure a neighbor as Route Server client\n")
-
-DEFUN (no_neighbor_route_server_client,
-       no_neighbor_route_server_client_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> route-server-client",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Configure a neighbor as Route Server client\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_RSERVER_CLIENT);
-}
-
-ALIAS_HIDDEN(no_neighbor_route_server_client,
-	     no_neighbor_route_server_client_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> route-server-client",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Configure a neighbor as Route Server client\n")
-
-DEFUN (neighbor_nexthop_local_unchanged,
-       neighbor_nexthop_local_unchanged_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> nexthop-local unchanged",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Configure treatment of outgoing link-local nexthop attribute\n"
-       "Leave link-local nexthop unchanged for this peer\n")
-{
-	int idx_peer = 1;
-	return peer_af_flag_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				    bgp_node_safi(vty),
-				    PEER_FLAG_NEXTHOP_LOCAL_UNCHANGED);
-}
-
-DEFUN (no_neighbor_nexthop_local_unchanged,
-       no_neighbor_nexthop_local_unchanged_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> nexthop-local unchanged",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Configure treatment of outgoing link-local-nexthop attribute\n"
-       "Leave link-local nexthop unchanged for this peer\n")
-{
-	int idx_peer = 2;
-	return peer_af_flag_unset_vty(vty, argv[idx_peer]->arg,
-				      bgp_node_afi(vty), bgp_node_safi(vty),
-				      PEER_FLAG_NEXTHOP_LOCAL_UNCHANGED);
-}
-
-DEFUN (neighbor_attr_unchanged,
-       neighbor_attr_unchanged_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> attribute-unchanged [{as-path|next-hop|med}]",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP attribute is propagated unchanged to this neighbor\n"
-       "As-path attribute\n"
-       "Nexthop attribute\n"
-       "Med attribute\n")
-{
-	int idx = 0;
-	char *peer_str = argv[1]->arg;
-	struct peer *peer;
-	bool aspath = false;
-	bool nexthop = false;
-	bool med = false;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-	int ret = 0;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (argv_find(argv, argc, "as-path", &idx))
-		aspath = true;
-
-	idx = 0;
-	if (argv_find(argv, argc, "next-hop", &idx))
-		nexthop = true;
-
-	idx = 0;
-	if (argv_find(argv, argc, "med", &idx))
-		med = true;
-
-	/* no flags means all of them! */
-	if (!aspath && !nexthop && !med) {
-		ret = peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					   PEER_FLAG_AS_PATH_UNCHANGED);
-		ret |= peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					    PEER_FLAG_NEXTHOP_UNCHANGED);
-		ret |= peer_af_flag_set_vty(vty, peer_str, afi, safi,
-					    PEER_FLAG_MED_UNCHANGED);
-	} else {
-		if (!aspath) {
-			if (peer_af_flag_check(peer, afi, safi,
-					       PEER_FLAG_AS_PATH_UNCHANGED)) {
-				ret |= peer_af_flag_unset_vty(
-					vty, peer_str, afi, safi,
-					PEER_FLAG_AS_PATH_UNCHANGED);
-			}
-		} else
-			ret |= peer_af_flag_set_vty(
-				vty, peer_str, afi, safi,
-				PEER_FLAG_AS_PATH_UNCHANGED);
-
-		if (!nexthop) {
-			if (peer_af_flag_check(peer, afi, safi,
-					       PEER_FLAG_NEXTHOP_UNCHANGED)) {
-				ret |= peer_af_flag_unset_vty(
-					vty, peer_str, afi, safi,
-					PEER_FLAG_NEXTHOP_UNCHANGED);
-			}
-		} else
-			ret |= peer_af_flag_set_vty(
-				vty, peer_str, afi, safi,
-				PEER_FLAG_NEXTHOP_UNCHANGED);
-
-		if (!med) {
-			if (peer_af_flag_check(peer, afi, safi,
-					       PEER_FLAG_MED_UNCHANGED)) {
-				ret |= peer_af_flag_unset_vty(
-					vty, peer_str, afi, safi,
-					PEER_FLAG_MED_UNCHANGED);
-			}
-		} else
-			ret |= peer_af_flag_set_vty(vty, peer_str, afi, safi,
-						    PEER_FLAG_MED_UNCHANGED);
-	}
-
-	return ret;
-}
-
-ALIAS_HIDDEN(
-	neighbor_attr_unchanged, neighbor_attr_unchanged_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> attribute-unchanged [{as-path|next-hop|med}]",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"BGP attribute is propagated unchanged to this neighbor\n"
-	"As-path attribute\n"
-	"Nexthop attribute\n"
-	"Med attribute\n")
-
-DEFUN (no_neighbor_attr_unchanged,
-       no_neighbor_attr_unchanged_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> attribute-unchanged [{as-path|next-hop|med}]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP attribute is propagated unchanged to this neighbor\n"
-       "As-path attribute\n"
-       "Nexthop attribute\n"
-       "Med attribute\n")
-{
-	int idx = 0;
-	char *peer_str = argv[2]->arg;
-	struct peer *peer;
-	bool aspath = false;
-	bool nexthop = false;
-	bool med = false;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-	int ret = 0;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (argv_find(argv, argc, "as-path", &idx))
-		aspath = true;
-
-	idx = 0;
-	if (argv_find(argv, argc, "next-hop", &idx))
-		nexthop = true;
-
-	idx = 0;
-	if (argv_find(argv, argc, "med", &idx))
-		med = true;
-
-	if (!aspath && !nexthop && !med) // no flags means all of them!
-		return peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					      PEER_FLAG_AS_PATH_UNCHANGED)
-		       | peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-						PEER_FLAG_NEXTHOP_UNCHANGED)
-		       | peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-						PEER_FLAG_MED_UNCHANGED);
-
-	if (aspath)
-		ret |= peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					      PEER_FLAG_AS_PATH_UNCHANGED);
-
-	if (nexthop)
-		ret |= peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					      PEER_FLAG_NEXTHOP_UNCHANGED);
-
-	if (med)
-		ret |= peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-					      PEER_FLAG_MED_UNCHANGED);
-
-	return ret;
-}
-
-ALIAS_HIDDEN(
-	no_neighbor_attr_unchanged, no_neighbor_attr_unchanged_hidden_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> attribute-unchanged [{as-path|next-hop|med}]",
-	NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"BGP attribute is propagated unchanged to this neighbor\n"
-	"As-path attribute\n"
-	"Nexthop attribute\n"
-	"Med attribute\n")
 
 /* EBGP multihop configuration. */
-static int peer_ebgp_multihop_set_vty(struct vty *vty, const char *ip_str,
-				      const char *ttl_str)
-{
-	struct peer *peer;
-	unsigned int ttl;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (peer->conf_if)
-		return bgp_vty_return(vty, BGP_ERR_INVALID_FOR_DIRECT_PEER);
-
-	if (!ttl_str)
-		ttl = MAXTTL;
-	else
-		ttl = strtoul(ttl_str, NULL, 10);
-
-	return bgp_vty_return(vty, peer_ebgp_multihop_set(peer, ttl));
-}
-
-static int peer_ebgp_multihop_unset_vty(struct vty *vty, const char *ip_str)
-{
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	return bgp_vty_return(vty, peer_ebgp_multihop_unset(peer));
-}
 
 /* neighbor ebgp-multihop. */
-DEFUN (neighbor_ebgp_multihop,
-       neighbor_ebgp_multihop_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> ebgp-multihop",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Allow EBGP neighbors not on directly connected networks\n")
-{
-	int idx_peer = 1;
-	return peer_ebgp_multihop_set_vty(vty, argv[idx_peer]->arg, NULL);
-}
-
-DEFUN (neighbor_ebgp_multihop_ttl,
-       neighbor_ebgp_multihop_ttl_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> ebgp-multihop (1-255)",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Allow EBGP neighbors not on directly connected networks\n"
-       "maximum hop count\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	return peer_ebgp_multihop_set_vty(vty, argv[idx_peer]->arg,
-					  argv[idx_number]->arg);
-}
-
-DEFUN (no_neighbor_ebgp_multihop,
-       no_neighbor_ebgp_multihop_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> ebgp-multihop [(1-255)]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Allow EBGP neighbors not on directly connected networks\n"
-       "maximum hop count\n")
-{
-	int idx_peer = 2;
-	return peer_ebgp_multihop_unset_vty(vty, argv[idx_peer]->arg);
-}
-
-DEFPY (neighbor_aigp,
-       neighbor_aigp_cmd,
-       "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor aigp",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Enable send and receive of the AIGP attribute per neighbor\n")
-{
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (no)
-		return peer_flag_unset_vty(vty, neighbor, PEER_FLAG_AIGP);
-	else
-		return peer_flag_set_vty(vty, neighbor, PEER_FLAG_AIGP);
-}
-
-static uint8_t get_role_by_name(const char *role_str)
-{
-	if (strncmp(role_str, "peer", 2) == 0)
-		return ROLE_PEER;
-	if (strncmp(role_str, "provider", 2) == 0)
-		return ROLE_PROVIDER;
-	if (strncmp(role_str, "customer", 2) == 0)
-		return ROLE_CUSTOMER;
-	if (strncmp(role_str, "rs-server", 4) == 0)
-		return ROLE_RS_SERVER;
-	if (strncmp(role_str, "rs-client", 4) == 0)
-		return ROLE_RS_CLIENT;
-	return ROLE_UNDEFINED;
-}
-
-static int peer_role_set_vty(struct vty *vty, struct peer *peer,
-			     const char *role_str, bool strict_mode)
-{
-	uint8_t role = get_role_by_name(role_str);
-
-	if (role == ROLE_UNDEFINED)
-		return bgp_vty_return(vty, BGP_ERR_INVALID_ROLE_NAME);
-	return bgp_vty_return(vty, peer_role_set(peer, role, strict_mode));
-}
-
-DEFPY(neighbor_role,
-      neighbor_role_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor local-role <provider|rs-server|rs-client|customer|peer>$role",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Set session role\n"
-      ROLE_STR)
-{
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_role_set_vty(vty, peer, role, false);
-
-	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ROLE,
-			    CAPABILITY_ACTION_SET);
-
-	return ret;
-}
-
-DEFPY(neighbor_role_strict,
-      neighbor_role_strict_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor local-role <provider|rs-server|rs-client|customer|peer>$role strict-mode",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Set session role\n"
-      ROLE_STR
-      "Use additional restriction on peer\n")
-{
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_role_set_vty(vty, peer, role, true);
-
-	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ROLE,
-			    CAPABILITY_ACTION_SET);
-
-	return ret;
-}
-
-DEFPY(no_neighbor_role,
-      no_neighbor_role_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor local-role <provider|rs-server|rs-client|customer|peer> [strict-mode]",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Set session role\n"
-      ROLE_STR
-      "Use additional restriction on peer\n")
-{
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = bgp_vty_return(vty, peer_role_unset(peer));
-
-	bgp_capability_send(peer->connection, AFI_IP, SAFI_UNICAST, CAPABILITY_CODE_ROLE,
-			    CAPABILITY_ACTION_UNSET);
-
-	return ret;
-}
-
-DEFPY (neighbor_oad,
-       neighbor_oad_cmd,
-       "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor oad",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Set peering session type to EBGP-OAD\n")
-{
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (no)
-		peer->sub_sort = 0;
-	else if (peer->sort == BGP_PEER_EBGP)
-		peer->sub_sort = BGP_PEER_EBGP_OAD;
-
-	return CMD_SUCCESS;
-}
 
 /* disable-connected-check */
-DEFUN (neighbor_disable_connected_check,
-       neighbor_disable_connected_check_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> <disable-connected-check|enforce-multihop>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "one-hop away EBGP peer using loopback address\n"
-       "Enforce EBGP neighbors perform multihop\n")
-{
-	int idx_peer = 1;
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg,
-				 PEER_FLAG_DISABLE_CONNECTED_CHECK);
-}
-
-DEFUN (no_neighbor_disable_connected_check,
-       no_neighbor_disable_connected_check_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> <disable-connected-check|enforce-multihop>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "one-hop away EBGP peer using loopback address\n"
-       "Enforce EBGP neighbors perform multihop\n")
-{
-	int idx_peer = 2;
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_DISABLE_CONNECTED_CHECK);
-}
-
-DEFPY(neighbor_extended_link_bw,
-      neighbor_extended_link_bw_cmd,
-      "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor extended-link-bandwidth",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Send Extended (64-bit) version of encoding for Link-Bandwidth\n")
-{
-	int ret;
-
-	if (no)
-		ret = peer_flag_unset_vty(vty, neighbor,
-					  PEER_FLAG_EXTENDED_LINK_BANDWIDTH);
-	else
-		ret = peer_flag_set_vty(vty, neighbor,
-					PEER_FLAG_EXTENDED_LINK_BANDWIDTH);
-
-	return ret;
-}
 
 DEFPY(neighbor_nhc_attribute,
       neighbor_nhc_attribute_cmd,
@@ -7903,695 +1595,19 @@ DEFPY(neighbor_nhc_attribute,
 }
 
 /* disable-link-bw-encoding-ieee */
-DEFUN(neighbor_disable_link_bw_encoding_ieee,
-      neighbor_disable_link_bw_encoding_ieee_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD> disable-link-bw-encoding-ieee",
-      NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-      "Disable IEEE floating-point encoding for extended community bandwidth\n")
-{
-	int idx_peer = 1;
-
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg,
-				 PEER_FLAG_DISABLE_LINK_BW_ENCODING_IEEE);
-}
-
-DEFUN(no_neighbor_disable_link_bw_encoding_ieee,
-      no_neighbor_disable_link_bw_encoding_ieee_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD> disable-link-bw-encoding-ieee",
-      NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-      "Disable IEEE floating-point encoding for extended community bandwidth\n")
-{
-	int idx_peer = 2;
-
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_DISABLE_LINK_BW_ENCODING_IEEE);
-}
 
 /* extended-optional-parameters */
-DEFUN(neighbor_extended_optional_parameters,
-      neighbor_extended_optional_parameters_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD> extended-optional-parameters",
-      NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-      "Force the extended optional parameters format for OPEN messages\n")
-{
-	int idx_peer = 1;
-
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg,
-				 PEER_FLAG_EXTENDED_OPT_PARAMS);
-}
-
-DEFUN(no_neighbor_extended_optional_parameters,
-      no_neighbor_extended_optional_parameters_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD> extended-optional-parameters",
-      NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-      "Force the extended optional parameters format for OPEN messages\n")
-{
-	int idx_peer = 2;
-
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_EXTENDED_OPT_PARAMS);
-}
 
 /* enforce-first-as */
-DEFUN (neighbor_enforce_first_as,
-       neighbor_enforce_first_as_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> enforce-first-as",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Enforce the first AS for EBGP routes\n")
-{
-	int idx_peer = 1;
-
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg,
-				 PEER_FLAG_ENFORCE_FIRST_AS);
-}
-
-DEFUN (no_neighbor_enforce_first_as,
-       no_neighbor_enforce_first_as_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> enforce-first-as",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Enforce the first AS for EBGP routes\n")
-{
-	int idx_peer = 2;
-
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_ENFORCE_FIRST_AS);
-}
-
-
-DEFUN (neighbor_description,
-       neighbor_description_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> description LINE...",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Neighbor specific description\n"
-       "Up to 80 characters describing this neighbor\n")
-{
-	int idx_peer = 1;
-	int idx_line = 3;
-	struct peer *peer;
-	char *str;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	str = argv_concat(argv, argc, idx_line);
-
-	peer_description_set(peer, str);
-
-	XFREE(MTYPE_TMP, str);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_neighbor_description,
-       no_neighbor_description_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> description",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Neighbor specific description\n")
-{
-	int idx_peer = 2;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	peer_description_unset(peer);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS(no_neighbor_description, no_neighbor_description_comment_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD> description LINE...",
-      NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-      "Neighbor specific description\n"
-      "Up to 80 characters describing this neighbor\n")
-
-/* Neighbor update-source. */
-static int peer_update_source_vty(struct vty *vty, const char *peer_str,
-				  const char *source_str)
-{
-	struct peer *peer;
-	struct prefix p;
-	union sockunion su;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (peer->conf_if)
-		return CMD_WARNING;
-
-	if (source_str) {
-		if (str2sockunion(source_str, &su) == 0)
-			peer_update_source_addr_set(peer, &su);
-		else {
-			if (str2prefix(source_str, &p)) {
-				vty_out(vty,
-					"%% Invalid update-source, remove prefix length \n");
-				return CMD_WARNING_CONFIG_FAILED;
-			} else
-				peer_update_source_if_set(peer, source_str);
-		}
-	} else
-		peer_update_source_unset(peer);
-
-	return CMD_SUCCESS;
-}
 
 #define BGP_UPDATE_SOURCE_HELP_STR                                             \
 	"IPv4 address\n"                                                       \
 	"IPv6 address\n"                                                       \
 	"Interface name (requires zebra to be running)\n"
 
-DEFUN (neighbor_update_source,
-       neighbor_update_source_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> update-source <A.B.C.D|X:X::X:X|WORD>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Source of routing updates\n"
-       BGP_UPDATE_SOURCE_HELP_STR)
-{
-	int idx_peer = 1;
-	int idx_peer_2 = 3;
-	return peer_update_source_vty(vty, argv[idx_peer]->arg,
-				      argv[idx_peer_2]->arg);
-}
-
-DEFUN (no_neighbor_update_source,
-       no_neighbor_update_source_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> update-source [<A.B.C.D|X:X::X:X|WORD>]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Source of routing updates\n"
-       BGP_UPDATE_SOURCE_HELP_STR)
-{
-	int idx_peer = 2;
-	return peer_update_source_vty(vty, argv[idx_peer]->arg, NULL);
-}
-
-static int peer_default_originate_set_vty(struct vty *vty, const char *peer_str,
-					  afi_t afi, safi_t safi,
-					  const char *rmap, int set)
-{
-	int ret;
-	struct peer *peer;
-	struct route_map *route_map = NULL;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (set) {
-		if (rmap)
-			route_map = route_map_lookup_warn_noexist(vty, rmap);
-		ret = peer_default_originate_set(peer, afi, safi,
-						 rmap, route_map);
-	} else
-		ret = peer_default_originate_unset(peer, afi, safi);
-
-	return bgp_vty_return(vty, ret);
-}
-
 /* neighbor default-originate. */
-DEFUN (neighbor_default_originate,
-       neighbor_default_originate_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> default-originate",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Originate default route to this neighbor\n")
-{
-	int idx_peer = 1;
-	return peer_default_originate_set_vty(vty, argv[idx_peer]->arg,
-					      bgp_node_afi(vty),
-					      bgp_node_safi(vty), NULL, 1);
-}
-
-ALIAS_HIDDEN(neighbor_default_originate, neighbor_default_originate_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> default-originate",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Originate default route to this neighbor\n")
-
-DEFUN (neighbor_default_originate_rmap,
-       neighbor_default_originate_rmap_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> default-originate route-map RMAP_NAME",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Originate default route to this neighbor\n"
-       "Route-map to specify criteria to originate default\n"
-       "route-map name\n")
-{
-	int idx_peer = 1;
-	int idx_word = 4;
-	return peer_default_originate_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_word]->arg, 1);
-}
-
-ALIAS_HIDDEN(
-	neighbor_default_originate_rmap,
-	neighbor_default_originate_rmap_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> default-originate route-map RMAP_NAME",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Originate default route to this neighbor\n"
-	"Route-map to specify criteria to originate default\n"
-	"route-map name\n")
-
-DEFUN (no_neighbor_default_originate,
-       no_neighbor_default_originate_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> default-originate [route-map RMAP_NAME]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Originate default route to this neighbor\n"
-       "Route-map to specify criteria to originate default\n"
-       "route-map name\n")
-{
-	int idx_peer = 2;
-	return peer_default_originate_set_vty(vty, argv[idx_peer]->arg,
-					      bgp_node_afi(vty),
-					      bgp_node_safi(vty), NULL, 0);
-}
-
-ALIAS_HIDDEN(
-	no_neighbor_default_originate, no_neighbor_default_originate_hidden_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> default-originate [route-map RMAP_NAME]",
-	NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Originate default route to this neighbor\n"
-	"Route-map to specify criteria to originate default\n"
-	"route-map name\n")
-
-
-/* Set neighbor's BGP port.  */
-static int peer_port_vty(struct vty *vty, const char *ip_str, int afi,
-			 const char *port_str)
-{
-	struct peer *peer;
-	uint16_t port;
-	struct servent *sp;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (!port_str) {
-		sp = getservbyname("bgp", "tcp");
-		port = (sp == NULL) ? BGP_PORT_DEFAULT : ntohs(sp->s_port);
-	} else {
-		port = strtoul(port_str, NULL, 10);
-	}
-
-	peer_port_set(peer, port);
-
-	return CMD_SUCCESS;
-}
 
 /* Set specified peer's BGP port.  */
-DEFUN (neighbor_port,
-       neighbor_port_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> port (0-65535)",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Neighbor's BGP port\n"
-       "TCP port number\n")
-{
-	int idx_ip = 1;
-	int idx_number = 3;
-	return peer_port_vty(vty, argv[idx_ip]->arg, AFI_IP,
-			     argv[idx_number]->arg);
-}
-
-DEFUN (no_neighbor_port,
-       no_neighbor_port_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> port [(0-65535)]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Neighbor's BGP port\n"
-       "TCP port number\n")
-{
-	int idx_ip = 2;
-	return peer_port_vty(vty, argv[idx_ip]->arg, AFI_IP, NULL);
-}
-
-
-/* neighbor weight. */
-static int peer_weight_set_vty(struct vty *vty, const char *ip_str, afi_t afi,
-			       safi_t safi, const char *weight_str)
-{
-	int ret;
-	struct peer *peer;
-	unsigned long weight;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	weight = strtoul(weight_str, NULL, 10);
-
-	ret = peer_weight_set(peer, afi, safi, weight);
-	return bgp_vty_return(vty, ret);
-}
-
-static int peer_weight_unset_vty(struct vty *vty, const char *ip_str, afi_t afi,
-				 safi_t safi)
-{
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_weight_unset(peer, afi, safi);
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_weight,
-       neighbor_weight_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> weight (0-65535)",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Set default weight for routes from this neighbor\n"
-       "default weight\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	return peer_weight_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				   bgp_node_safi(vty), argv[idx_number]->arg);
-}
-
-ALIAS_HIDDEN(neighbor_weight, neighbor_weight_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> weight (0-65535)",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Set default weight for routes from this neighbor\n"
-	     "default weight\n")
-
-DEFUN (no_neighbor_weight,
-       no_neighbor_weight_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> weight [(0-65535)]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Set default weight for routes from this neighbor\n"
-       "default weight\n")
-{
-	int idx_peer = 2;
-	return peer_weight_unset_vty(vty, argv[idx_peer]->arg,
-				     bgp_node_afi(vty), bgp_node_safi(vty));
-}
-
-ALIAS_HIDDEN(no_neighbor_weight, no_neighbor_weight_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> weight [(0-65535)]",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Set default weight for routes from this neighbor\n"
-	     "default weight\n")
-
-
-/* Override capability negotiation. */
-DEFUN (neighbor_override_capability,
-       neighbor_override_capability_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> override-capability",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Override capability negotiation result\n")
-{
-	int idx_peer = 1;
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg,
-				 PEER_FLAG_OVERRIDE_CAPABILITY);
-}
-
-DEFUN (no_neighbor_override_capability,
-       no_neighbor_override_capability_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> override-capability",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Override capability negotiation result\n")
-{
-	int idx_peer = 2;
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_OVERRIDE_CAPABILITY);
-}
-
-DEFUN (neighbor_strict_capability,
-       neighbor_strict_capability_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> strict-capability-match",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Strict capability negotiation match\n")
-{
-	int idx_peer = 1;
-
-	return peer_flag_set_vty(vty, argv[idx_peer]->arg,
-				 PEER_FLAG_STRICT_CAP_MATCH);
-}
-
-DEFUN (no_neighbor_strict_capability,
-       no_neighbor_strict_capability_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> strict-capability-match",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Strict capability negotiation match\n")
-{
-	int idx_peer = 2;
-
-	return peer_flag_unset_vty(vty, argv[idx_peer]->arg,
-				   PEER_FLAG_STRICT_CAP_MATCH);
-}
-
-static int peer_timers_set_vty(struct vty *vty, const char *ip_str,
-			       const char *keep_str, const char *hold_str)
-{
-	int ret;
-	struct peer *peer;
-	uint32_t keepalive;
-	uint32_t holdtime;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	keepalive = strtoul(keep_str, NULL, 10);
-	holdtime = strtoul(hold_str, NULL, 10);
-
-	ret = peer_timers_set(peer, keepalive, holdtime);
-
-	return bgp_vty_return(vty, ret);
-}
-
-static int peer_timers_unset_vty(struct vty *vty, const char *ip_str)
-{
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_timers_unset(peer);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_timers,
-       neighbor_timers_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> timers (0-65535) (0-65535)",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP per neighbor timers\n"
-       "Keepalive interval\n"
-       "Holdtime\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	int idx_number_2 = 4;
-	return peer_timers_set_vty(vty, argv[idx_peer]->arg,
-				   argv[idx_number]->arg,
-				   argv[idx_number_2]->arg);
-}
-
-DEFUN (no_neighbor_timers,
-       no_neighbor_timers_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> timers [(0-65535) (0-65535)]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP per neighbor timers\n"
-       "Keepalive interval\n"
-       "Holdtime\n")
-{
-	int idx_peer = 2;
-	return peer_timers_unset_vty(vty, argv[idx_peer]->arg);
-}
-
-
-static int peer_timers_connect_set_vty(struct vty *vty, const char *ip_str,
-				       const char *time_str)
-{
-	int ret;
-	struct peer *peer;
-	uint32_t connect;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	connect = strtoul(time_str, NULL, 10);
-
-	ret = peer_timers_connect_set(peer, connect);
-
-	return bgp_vty_return(vty, ret);
-}
-
-static int peer_timers_connect_unset_vty(struct vty *vty, const char *ip_str)
-{
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_timers_connect_unset(peer);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_timers_connect,
-       neighbor_timers_connect_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> timers connect (1-65535)",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP per neighbor timers\n"
-       "BGP connect timer\n"
-       "Connect timer\n")
-{
-	int idx_peer = 1;
-	int idx_number = 4;
-	return peer_timers_connect_set_vty(vty, argv[idx_peer]->arg,
-					   argv[idx_number]->arg);
-}
-
-DEFUN (no_neighbor_timers_connect,
-       no_neighbor_timers_connect_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> timers connect [(1-65535)]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP per neighbor timers\n"
-       "BGP connect timer\n"
-       "Connect timer\n")
-{
-	int idx_peer = 2;
-	return peer_timers_connect_unset_vty(vty, argv[idx_peer]->arg);
-}
-
-DEFPY (neighbor_timers_delayopen,
-       neighbor_timers_delayopen_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor timers delayopen (1-240)$interval",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP per neighbor timers\n"
-       "RFC 4271 DelayOpenTimer\n"
-       "DelayOpenTime timer interval\n")
-{
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (!interval) {
-		if (peer_timers_delayopen_unset(peer))
-			return CMD_WARNING_CONFIG_FAILED;
-	} else {
-		if (peer_timers_delayopen_set(peer, interval))
-			return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (no_neighbor_timers_delayopen,
-       no_neighbor_timers_delayopen_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor timers delayopen [(0-65535)]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP per neighbor timers\n"
-       "RFC 4271 DelayOpenTimer\n"
-       "DelayOpenTime timer interval\n")
-{
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (peer_timers_delayopen_unset(peer))
-		return CMD_WARNING_CONFIG_FAILED;
-
-	return CMD_SUCCESS;
-}
-
-static int peer_advertise_interval_vty(struct vty *vty, const char *ip_str,
-				       const char *time_str, int set)
-{
-	int ret;
-	struct peer *peer;
-	uint32_t routeadv = 0;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (time_str)
-		routeadv = strtoul(time_str, NULL, 10);
-
-	if (set)
-		ret = peer_advertise_interval_set(peer, routeadv);
-	else
-		ret = peer_advertise_interval_unset(peer);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_advertise_interval,
-       neighbor_advertise_interval_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> advertisement-interval (0-600)",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Minimum interval between sending BGP routing updates\n"
-       "time in seconds\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	return peer_advertise_interval_vty(vty, argv[idx_peer]->arg,
-					   argv[idx_number]->arg, 1);
-}
-
-DEFUN (no_neighbor_advertise_interval,
-       no_neighbor_advertise_interval_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> advertisement-interval [(0-600)]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Minimum interval between sending BGP routing updates\n"
-       "time in seconds\n")
-{
-	int idx_peer = 2;
-	return peer_advertise_interval_vty(vty, argv[idx_peer]->arg, NULL, 0);
-}
-
 
 /* Time to wait before processing route-map updates */
 DEFUN (bgp_set_route_map_delay_timer,
@@ -8641,1417 +1657,21 @@ DEFUN (no_bgp_set_route_map_delay_timer,
 	return CMD_SUCCESS;
 }
 
-/* neighbor interface */
-static int peer_interface_vty(struct vty *vty, const char *ip_str,
-			      const char *str)
-{
-	struct peer *peer;
-
-	peer = peer_lookup_vty(vty, ip_str);
-	if (!peer || peer->conf_if) {
-		vty_out(vty, "%% BGP invalid peer %s\n", ip_str);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (str)
-		peer_interface_set(peer, str);
-	else
-		peer_interface_unset(peer);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (neighbor_interface,
-       neighbor_interface_cmd,
-       "neighbor <A.B.C.D|X:X::X:X> interface WORD",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
-       "Interface\n"
-       "Interface name\n")
-{
-	int idx_ip = 1;
-	int idx_word = 3;
-
-	return peer_interface_vty(vty, argv[idx_ip]->arg, argv[idx_word]->arg);
-}
-
-DEFUN (no_neighbor_interface,
-       no_neighbor_interface_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X> interface WORD",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
-       "Interface\n"
-       "Interface name\n")
-{
-	int idx_peer = 2;
-
-	return peer_interface_vty(vty, argv[idx_peer]->arg, NULL);
-}
-
-DEFUN (neighbor_distribute_list,
-       neighbor_distribute_list_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> distribute-list ACCESSLIST_NAME <in|out>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Filter updates to/from this neighbor\n"
-       "IP Access-list name\n"
-       "Filter incoming updates\n"
-       "Filter outgoing updates\n")
-{
-	int idx_peer = 1;
-	int idx_acl = 3;
-	int direct, ret;
-	struct peer *peer;
-
-	const char *pstr = argv[idx_peer]->arg;
-	const char *acl = argv[idx_acl]->arg;
-	const char *inout = argv[argc - 1]->text;
-
-	peer = peer_and_group_lookup_vty(vty, pstr);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* Check filter direction. */
-	direct = strmatch(inout, "in") ? FILTER_IN : FILTER_OUT;
-	ret = peer_distribute_set(peer, bgp_node_afi(vty), bgp_node_safi(vty),
-				  direct, acl);
-
-	return bgp_vty_return(vty, ret);
-}
-
-ALIAS_HIDDEN(
-	neighbor_distribute_list, neighbor_distribute_list_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> distribute-list ACCESSLIST_NAME <in|out>",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Filter updates to/from this neighbor\n"
-	"IP Access-list name\n"
-	"Filter incoming updates\n"
-	"Filter outgoing updates\n")
-
-DEFUN (no_neighbor_distribute_list,
-       no_neighbor_distribute_list_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> distribute-list ACCESSLIST_NAME <in|out>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Filter updates to/from this neighbor\n"
-       "IP Access-list name\n"
-       "Filter incoming updates\n"
-       "Filter outgoing updates\n")
-{
-	int idx_peer = 2;
-	int direct, ret;
-	struct peer *peer;
-
-	const char *pstr = argv[idx_peer]->arg;
-	const char *inout = argv[argc - 1]->text;
-
-	peer = peer_and_group_lookup_vty(vty, pstr);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* Check filter direction. */
-	direct = strmatch(inout, "in") ? FILTER_IN : FILTER_OUT;
-	ret = peer_distribute_unset(peer, bgp_node_afi(vty), bgp_node_safi(vty),
-				    direct);
-
-	return bgp_vty_return(vty, ret);
-}
-
-ALIAS_HIDDEN(
-	no_neighbor_distribute_list, no_neighbor_distribute_list_hidden_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> distribute-list ACCESSLIST_NAME <in|out>",
-	NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Filter updates to/from this neighbor\n"
-	"IP Access-list name\n"
-	"Filter incoming updates\n"
-	"Filter outgoing updates\n")
-
-/* Set prefix list to the peer. */
-static int peer_prefix_list_set_vty(struct vty *vty, const char *ip_str,
-				    afi_t afi, safi_t safi,
-				    const char *name_str,
-				    const char *direct_str)
-{
-	int ret;
-	int direct = FILTER_IN;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* Check filter direction. */
-	if (strncmp(direct_str, "i", 1) == 0)
-		direct = FILTER_IN;
-	else if (strncmp(direct_str, "o", 1) == 0)
-		direct = FILTER_OUT;
-
-	ret = peer_prefix_list_set(peer, afi, safi, direct, name_str);
-
-	return bgp_vty_return(vty, ret);
-}
-
-static int peer_prefix_list_unset_vty(struct vty *vty, const char *ip_str,
-				      afi_t afi, safi_t safi,
-				      const char *direct_str)
-{
-	int ret;
-	struct peer *peer;
-	int direct = FILTER_IN;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* Check filter direction. */
-	if (strncmp(direct_str, "i", 1) == 0)
-		direct = FILTER_IN;
-	else if (strncmp(direct_str, "o", 1) == 0)
-		direct = FILTER_OUT;
-
-	ret = peer_prefix_list_unset(peer, afi, safi, direct);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_prefix_list,
-       neighbor_prefix_list_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> prefix-list WORD <in|out>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Filter updates to/from this neighbor\n"
-       "Name of a prefix list\n"
-       "Filter incoming updates\n"
-       "Filter outgoing updates\n")
-{
-	int idx_peer = 1;
-	int idx_word = 3;
-	int idx_in_out = 4;
-	return peer_prefix_list_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_word]->arg, argv[idx_in_out]->arg);
-}
-
-ALIAS_HIDDEN(neighbor_prefix_list, neighbor_prefix_list_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> prefix-list WORD <in|out>",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Filter updates to/from this neighbor\n"
-	     "Name of a prefix list\n"
-	     "Filter incoming updates\n"
-	     "Filter outgoing updates\n")
-
-DEFUN (no_neighbor_prefix_list,
-       no_neighbor_prefix_list_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> prefix-list WORD <in|out>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Filter updates to/from this neighbor\n"
-       "Name of a prefix list\n"
-       "Filter incoming updates\n"
-       "Filter outgoing updates\n")
-{
-	int idx_peer = 2;
-	int idx_in_out = 5;
-	return peer_prefix_list_unset_vty(vty, argv[idx_peer]->arg,
-					  bgp_node_afi(vty), bgp_node_safi(vty),
-					  argv[idx_in_out]->arg);
-}
-
-ALIAS_HIDDEN(no_neighbor_prefix_list, no_neighbor_prefix_list_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> prefix-list WORD <in|out>",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Filter updates to/from this neighbor\n"
-	     "Name of a prefix list\n"
-	     "Filter incoming updates\n"
-	     "Filter outgoing updates\n")
-
-static int peer_aslist_set_vty(struct vty *vty, const char *ip_str, afi_t afi,
-			       safi_t safi, const char *name_str,
-			       const char *direct_str)
-{
-	int ret;
-	struct peer *peer;
-	int direct = FILTER_IN;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* Check filter direction. */
-	if (strncmp(direct_str, "i", 1) == 0)
-		direct = FILTER_IN;
-	else if (strncmp(direct_str, "o", 1) == 0)
-		direct = FILTER_OUT;
-
-	ret = peer_aslist_set(peer, afi, safi, direct, name_str);
-
-	return bgp_vty_return(vty, ret);
-}
-
-static int peer_aslist_unset_vty(struct vty *vty, const char *ip_str, afi_t afi,
-				 safi_t safi, const char *direct_str)
-{
-	int ret;
-	struct peer *peer;
-	int direct = FILTER_IN;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* Check filter direction. */
-	if (strncmp(direct_str, "i", 1) == 0)
-		direct = FILTER_IN;
-	else if (strncmp(direct_str, "o", 1) == 0)
-		direct = FILTER_OUT;
-
-	ret = peer_aslist_unset(peer, afi, safi, direct);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_filter_list,
-       neighbor_filter_list_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> filter-list AS_PATH_FILTER_NAME <in|out>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Establish BGP filters\n"
-       "AS path access-list name\n"
-       "Filter incoming routes\n"
-       "Filter outgoing routes\n")
-{
-	int idx_peer = 1;
-	int idx_word = 3;
-	int idx_in_out = 4;
-	return peer_aslist_set_vty(vty, argv[idx_peer]->arg, bgp_node_afi(vty),
-				   bgp_node_safi(vty), argv[idx_word]->arg,
-				   argv[idx_in_out]->arg);
-}
-
-ALIAS_HIDDEN(neighbor_filter_list, neighbor_filter_list_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> filter-list AS_PATH_FILTER_NAME <in|out>",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Establish BGP filters\n"
-	     "AS path access-list name\n"
-	     "Filter incoming routes\n"
-	     "Filter outgoing routes\n")
-
-DEFUN (no_neighbor_filter_list,
-       no_neighbor_filter_list_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> filter-list AS_PATH_FILTER_NAME <in|out>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Establish BGP filters\n"
-       "AS path access-list name\n"
-       "Filter incoming routes\n"
-       "Filter outgoing routes\n")
-{
-	int idx_peer = 2;
-	int idx_in_out = 5;
-	return peer_aslist_unset_vty(vty, argv[idx_peer]->arg,
-				     bgp_node_afi(vty), bgp_node_safi(vty),
-				     argv[idx_in_out]->arg);
-}
-
-ALIAS_HIDDEN(no_neighbor_filter_list, no_neighbor_filter_list_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> filter-list AS_PATH_FILTER_NAME <in|out>",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Establish BGP filters\n"
-	     "AS path access-list name\n"
-	     "Filter incoming routes\n"
-	     "Filter outgoing routes\n")
-
 /* Set advertise-map to the peer. */
-static int peer_advertise_map_set_vty(struct vty *vty, const char *ip_str,
-				      afi_t afi, safi_t safi,
-				      const char *advertise_str,
-				      const char *condition_str, bool condition,
-				      bool set)
-{
-	int ret = CMD_WARNING_CONFIG_FAILED;
-	struct peer *peer;
-	struct route_map *advertise_map;
-	struct route_map *condition_map;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return ret;
-
-	condition_map = route_map_lookup_warn_noexist(vty, condition_str);
-	advertise_map = route_map_lookup_warn_noexist(vty, advertise_str);
-
-	if (set)
-		ret = peer_advertise_map_set(peer, afi, safi, advertise_str,
-					     advertise_map, condition_str,
-					     condition_map, condition);
-	else
-		ret = peer_advertise_map_unset(peer, afi, safi, advertise_str,
-					       advertise_map, condition_str,
-					       condition_map, condition);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFPY (bgp_condadv_period,
-       bgp_condadv_period_cmd,
-       "[no$no] bgp conditional-advertisement timer (5-240)$period",
-       NO_STR
-       BGP_STR
-       "Conditional advertisement settings\n"
-       "Set period to rescan BGP table to check if condition is met\n"
-       "Period between BGP table scans, in seconds; default 60\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	struct listnode *node, *nnode = NULL;
-	struct peer *peer = NULL;
-
-	if (no) {
-		if (bgp->condition_check_period == DEFAULT_CONDITIONAL_ROUTES_POLL_TIME)
-			return CMD_SUCCESS;
-
-		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
-			UNSET_FLAG(peer->sflags, PEER_STATUS_COND_ADV_PENDING);
-
-		bgp->condition_check_period = DEFAULT_CONDITIONAL_ROUTES_POLL_TIME;
-	} else {
-		bgp->condition_check_period = period;
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_def_originate_eval,
-       bgp_def_originate_eval_cmd,
-       "[no$no] bgp default-originate timer (0-65535)$timer",
-       NO_STR
-       BGP_STR
-       "Control default-originate\n"
-       "Set period to rescan BGP table to check if default-originate condition is met\n"
-       "Period between BGP table scans, in seconds; default 5\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	bgp->rmap_def_originate_eval_timer = no ? 0 : timer;
-
-	if (bgp->t_rmap_def_originate_eval)
-		event_cancel(&bgp->t_rmap_def_originate_eval);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (neighbor_advertise_map,
-       neighbor_advertise_map_cmd,
-       "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor advertise-map RMAP_NAME$advertise_str <exist-map|non-exist-map>$exist RMAP_NAME$condition_str",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Route-map to conditionally advertise routes\n"
-       "Name of advertise map\n"
-       "Advertise routes only if prefixes in exist-map are installed in BGP table\n"
-       "Advertise routes only if prefixes in non-exist-map are not installed in BGP table\n"
-       "Name of the exist or non exist map\n")
-{
-	bool condition = CONDITION_EXIST;
-
-	if (!strcmp(exist, "non-exist-map"))
-		condition = CONDITION_NON_EXIST;
-
-	return peer_advertise_map_set_vty(vty, neighbor, bgp_node_afi(vty),
-					  bgp_node_safi(vty), advertise_str,
-					  condition_str, condition, !no);
-}
-
-ALIAS_HIDDEN(neighbor_advertise_map, neighbor_advertise_map_hidden_cmd,
-	     "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor advertise-map RMAP_NAME$advertise_str <exist-map|non-exist-map>$exist RMAP_NAME$condition_str",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Route-map to conditionally advertise routes\n"
-	     "Name of advertise map\n"
-	     "Advertise routes only if prefixes in exist-map are installed in BGP table\n"
-	     "Advertise routes only if prefixes in non-exist-map are not installed in BGP table\n"
-	     "Name of the exist or non exist map\n")
-
-/* Set route-map to the peer. */
-static int peer_route_map_set_vty(struct vty *vty, const char *ip_str,
-				  afi_t afi, safi_t safi, const char *name_str,
-				  const char *direct_str)
-{
-	int ret;
-	struct peer *peer;
-	int direct = RMAP_IN;
-	struct route_map *route_map;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* Check filter direction. */
-	if (strncmp(direct_str, "in", 2) == 0)
-		direct = RMAP_IN;
-	else if (strncmp(direct_str, "o", 1) == 0)
-		direct = RMAP_OUT;
-
-	route_map = route_map_lookup_warn_noexist(vty, name_str);
-	ret = peer_route_map_set(peer, afi, safi, direct, name_str, route_map);
-
-	return bgp_vty_return(vty, ret);
-}
-
-static int peer_route_map_unset_vty(struct vty *vty, const char *ip_str,
-				    afi_t afi, safi_t safi,
-				    const char *direct_str)
-{
-	int ret;
-	struct peer *peer;
-	int direct = RMAP_IN;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* Check filter direction. */
-	if (strncmp(direct_str, "in", 2) == 0)
-		direct = RMAP_IN;
-	else if (strncmp(direct_str, "o", 1) == 0)
-		direct = RMAP_OUT;
-
-	ret = peer_route_map_unset(peer, afi, safi, direct);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_route_map,
-       neighbor_route_map_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> route-map RMAP_NAME <in|out>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Apply route map to neighbor\n"
-       "Name of route map\n"
-       "Apply map to incoming routes\n"
-       "Apply map to outbound routes\n")
-{
-	int idx_peer = 1;
-	int idx_word = 3;
-	int idx_in_out = 4;
-	return peer_route_map_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_word]->arg, argv[idx_in_out]->arg);
-}
-
-ALIAS_HIDDEN(neighbor_route_map, neighbor_route_map_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> route-map RMAP_NAME <in|out>",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Apply route map to neighbor\n"
-	     "Name of route map\n"
-	     "Apply map to incoming routes\n"
-	     "Apply map to outbound routes\n")
-
-DEFUN (no_neighbor_route_map,
-       no_neighbor_route_map_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> route-map RMAP_NAME <in|out>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Apply route map to neighbor\n"
-       "Name of route map\n"
-       "Apply map to incoming routes\n"
-       "Apply map to outbound routes\n")
-{
-	int idx_peer = 2;
-	int idx_in_out = 5;
-	return peer_route_map_unset_vty(vty, argv[idx_peer]->arg,
-					bgp_node_afi(vty), bgp_node_safi(vty),
-					argv[idx_in_out]->arg);
-}
-
-ALIAS_HIDDEN(no_neighbor_route_map, no_neighbor_route_map_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> route-map RMAP_NAME <in|out>",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Apply route map to neighbor\n"
-	     "Name of route map\n"
-	     "Apply map to incoming routes\n"
-	     "Apply map to outbound routes\n")
-
-/* Set unsuppress-map to the peer. */
-static int peer_unsuppress_map_set_vty(struct vty *vty, const char *ip_str,
-				       afi_t afi, safi_t safi,
-				       const char *name_str)
-{
-	int ret;
-	struct peer *peer;
-	struct route_map *route_map;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	route_map = route_map_lookup_warn_noexist(vty, name_str);
-	ret = peer_unsuppress_map_set(peer, afi, safi, name_str, route_map);
-
-	return bgp_vty_return(vty, ret);
-}
-
-/* Unset route-map from the peer. */
-static int peer_unsuppress_map_unset_vty(struct vty *vty, const char *ip_str,
-					 afi_t afi, safi_t safi)
-{
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_unsuppress_map_unset(peer, afi, safi);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN (neighbor_unsuppress_map,
-       neighbor_unsuppress_map_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> unsuppress-map WORD",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Route-map to selectively unsuppress suppressed routes\n"
-       "Name of route map\n")
-{
-	int idx_peer = 1;
-	int idx_word = 3;
-	return peer_unsuppress_map_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_word]->arg);
-}
-
-ALIAS_HIDDEN(neighbor_unsuppress_map, neighbor_unsuppress_map_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> unsuppress-map WORD",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Route-map to selectively unsuppress suppressed routes\n"
-	     "Name of route map\n")
-
-DEFUN (no_neighbor_unsuppress_map,
-       no_neighbor_unsuppress_map_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> unsuppress-map WORD",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Route-map to selectively unsuppress suppressed routes\n"
-       "Name of route map\n")
-{
-	int idx_peer = 2;
-	return peer_unsuppress_map_unset_vty(vty, argv[idx_peer]->arg,
-					     bgp_node_afi(vty),
-					     bgp_node_safi(vty));
-}
-
-ALIAS_HIDDEN(no_neighbor_unsuppress_map, no_neighbor_unsuppress_map_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> unsuppress-map WORD",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Route-map to selectively unsuppress suppressed routes\n"
-	     "Name of route map\n")
-
-static int peer_maximum_prefix_set_vty(struct vty *vty, const char *ip_str,
-				       afi_t afi, safi_t safi,
-				       const char *num_str,
-				       const char *threshold_str, int warning,
-				       const char *restart_str,
-				       const char *force_str)
-{
-	int ret;
-	struct peer *peer;
-	uint32_t max;
-	uint8_t threshold;
-	uint16_t restart;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	max = strtoul(num_str, NULL, 10);
-	if (threshold_str)
-		threshold = atoi(threshold_str);
-	else
-		threshold = MAXIMUM_PREFIX_THRESHOLD_DEFAULT;
-
-	if (restart_str)
-		restart = atoi(restart_str);
-	else
-		restart = 0;
-
-	ret = peer_maximum_prefix_set(peer, afi, safi, max, threshold, warning,
-				      restart, force_str ? true : false);
-
-	return bgp_vty_return(vty, ret);
-}
-
-static int peer_maximum_prefix_unset_vty(struct vty *vty, const char *ip_str,
-					 afi_t afi, safi_t safi)
-{
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, ip_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_maximum_prefix_unset(peer, afi, safi);
-
-	return bgp_vty_return(vty, ret);
-}
 
 /* Maximum number of prefix to be sent to the neighbor. */
-DEFUN(neighbor_maximum_prefix_out,
-      neighbor_maximum_prefix_out_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix-out (1-4294967295)",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Maximum number of prefixes to be sent to this peer\n"
-      "Maximum no. of prefix limit\n")
-{
-	int ret;
-	int idx_peer = 1;
-	int idx_number = 3;
-	struct peer *peer;
-	uint32_t max;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	max = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	ret = peer_maximum_prefix_out_set(peer, afi, safi, max);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFUN(no_neighbor_maximum_prefix_out,
-      no_neighbor_maximum_prefix_out_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix-out [(1-4294967295)]",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Maximum number of prefixes to be sent to this peer\n"
-      "Maximum no. of prefix limit\n")
-{
-	int ret;
-	int idx_peer = 2;
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_maximum_prefix_out_unset(peer, afi, safi);
-
-	return bgp_vty_return(vty, ret);
-}
 
 /* Maximum number of prefix configuration. Prefix count is different
    for each peer configuration. So this configuration can be set for
    each peer configuration. */
-DEFUN (neighbor_maximum_prefix,
-       neighbor_maximum_prefix_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) [force]",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Maximum number of prefix accept from this peer\n"
-       "maximum no. of prefix limit\n"
-       "Force checking all received routes not only accepted\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	int idx_force = 0;
-	char *force = NULL;
-
-	if (argv_find(argv, argc, "force", &idx_force))
-		force = argv[idx_force]->arg;
-
-	return peer_maximum_prefix_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_number]->arg, NULL, 0, NULL, force);
-}
-
-ALIAS_HIDDEN(neighbor_maximum_prefix, neighbor_maximum_prefix_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) [force]",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Maximum number of prefix accept from this peer\n"
-	     "maximum no. of prefix limit\n"
-	     "Force checking all received routes not only accepted\n")
-
-DEFUN (neighbor_maximum_prefix_threshold,
-       neighbor_maximum_prefix_threshold_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) (1-100) [force]",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Maximum number of prefix accept from this peer\n"
-       "maximum no. of prefix limit\n"
-       "Threshold value (%) at which to generate a warning msg\n"
-       "Force checking all received routes not only accepted\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	int idx_number_2 = 4;
-	int idx_force = 0;
-	char *force = NULL;
-
-	if (argv_find(argv, argc, "force", &idx_force))
-		force = argv[idx_force]->arg;
-
-	return peer_maximum_prefix_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_number]->arg, argv[idx_number_2]->arg, 0, NULL, force);
-}
-
-ALIAS_HIDDEN(
-	neighbor_maximum_prefix_threshold,
-	neighbor_maximum_prefix_threshold_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) (1-100) [force]",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Maximum number of prefix accept from this peer\n"
-	"maximum no. of prefix limit\n"
-	"Threshold value (%) at which to generate a warning msg\n"
-	"Force checking all received routes not only accepted\n")
-
-DEFUN (neighbor_maximum_prefix_warning,
-       neighbor_maximum_prefix_warning_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) warning-only [force]",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Maximum number of prefix accept from this peer\n"
-       "maximum no. of prefix limit\n"
-       "Only give warning message when limit is exceeded\n"
-       "Force checking all received routes not only accepted\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	int idx_force = 0;
-	char *force = NULL;
-
-	if (argv_find(argv, argc, "force", &idx_force))
-		force = argv[idx_force]->arg;
-
-	return peer_maximum_prefix_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_number]->arg, NULL, 1, NULL, force);
-}
-
-ALIAS_HIDDEN(
-	neighbor_maximum_prefix_warning,
-	neighbor_maximum_prefix_warning_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) warning-only [force]",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Maximum number of prefix accept from this peer\n"
-	"maximum no. of prefix limit\n"
-	"Only give warning message when limit is exceeded\n"
-	"Force checking all received routes not only accepted\n")
-
-DEFUN (neighbor_maximum_prefix_threshold_warning,
-       neighbor_maximum_prefix_threshold_warning_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) (1-100) warning-only [force]",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Maximum number of prefix accept from this peer\n"
-       "maximum no. of prefix limit\n"
-       "Threshold value (%) at which to generate a warning msg\n"
-       "Only give warning message when limit is exceeded\n"
-       "Force checking all received routes not only accepted\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	int idx_number_2 = 4;
-	int idx_force = 0;
-	char *force = NULL;
-
-	if (argv_find(argv, argc, "force", &idx_force))
-		force = argv[idx_force]->arg;
-
-	return peer_maximum_prefix_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_number]->arg, argv[idx_number_2]->arg, 1, NULL, force);
-}
-
-ALIAS_HIDDEN(
-	neighbor_maximum_prefix_threshold_warning,
-	neighbor_maximum_prefix_threshold_warning_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) (1-100) warning-only [force]",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Maximum number of prefix accept from this peer\n"
-	"maximum no. of prefix limit\n"
-	"Threshold value (%) at which to generate a warning msg\n"
-	"Only give warning message when limit is exceeded\n"
-	"Force checking all received routes not only accepted\n")
-
-DEFUN (neighbor_maximum_prefix_restart,
-       neighbor_maximum_prefix_restart_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) restart (1-65535) [force]",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Maximum number of prefix accept from this peer\n"
-       "maximum no. of prefix limit\n"
-       "Restart bgp connection after limit is exceeded\n"
-       "Restart interval in minutes\n"
-       "Force checking all received routes not only accepted\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	int idx_number_2 = 5;
-	int idx_force = 0;
-	char *force = NULL;
-
-	if (argv_find(argv, argc, "force", &idx_force))
-		force = argv[idx_force]->arg;
-
-	return peer_maximum_prefix_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_number]->arg, NULL, 0, argv[idx_number_2]->arg, force);
-}
-
-ALIAS_HIDDEN(
-	neighbor_maximum_prefix_restart,
-	neighbor_maximum_prefix_restart_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) restart (1-65535) [force]",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Maximum number of prefix accept from this peer\n"
-	"maximum no. of prefix limit\n"
-	"Restart bgp connection after limit is exceeded\n"
-	"Restart interval in minutes\n"
-	"Force checking all received routes not only accepted\n")
-
-DEFUN (neighbor_maximum_prefix_threshold_restart,
-       neighbor_maximum_prefix_threshold_restart_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) (1-100) restart (1-65535) [force]",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Maximum number of prefixes to accept from this peer\n"
-       "maximum no. of prefix limit\n"
-       "Threshold value (%) at which to generate a warning msg\n"
-       "Restart bgp connection after limit is exceeded\n"
-       "Restart interval in minutes\n"
-       "Force checking all received routes not only accepted\n")
-{
-	int idx_peer = 1;
-	int idx_number = 3;
-	int idx_number_2 = 4;
-	int idx_number_3 = 6;
-	int idx_force = 0;
-	char *force = NULL;
-
-	if (argv_find(argv, argc, "force", &idx_force))
-		force = argv[idx_force]->arg;
-
-	return peer_maximum_prefix_set_vty(
-		vty, argv[idx_peer]->arg, bgp_node_afi(vty), bgp_node_safi(vty),
-		argv[idx_number]->arg, argv[idx_number_2]->arg, 0,
-		argv[idx_number_3]->arg, force);
-}
-
-ALIAS_HIDDEN(
-	neighbor_maximum_prefix_threshold_restart,
-	neighbor_maximum_prefix_threshold_restart_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix (1-4294967295) (1-100) restart (1-65535) [force]",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Maximum number of prefixes to accept from this peer\n"
-	"maximum no. of prefix limit\n"
-	"Threshold value (%) at which to generate a warning msg\n"
-	"Restart bgp connection after limit is exceeded\n"
-	"Restart interval in minutes\n"
-	"Force checking all received routes not only accepted\n")
-
-DEFUN (no_neighbor_maximum_prefix,
-       no_neighbor_maximum_prefix_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix [(1-4294967295) [(1-100)] [restart (1-65535)] [warning-only] [force]]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Maximum number of prefixes to accept from this peer\n"
-       "maximum no. of prefix limit\n"
-       "Threshold value (%) at which to generate a warning msg\n"
-       "Restart bgp connection after limit is exceeded\n"
-       "Restart interval in minutes\n"
-       "Only give warning message when limit is exceeded\n"
-       "Force checking all received routes not only accepted\n")
-{
-	int idx_peer = 2;
-	return peer_maximum_prefix_unset_vty(vty, argv[idx_peer]->arg,
-					     bgp_node_afi(vty),
-					     bgp_node_safi(vty));
-}
-
-ALIAS_HIDDEN(
-	no_neighbor_maximum_prefix, no_neighbor_maximum_prefix_hidden_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> maximum-prefix [(1-4294967295) [(1-100)] [restart (1-65535)] [warning-only] [force]]",
-	NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Maximum number of prefixes to accept from this peer\n"
-	"maximum no. of prefix limit\n"
-	"Threshold value (%) at which to generate a warning msg\n"
-	"Restart bgp connection after limit is exceeded\n"
-	"Restart interval in minutes\n"
-	"Only give warning message when limit is exceeded\n"
-	"Force checking all received routes not only accepted\n")
 
 /* "neighbor accept-own" */
-DEFPY (neighbor_accept_own,
-       neighbor_accept_own_cmd,
-       "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor accept-own",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Enable handling of self-originated VPN routes containing ACCEPT_OWN community\n")
-{
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (no)
-		ret = peer_af_flag_unset(peer, afi, safi, PEER_FLAG_ACCEPT_OWN);
-	else
-		ret = peer_af_flag_set(peer, afi, safi, PEER_FLAG_ACCEPT_OWN);
-
-	return bgp_vty_return(vty, ret);
-}
 
 /* "neighbor soo" */
-DEFPY (neighbor_soo,
-       neighbor_soo_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor soo ASN:NN_OR_IP-ADDRESS:NN$soo",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Set the Site-of-Origin (SoO) extended community\n"
-       "VPN extended community\n")
-{
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-	struct ecommunity *ecomm_soo;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ecomm_soo = ecommunity_str2com(soo, ECOMMUNITY_SITE_ORIGIN, 0);
-	if (!ecomm_soo) {
-		vty_out(vty, "%% Malformed SoO extended community\n");
-		return CMD_WARNING;
-	}
-	ecommunity_str(ecomm_soo);
-
-	if (!ecommunity_match(peer->soo[afi][safi], ecomm_soo)) {
-		ecommunity_free(&peer->soo[afi][safi]);
-		peer->soo[afi][safi] = ecomm_soo;
-		peer_af_flag_unset(peer, afi, safi, PEER_FLAG_SOO);
-	} else {
-		ecommunity_free(&ecomm_soo);
-	}
-
-	return bgp_vty_return(vty,
-			      peer_af_flag_set(peer, afi, safi, PEER_FLAG_SOO));
-}
-
-DEFPY (no_neighbor_soo,
-       no_neighbor_soo_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor soo [ASN:NN_OR_IP-ADDRESS:NN$soo]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Set the Site-of-Origin (SoO) extended community\n"
-       "VPN extended community\n")
-{
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ecommunity_free(&peer->soo[afi][safi]);
-
-	return bgp_vty_return(
-		vty, peer_af_flag_unset(peer, afi, safi, PEER_FLAG_SOO));
-}
 
 /* "neighbor allowas-in" */
-DEFUN (neighbor_allowas_in,
-       neighbor_allowas_in_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> allowas-in [<(1-10)|origin>]",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Accept as-path with my AS present in it\n"
-       "Number of occurrences of AS number\n"
-       "Only accept my AS in the as-path if the route was originated in my AS\n")
-{
-	int idx_peer = 1;
-	int idx_number_origin = 3;
-	int ret;
-	bool origin = false;
-	struct peer *peer;
-	int allow_num = 0;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (argc <= idx_number_origin)
-		allow_num = BGP_ALLOWAS_IN_DEFAULT;
-	else {
-		if (argv[idx_number_origin]->type == WORD_TKN)
-			origin = true;
-		else
-			allow_num = atoi(argv[idx_number_origin]->arg);
-	}
-
-	ret = peer_allowas_in_set(peer, bgp_node_afi(vty), bgp_node_safi(vty),
-				  allow_num, origin);
-
-	return bgp_vty_return(vty, ret);
-}
-
-ALIAS_HIDDEN(
-	neighbor_allowas_in, neighbor_allowas_in_hidden_cmd,
-	"neighbor <A.B.C.D|X:X::X:X|WORD> allowas-in [<(1-10)|origin>]",
-	NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"Accept as-path with my AS present in it\n"
-	"Number of occurrences of AS number\n"
-	"Only accept my AS in the as-path if the route was originated in my AS\n")
-
-DEFUN (no_neighbor_allowas_in,
-       no_neighbor_allowas_in_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> allowas-in [<(1-10)|origin>]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "allow local ASN appears in aspath attribute\n"
-       "Number of occurrences of AS number\n"
-       "Only accept my AS in the as-path if the route was originated in my AS\n")
-{
-	int idx_peer = 2;
-	int ret;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_allowas_in_unset(peer, bgp_node_afi(vty),
-				    bgp_node_safi(vty));
-
-	return bgp_vty_return(vty, ret);
-}
-
-ALIAS_HIDDEN(
-	no_neighbor_allowas_in, no_neighbor_allowas_in_hidden_cmd,
-	"no neighbor <A.B.C.D|X:X::X:X|WORD> allowas-in [<(1-10)|origin>]",
-	NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	"allow local ASN appears in aspath attribute\n"
-	"Number of occurrences of AS number\n"
-	"Only accept my AS in the as-path if the route was originated in my AS\n")
-
-DEFUN (neighbor_ttl_security,
-       neighbor_ttl_security_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> ttl-security hops (1-254)",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP ttl-security parameters\n"
-       "Specify the maximum number of hops to the BGP peer\n"
-       "Number of hops to BGP peer\n")
-{
-	int idx_peer = 1;
-	int idx_number = 4;
-	struct peer *peer;
-	int gtsm_hops;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	gtsm_hops = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	/*
-	 * If 'neighbor swpX', then this is for directly connected peers,
-	 * we should not accept a ttl-security hops value greater than 1.
-	 */
-	if (peer->conf_if && (gtsm_hops > BGP_GTSM_HOPS_CONNECTED)) {
-		vty_out(vty,
-			"%s is directly connected peer, hops cannot exceed 1\n",
-			argv[idx_peer]->arg);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	return bgp_vty_return(vty, peer_ttl_security_hops_set(peer, gtsm_hops));
-}
-
-DEFUN (no_neighbor_ttl_security,
-       no_neighbor_ttl_security_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> ttl-security hops (1-254)",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "BGP ttl-security parameters\n"
-       "Specify the maximum number of hops to the BGP peer\n"
-       "Number of hops to BGP peer\n")
-{
-	int idx_peer = 2;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	return bgp_vty_return(vty, peer_ttl_security_hops_unset(peer));
-}
-
-/* "neighbor encapsulation-srv6|encapsulation-mpls" */
-DEFPY (neighbor_encapsulation_srv6_or_mpls,
-       neighbor_encapsulation_srv6_or_mpls_cmd,
-       "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$peer_str <encapsulation-srv6$srv6|encapsulation-mpls$mpls>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Distribute L3VPN updates with SRv6 prefix SID\n"
-       "Distribute L3VPN updates with MPLS prefix SID\n")
-{
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (srv6) {
-		if (no)
-			ret = peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-						     PEER_FLAG_CONFIG_ENCAPSULATION_SRV6);
-		else
-			ret = peer_af_flag_set_vty(vty, peer_str, afi, safi,
-						   PEER_FLAG_CONFIG_ENCAPSULATION_SRV6);
-		return ret;
-	}
-	if (mpls) {
-		if (no)
-			ret = peer_af_flag_unset_vty(vty, peer_str, afi, safi,
-						     PEER_FLAG_CONFIG_ENCAPSULATION_MPLS);
-		else
-			ret = peer_af_flag_set_vty(vty, peer_str, afi, safi,
-						   PEER_FLAG_CONFIG_ENCAPSULATION_MPLS);
-		return ret;
-	}
-	return CMD_WARNING_CONFIG_FAILED;
-}
 
 /* disable-addpath-rx */
-DEFUN(neighbor_disable_addpath_rx,
-      neighbor_disable_addpath_rx_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD> disable-addpath-rx",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Do not accept additional paths\n")
-{
-	char *peer_str = argv[1]->arg;
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	return peer_af_flag_set_vty(vty, peer_str, afi, safi, PEER_FLAG_DISABLE_ADDPATH_RX);
-}
-
-DEFUN(no_neighbor_disable_addpath_rx,
-      no_neighbor_disable_addpath_rx_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD> disable-addpath-rx",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Do not accept additional paths\n")
-{
-	char *peer_str = argv[2]->arg;
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	return peer_af_flag_unset_vty(vty, peer_str, afi, safi, PEER_FLAG_DISABLE_ADDPATH_RX);
-}
-
-DEFUN (neighbor_addpath_tx_all_paths,
-       neighbor_addpath_tx_all_paths_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> addpath-tx-all-paths",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Use addpath to advertise all paths to a neighbor\n")
-{
-	int idx_peer = 1;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	bgp_addpath_set_peer_type(peer, bgp_node_afi(vty), bgp_node_safi(vty), BGP_ADDPATH_ALL, 0);
-	return CMD_SUCCESS;
-}
-
-ALIAS_HIDDEN(neighbor_addpath_tx_all_paths,
-	     neighbor_addpath_tx_all_paths_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> addpath-tx-all-paths",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Use addpath to advertise all paths to a neighbor\n")
-
-DEFUN (no_neighbor_addpath_tx_all_paths,
-       no_neighbor_addpath_tx_all_paths_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> addpath-tx-all-paths",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Use addpath to advertise all paths to a neighbor\n")
-{
-	int idx_peer = 2;
-	struct peer *peer;
-	safi_t safi = bgp_node_safi(vty);
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (safi == SAFI_LABELED_UNICAST)
-		safi = SAFI_UNICAST;
-	if (peer->addpath_type[bgp_node_afi(vty)][safi] != BGP_ADDPATH_ALL) {
-		vty_out(vty,
-			"%% Peer not currently configured to transmit all paths.");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_addpath_set_peer_type(peer, bgp_node_afi(vty), bgp_node_safi(vty), BGP_ADDPATH_NONE, 0);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS_HIDDEN(no_neighbor_addpath_tx_all_paths,
-	     no_neighbor_addpath_tx_all_paths_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> addpath-tx-all-paths",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Use addpath to advertise all paths to a neighbor\n")
-
-DEFPY (neighbor_addpath_tx_best_selected_paths,
-       neighbor_addpath_tx_best_selected_paths_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor addpath-tx-best-selected (1-6)$paths",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Use addpath to advertise best selected paths to a neighbor\n"
-       "The number of best paths\n")
-{
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	bgp_addpath_set_peer_type(peer, bgp_node_afi(vty), bgp_node_safi(vty),
-				  BGP_ADDPATH_BEST_SELECTED, paths);
-	return CMD_SUCCESS;
-}
-
-DEFPY (no_neighbor_addpath_tx_best_selected_paths,
-       no_neighbor_addpath_tx_best_selected_paths_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor addpath-tx-best-selected [(1-6)]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Use addpath to advertise best selected paths to a neighbor\n"
-       "The number of best paths\n")
-{
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	bgp_addpath_set_peer_type(peer, bgp_node_afi(vty), bgp_node_safi(vty),
-				  BGP_ADDPATH_BEST_SELECTED, 0);
-	return CMD_SUCCESS;
-}
-
-DEFUN (neighbor_addpath_tx_bestpath_per_as,
-       neighbor_addpath_tx_bestpath_per_as_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD> addpath-tx-bestpath-per-AS",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Use addpath to advertise the bestpath per each neighboring AS\n")
-{
-	int idx_peer = 1;
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	bgp_addpath_set_peer_type(peer, bgp_node_afi(vty), bgp_node_safi(vty),
-				  BGP_ADDPATH_BEST_PER_AS, 0);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS_HIDDEN(neighbor_addpath_tx_bestpath_per_as,
-	     neighbor_addpath_tx_bestpath_per_as_hidden_cmd,
-	     "neighbor <A.B.C.D|X:X::X:X|WORD> addpath-tx-bestpath-per-AS",
-	     NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Use addpath to advertise the bestpath per each neighboring AS\n")
-
-DEFUN (no_neighbor_addpath_tx_bestpath_per_as,
-       no_neighbor_addpath_tx_bestpath_per_as_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD> addpath-tx-bestpath-per-AS",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Use addpath to advertise the bestpath per each neighboring AS\n")
-{
-	int idx_peer = 2;
-	struct peer *peer;
-	safi_t safi = bgp_node_safi(vty);
-
-	peer = peer_and_group_lookup_vty(vty, argv[idx_peer]->arg);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (safi == SAFI_LABELED_UNICAST)
-		safi = SAFI_UNICAST;
-	if (peer->addpath_type[bgp_node_afi(vty)][safi] != BGP_ADDPATH_BEST_PER_AS) {
-		vty_out(vty,
-			"%% Peer not currently configured to transmit all best path per as.");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_addpath_set_peer_type(peer, bgp_node_afi(vty), bgp_node_safi(vty),
-				  BGP_ADDPATH_NONE, 0);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS_HIDDEN(no_neighbor_addpath_tx_bestpath_per_as,
-	     no_neighbor_addpath_tx_bestpath_per_as_hidden_cmd,
-	     "no neighbor <A.B.C.D|X:X::X:X|WORD> addpath-tx-bestpath-per-AS",
-	     NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-	     "Use addpath to advertise the bestpath per each neighboring AS\n")
 
 DEFPY(
 	neighbor_aspath_loop_detection, neighbor_aspath_loop_detection_cmd,
@@ -10061,63 +1681,6 @@ DEFPY(
 	"Detect AS loops before sending to neighbor\n")
 {
 	return peer_flag_set_vty(vty, neighbor, PEER_FLAG_AS_LOOP_DETECTION);
-}
-
-DEFPY (neighbor_addpath_paths_limit,
-       neighbor_addpath_paths_limit_cmd,
-       "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor addpath-rx-paths-limit (1-65535)$paths_limit",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Paths Limit for Addpath to receive from the peer\n"
-       "Maximum number of paths\n")
-{
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_af_flag_set_vty(vty, neighbor, afi, safi,
-				   PEER_FLAG_ADDPATH_RX_PATHS_LIMIT);
-
-	peer->addpath_paths_limit[afi][safi].send = paths_limit;
-
-	bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_PATHS_LIMIT,
-			    CAPABILITY_ACTION_SET);
-
-	return ret;
-}
-
-DEFPY (no_neighbor_addpath_paths_limit,
-       no_neighbor_addpath_paths_limit_cmd,
-       "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor addpath-rx-paths-limit [(1-65535)]",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR2
-       "Paths Limit for Addpath to receive from the peer\n"
-       "Maximum number of paths\n")
-{
-	struct peer *peer;
-	afi_t afi = bgp_node_afi(vty);
-	safi_t safi = bgp_node_safi(vty);
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = peer_af_flag_unset_vty(vty, neighbor, afi, safi,
-				     PEER_FLAG_ADDPATH_RX_PATHS_LIMIT);
-
-	peer->addpath_paths_limit[afi][safi].send = 0;
-
-	bgp_capability_send(peer->connection, afi, safi, CAPABILITY_CODE_PATHS_LIMIT,
-			    CAPABILITY_ACTION_SET);
-
-	return ret;
 }
 
 DEFPY(
@@ -10130,395 +1693,6 @@ DEFPY(
 	"Detect AS loops before sending to neighbor\n")
 {
 	return peer_flag_unset_vty(vty, neighbor, PEER_FLAG_AS_LOOP_DETECTION);
-}
-
-DEFPY(neighbor_path_attribute_discard,
-      neighbor_path_attribute_discard_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor path-attribute discard (1-255)...",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Manipulate path attributes from incoming UPDATE messages\n"
-      "Drop specified attributes from incoming UPDATE messages\n"
-      "Attribute number\n")
-{
-	struct peer *peer;
-	int idx = 0;
-	char *discard_attrs = NULL;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	argv_find(argv, argc, "(1-255)", &idx);
-	if (idx)
-		discard_attrs = argv_concat(argv, argc, idx);
-
-	bgp_path_attribute_discard_vty(vty, peer, discard_attrs, true);
-
-	XFREE(MTYPE_TMP, discard_attrs);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(no_neighbor_path_attribute_discard,
-      no_neighbor_path_attribute_discard_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor path-attribute discard [(1-255)]",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Manipulate path attributes from incoming UPDATE messages\n"
-      "Drop specified attributes from incoming UPDATE messages\n"
-      "Attribute number\n")
-{
-	struct peer *peer;
-	int idx = 0;
-	char *discard_attrs = NULL;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	argv_find(argv, argc, "(1-255)", &idx);
-	if (idx)
-		discard_attrs = argv[idx]->arg;
-
-	bgp_path_attribute_discard_vty(vty, peer, discard_attrs, false);
-
-	XFREE(MTYPE_TMP, discard_attrs);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(neighbor_path_attribute_treat_as_withdraw,
-      neighbor_path_attribute_treat_as_withdraw_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor path-attribute treat-as-withdraw (1-255)...",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Manipulate path attributes from incoming UPDATE messages\n"
-      "Treat-as-withdraw any incoming BGP UPDATE messages that contain the specified attribute\n"
-      "Attribute number\n")
-{
-	struct peer *peer;
-	int idx = 0;
-	char *withdraw_attrs = NULL;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	argv_find(argv, argc, "(1-255)", &idx);
-	if (idx)
-		withdraw_attrs = argv_concat(argv, argc, idx);
-
-	bgp_path_attribute_withdraw_vty(vty, peer, withdraw_attrs, true);
-
-	XFREE(MTYPE_TMP, withdraw_attrs);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(no_neighbor_path_attribute_treat_as_withdraw,
-      no_neighbor_path_attribute_treat_as_withdraw_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor path-attribute treat-as-withdraw (1-255)...",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Manipulate path attributes from incoming UPDATE messages\n"
-      "Treat-as-withdraw any incoming BGP UPDATE messages that contain the specified attribute\n"
-      "Attribute number\n")
-{
-	struct peer *peer;
-	int idx = 0;
-	char *withdraw_attrs = NULL;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	argv_find(argv, argc, "(1-255)", &idx);
-	if (idx)
-		withdraw_attrs = argv_concat(argv, argc, idx);
-
-	bgp_path_attribute_withdraw_vty(vty, peer, withdraw_attrs, false);
-
-	XFREE(MTYPE_TMP, withdraw_attrs);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(neighbor_encap_srv6,
-      neighbor_encap_srv6_cmd,
-      "[no] neighbor <X:X::X:X|WORD>$neighbor <encapsulation-srv6|encapsulation-srv6-relax>$encap",
-      NO_STR
-      NEIGHBOR_STR
-      "Neighbor IPv6 address\n"
-      "Neighbor tag\n"
-      "Advertise routes with SRv6 prefix SID to the neighbor\n"
-      "Advertise routes with and without SRv6 prefix SID the neighbor\n")
-{
-	int ret;
-	afi_t afi;
-	uint64_t flag;
-	struct peer *peer;
-	safi_t safi = SAFI_UNICAST;
-
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	afi = bgp_node_afi(vty);
-	if (strncmp(encap, "encapsulation-srv6-relax", 25))
-		flag = PEER_FLAG_CONFIG_ENCAPSULATION_SRV6;
-	else
-		flag = PEER_FLAG_CONFIG_ENCAPSULATION_SRV6_RELAX;
-
-	if (no) {
-		if (!peergroup_af_flag_check(peer, afi, safi, flag)) {
-			vty_out(vty, "%% Peer is not configured.\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		ret = peer_af_flag_unset_vty(vty, neighbor, afi, safi, flag);
-
-		return ret;
-	}
-
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_CONFIG_ENCAPSULATION_SRV6) ||
-	    peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_CONFIG_ENCAPSULATION_SRV6_RELAX)) {
-		vty_out(vty, "%% Peer is already configured, unset it first.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	ret = peer_af_flag_set_vty(vty, neighbor, afi, safi, flag);
-
-	return ret;
-}
-
-DEFPY(sid_export,
-      sid_export_cmd,
-      "[no] sid export <(1-1048575)$sid_idx|auto$sid_auto|explicit$sid_explicit X:X::X:X$sid_value> [behavior dt46$behavior_dt46] [route-map RMAP$rmap_str]",
-      NO_STR
-      "Sid value for VRF\n"
-      "Encapsulation SRv6 over default vrf\n"
-      "Sid allocation index\n"
-      "Automatically assign a label\n"
-      "Explicitly assign a sid value\n"
-      "Sid value\n"
-      "Specify SRv6 SID behavior\n"
-      "Allocate a DT46 SID\n"
-      "Specify route-map name\n"
-      "Name of route-map\n")
-{
-	afi_t afi = bgp_node_afi(vty);
-	struct in6_addr *unicast_sid_explicit = NULL;
-
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	if (bgp->vrf_id != VRF_DEFAULT) {
-		vty_out(vty, "SRv6 unicast is only supported on default vrf");
-
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (is_srv6_vpn_afi_enabled(bgp, afi)) {
-		vty_out(vty,
-			"sid vpn per afi is configured.\n"
-			"Remove it first before configuring encapsulation SRv6 over default vrf");
-
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (is_srv6_vpn_vrf_enabled(bgp)) {
-		vty_out(vty,
-			"sid vpn per-vrf is configured.\n"
-			"Remove it first before configuring encapsulation SRv6 over default vrf.\n");
-
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (no) {
-		if (!is_srv6_unicast_enabled(bgp, afi))
-			return CMD_SUCCESS;
-
-		if (bgp->srv6_unicast[afi].rmap_name) {
-			route_map_counter_decrement(
-				route_map_lookup_by_name(bgp->srv6_unicast[afi].rmap_name));
-			XFREE(MTYPE_ROUTE_MAP_NAME, bgp->srv6_unicast[afi].rmap_name);
-			bgp->srv6_unicast[afi].rmap_name = NULL;
-		}
-		if (bgp->srv6_unicast[afi].sid_explicit) {
-			XFREE(MTYPE_BGP_SRV6_SID, bgp->srv6_unicast[afi].sid_explicit);
-			bgp->srv6_unicast[afi].sid_explicit = NULL;
-		}
-		bgp->srv6_unicast[afi].sid_index = 0;
-		UNSET_FLAG(bgp->srv6_unicast[afi].flags, SRV6_POLICY_FLAG_SID_AUTO);
-
-		bgp_srv6_unicast_sid_withdraw(bgp, afi);
-		UNSET_FLAG(bgp->srv6_unicast[afi].flags, SRV6_POLICY_FLAG_BEHAVIOR_DT46);
-
-		return CMD_SUCCESS;
-	}
-
-	/* configured */
-	if ((sid_auto && CHECK_FLAG(bgp->srv6_unicast[afi].flags, SRV6_POLICY_FLAG_SID_AUTO)) ||
-	    (sid_idx != 0 && bgp->srv6_unicast[afi].sid_index != 0) ||
-	    (sid_explicit && bgp->srv6_unicast[afi].sid_explicit)) {
-		if (!!behavior_dt46 !=
-		    !!CHECK_FLAG(bgp->srv6_unicast[afi].flags, SRV6_POLICY_FLAG_BEHAVIOR_DT46)) {
-			vty_out(vty,
-				"%% SID export is already configured. Unconfigure it first to reconfigure with a different behavior.\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		/* no rmap change */
-		if (!rmap_str || (bgp->srv6_unicast[afi].rmap_name &&
-				  !strcmp(rmap_str, bgp->srv6_unicast[afi].rmap_name)))
-			return CMD_SUCCESS;
-
-		if (bgp->srv6_unicast[afi].rmap_name) {
-			route_map_counter_decrement(
-				route_map_lookup_by_name(bgp->srv6_unicast[afi].rmap_name));
-			XFREE(MTYPE_ROUTE_MAP_NAME, bgp->srv6_unicast[afi].rmap_name);
-		}
-
-		bgp->srv6_unicast[afi].rmap_name = XSTRDUP(MTYPE_ROUTE_MAP_NAME, rmap_str);
-		route_map_counter_increment(
-			route_map_lookup_by_name(bgp->srv6_unicast[afi].rmap_name));
-
-		/* apply route-map change */
-		bgp_srv6_unicast_announce(bgp, afi);
-
-		return CMD_SUCCESS;
-	}
-
-	/*
-	 * mode change between sid_idx and sid_auto isn't supported.
-	 * user must negate sid vpn export when they want to change the mode
-	 */
-	if ((sid_auto || sid_explicit) && bgp->srv6_unicast[afi].sid_index != 0) {
-		vty_out(vty, "it's already configured as idx-mode.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	if ((sid_auto || sid_idx != 0) && bgp->srv6_unicast[afi].sid_explicit) {
-		vty_out(vty, "it's already configured as explicit-mode.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	if ((sid_idx != 0 || sid_explicit) &&
-	    CHECK_FLAG(bgp->srv6_unicast[afi].flags, SRV6_POLICY_FLAG_SID_AUTO)) {
-		vty_out(vty, "it's already configured as auto-mode.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (behavior_dt46) {
-		afi_t other_afi = (afi == AFI_IP) ? AFI_IP6 : AFI_IP;
-
-		if (is_srv6_unicast_dt46_enabled(bgp, other_afi)) {
-			bool other_auto = CHECK_FLAG(bgp->srv6_unicast[other_afi].flags,
-						     SRV6_POLICY_FLAG_SID_AUTO);
-			uint32_t other_index = bgp->srv6_unicast[other_afi].sid_index;
-			bool other_explicit = !!bgp->srv6_unicast[other_afi].sid_explicit;
-
-			if (!!sid_auto != other_auto || (sid_idx != 0) != (other_index != 0) ||
-			    !!sid_explicit != other_explicit) {
-				vty_out(vty,
-					"%% DT46 sid export mode mismatch with %s unicast. Both address families must use the same mode (auto/index/explicit).\n",
-					afi2str(other_afi));
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-
-			if (sid_idx != 0 && sid_idx != other_index) {
-				vty_out(vty,
-					"%% DT46 sid index mismatch with %s unicast (configured as %u). Both address families must use the same index.\n",
-					afi2str(other_afi), other_index);
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-
-			if (sid_explicit && bgp->srv6_unicast[other_afi].sid_explicit &&
-			    !IPV6_ADDR_SAME(&sid_value, bgp->srv6_unicast[other_afi].sid_explicit)) {
-				vty_out(vty,
-					"%% DT46 explicit SID value mismatch with %s unicast. Both address families must use the same SID value.\n",
-					afi2str(other_afi));
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-		}
-	}
-
-	if (rmap_str) {
-		bgp->srv6_unicast[afi].rmap_name = XSTRDUP(MTYPE_ROUTE_MAP_NAME, rmap_str);
-		route_map_counter_increment(
-			route_map_lookup_by_name(bgp->srv6_unicast[afi].rmap_name));
-	}
-
-	if (sid_auto) {
-		SET_FLAG(bgp->srv6_unicast[afi].flags, SRV6_POLICY_FLAG_SID_AUTO);
-	} else if (sid_idx) {
-		bgp->srv6_unicast[afi].sid_index = sid_idx;
-	} else if (sid_explicit) {
-		unicast_sid_explicit = XCALLOC(MTYPE_BGP_SRV6_SID, sizeof(struct in6_addr));
-		IPV6_ADDR_COPY(unicast_sid_explicit, &sid_value);
-		bgp->srv6_unicast[afi].sid_explicit = unicast_sid_explicit;
-	}
-
-	if (behavior_dt46)
-		SET_FLAG(bgp->srv6_unicast[afi].flags, SRV6_POLICY_FLAG_BEHAVIOR_DT46);
-	else
-		UNSET_FLAG(bgp->srv6_unicast[afi].flags, SRV6_POLICY_FLAG_BEHAVIOR_DT46);
-
-	/* request srv6 sid */
-	bgp_srv6_unicast_ensure_afi_sid(bgp, afi);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(neighbor_damp,
-      neighbor_damp_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor dampening [(1-45)$half [(1-20000)$reuse (1-20000)$suppress (1-255)$max]]",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Enable neighbor route-flap dampening\n"
-      "Half-life time for the penalty\n"
-      "Value to start reusing a route\n"
-      "Value to start suppressing a route\n"
-      "Maximum duration to suppress a stable route\n")
-{
-	struct peer *peer = peer_and_group_lookup_vty(vty, neighbor);
-
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-	if (!half)
-		half = DEFAULT_HALF_LIFE;
-	if (!reuse) {
-		reuse = DEFAULT_REUSE;
-		suppress = DEFAULT_SUPPRESS;
-		max = half * 4;
-	}
-	if (suppress < reuse) {
-		vty_out(vty, "Suppress value cannot be less than reuse value\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	bgp_peer_damp_enable(peer, bgp_node_afi(vty), bgp_node_safi(vty),
-			     half * 60, reuse, suppress, max * 60);
-	return CMD_SUCCESS;
-}
-
-DEFPY(no_neighbor_damp,
-      no_neighbor_damp_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor dampening [HALF [REUSE SUPPRESS MAX]]",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Enable neighbor route-flap dampening\n"
-      "Half-life time for the penalty\n"
-      "Value to start reusing a route\n"
-      "Value to start suppressing a route\n"
-      "Maximum duration to suppress a stable route\n")
-{
-	struct peer *peer = peer_and_group_lookup_vty(vty, neighbor);
-
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-	bgp_peer_damp_disable(peer, bgp_node_afi(vty), bgp_node_safi(vty));
-	return CMD_SUCCESS;
 }
 
 DEFPY (show_ip_bgp_neighbor_damp_param,
@@ -10556,48 +1730,10 @@ DEFPY (show_ip_bgp_neighbor_damp_param,
 	return CMD_SUCCESS;
 }
 
-static int set_ecom_list(struct vty *vty, int argc, struct cmd_token **argv,
-			 struct ecommunity **list, bool is_rt6)
-{
-	struct ecommunity *ecom = NULL;
-	struct ecommunity *ecomadd;
-
-	for (; argc; --argc, ++argv) {
-		if (is_rt6)
-			ecomadd = ecommunity_str2com_ipv6(argv[0]->arg,
-						ECOMMUNITY_ROUTE_TARGET,
-						0);
-		else
-			ecomadd = ecommunity_str2com(argv[0]->arg,
-						ECOMMUNITY_ROUTE_TARGET,
-						0);
-		if (!ecomadd) {
-			vty_out(vty, "Malformed community-list value\n");
-			if (ecom)
-				ecommunity_free(&ecom);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		if (ecom) {
-			ecommunity_merge(ecom, ecomadd);
-			ecommunity_free(&ecomadd);
-		} else {
-			ecom = ecomadd;
-		}
-	}
-
-	if (*list) {
-		ecommunity_free(&*list);
-	}
-	*list = ecom;
-
-	return CMD_SUCCESS;
-}
-
 /*
  * v2vimport is true if we are handling a `import vrf ...` command
  */
-static afi_t vpn_policy_getafi(struct vty *vty, struct bgp *bgp, bool v2vimport)
+static __attribute__((unused)) afi_t vpn_policy_getafi(struct vty *vty, struct bgp *bgp, bool v2vimport)
 {
 	afi_t afi;
 
@@ -10636,1055 +1772,6 @@ static afi_t vpn_policy_getafi(struct vty *vty, struct bgp *bgp, bool v2vimport)
 	return afi;
 }
 
-DEFPY (af_rd_vpn_export,
-       af_rd_vpn_export_cmd,
-       "[no] rd vpn export ASN:NN_OR_IP-ADDRESS:NN$rd_str",
-       NO_STR
-       "Specify route distinguisher\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from current address-family to vpn\n"
-       "Route Distinguisher (<as-number>:<number> | <ip-address>:<number>)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct prefix_rd prd;
-	int ret;
-	afi_t afi;
-	int idx = 0;
-	bool yes = true;
-
-	if (argv_find(argv, argc, "no", &idx))
-		yes = false;
-
-	if (yes) {
-		ret = str2prefix_rd(rd_str, &prd);
-		if (!ret) {
-			vty_out(vty, "%% Malformed rd\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	}
-
-	afi = vpn_policy_getafi(vty, bgp, false);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/*
-	 * pre-change: un-export vpn routes (vpn->vrf routes unaffected)
-	 */
-	vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-			   bgp_get_default(), bgp);
-
-	if (!bgp->vpn_policy[afi].tovpn_rd_pretty && !rd_str)
-		return CMD_SUCCESS;
-
-	if (yes && bgp->vpn_policy[afi].tovpn_rd_pretty && rd_str &&
-	    strmatch(rd_str, bgp->vpn_policy[afi].tovpn_rd_pretty))
-		return CMD_SUCCESS;
-
-	hook_call(bgp_route_distinguisher_update, bgp, afi, true);
-	if (yes) {
-		if (bgp->vpn_policy[afi].tovpn_rd_pretty)
-			XFREE(MTYPE_BGP_NAME, bgp->vpn_policy[afi].tovpn_rd_pretty);
-		bgp->vpn_policy[afi].tovpn_rd_pretty = XSTRDUP(MTYPE_BGP_NAME,
-							       rd_str);
-		bgp->vpn_policy[afi].tovpn_rd = prd;
-		SET_FLAG(bgp->vpn_policy[afi].flags,
-			 BGP_VPN_POLICY_TOVPN_RD_SET);
-		SET_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_RD_CLI_SET);
-	} else {
-		XFREE(MTYPE_BGP_NAME, bgp->vpn_policy[afi].tovpn_rd_pretty);
-		bgp->vpn_policy[afi].tovpn_rd_pretty = NULL;
-		UNSET_FLAG(bgp->vpn_policy[afi].flags,
-			   BGP_VPN_POLICY_TOVPN_RD_SET);
-		UNSET_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_RD_CLI_SET);
-	}
-	hook_call(bgp_route_distinguisher_update, bgp, afi, false);
-
-	/* post-change: re-export vpn routes */
-	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-			    bgp_get_default(), bgp);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS (af_rd_vpn_export,
-       af_no_rd_vpn_export_cmd,
-       "no rd vpn export",
-       NO_STR
-       "Specify route distinguisher\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from current address-family to vpn\n")
-
-DEFPY(af_label_vpn_export_allocation_mode,
-      af_label_vpn_export_allocation_mode_cmd,
-      "[no$no] label vpn export allocation-mode <per-vrf$label_per_vrf|per-nexthop$label_per_nh>",
-      NO_STR
-      "label value for VRF\n"
-      "Between current address-family and vpn\n"
-      "For routes leaked from current address-family to vpn\n"
-      "Label allocation mode\n"
-      "Allocate one label for all BGP updates of the VRF\n"
-      "Allocate a label per connected next-hop in the VRF\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	afi_t afi;
-	bool old_per_nexthop, new_per_nexthop;
-
-	afi = vpn_policy_getafi(vty, bgp, false);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	old_per_nexthop = !!CHECK_FLAG(bgp->vpn_policy[afi].flags,
-				       BGP_VPN_POLICY_TOVPN_LABEL_PER_NEXTHOP);
-	if (no) {
-		if (old_per_nexthop == false && label_per_nh)
-			return CMD_ERR_NO_MATCH;
-		if (old_per_nexthop == true && label_per_vrf)
-			return CMD_ERR_NO_MATCH;
-		new_per_nexthop = false;
-	} else {
-		if (label_per_nh)
-			new_per_nexthop = true;
-		else
-			new_per_nexthop = false;
-	}
-
-	/* no change */
-	if (old_per_nexthop == new_per_nexthop)
-		return CMD_SUCCESS;
-
-	/*
-	 * pre-change: un-export vpn routes (vpn->vrf routes unaffected)
-	 */
-	vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, afi, bgp_get_default(),
-			   bgp);
-
-	if (new_per_nexthop)
-		SET_FLAG(bgp->vpn_policy[afi].flags,
-			 BGP_VPN_POLICY_TOVPN_LABEL_PER_NEXTHOP);
-	else
-		UNSET_FLAG(bgp->vpn_policy[afi].flags,
-			   BGP_VPN_POLICY_TOVPN_LABEL_PER_NEXTHOP);
-
-	/* post-change: re-export vpn routes */
-	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, afi, bgp_get_default(),
-			    bgp);
-
-	hook_call(bgp_snmp_update_last_changed, bgp);
-	return CMD_SUCCESS;
-}
-
-DEFPY (af_label_vpn_export,
-       af_label_vpn_export_cmd,
-       "[no] label vpn export <(0-1048575)$label_val|auto$label_auto>",
-       NO_STR
-       "label value for VRF\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from current address-family to vpn\n"
-       "Label Value <0-1048575>\n"
-       "Automatically assign a label\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	mpls_label_t label = (mpls_label_t)label_val;
-	afi_t afi;
-	int idx = 0;
-	bool yes = true;
-
-	if (argv_find(argv, argc, "no", &idx))
-		yes = false;
-
-	afi = vpn_policy_getafi(vty, bgp, false);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (yes) {
-		if (label_auto && CHECK_FLAG(bgp->vpn_policy[afi].flags,
-					     BGP_VPN_POLICY_TOVPN_LABEL_AUTO))
-			/* no change */
-			return CMD_SUCCESS;
-		if (!label_auto && label == bgp->vpn_policy[afi].tovpn_label)
-			/* no change */
-			return CMD_SUCCESS;
-	} else {
-		if (label_auto && !CHECK_FLAG(bgp->vpn_policy[afi].flags,
-					      BGP_VPN_POLICY_TOVPN_LABEL_AUTO))
-			/* no match */
-			return CMD_WARNING_CONFIG_FAILED;
-		if (!label_auto && label_val &&
-		    label != bgp->vpn_policy[afi].tovpn_label)
-			/* no change */
-			return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	/*
-	 * pre-change: un-export vpn routes (vpn->vrf routes unaffected)
-	 */
-	vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-			   bgp_get_default(), bgp);
-
-	if (CHECK_FLAG(bgp->vpn_policy[afi].flags,
-		       BGP_VPN_POLICY_TOVPN_LABEL_MANUAL_REG)) {
-		bgp_zebra_release_label_range(bgp->vpn_policy[afi].tovpn_label,
-					      bgp->vpn_policy[afi].tovpn_label);
-		UNSET_FLAG(bgp->vpn_policy[afi].flags,
-			   BGP_VPN_POLICY_TOVPN_LABEL_MANUAL_REG);
-
-	} else if (CHECK_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_LABEL_AUTO))
-		/* release any previous auto label */
-		bgp_vpn_release_label(bgp, afi, false);
-
-	if (yes) {
-		if (label_auto) {
-			SET_FLAG(bgp->vpn_policy[afi].flags,
-				 BGP_VPN_POLICY_TOVPN_LABEL_AUTO);
-			/* fetch a label */
-			bgp->vpn_policy[afi].tovpn_label = MPLS_LABEL_NONE;
-		} else {
-			bgp->vpn_policy[afi].tovpn_label = label;
-			UNSET_FLAG(bgp->vpn_policy[afi].flags,
-				   BGP_VPN_POLICY_TOVPN_LABEL_AUTO);
-			if (bgp->vpn_policy[afi].tovpn_label >=
-				    MPLS_LABEL_UNRESERVED_MIN &&
-			    bgp_zebra_request_label_range(bgp->vpn_policy[afi]
-								  .tovpn_label,
-							  1, false))
-				SET_FLAG(bgp->vpn_policy[afi].flags,
-					 BGP_VPN_POLICY_TOVPN_LABEL_MANUAL_REG);
-		}
-	} else {
-		UNSET_FLAG(bgp->vpn_policy[afi].flags,
-			   BGP_VPN_POLICY_TOVPN_LABEL_AUTO);
-		bgp->vpn_policy[afi].tovpn_label = MPLS_LABEL_NONE;
-	}
-
-	/* post-change: re-export vpn routes */
-	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-			    bgp_get_default(), bgp);
-
-	hook_call(bgp_snmp_update_last_changed, bgp);
-	return CMD_SUCCESS;
-}
-
-DEFPY (af_sid_vpn_export,
-       af_sid_vpn_export_cmd,
-       "[no] sid vpn export <(1-4294967295)$sid_idx|auto$sid_auto|explicit$sid_explicit X:X::X:X$sid_value>",
-       NO_STR
-       "sid value for VRF\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from current address-family to vpn\n"
-       "Sid allocation index\n"
-       "Automatically assign a label\n"
-       "Explicitly assign a sid value\n"
-       "Sid value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	afi_t afi;
-	int debug = 0;
-	int idx = 0;
-	bool yes = true;
-	struct in6_addr *tovpn_sid_explicit = NULL;
-
-	if (argv_find(argv, argc, "no", &idx))
-		yes = false;
-	debug = (BGP_DEBUG(vpn, VPN_LEAK_TO_VRF) |
-		 BGP_DEBUG(vpn, VPN_LEAK_FROM_VRF));
-
-	afi = vpn_policy_getafi(vty, bgp, false);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (!yes) {
-		/* when SID is not set, do nothing */
-		if (!is_srv6_vpn_afi_enabled(bgp, afi))
-			return CMD_SUCCESS;
-
-		/* pre-change */
-		vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-				   bgp_get_default(), bgp);
-		bgp->vpn_policy[afi].tovpn_sid_index = 0;
-		UNSET_FLAG(bgp->vpn_policy[afi].flags,
-			   BGP_VPN_POLICY_TOVPN_SID_AUTO);
-		UNSET_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_SID_EXPLICIT);
-
-		/* post-change */
-		vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-				    bgp_get_default(), bgp);
-
-		return CMD_SUCCESS;
-	}
-
-	if (is_srv6_vpn_vrf_enabled(bgp)) {
-		vty_out(vty,
-			"sid vpn per-vrf sid and per-af sid are mutually exclusive\n"
-			"Failed: per-vrf sid is configured. Remove per-vrf sid before configuring per-af sid\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (is_srv6_unicast_enabled(bgp, afi)) {
-		vty_out(vty, "sid export is configured on unicast\n"
-			     "Remove it before configuring sid vpn");
-
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	/* skip when it's already configured */
-	if ((sid_idx != 0 && bgp->vpn_policy[afi].tovpn_sid_index != 0) ||
-	    (sid_auto && CHECK_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_SID_AUTO)) ||
-	    (sid_explicit &&
-	     CHECK_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_SID_EXPLICIT)))
-		return CMD_SUCCESS;
-
-	/*
-	 * mode change between sid_idx and sid_auto isn't supported.
-	 * user must negate sid vpn export when they want to change the mode
-	 */
-	if ((sid_auto || sid_explicit) && bgp->vpn_policy[afi].tovpn_sid_index != 0) {
-		vty_out(vty, "it's already configured as idx-mode.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	if ((sid_auto || sid_idx != 0) &&
-	    CHECK_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_SID_EXPLICIT)) {
-		vty_out(vty, "it's already configured as explicit-mode.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	if ((sid_idx != 0 || sid_explicit) &&
-	    CHECK_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_SID_AUTO)) {
-		vty_out(vty, "it's already configured as auto-mode.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	/* pre-change */
-	vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-			   bgp_get_default(), bgp);
-
-	if (sid_auto) {
-		/* SID allocation auto-mode */
-		if (debug)
-			zlog_debug("%s: auto sid alloc.", __func__);
-		SET_FLAG(bgp->vpn_policy[afi].flags,
-			 BGP_VPN_POLICY_TOVPN_SID_AUTO);
-	} else if (sid_idx != 0) {
-		/* SID allocation index-mode */
-		if (debug)
-			zlog_debug("%s: idx %" PRId64 " sid alloc.", __func__, sid_idx);
-		bgp->vpn_policy[afi].tovpn_sid_index = sid_idx;
-	} else if (sid_explicit) {
-		/* SID allocation explicit-mode */
-		tovpn_sid_explicit = XCALLOC(MTYPE_BGP_SRV6_SID, sizeof(struct in6_addr));
-		IPV6_ADDR_COPY(tovpn_sid_explicit, &sid_value);
-		bgp->vpn_policy[afi].tovpn_sid_explicit = tovpn_sid_explicit;
-
-		if (debug)
-			zlog_debug("%s: explicit per-address-family afi %s sid alloc.", __func__,
-				   afi2str(afi));
-		SET_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_SID_EXPLICIT);
-	}
-
-	/* post-change */
-	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-			    bgp_get_default(), bgp);
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_sid_vpn_export,
-       bgp_sid_vpn_export_cmd,
-       "[no] sid vpn per-vrf export <(1-4294967295)$sid_idx|auto$sid_auto|explicit$sid_explicit X:X::X:X$sid_value>",
-       NO_STR
-       "sid value for VRF\n"
-       "Between current vrf and vpn\n"
-       "sid per-VRF (both IPv4 and IPv6 address families)\n"
-       "For routes leaked from current vrf to vpn\n"
-       "Sid allocation index\n"
-       "Automatically assign a label\n"
-       "Explicitly assign a sid value\n"
-       "Sid value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int debug;
-	struct in6_addr *tovpn_sid_explicit = NULL;
-
-	debug = (BGP_DEBUG(vpn, VPN_LEAK_TO_VRF) |
-		 BGP_DEBUG(vpn, VPN_LEAK_FROM_VRF));
-
-	if (no) {
-		/* when per-VRF SID is not set, do nothing */
-		if (!is_srv6_vpn_vrf_enabled(bgp))
-			return CMD_SUCCESS;
-
-		sid_idx = 0;
-		sid_auto = false;
-		sid_explicit = false;
-		bgp->tovpn_sid_index = 0;
-		UNSET_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_AUTO);
-		UNSET_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_EXPLICIT);
-	}
-
-	if (is_srv6_vpn_afi_enabled(bgp, AFI_IP) || is_srv6_vpn_afi_enabled(bgp, AFI_IP6)) {
-		vty_out(vty,
-			"per-vrf sid and per-af sid are mutually exclusive\n"
-			"Failed: per-af sid is configured. Remove per-af sid before configuring per-vrf sid\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (is_srv6_unicast_enabled(bgp, AFI_IP) || is_srv6_unicast_enabled(bgp, AFI_IP6)) {
-		vty_out(vty, "sid export is configured on unicast\n"
-			     "Remove it before configuring sid vpn");
-
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	/* skip when it's already configured */
-	if ((sid_idx != 0 && bgp->tovpn_sid_index != 0) ||
-	    (sid_auto && CHECK_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_AUTO)) ||
-	    (sid_explicit && CHECK_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_EXPLICIT)))
-		return CMD_SUCCESS;
-
-	/*
-	 * mode change among sid_idx, sid_auto and sid_explicit isn't supported.
-	 * user must negate sid vpn export when they want to change the mode
-	 */
-	if ((sid_auto || sid_explicit) && bgp->tovpn_sid_index != 0) {
-		vty_out(vty, "it's already configured as idx-mode.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	if ((sid_auto || sid_idx != 0) && CHECK_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_EXPLICIT)) {
-		vty_out(vty, "it's already configured as explicit-mode.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	if ((sid_idx != 0 || sid_explicit) && CHECK_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_AUTO)) {
-		vty_out(vty, "it's already configured as auto-mode.\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	/* pre-change */
-	vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP, bgp_get_default(),
-			   bgp);
-	vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP6, bgp_get_default(),
-			   bgp);
-
-	if (sid_auto) {
-		/* SID allocation auto-mode */
-		if (debug)
-			zlog_debug("%s: auto per-vrf sid alloc.", __func__);
-		SET_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_AUTO);
-	} else if (sid_idx != 0) {
-		/* SID allocation index-mode */
-		if (debug)
-			zlog_debug("%s: idx %" PRId64 " per-vrf sid alloc.", __func__, sid_idx);
-		bgp->tovpn_sid_index = sid_idx;
-	} else if (sid_explicit) {
-		/* SID allocation explicit-mode */
-		tovpn_sid_explicit = XCALLOC(MTYPE_BGP_SRV6_SID, sizeof(struct in6_addr));
-		memcpy(tovpn_sid_explicit, &sid_value, sizeof(struct in6_addr));
-		bgp->tovpn_sid_explicit = tovpn_sid_explicit;
-
-		if (debug)
-			zlog_debug("%s: explicit per-vrf sid alloc.", __func__);
-		SET_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_EXPLICIT);
-	}
-
-	/* post-change */
-	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP, bgp_get_default(),
-			    bgp);
-	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP6,
-			    bgp_get_default(), bgp);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS (af_label_vpn_export,
-       af_no_label_vpn_export_cmd,
-       "no label vpn export",
-       NO_STR
-       "label value for VRF\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from current address-family to vpn\n")
-
-ALIAS (bgp_sid_vpn_export,
-       no_bgp_sid_vpn_export_cmd,
-       "no$no sid vpn per-vrf export",
-       NO_STR
-       "sid value for VRF\n"
-       "Between current vrf and vpn\n"
-       "sid per-VRF (both IPv4 and IPv6 address families)\n"
-       "For routes leaked from current vrf to vpn\n")
-
-DEFPY (af_nexthop_vpn_export,
-       af_nexthop_vpn_export_cmd,
-       "[no] nexthop vpn export [<A.B.C.D|X:X::X:X>$nexthop_su]",
-       NO_STR
-       "Specify next hop to use for VRF advertised prefixes\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from current address-family to vpn\n"
-       "IPv4 prefix\n"
-       "IPv6 prefix\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	afi_t afi;
-	struct prefix p;
-
-	if (!no) {
-		if (!nexthop_su) {
-			vty_out(vty, "%% Nexthop required\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		if (!sockunion2hostprefix(nexthop_su, &p))
-			return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	afi = vpn_policy_getafi(vty, bgp, false);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/*
-	 * pre-change: un-export vpn routes (vpn->vrf routes unaffected)
-	 */
-	vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-			   bgp_get_default(), bgp);
-
-	if (!no) {
-		bgp->vpn_policy[afi].tovpn_nexthop = p;
-		SET_FLAG(bgp->vpn_policy[afi].flags,
-			 BGP_VPN_POLICY_TOVPN_NEXTHOP_SET);
-	} else {
-		UNSET_FLAG(bgp->vpn_policy[afi].flags,
-			   BGP_VPN_POLICY_TOVPN_NEXTHOP_SET);
-	}
-
-	/* post-change: re-export vpn routes */
-	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, afi,
-			    bgp_get_default(), bgp);
-
-	return CMD_SUCCESS;
-}
-
-static int vpn_policy_getdirs(struct vty *vty, const char *dstr, int *dodir)
-{
-	if (!strcmp(dstr, "import")) {
-		dodir[BGP_VPN_POLICY_DIR_FROMVPN] = 1;
-	} else if (!strcmp(dstr, "export")) {
-		dodir[BGP_VPN_POLICY_DIR_TOVPN] = 1;
-	} else if (!strcmp(dstr, "both")) {
-		dodir[BGP_VPN_POLICY_DIR_FROMVPN] = 1;
-		dodir[BGP_VPN_POLICY_DIR_TOVPN] = 1;
-	} else {
-		vty_out(vty, "%% direction parse error\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	return CMD_SUCCESS;
-}
-
-DEFPY (af_rt_vpn_imexport,
-       af_rt_vpn_imexport_cmd,
-       "[no] <rt|route-target> vpn <import|export|both>$direction_str RTLIST...",
-       NO_STR
-       "Specify route target list\n"
-       "Specify route target list\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from vpn to current address-family: match any\n"
-       "For routes leaked from current address-family to vpn: set\n"
-       "both import: match any and export: set\n"
-       "Space separated route target list (A.B.C.D:MN|EF:OPQR|GHJK:MN)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int ret;
-	struct ecommunity *ecom = NULL;
-	int dodir[BGP_VPN_POLICY_DIR_MAX] = {0};
-	enum vpn_policy_direction dir;
-	afi_t afi;
-	int idx = 0;
-	bool yes = true;
-
-	if (argv_find(argv, argc, "no", &idx))
-		yes = false;
-
-	afi = vpn_policy_getafi(vty, bgp, false);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = vpn_policy_getdirs(vty, direction_str, dodir);
-	if (ret != CMD_SUCCESS)
-		return ret;
-
-	if (yes) {
-		if (!argv_find(argv, argc, "RTLIST", &idx)) {
-			vty_out(vty, "%% Missing RTLIST\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		ret = set_ecom_list(vty, argc - idx, argv + idx, &ecom, false);
-		if (ret != CMD_SUCCESS) {
-			return ret;
-		}
-	}
-
-	for (dir = 0; dir < BGP_VPN_POLICY_DIR_MAX; ++dir) {
-		if (!dodir[dir])
-			continue;
-
-		vpn_leak_prechange(dir, afi, bgp_get_default(), bgp);
-
-		if (yes) {
-			if (bgp->vpn_policy[afi].rtlist[dir])
-				ecommunity_free(
-						&bgp->vpn_policy[afi].rtlist[dir]);
-			bgp->vpn_policy[afi].rtlist[dir] =
-				ecommunity_dup(ecom);
-		} else {
-			if (bgp->vpn_policy[afi].rtlist[dir])
-				ecommunity_free(
-						&bgp->vpn_policy[afi].rtlist[dir]);
-			bgp->vpn_policy[afi].rtlist[dir] = NULL;
-		}
-
-		vpn_leak_postchange(dir, afi, bgp_get_default(), bgp);
-	}
-
-	if (ecom)
-		ecommunity_free(&ecom);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS (af_rt_vpn_imexport,
-       af_no_rt_vpn_imexport_cmd,
-       "no <rt|route-target> vpn <import|export|both>$direction_str",
-       NO_STR
-       "Specify route target list\n"
-       "Specify route target list\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from vpn to current address-family\n"
-       "For routes leaked from current address-family to vpn\n"
-       "both import and export\n")
-
-DEFPY (af_route_map_vpn_imexport,
-       af_route_map_vpn_imexport_cmd,
-/* future: "route-map <vpn|evpn|vrf NAME> <import|export> RMAP" */
-       "[no] route-map vpn <import|export>$direction_str RMAP$rmap_str",
-       NO_STR
-       "Specify route map\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from vpn to current address-family\n"
-       "For routes leaked from current address-family to vpn\n"
-       "name of route-map\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int ret;
-	int dodir[BGP_VPN_POLICY_DIR_MAX] = {0};
-	enum vpn_policy_direction dir;
-	afi_t afi;
-	int idx = 0;
-	bool yes = true;
-
-	if (argv_find(argv, argc, "no", &idx))
-		yes = false;
-
-	afi = vpn_policy_getafi(vty, bgp, false);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	ret = vpn_policy_getdirs(vty, direction_str, dodir);
-	if (ret != CMD_SUCCESS)
-		return ret;
-
-	for (dir = 0; dir < BGP_VPN_POLICY_DIR_MAX; ++dir) {
-		if (!dodir[dir])
-			continue;
-
-		vpn_leak_prechange(dir, afi, bgp_get_default(), bgp);
-
-		if (yes) {
-			if (bgp->vpn_policy[afi].rmap_name[dir])
-				XFREE(MTYPE_ROUTE_MAP_NAME,
-				      bgp->vpn_policy[afi].rmap_name[dir]);
-			bgp->vpn_policy[afi].rmap_name[dir] = XSTRDUP(
-								      MTYPE_ROUTE_MAP_NAME, rmap_str);
-			bgp->vpn_policy[afi].rmap[dir] =
-				route_map_lookup_warn_noexist(vty, rmap_str);
-			if (!bgp->vpn_policy[afi].rmap[dir])
-				return CMD_SUCCESS;
-		} else {
-			if (bgp->vpn_policy[afi].rmap_name[dir])
-				XFREE(MTYPE_ROUTE_MAP_NAME,
-				      bgp->vpn_policy[afi].rmap_name[dir]);
-			bgp->vpn_policy[afi].rmap_name[dir] = NULL;
-			bgp->vpn_policy[afi].rmap[dir] = NULL;
-		}
-
-		vpn_leak_postchange(dir, afi, bgp_get_default(), bgp);
-	}
-
-	return CMD_SUCCESS;
-}
-
-ALIAS (af_route_map_vpn_imexport,
-       af_no_route_map_vpn_imexport_cmd,
-       "no route-map vpn <import|export>$direction_str",
-       NO_STR
-       "Specify route map\n"
-       "Between current address-family and vpn\n"
-       "For routes leaked from vpn to current address-family\n"
-       "For routes leaked from current address-family to vpn\n")
-
-DEFPY(af_import_vrf_route_map, af_import_vrf_route_map_cmd,
-      "import vrf route-map RMAP$rmap_str",
-      "Import routes from another VRF\n"
-      "Vrf routes being filtered\n"
-      "Specify route map\n"
-      "name of route-map\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	enum vpn_policy_direction dir = BGP_VPN_POLICY_DIR_FROMVPN;
-	afi_t afi;
-	struct bgp *bgp_default;
-
-	afi = vpn_policy_getafi(vty, bgp, true);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	bgp_default = bgp_get_default();
-	if (!bgp_default) {
-		int32_t ret;
-		as_t as = AS_UNSPECIFIED;
-
-		/* Auto-create with AS_UNSPECIFIED, to be filled in later */
-		ret = bgp_get_vty(&bgp_default, &as, NULL,
-				  BGP_INSTANCE_TYPE_DEFAULT, NULL,
-				  ASNOTATION_UNDEFINED);
-
-		if (ret) {
-			vty_out(vty,
-				"VRF default is not configured as a bgp instance\n");
-			return CMD_WARNING;
-		}
-
-		SET_FLAG(bgp_default->flags, BGP_FLAG_INSTANCE_HIDDEN);
-	}
-
-	vpn_leak_prechange(dir, afi, bgp_get_default(), bgp);
-
-	if (bgp->vpn_policy[afi].rmap_name[dir])
-		XFREE(MTYPE_ROUTE_MAP_NAME,
-		      bgp->vpn_policy[afi].rmap_name[dir]);
-	bgp->vpn_policy[afi].rmap_name[dir] =
-		XSTRDUP(MTYPE_ROUTE_MAP_NAME, rmap_str);
-	bgp->vpn_policy[afi].rmap[dir] =
-		route_map_lookup_warn_noexist(vty, rmap_str);
-
-	SET_FLAG(bgp->af_flags[afi][SAFI_UNICAST],
-		 BGP_CONFIG_VRF_TO_VRF_IMPORT);
-	if (!bgp->vpn_policy[afi].rmap[dir])
-		return CMD_SUCCESS;
-
-	vpn_leak_postchange(dir, afi, bgp_get_default(), bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(af_no_import_vrf_route_map, af_no_import_vrf_route_map_cmd,
-      "no import vrf route-map [RMAP$rmap_str]",
-      NO_STR
-      "Import routes from another VRF\n"
-      "Vrf routes being filtered\n"
-      "Specify route map\n"
-      "name of route-map\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	enum vpn_policy_direction dir = BGP_VPN_POLICY_DIR_FROMVPN;
-	afi_t afi;
-
-	afi = vpn_policy_getafi(vty, bgp, true);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	vpn_leak_prechange(dir, afi, bgp_get_default(), bgp);
-
-	if (bgp->vpn_policy[afi].rmap_name[dir])
-		XFREE(MTYPE_ROUTE_MAP_NAME,
-		      bgp->vpn_policy[afi].rmap_name[dir]);
-	bgp->vpn_policy[afi].rmap_name[dir] = NULL;
-	bgp->vpn_policy[afi].rmap[dir] = NULL;
-
-	if (bgp->vpn_policy[afi].import_vrf->count == 0)
-		UNSET_FLAG(bgp->af_flags[afi][SAFI_UNICAST],
-			   BGP_CONFIG_VRF_TO_VRF_IMPORT);
-
-	vpn_leak_postchange(dir, afi, bgp_get_default(), bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(bgp_imexport_vrf, bgp_imexport_vrf_cmd,
-      "[no] import vrf VIEWVRFNAME$import_name",
-      NO_STR
-      "Import routes from another VRF\n"
-      "VRF to import from\n"
-      "The name of the VRF\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct listnode *node;
-	struct bgp *vrf_bgp, *bgp_default;
-	int32_t ret = 0;
-	as_t as = bgp->as;
-	bool remove = false;
-	int32_t idx = 0;
-	char *vname;
-	safi_t safi;
-	afi_t afi;
-
-	if (import_name == NULL) {
-		vty_out(vty, "%% Missing import name\n");
-		return CMD_WARNING;
-	}
-
-	if (strcmp(import_name, "route-map") == 0) {
-		vty_out(vty, "%% Must include route-map name\n");
-		return CMD_WARNING;
-	}
-
-	if (argv_find(argv, argc, "no", &idx))
-		remove = true;
-
-	afi = vpn_policy_getafi(vty, bgp, true);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	safi = bgp_node_safi(vty);
-
-	if (((BGP_INSTANCE_TYPE_DEFAULT == bgp->inst_type)
-	     && (strcmp(import_name, VRF_DEFAULT_NAME) == 0))
-	    || (bgp->name && (strcmp(import_name, bgp->name) == 0))) {
-		vty_out(vty, "%% Cannot %s vrf %s into itself\n",
-			remove ? "unimport" : "import", import_name);
-		return CMD_WARNING;
-	}
-
-	bgp_default = bgp_get_default();
-	if (!bgp_default) {
-		as = AS_UNSPECIFIED;
-
-		/* Auto-create with AS_UNSPECIFIED, to be filled in later */
-		ret = bgp_get_vty(&bgp_default, &as, NULL,
-				  BGP_INSTANCE_TYPE_DEFAULT, NULL,
-				  ASNOTATION_UNDEFINED);
-
-		if (ret) {
-			vty_out(vty,
-				"VRF default is not configured as a bgp instance\n");
-			return CMD_WARNING;
-		}
-
-		SET_FLAG(bgp_default->flags, BGP_FLAG_INSTANCE_HIDDEN);
-	}
-
-	if (strcmp(import_name, VRF_DEFAULT_NAME) == 0)
-		vrf_bgp = bgp_default;
-	else
-		vrf_bgp = bgp_lookup_by_name_filter(import_name, false);
-
-	if (remove) {
-		vrf_unimport_from_vrf(bgp, vrf_bgp, import_name, afi, safi);
-	} else {
-		/* Already importing from "import_vrf"? */
-		for (ALL_LIST_ELEMENTS_RO(bgp->vpn_policy[afi].import_vrf, node,
-					  vname)) {
-			if (strcmp(vname, import_name) == 0)
-				return CMD_WARNING;
-		}
-
-		vrf_import_from_vrf(bgp, vrf_bgp, import_name, afi, safi);
-	}
-
-	return CMD_SUCCESS;
-}
-
-/* This command is valid only in a bgp vrf instance or the default instance */
-DEFPY (bgp_imexport_vpn,
-       bgp_imexport_vpn_cmd,
-       "[no] <import|export>$direction_str vpn",
-       NO_STR
-       "Import routes to this address-family\n"
-       "Export routes from this address-family\n"
-       "to/from default instance VPN RIB\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int previous_state;
-	afi_t afi;
-	safi_t safi;
-	int idx = 0;
-	bool yes = true;
-	int flag;
-	enum vpn_policy_direction dir;
-	struct bgp *bgp_default = bgp_get_default();
-
-	if (argv_find(argv, argc, "no", &idx))
-		yes = false;
-	else {
-		afi = vpn_policy_getafi(vty, bgp, false);
-		if (afi == AFI_MAX)
-			return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (BGP_INSTANCE_TYPE_VRF != bgp->inst_type &&
-		BGP_INSTANCE_TYPE_DEFAULT != bgp->inst_type) {
-
-		vty_out(vty, "%% import|export vpn valid only for bgp vrf or default instance\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	afi = bgp_node_afi(vty);
-	safi = bgp_node_safi(vty);
-	if ((SAFI_UNICAST != safi) || ((AFI_IP != afi) && (AFI_IP6 != afi))) {
-		vty_out(vty, "%% import|export vpn valid only for unicast ipv4|ipv6\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (!strcmp(direction_str, "import")) {
-		flag = BGP_CONFIG_MPLSVPN_TO_VRF_IMPORT;
-		dir = BGP_VPN_POLICY_DIR_FROMVPN;
-	} else if (!strcmp(direction_str, "export")) {
-		flag = BGP_CONFIG_VRF_TO_MPLSVPN_EXPORT;
-		dir = BGP_VPN_POLICY_DIR_TOVPN;
-	} else {
-		vty_out(vty, "%% unknown direction %s\n", direction_str);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	previous_state = CHECK_FLAG(bgp->af_flags[afi][safi], flag);
-
-	if (yes) {
-		SET_FLAG(bgp->af_flags[afi][safi], flag);
-		if (!previous_state) {
-			/* trigger export current vrf */
-			vpn_leak_postchange(dir, afi, bgp_default, bgp);
-		}
-	} else {
-		if (previous_state) {
-			/* trigger un-export current vrf */
-			vpn_leak_prechange(dir, afi, bgp_default, bgp);
-		}
-		UNSET_FLAG(bgp->af_flags[afi][safi], flag);
-		if (previous_state && bgp_default &&
-		    !CHECK_FLAG(bgp_default->af_flags[afi][SAFI_MPLS_VPN],
-				BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL))
-			vpn_leak_no_retain(bgp, bgp_default, afi);
-	}
-
-	hook_call(bgp_snmp_init_stats, bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (af_routetarget_import,
-       af_routetarget_import_cmd,
-       "[no] <rt|route-target|route-target6|rt6> redirect import RTLIST...",
-       NO_STR
-       "Specify route target list\n"
-       "Specify route target list\n"
-       "Specify route target list\n"
-       "Specify route target list\n"
-       "Flow-spec redirect type route target\n"
-       "Import routes to this address-family\n"
-       "Space separated route target list (A.B.C.D:MN|EF:OPQR|GHJK:MN|IPV6:MN)\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int ret;
-	struct ecommunity *ecom = NULL;
-	afi_t afi;
-	int idx = 0, idx_unused = 0;
-	bool yes = true;
-	bool rt6 = false;
-
-	if (argv_find(argv, argc, "no", &idx))
-		yes = false;
-
-	if (argv_find(argv, argc, "rt6", &idx_unused) ||
-	    argv_find(argv, argc, "route-target6", &idx_unused))
-		rt6 = true;
-
-	afi = vpn_policy_getafi(vty, bgp, false);
-	if (afi == AFI_MAX)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (rt6 && afi != AFI_IP6)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (yes) {
-		if (!argv_find(argv, argc, "RTLIST", &idx)) {
-			vty_out(vty, "%% Missing RTLIST\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		ret = set_ecom_list(vty, argc - idx, argv + idx, &ecom, rt6);
-		if (ret != CMD_SUCCESS)
-			return ret;
-	}
-
-	if (yes) {
-		if (bgp->vpn_policy[afi].import_redirect_rtlist)
-			ecommunity_free(&bgp->vpn_policy[afi]
-					.import_redirect_rtlist);
-		bgp->vpn_policy[afi].import_redirect_rtlist =
-			ecommunity_dup(ecom);
-	} else {
-		if (bgp->vpn_policy[afi].import_redirect_rtlist)
-			ecommunity_free(&bgp->vpn_policy[afi]
-					.import_redirect_rtlist);
-		bgp->vpn_policy[afi].import_redirect_rtlist = NULL;
-	}
-
-	if (ecom)
-		ecommunity_free(&ecom);
-
-	return CMD_SUCCESS;
-}
-
-DEFUN_NOSH (address_family_ipv4_safi,
-	address_family_ipv4_safi_cmd,
-	"address-family ipv4 [<unicast|multicast|vpn|labeled-unicast|flowspec>]",
-	"Enter Address Family command mode\n"
-	BGP_AF_STR
-	BGP_SAFI_WITH_LABEL_HELP_STR)
-{
-
-	if (argc == 3) {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		safi_t safi = bgp_vty_safi_from_str(argv[2]->text);
-		if (bgp->inst_type != BGP_INSTANCE_TYPE_DEFAULT
-		    && safi != SAFI_UNICAST && safi != SAFI_MULTICAST
-		    && safi != SAFI_EVPN) {
-			vty_out(vty,
-				"Only Unicast/Multicast/EVPN SAFIs supported in non-core instances.\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		vty->node = bgp_node_type(AFI_IP, safi);
-	} else
-		vty->node = BGP_IPV4_NODE;
-
-	return CMD_SUCCESS;
-}
-
-DEFUN_NOSH (address_family_ipv6_safi,
-	address_family_ipv6_safi_cmd,
-	"address-family ipv6 [<unicast|multicast|vpn|labeled-unicast|flowspec>]",
-	"Enter Address Family command mode\n"
-	BGP_AF_STR
-	BGP_SAFI_WITH_LABEL_HELP_STR)
-{
-	if (argc == 3) {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		safi_t safi = bgp_vty_safi_from_str(argv[2]->text);
-		if (bgp->inst_type != BGP_INSTANCE_TYPE_DEFAULT
-		    && safi != SAFI_UNICAST && safi != SAFI_MULTICAST
-		    && safi != SAFI_EVPN) {
-			vty_out(vty,
-				"Only Unicast/Multicast/EVPN SAFIs supported in non-core instances.\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		vty->node = bgp_node_type(AFI_IP6, safi);
-	} else
-		vty->node = BGP_IPV6_NODE;
-
-	return CMD_SUCCESS;
-}
-
 #ifdef KEEP_OLD_VPN_COMMANDS
 DEFUN_NOSH (address_family_vpnv4,
        address_family_vpnv4_cmd,
@@ -11708,195 +1795,6 @@ DEFUN_NOSH (address_family_vpnv6,
 	return CMD_SUCCESS;
 }
 #endif /* KEEP_OLD_VPN_COMMANDS */
-
-DEFUN_NOSH (address_family_evpn,
-       address_family_evpn_cmd,
-       "address-family l2vpn evpn",
-       "Enter Address Family command mode\n"
-       BGP_AF_STR
-       BGP_AF_MODIFIER_STR)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	vty->node = BGP_EVPN_NODE;
-	return CMD_SUCCESS;
-}
-
-DEFUN_NOSH(address_family_link_state,
-	address_family_link_state_cmd,
-	"address-family link-state [link-state]",
-	"Enter Address Family command mode\n"
-	"Link-State Address Family\n"
-	"Link-State Subsequent Address Family\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	vty->node = BGP_LS_NODE;
-	return CMD_SUCCESS;
-}
-
-DEFUN_NOSH (bgp_segment_routing_srv6,
-            bgp_segment_routing_srv6_cmd,
-            "segment-routing srv6",
-            "Segment-Routing configuration\n"
-            "Segment-Routing SRv6 configuration\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	vty->node = BGP_SRV6_NODE;
-	return CMD_SUCCESS;
-}
-
-static void bgp_segment_routing_srv6_hencaps_refresh(struct bgp *bgp)
-{
-	struct bgp *bgp_inst;
-	struct listnode *node;
-
-	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp_inst)) {
-		bgp_zebra_update_srv6_encap_routes(bgp_inst, AFI_IP, bgp, false);
-		bgp_zebra_update_srv6_encap_routes(bgp_inst, AFI_IP6, bgp, false);
-
-		bgp_zebra_update_srv6_encap_routes(bgp_inst, AFI_IP, bgp, true);
-		bgp_zebra_update_srv6_encap_routes(bgp_inst, AFI_IP6, bgp, true);
-	}
-}
-
-static void bgp_srv6_only_change(struct bgp *bgp, bool enable)
-{
-	/* pre-change */
-	vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP, bgp_get_default(), bgp);
-	vpn_leak_prechange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP6, bgp_get_default(), bgp);
-
-	bgp->srv6_only = enable;
-
-	/* post-change */
-	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP, bgp_get_default(), bgp);
-	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, AFI_IP6, bgp_get_default(), bgp);
-}
-
-DEFUN (no_bgp_segment_routing_srv6,
-       no_bgp_segment_routing_srv6_cmd,
-       "no segment-routing srv6",
-       NO_STR
-       "Segment-Routing configuration\n"
-       "Segment-Routing SRv6 configuration\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if (strlen(bgp->srv6_locator_name) > 0)
-		if (bgp_srv6_locator_unset(bgp) < 0)
-			return CMD_WARNING_CONFIG_FAILED;
-
-	if (bgp->srv6_encap_behavior != SRV6_HEADEND_BEHAVIOR_H_ENCAPS) {
-		bgp->srv6_encap_behavior = SRV6_HEADEND_BEHAVIOR_H_ENCAPS;
-		bgp_segment_routing_srv6_hencaps_refresh(bgp);
-	}
-
-	if (bgp->srv6_only)
-		bgp_srv6_only_change(bgp, false);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_srv6_encap_behavior,
-       bgp_srv6_encap_behavior_cmd,
-       "[no$no] encap-behavior <H_Encaps|H_Encaps_Red>$encap_behavior",
-       NO_STR
-       "Configure SRv6 encap mode\n"
-       "H.Encaps\n"
-       "H.Encaps.Red\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	enum srv6_headend_behavior srv6_encap_behavior;
-
-	bgp = bgp_get_default();
-	if (!bgp)
-		return CMD_SUCCESS;
-
-	if (strmatch(encap_behavior, "H_Encaps_Red"))
-		srv6_encap_behavior = SRV6_HEADEND_BEHAVIOR_H_ENCAPS_RED;
-	else
-		srv6_encap_behavior = SRV6_HEADEND_BEHAVIOR_H_ENCAPS;
-
-	if (no && ((srv6_encap_behavior != bgp->srv6_encap_behavior) ||
-		   (srv6_encap_behavior == SRV6_HEADEND_BEHAVIOR_H_ENCAPS)))
-		return CMD_SUCCESS;
-	else if (no == NULL && srv6_encap_behavior == bgp->srv6_encap_behavior)
-		return CMD_SUCCESS;
-
-	if (no)
-		bgp->srv6_encap_behavior = SRV6_HEADEND_BEHAVIOR_H_ENCAPS;
-	else
-		bgp->srv6_encap_behavior = srv6_encap_behavior;
-
-	bgp_segment_routing_srv6_hencaps_refresh(bgp);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_srv6_locator,
-       bgp_srv6_locator_cmd,
-       "locator NAME$name",
-       "Specify SRv6 locator\n"
-       "Specify SRv6 locator\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int ret;
-
-	if (strlen(bgp->srv6_locator_name) > 0
-	    && strcmp(name, bgp->srv6_locator_name) != 0) {
-		vty_out(vty, "srv6 locator is already configured\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_srv6_sids_unset(bgp);
-
-	snprintf(bgp->srv6_locator_name,
-		 sizeof(bgp->srv6_locator_name), "%s", name);
-
-	ret = bgp_zebra_srv6_manager_get_locator(name);
-	if (ret < 0)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	return CMD_SUCCESS;
-}
-
-DEFPY (bgp_srv6_only,
-       bgp_srv6_only_cmd,
-       "[no] srv6-only",
-       NO_STR
-       "Only allow SRv6 and disallow MPLS routes\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	if ((!no && bgp->srv6_only) || (no && !bgp->srv6_only))
-		return CMD_SUCCESS;
-	bgp_srv6_only_change(bgp, !no);
-	return CMD_SUCCESS;
-}
-
-DEFPY (no_bgp_srv6_locator,
-       no_bgp_srv6_locator_cmd,
-       "no locator NAME$name",
-       NO_STR
-       "Specify SRv6 locator\n"
-       "Specify SRv6 locator\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-	/* when locator isn't configured, do nothing */
-	if (strlen(bgp->srv6_locator_name) < 1)
-		return CMD_SUCCESS;
-
-	/* name validation */
-	if (strcmp(name, bgp->srv6_locator_name) != 0) {
-		vty_out(vty, "%% No srv6 locator is configured\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	/* unset locator */
-	if (bgp_srv6_locator_unset(bgp) < 0)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	return CMD_SUCCESS;
-}
 
 DEFPY (show_bgp_srv6,
        show_bgp_srv6_cmd,
@@ -11953,27 +1851,12 @@ DEFPY (show_bgp_srv6,
 		vty_out(vty, "  vpn_policy[AFI_IP6].tovpn_sid: %pI6\n",
 			bgp->vpn_policy[AFI_IP6].tovpn_sid);
 		vty_out(vty, "  per-vrf tovpn_sid: %pI6\n", bgp->tovpn_sid);
-		vty_out(vty, "  srv6_unicast[AFI_IP].sid: %pI6\n", bgp->srv6_unicast[AFI_IP].sid);
-		vty_out(vty, "  srv6_unicast[AFI_IP6].sid: %pI6\n", bgp->srv6_unicast[AFI_IP6].sid);
+		vty_out(vty, "  srv6_unicast[AFI_IP].sid: %pI6\n",
+			bgp->srv6_unicast[AFI_IP].sid);
+		vty_out(vty, "  srv6_unicast[AFI_IP6].sid: %pI6\n",
+			bgp->srv6_unicast[AFI_IP6].sid);
 	}
 
-	return CMD_SUCCESS;
-}
-
-DEFUN_NOSH (exit_address_family,
-       exit_address_family_cmd,
-       "exit-address-family",
-       "Exit from Address Family configuration mode\n")
-{
-	if (vty->node == BGP_IPV4_NODE || vty->node == BGP_IPV4M_NODE
-	    || vty->node == BGP_IPV4L_NODE || vty->node == BGP_VPNV4_NODE
-	    || vty->node == BGP_IPV6_NODE || vty->node == BGP_IPV6M_NODE
-	    || vty->node == BGP_IPV6L_NODE || vty->node == BGP_VPNV6_NODE
-	    || vty->node == BGP_EVPN_NODE
-	    || vty->node == BGP_FLOWSPECV4_NODE
-	    || vty->node == BGP_FLOWSPECV6_NODE
-	    || vty->node == BGP_LS_NODE)
-		vty->node = BGP_NODE;
 	return CMD_SUCCESS;
 }
 
@@ -12606,7 +2489,6 @@ static void print_bgp_vrfs(struct bgp *bgp, struct vty *vty, json_object *json,
 		int64_t vrf_id_ui = (bgp->vrf_id == VRF_UNKNOWN)
 					    ? -1
 					    : (int64_t)bgp->vrf_id;
-
 		json_object_string_add(json, "type", type);
 		json_object_int_add(json, "vrfId", vrf_id_ui);
 		json_object_string_addf(json, "routerId", "%pI4",
@@ -12622,7 +2504,6 @@ static void print_bgp_vrfs(struct bgp *bgp, struct vty *vty, json_object *json,
 
 		if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART)) {
 			struct graceful_restart_info *gr_info;
-
 			json_object *json_gr = NULL;
 			json_object *json_grs = NULL;
 
@@ -12633,12 +2514,15 @@ static void print_bgp_vrfs(struct bgp *bgp, struct vty *vty, json_object *json,
 				json_object_string_add(json_gr, "addressFamily",
 						       get_afi_safi_str(afi, safi, false));
 				gr_info = &(bgp->gr_info[afi][safi]);
-				json_object_boolean_add(json_gr, "grEnabled", gr_info->af_enabled);
-				json_object_boolean_add(json_gr, "grPathSelectionDeferral",
+				json_object_boolean_add(json_gr, "grEnabled",
+							gr_info->af_enabled);
+				json_object_boolean_add(json_gr,
+							"grPathSelectionDeferral",
 							event_is_scheduled(
 								gr_info->t_select_deferral));
 				if (gr_info->t_select_deferral)
-					json_object_int_add(json_gr, "grDeferralRemainingTimeSec",
+					json_object_int_add(json_gr,
+							    "grDeferralRemainingTimeSec",
 							    event_timer_remain_second(
 								    gr_info->t_select_deferral));
 				json_object_array_add(json_grs, json_gr);
@@ -12650,202 +2534,14 @@ static void print_bgp_vrfs(struct bgp *bgp, struct vty *vty, json_object *json,
 		json_object_int_add(json, "grRestartTime", bgp->restart_time);
 		json_object_int_add(json, "grStalePathTime", bgp->stalepath_time);
 		json_object_int_add(json, "grSelectDeferTime", bgp->select_defer_time);
-		json_object_string_add(json, "grMode", bgp_global_gr_mode_str[gr_mode]);
+		json_object_string_add(json, "grMode",
+				       bgp_global_gr_mode_str[gr_mode]);
 		json_object_boolean_add(json, "waitForFibSet",
-					CHECK_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_FIB_PENDING));
+					CHECK_FLAG(bgp->flags,
+						   BGP_FLAG_SUPPRESS_FIB_PENDING));
 		json_object_boolean_add(json, "gShutEnabled",
-					CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN));
-
-		/* BGP cluster ID. */
-		if (CHECK_FLAG(bgp->config, BGP_CONFIG_CLUSTER_ID))
-			json_object_string_addf(json, "bgpClusterId", "%pI4", &bgp->cluster_id);
-		/* BGP route-reflector allow-outbound-policy. */
-		json_object_boolean_add(json, "rrAllowOutboundPolicy",
-					CHECK_FLAG(bgp->flags, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY));
-		/* BGP client-to-client reflection. */
-		json_object_boolean_add(json, "noClientToClientReflection",
-					CHECK_FLAG(bgp->flags, BGP_FLAG_NO_CLIENT_TO_CLIENT));
-
-		/* BGP confederation, then timers (JSON key order matches prior output) */
-		print_bgp_vrfs_confederation(vty, bgp, json);
-		print_bgp_vrfs_timers(vty, bgp, json);
-
-		/* listen range and limit for dynamic BGP neighbors info */
-		print_bgp_vrfs_listen_range(vty, bgp, json);
-
-		/* import and export route-target info */
-		print_bgp_vrfs_route_targets(vty, bgp, json);
-
-		/* address-family info */
-		json_object *json_addr = NULL, *json_af = NULL;
-
-		json_af = json_object_new_object();
-		for (afi = AFI_IP; afi <= AFI_IP6; afi++) {
-			json_addr = json_object_new_object();
-			json_object *json_aggregate = NULL, *json_agg = NULL, *json_network = NULL,
-				    *json_static = NULL;
-			struct bgp_dest *dest;
-			const struct prefix *p;
-			struct bgp_aggregate *bgp_aggregate;
-			struct bgp_static *bgp_static;
-
-			json_aggregate = json_object_new_object();
-			json_network = json_object_new_object();
-
-			/* Import VRF route-map info */
-			if (bgp->vpn_policy[afi].rmap_name[BGP_VPN_POLICY_DIR_FROMVPN]) {
-				if (CHECK_FLAG(bgp->af_flags[afi][SAFI_UNICAST],
-					       BGP_CONFIG_VRF_TO_VRF_IMPORT))
-					json_object_string_add(json_addr, "importVrfRouteMap",
-							       bgp->vpn_policy[afi].rmap_name
-								       [BGP_VPN_POLICY_DIR_FROMVPN]);
-				else
-					json_object_string_add(json_addr, "importVpnRouteMap",
-							       bgp->vpn_policy[afi].rmap_name
-								       [BGP_VPN_POLICY_DIR_FROMVPN]);
-			}
-			/* avertise origin, nhg per origin and tablemap info */
-			json_object_string_add(json_addr, "afi",
-					       get_afi_safi_str(afi, safi, false));
-			if (bgp->table_map[afi][safi].name)
-				json_object_string_add(json_addr, "tableMap",
-						       bgp->table_map[afi][safi].name);
-
-			/* bgp multipath info */
-			if (bgp->maxpaths[afi][safi].maxpaths_ebgp != multipath_num)
-				json_object_int_add(json_addr, "ebgpMaximumPaths",
-						    bgp->maxpaths[afi][safi].maxpaths_ebgp);
-			if (bgp->maxpaths[afi][safi].maxpaths_ibgp != multipath_num) {
-				json_object_int_add(json_addr, "ibgpMaximumPaths",
-						    bgp->maxpaths[afi][safi].maxpaths_ibgp);
-				json_object_boolean_add(json_addr, "equalClusterLength",
-							bgp->maxpaths[afi][safi].same_clusterlen);
-			}
-
-			/* bgp distance info */
-			if (bgp->distance_ebgp[afi][safi])
-				json_object_int_add(json_addr, "ebgpDistance",
-						    bgp->distance_ebgp[afi][safi]);
-			if (bgp->distance_ibgp[afi][safi])
-				json_object_int_add(json_addr, "ibgpDistance",
-						    bgp->distance_ibgp[afi][safi]);
-			if (bgp->distance_local[afi][safi])
-				json_object_int_add(json_addr, "localDistance",
-						    bgp->distance_local[afi][safi]);
-
-			/* Network configuration (walk static_routes; RIB holds paths, not bgp_static). */
-			if (bgp->static_routes[afi][safi]) {
-				for (dest = bgp_table_top(bgp->static_routes[afi][safi]);
-				     dest; dest = bgp_route_next(dest)) {
-					if (!bgp_dest_has_bgp_path_info_data(dest))
-						continue;
-
-					bgp_static = bgp_dest_get_bgp_static_info(dest);
-					if (bgp_static == NULL)
-						continue;
-
-					p = bgp_dest_get_prefix(dest);
-					json_static = json_object_new_object();
-
-					if (bgp_static->rmap.name)
-						json_object_string_add(json_static, "routeMap",
-								       bgp_static->rmap.name);
-
-					json_object_object_addf(json_network, json_static,
-								"%pFX", p);
-				}
-			}
-			json_object_object_add(json_addr, "network", json_network);
-
-			/* Aggregate-address info */
-			if (bgp->aggregate[afi][safi]) {
-				for (dest = bgp_table_top(bgp->aggregate[afi][safi]); dest;
-				     dest = bgp_route_next(dest)) {
-					bgp_aggregate =
-						bgp_dest_get_bgp_aggregate_info(dest);
-					if (bgp_aggregate == NULL)
-						continue;
-
-					p = bgp_dest_get_prefix(dest);
-					json_agg = json_object_new_object();
-
-					if (bgp_aggregate->as_set)
-						json_object_boolean_add(json_agg, "asSet",
-									bgp_aggregate->as_set);
-					if (bgp_aggregate->summary_only)
-						json_object_boolean_add(json_agg, "summaryOnly",
-									bgp_aggregate->summary_only);
-					if (bgp_aggregate->rmap.name)
-						json_object_string_add(json_agg, "routeMap",
-								       bgp_aggregate->rmap.name);
-
-					json_object_object_addf(json_aggregate, json_agg,
-								"%pFX", p);
-				}
-			}
-			json_object_object_add(json_addr, "aggregateAddress",
-					       json_aggregate);
-
-			json_object_object_add(json_af, get_afi_safi_str(afi, safi, true),
-					       json_addr);
-		}
-		json_object_object_add(json, "addressFamilyInfo", json_af);
-	}
-}
-
-/* Static network / aggregate lines for `show bgp vrfs <name>` (plain text). */
-static void print_bgp_vrfs_detail_network_lines(struct vty *vty, struct bgp *bgp,
-						afi_t afi, safi_t safi)
-{
-	struct bgp_dest *dest;
-	struct bgp_static *bgp_static;
-	const struct prefix *p;
-
-	if (!bgp->static_routes[afi][safi])
-		return;
-
-	for (dest = bgp_table_top(bgp->static_routes[afi][safi]); dest;
-	     dest = bgp_route_next(dest)) {
-		if (!bgp_dest_has_bgp_path_info_data(dest))
-			continue;
-
-		bgp_static = bgp_dest_get_bgp_static_info(dest);
-		if (!bgp_static)
-			continue;
-
-		p = bgp_dest_get_prefix(dest);
-		vty_out(vty, "   network %pFX", p);
-		if (bgp_static->rmap.name)
-			vty_out(vty, " route-map %s", bgp_static->rmap.name);
-		vty_out(vty, "\n");
-	}
-}
-
-static void print_bgp_vrfs_detail_aggregate_lines(struct vty *vty, struct bgp *bgp,
-						  afi_t afi, safi_t safi)
-{
-	struct bgp_dest *dest;
-	struct bgp_aggregate *bgp_aggregate;
-	const struct prefix *p;
-
-	if (!bgp->aggregate[afi][safi])
-		return;
-
-	for (dest = bgp_table_top(bgp->aggregate[afi][safi]); dest;
-	     dest = bgp_route_next(dest)) {
-		bgp_aggregate = bgp_dest_get_bgp_aggregate_info(dest);
-		if (!bgp_aggregate)
-			continue;
-
-		p = bgp_dest_get_prefix(dest);
-		vty_out(vty, "   aggregate-address %pFX", p);
-		if (bgp_aggregate->as_set)
-			vty_out(vty, " as-set");
-		if (bgp_aggregate->summary_only)
-			vty_out(vty, " summary-only");
-		if (bgp_aggregate->rmap.name)
-			vty_out(vty, " route-map %s", bgp_aggregate->rmap.name);
-		vty_out(vty, "\n");
+					CHECK_FLAG(bgp->flags,
+						   BGP_FLAG_GRACEFUL_SHUTDOWN));
 	}
 }
 
@@ -12860,8 +2556,6 @@ static int show_bgp_vrfs_detail_common(struct vty *vty, struct bgp *bgp,
 	calc_peers_cfgd_estbd(bgp, &peers_cfg, &peers_estb);
 
 	if (use_vrf) {
-		enum global_mode gr_mode = bgp_global_gr_mode_get(bgp);
-
 		if (json) {
 			print_bgp_vrfs(bgp, vty, json, type);
 		} else {
@@ -12874,8 +2568,6 @@ static int show_bgp_vrfs_detail_common(struct vty *vty, struct bgp *bgp,
 			vty_out(vty,
 				"Num Configured Peers %d, Established %d\n",
 				peers_cfg, peers_estb);
-			vty_out(vty, "Global graceful restart mode is %s\n",
-				bgp_global_gr_mode_str[gr_mode]);
 			if (bgp->l3vni) {
 				vty_out(vty,
 					"L3VNI %u, L3VNI-SVI %s, Router MAC %pEA\n",
@@ -12883,114 +2575,6 @@ static int show_bgp_vrfs_detail_common(struct vty *vty, struct bgp *bgp,
 					ifindex2ifname(bgp->l3vni_svi_ifindex,
 						       bgp->vrf_id),
 					&bgp->rmac);
-			}
-			if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_RESTART)) {
-				struct graceful_restart_info *gr_info;
-
-				for (afi = AFI_IP; afi <= AFI_IP6; afi++) {
-					vty_out(vty, "For address-family %s:\n",
-						get_afi_safi_str(afi, safi, false));
-					gr_info = &(bgp->gr_info[afi][safi]);
-					vty_out(vty, "  GR enabled %s Path Selection Deferral %s\n",
-						gr_info->af_enabled ? "YES" : "NO",
-						event_is_scheduled(gr_info->t_select_deferral)
-							? "DONE"
-							: "IN-PROGRESS");
-					if (gr_info->t_select_deferral)
-						vty_out(vty,
-							"  Path selection deferral timer running, remaining time %lds\n",
-							event_timer_remain_second(
-								gr_info->t_select_deferral));
-				}
-				vty_out(vty, "Route sync with zebra %s\n",
-					bgp->gr_route_sync_pending ? "pending" : "completed");
-			}
-			vty_out(vty, "GR Restart Time Configured: %ds\n", bgp->restart_time);
-			vty_out(vty, "GR Stale Path Time Configured: %ds\n", bgp->stalepath_time);
-			vty_out(vty, "GR Select Defer Time Configured: %ds\n",
-				bgp->select_defer_time);
-			vty_out(vty, "Wait for install (FIB suppress pending) is set: %s\n",
-				CHECK_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_FIB_PENDING) ? "YES"
-										      : "NO");
-			vty_out(vty, "BGP Graceful Shutdown is enabled: %s\n",
-				CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN) ? "YES" : "NO");
-
-			/* BGP cluster ID. */
-			if (CHECK_FLAG(bgp->config, BGP_CONFIG_CLUSTER_ID))
-				vty_out(vty, "BGP cluster-id %pI4\n", &bgp->cluster_id);
-
-			/* BGP route-reflector allow-outbound-policy. */
-			if (CHECK_FLAG(bgp->flags, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY))
-				vty_out(vty, "BGP route-reflector allow-outbound-policy\n");
-
-			/* BGP client-to-client reflection. */
-			if (CHECK_FLAG(bgp->flags, BGP_FLAG_NO_CLIENT_TO_CLIENT))
-				vty_out(vty, "No BGP client-to-client reflection\n");
-
-			/* BGP timers, then confederation (text line order matches prior output) */
-			print_bgp_vrfs_timers(vty, bgp, NULL);
-			print_bgp_vrfs_confederation(vty, bgp, NULL);
-
-			/* listen range and limit for dynamic BGP neighbors info */
-			print_bgp_vrfs_listen_range(vty, bgp, NULL);
-
-			/* import export route-target info */
-			print_bgp_vrfs_route_targets(vty, bgp, NULL);
-
-			/* address-family info */
-			for (afi = AFI_IP; afi <= AFI_IP6; afi++) {
-				vty_out(vty, "For address-family %s:\n",
-					get_afi_safi_str(afi, safi, false));
-				/* Import VRF route-map info */
-				if (bgp->vpn_policy[afi].rmap_name[BGP_VPN_POLICY_DIR_FROMVPN]) {
-					if (CHECK_FLAG(bgp->af_flags[afi][SAFI_UNICAST],
-						       BGP_CONFIG_VRF_TO_VRF_IMPORT))
-						vty_out(vty, "   Import Vrf Route-map %s\n",
-							bgp->vpn_policy[afi].rmap_name
-								[BGP_VPN_POLICY_DIR_FROMVPN]);
-					else
-						vty_out(vty, "   Import Vpn Route-map %s\n",
-							bgp->vpn_policy[afi].rmap_name
-								[BGP_VPN_POLICY_DIR_FROMVPN]);
-				}
-
-				if (bgp->table_map[afi][safi].name)
-					vty_out(vty, "   BGP Tablemap %s\n",
-						bgp->table_map[afi][safi].name);
-
-				/* bgp multipath configuration */
-				if (bgp->maxpaths[afi][safi].maxpaths_ebgp != multipath_num) {
-					vty_out(vty, "   EBGP Maximumpaths %d\n",
-						bgp->maxpaths[afi][safi].maxpaths_ebgp);
-				}
-				if (bgp->maxpaths[afi][safi].maxpaths_ibgp != multipath_num) {
-					vty_out(vty, "   IBGP Maximumpaths %d\n",
-						bgp->maxpaths[afi][safi].maxpaths_ibgp);
-					if (bgp->maxpaths[afi][safi].same_clusterlen)
-						vty_out(vty, "   Equal Cluster Length: %s\n",
-							bgp->maxpaths[afi][safi].same_clusterlen
-								? "YES"
-								: "NO");
-				}
-
-				/* bgp distance configuration */
-				if (bgp->distance_ebgp[afi][safi])
-					vty_out(vty, "   BGP Distance Ebgp %d\n",
-						bgp->distance_ebgp[afi][safi]);
-				if (bgp->distance_ibgp[afi][safi])
-					vty_out(vty, "   BGP Distance Ibgp %d\n",
-						bgp->distance_ibgp[afi][safi]);
-				if (bgp->distance_local[afi][safi])
-					vty_out(vty, "   BGP Distance Local %d\n",
-						bgp->distance_local[afi][safi]);
-
-				/* Network configuration (walk static_routes; RIB holds paths, not bgp_static). */
-				print_bgp_vrfs_detail_network_lines(vty, bgp, afi, safi);
-				vty_out(vty, "\n");
-
-				/* Aggregate-address info */
-				print_bgp_vrfs_detail_aggregate_lines(vty, bgp, afi, safi);
-				vty_out(vty, "\n");
 			}
 		}
 	} else {
@@ -13463,7 +3047,7 @@ static void show_tip_entry(struct hash_bucket *bucket, void *args)
 	struct vty *vty = (struct vty *)args;
 	struct tip_addr *tip = (struct tip_addr *)bucket->data;
 
-	vty_out(vty, "addr: %pIA, count: %d\n", &tip->addr, tip->refcnt);
+	vty_out(vty, "addr: %pI4, count: %d\n", &tip->addr, tip->refcnt);
 }
 
 static void bgp_show_martian_nexthops(struct vty *vty, struct bgp *bgp)
@@ -13855,12 +3439,22 @@ static void bgp_show_peer_reset(struct vty * vty, struct peer *peer,
 				       peer_down_str[(int)peer->last_reset]);
 		json_object_int_add(json_peer, "lastResetCode",
 				    peer->last_reset);
+		/*
+		 * A reset that occurs *while the peer is already down* is
+		 * recorded in down_last_reset (see peer_set_last_reset in
+		 * bgpd.h). Emit it separately so callers can distinguish the
+		 * cause that brought the peer down from follow-on resets
+		 * (e.g., config changes made while the peer is shut down).
+		 */
 		if (peer->down_last_reset != PEER_DOWN_NONE) {
-			json_object_string_add(json_peer, "downLastResetDueTo",
-					       peer_down_str[peer->down_last_reset]);
-			json_object_int_add(json_peer, "downLastResetCode", peer->down_last_reset);
-			json_object_int_add(json_peer, "downLastResetTimeSecs",
-					    monotime(NULL) - peer->down_resettime);
+			json_object_string_add(
+				json_peer, "downLastResetDueTo",
+				peer_down_str[peer->down_last_reset]);
+			json_object_int_add(json_peer, "downLastResetCode",
+					    peer->down_last_reset);
+			json_object_int_add(
+				json_peer, "downLastResetTimeSecs",
+				monotime(NULL) - peer->down_resettime);
 		}
 		json_object_string_add(json_peer, "softwareVersion",
 				       peer->soft_version ? peer->soft_version
@@ -13886,10 +3480,6 @@ static void bgp_show_peer_reset(struct vty * vty, struct peer *peer,
 			vty_out(vty, " %s (%s)\n",
 				peer_down_str[(int)peer->last_reset],
 				peer->soft_version ? peer->soft_version : "n/a");
-			if (peer->down_last_reset != PEER_DOWN_NONE)
-				vty_out(vty, "  Down last reset: %s, %u seconds ago\n",
-					peer_down_str[peer->down_last_reset],
-					(unsigned int)(monotime(NULL) - peer->down_resettime));
 		}
 	}
 }
@@ -13925,7 +3515,11 @@ static void bgp_show_failed_summary(struct vty *vty, struct bgp *bgp,
 				    peer->dropped);
 		peer_uptime(peer->uptime, timebuf, BGP_UPTIME_LEN,
 			    use_json, json_peer);
-		bgp_show_peer_reset(NULL, peer, json_peer, true);
+		if (peer_established(peer->connection))
+			json_object_string_add(json_peer, "lastResetDueTo",
+					       "AFI/SAFI Not Negotiated");
+		else
+			bgp_show_peer_reset(NULL, peer, json_peer, true);
 	} else {
 		dn_flag[1] = '\0';
 		dn_flag[0] = peer_dynamic_neighbor(peer) ? '*' : '\0';
@@ -13944,7 +3538,11 @@ static void bgp_show_failed_summary(struct vty *vty, struct bgp *bgp,
 			peer->dropped,
 			peer_uptime(peer->uptime, timebuf,
 				    BGP_UPTIME_LEN, 0, NULL));
-		bgp_show_peer_reset(vty, peer, NULL, false);
+		if (peer_established(peer->connection))
+			vty_out(vty, "  AFI/SAFI Not Negotiated\n");
+		else
+			bgp_show_peer_reset(vty, peer, NULL,
+					    false);
 	}
 }
 
@@ -13977,6 +3575,14 @@ static bool bgp_show_summary_is_peer_filtered(struct peer *peer,
 					      enum peer_asn_type as_type,
 					      as_t as)
 {
+	/*
+	 * Hide peers flagged PEER_STATUS_NB_PENDING_CONFIG: their remote-as
+	 * YANG leaf was destroyed but the peer struct is kept alive to dodge
+	 * the libyang delta-reconfig collapse trap.  From the user's view
+	 * such peers are deconfigured and must not appear in show output.
+	 */
+	if (CHECK_FLAG(peer->sflags, PEER_STATUS_NB_PENDING_CONFIG))
+		return true;
 
 	/* filter neighbor XXXX */
 	if (fpeer && fpeer != peer)
@@ -14282,6 +3888,41 @@ static int bgp_show_summary(struct vty *vty, struct bgp *bgp, int afi, int safi,
 
 			bgp_show_summary_advertisement_delay(vty, bgp, json,
 							     use_json);
+
+			if (bgp_advertisement_delay_configured(bgp)) {
+				if (use_json) {
+					json_object_int_add(json,
+							    "advertisementDelay",
+							    bgp->v_advertisement_delay);
+					if (bgp_advertisement_delay_active(bgp)) {
+						json_object_boolean_true_add(
+							json,
+							"advertisementDelayInProgress");
+						json_object_int_add(
+							json,
+							"advertisementDelayRemainingSeconds",
+							event_timer_remain_second(
+								bgp->t_advertisement_delay));
+					} else if (bgp->advertisement_delay_resume_time[0] != '\0')
+						json_object_string_add(
+							json,
+							"advertisementDelayResumeTime",
+							bgp->advertisement_delay_resume_time);
+				} else {
+					vty_out(vty,
+						"Advertisement delay: %d seconds\n",
+						bgp->v_advertisement_delay);
+					if (bgp_advertisement_delay_active(bgp))
+						vty_out(vty,
+							"  %lu seconds remaining\n",
+							event_timer_remain_second(
+								bgp->t_advertisement_delay));
+					else if (bgp->advertisement_delay_resume_time[0] != '\0')
+						vty_out(vty,
+							"  advertisements resumed: %s\n",
+							bgp->advertisement_delay_resume_time);
+				}
+			}
 
 			if (use_json) {
 				if (bgp_maxmed_onstartup_configured(bgp)
@@ -15051,7 +4692,6 @@ const char *get_afi_safi_str(afi_t afi, safi_t safi, bool for_json)
 		return get_afi_safi_vty_str(afi, safi);
 }
 
-
 static void bgp_show_peer_afi_orf_cap(struct vty *vty, struct peer *p,
 				      afi_t afi, safi_t safi,
 				      uint16_t adv_smcap, uint16_t adv_rmcap,
@@ -15144,6 +4784,9 @@ static void bgp_show_neighbor_graceful_restart_remote_mode(struct vty *vty,
 {
 	const char *mode = "NotApplicable";
 
+	if (!json)
+		vty_out(vty, "\n    Remote GR Mode: ");
+
 	if (CHECK_FLAG(peer->cap, PEER_CAP_RESTART_ADV) &&
 	    (peer_established(peer->connection))) {
 		if ((peer->nsf_af_count == 0)
@@ -15166,7 +4809,7 @@ static void bgp_show_neighbor_graceful_restart_remote_mode(struct vty *vty,
 	if (json)
 		json_object_string_add(json, "remoteGrMode", mode);
 	else
-		vty_out(vty, "    Remote GR Mode: %s\n", mode);
+		vty_out(vty, "%s", mode);
 }
 
 static void bgp_show_neighbor_graceful_restart_local_mode(struct vty *vty,
@@ -15174,6 +4817,9 @@ static void bgp_show_neighbor_graceful_restart_local_mode(struct vty *vty,
 							  json_object *json)
 {
 	const char *mode = "Invalid";
+
+	if (!json)
+		vty_out(vty, "    Local GR Mode: ");
 
 	if (bgp_peer_gr_mode_get(p) == PEER_HELPER)
 		mode = "Helper";
@@ -15195,11 +4841,11 @@ static void bgp_show_neighbor_graceful_restart_local_mode(struct vty *vty,
 	if (json)
 		json_object_string_add(json, "localGrMode", mode);
 	else
-		vty_out(vty, "    Local GR Mode: %s\n", mode);
+		vty_out(vty, "%s", mode);
 }
 
-static void bgp_show_peer_gr_info_afi_safi(struct vty *vty, struct peer *peer, bool use_json,
-					   json_object *json)
+static __attribute__((unused)) void bgp_show_neighbor_graceful_restart_capability_per_afi_safi(
+	struct vty *vty, struct peer *peer, json_object *json)
 {
 	afi_t afi;
 	safi_t safi;
@@ -15422,9 +5068,6 @@ static void bgp_show_neighbor_graceful_restart_time(struct vty *vty,
 			json_object_int_add(json_timer, "restartTimerRemaining",
 					    event_timer_remain_second(
 						    p->connection->t_gr_restart));
-		if (p->connection->t_gr_stale)
-			json_object_int_add(json_timer, "gracefulStalepathTimerSec",
-					    event_timer_remain_second(p->connection->t_gr_stale));
 
 		json_object_object_add(json, "timers", json_timer);
 	} else {
@@ -15441,6 +5084,229 @@ static void bgp_show_neighbor_graceful_restart_time(struct vty *vty,
 			vty_out(vty, "      Restart Time Remaining(sec): %ld\n",
 				event_timer_remain_second(
 					p->connection->t_gr_restart));
+		if (p->connection->t_gr_restart != NULL) {
+			vty_out(vty, "      Restart Time Remaining(sec): %ld\n",
+				event_timer_remain_second(
+					p->connection->t_gr_restart));
+		}
+	}
+}
+
+static void bgp_show_peer_gr_status(struct vty *vty, struct peer *p,
+				    json_object *json)
+{
+	char dn_flag[2] = {0};
+	/* '*' + v6 address of neighbor */
+	char neighborAddr[INET6_ADDRSTRLEN + 1] = {0};
+
+	if (!p->conf_if && peer_dynamic_neighbor(p))
+		dn_flag[0] = '*';
+
+	if (p->conf_if) {
+		if (json)
+			json_object_string_addf(json, "neighborAddr", "%pSU",
+						&p->connection->su);
+		else
+			vty_out(vty, "BGP neighbor on %s: %pSU\n", p->conf_if,
+				&p->connection->su);
+	} else {
+		snprintf(neighborAddr, sizeof(neighborAddr), "%s%s", dn_flag,
+			 p->host);
+
+		if (json)
+			json_object_string_add(json, "neighborAddr",
+					       neighborAddr);
+		else
+			vty_out(vty, "BGP neighbor is %s\n", neighborAddr);
+	}
+
+	/* more gr info in new format */
+	if (json) {
+		json_object *json_grace = json_object_new_object();
+		BGP_SHOW_PEER_GR_CAPABILITY(vty, p, json_grace);
+		json_object_object_add(json, "gracefulRestartInfo", json_grace);
+	} else {
+		BGP_SHOW_PEER_GR_CAPABILITY(vty, p, NULL);
+	}
+}
+
+void bgp_show_peer_gr_info_afi_safi(struct vty *vty, struct peer *peer, bool use_json,
+					   json_object *json)
+{
+	afi_t afi;
+	safi_t safi;
+	json_object *json_afi_safi = NULL;
+	json_object *json_timer = NULL;
+	json_object *json_endofrib_status = NULL;
+	bool eor_flag = false;
+
+	FOREACH_AFI_SAFI_NSF (afi, safi) {
+		if (!peer->afc[afi][safi])
+			continue;
+
+		if (!CHECK_FLAG(peer->cap, PEER_CAP_RESTART_ADV) ||
+		    !CHECK_FLAG(peer->cap, PEER_CAP_RESTART_RCV))
+			continue;
+
+		if (json) {
+			json_afi_safi = json_object_new_object();
+			json_endofrib_status = json_object_new_object();
+			json_timer = json_object_new_object();
+		}
+
+		if (peer->eor_stime[afi][safi] >= peer->pkt_stime[afi][safi])
+			eor_flag = true;
+		else
+			eor_flag = false;
+
+		if (!json) {
+			vty_out(vty, "    %s:\n",
+				get_afi_safi_str(afi, safi, false));
+
+			vty_out(vty, "      F bit: ");
+		}
+
+		if (peer->nsf[afi][safi] &&
+		    CHECK_FLAG(peer->af_cap[afi][safi],
+			       PEER_CAP_RESTART_AF_PRESERVE_RCV)) {
+
+			if (json) {
+				json_object_boolean_true_add(json_afi_safi,
+							     "fBit");
+			} else
+				vty_out(vty, "True\n");
+		} else {
+			if (json)
+				json_object_boolean_false_add(json_afi_safi,
+							      "fBit");
+			else
+				vty_out(vty, "False\n");
+		}
+
+		if (!json)
+			vty_out(vty, "      End-of-RIB sent: ");
+
+		if (CHECK_FLAG(peer->af_sflags[afi][safi],
+			       PEER_STATUS_EOR_SEND)) {
+			if (json) {
+				json_object_boolean_true_add(
+					json_endofrib_status, "endOfRibSend");
+
+				PRINT_EOR_JSON(eor_flag);
+			} else {
+				vty_out(vty, "Yes\n");
+				vty_out(vty,
+					"      End-of-RIB sent after update: ");
+
+				PRINT_EOR(eor_flag);
+			}
+		} else {
+			if (json) {
+				json_object_boolean_false_add(
+					json_endofrib_status, "endOfRibSend");
+				json_object_boolean_false_add(
+					json_endofrib_status,
+					"endOfRibSentAfterUpdate");
+			} else {
+				vty_out(vty, "No\n");
+				vty_out(vty,
+					"      End-of-RIB sent after update: ");
+				vty_out(vty, "No\n");
+			}
+		}
+
+		if (!json)
+			vty_out(vty, "      End-of-RIB received: ");
+
+		if (CHECK_FLAG(peer->af_sflags[afi][safi],
+			       PEER_STATUS_EOR_RECEIVED)) {
+			if (json)
+				json_object_boolean_true_add(
+					json_endofrib_status, "endOfRibRecv");
+			else
+				vty_out(vty, "Yes\n");
+		} else {
+			if (json)
+				json_object_boolean_false_add(
+					json_endofrib_status, "endOfRibRecv");
+			else
+				vty_out(vty, "No\n");
+		}
+
+		if (json) {
+			json_object_int_add(json_timer, "stalePathTimer",
+					    peer->bgp->stalepath_time);
+			json_object_int_add(json_timer, "llgrStaleTime",
+					    peer->llgr[afi][safi].stale_time);
+
+			if (peer->connection->t_gr_stale != NULL) {
+				json_object_int_add(json_timer,
+						    "stalePathTimerRemaining",
+						    event_timer_remain_second(
+							    peer->connection
+								    ->t_gr_stale));
+			}
+
+			/* Display Configured Selection
+			 * Deferral only when when
+			 * Gr mode is enabled.
+			 */
+			if (CHECK_FLAG(peer->flags,
+				       PEER_FLAG_GRACEFUL_RESTART)) {
+				json_object_int_add(json_timer, "selectionDeferralTimer",
+						    peer->bgp->select_defer_time);
+			}
+
+			if (peer->bgp->gr_info[afi][safi].t_select_deferral !=
+			    NULL) {
+
+				json_object_int_add(
+					json_timer,
+					"selectionDeferralTimerRemaining",
+					event_timer_remain_second(
+						peer->bgp->gr_info[afi][safi]
+							.t_select_deferral));
+			}
+		} else {
+			vty_out(vty, "      Timers:\n");
+			vty_out(vty,
+				"        Configured Stale Path Time(sec): %u\n",
+				peer->bgp->stalepath_time);
+
+			if (peer->connection->t_gr_stale != NULL)
+				vty_out(vty,
+					"      Stale Path Remaining(sec): %ld\n",
+					event_timer_remain_second(
+						peer->connection->t_gr_stale));
+			/* Display Configured Selection
+			 * Deferral only when when
+			 * Gr mode is enabled.
+			 */
+			if (CHECK_FLAG(peer->flags, PEER_FLAG_GRACEFUL_RESTART))
+				vty_out(vty,
+					"        Configured Selection Deferral Time(sec): %u\n",
+					peer->bgp->select_defer_time);
+
+			vty_out(vty, "        LLGR Stale Path Time(sec): %u\n",
+				peer->llgr[afi][safi].stale_time);
+
+			if (peer->bgp->gr_info[afi][safi].t_select_deferral !=
+			    NULL)
+				vty_out(vty,
+					"        Selection Deferral Time Remaining(sec): %ld\n",
+					event_timer_remain_second(
+						peer->bgp->gr_info[afi][safi]
+							.t_select_deferral));
+		}
+		if (json) {
+			json_object_object_add(json_afi_safi, "endOfRibStatus",
+					       json_endofrib_status);
+			json_object_object_add(json_afi_safi, "timers",
+					       json_timer);
+			json_object_object_add(
+				json, get_afi_safi_str(afi, safi, true),
+				json_afi_safi);
+		}
 	}
 }
 
@@ -15448,7 +5314,6 @@ static void bgp_show_peer_afi(struct vty *vty, struct peer *p, afi_t afi,
 			      safi_t safi, bool use_json,
 			      json_object *json_neigh)
 {
-	int pfx_rcd_safi;
 	struct bgp_filter *filter;
 	struct peer_af *paf;
 	char orf_pfx_name[BUFSIZ];
@@ -15457,11 +5322,6 @@ static void bgp_show_peer_afi(struct vty *vty, struct peer *p, afi_t afi,
 	json_object *json_prefA = NULL;
 	json_object *json_addr = NULL;
 	json_object *json_advmap = NULL;
-
-	if (safi == SAFI_LABELED_UNICAST)
-		pfx_rcd_safi = SAFI_UNICAST;
-	else
-		pfx_rcd_safi = safi;
 
 	if (use_json) {
 		json_addr = json_object_new_object();
@@ -15761,13 +5621,13 @@ static void bgp_show_peer_afi(struct vty *vty, struct peer *p, afi_t afi,
 
 		/* Receive prefix count */
 		json_object_int_add(json_addr, "acceptedPrefixCounter",
-				    p->pcount[afi][pfx_rcd_safi]);
+				    p->pcount[afi][safi]);
 		if (paf && PAF_SUBGRP(paf))
 			json_object_int_add(json_addr, "sentPrefixCounter",
 						(PAF_SUBGRP(paf))->scount);
 
 		json_object_int_add(json_addr, "receivedPrefixDup",
-				    p->pcount_dup[afi][pfx_rcd_safi]);
+				    p->pcount_dup[afi][safi]);
 
 		/* Maximum prefix */
 		if (CHECK_FLAG(p->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_OUT))
@@ -16066,12 +5926,11 @@ static void bgp_show_peer_afi(struct vty *vty, struct peer *p, afi_t afi,
 		/* Receive and sent prefix count, if available */
 		paf = peer_af_find(p, afi, safi);
 		if (paf && PAF_SUBGRP(paf))
-			vty_out(vty, "  %u accepted, %u sent prefixes, %u received duplicates\n",
-				p->pcount[afi][pfx_rcd_safi], PAF_SUBGRP(paf)->scount,
-				p->pcount_dup[afi][pfx_rcd_safi]);
+			vty_out(vty, "  %u accepted, %u sent prefixes\n",
+				p->pcount[afi][safi], PAF_SUBGRP(paf)->scount);
 		else
-			vty_out(vty, "  %u accepted prefixes, %u received duplicates\n",
-				p->pcount[afi][pfx_rcd_safi], p->pcount_dup[afi][pfx_rcd_safi]);
+			vty_out(vty, "  %u accepted prefixes\n",
+				p->pcount[afi][safi]);
 
 		/* maximum-prefix-out */
 		if (CHECK_FLAG(p->af_flags[afi][safi],
@@ -16108,7 +5967,8 @@ static void bgp_show_peer_status(struct vty *vty, struct peer *p, bool use_json,
 
 	if (use_json)
 		json_object_string_add(json_neigh, "bgpState",
-				       lookup_msg(bgp_status_msg, p->connection->status, NULL));
+				       lookup_msg(bgp_status_msg,
+						  p->connection->status, NULL));
 	else
 		vty_out(vty, "  BGP state = %s",
 			lookup_msg(bgp_status_msg, p->connection->status, NULL));
@@ -16122,20 +5982,27 @@ static void bgp_show_peer_status(struct vty *vty, struct peer *p, bool use_json,
 			uptime -= p->uptime;
 			epoch_tbuf = time(NULL) - uptime;
 
-			json_object_int_add(json_neigh, "bgpTimerUpMsec", uptime * 1000);
+			json_object_int_add(json_neigh, "bgpTimerUpMsec",
+					    uptime * 1000);
 			json_object_string_add(json_neigh, "bgpTimerUpString",
-					       peer_uptime(p->uptime, timebuf, BGP_UPTIME_LEN, 0,
+					       peer_uptime(p->uptime, timebuf,
+							   BGP_UPTIME_LEN, 0,
 							   NULL));
-			json_object_int_add(json_neigh, "bgpTimerUpEstablishedEpoch", epoch_tbuf);
+			json_object_int_add(json_neigh,
+					    "bgpTimerUpEstablishedEpoch",
+					    epoch_tbuf);
 		} else
 			vty_out(vty, ", up for %8s",
-				peer_uptime(p->uptime, timebuf, BGP_UPTIME_LEN, 0, NULL));
+				peer_uptime(p->uptime, timebuf, BGP_UPTIME_LEN,
+					    0, NULL));
 	} else if (p->connection->status == Active) {
 		if (use_json) {
 			if (CHECK_FLAG(p->flags, PEER_FLAG_PASSIVE))
-				json_object_string_add(json_neigh, "bgpStateIs", "passive");
+				json_object_string_add(json_neigh, "bgpStateIs",
+						       "passive");
 			else if (CHECK_FLAG(p->sflags, PEER_STATUS_NSF_WAIT))
-				json_object_string_add(json_neigh, "bgpStateIs", "passiveNSF");
+				json_object_string_add(json_neigh, "bgpStateIs",
+						       "passiveNSF");
 		} else {
 			if (CHECK_FLAG(p->flags, PEER_FLAG_PASSIVE))
 				vty_out(vty, " (passive)");
@@ -16147,224 +6014,20 @@ static void bgp_show_peer_status(struct vty *vty, struct peer *p, bool use_json,
 		vty_out(vty, "\n");
 }
 
-static void bgp_show_peer_gr_capability(struct vty *vty, struct peer *p, bool use_json,
-					json_object *json_cap)
-{
-	if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV) && CHECK_FLAG(p->cap, PEER_CAP_RESTART_ADV)) {
-		if (use_json)
-			json_object_string_add(json_cap, "gracefulRestart",
-					       "advertisedAndReceived");
-		else
-			vty_out(vty, "    Graceful Restart Capability: advertised and received\n");
-	} else if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_ADV)) {
-		if (use_json)
-			json_object_string_add(json_cap, "gracefulRestart", "advertised");
-		else
-			vty_out(vty, "    Graceful Restart Capability: advertised\n");
-	} else if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
-		if (use_json)
-			json_object_string_add(json_cap, "gracefulRestart", "received");
-		else
-			vty_out(vty, "    Graceful Restart Capability: received\n");
-	}
-
-	if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
-		int r_afc = 0;
-		afi_t afi;
-		safi_t safi;
-		json_object *json_restart = NULL;
-
-		if (use_json) {
-			json_restart = json_object_new_object();
-			json_object_int_add(json_cap, "gracefulRestartRemoteTimerSec",
-					    p->v_gr_restart);
-		} else
-			vty_out(vty, "      Remote Restart timer is %d seconds\n", p->v_gr_restart);
-
-		if (CHECK_FLAG(p->cap, PEER_CAP_GRACEFUL_RESTART_R_BIT_RCV)) {
-			if (use_json)
-				json_object_boolean_true_add(json_cap, "rBitReceived");
-			else
-				vty_out(vty, "      Peer has restarted (R-bit is set)\n");
-		}
-
-		if (CHECK_FLAG(p->cap, PEER_CAP_GRACEFUL_RESTART_N_BIT_RCV)) {
-			if (use_json)
-				json_object_boolean_true_add(json_cap, "nBitReceived");
-			else
-				vty_out(vty, "      Peer has restarted (N-bit is set)\n");
-		}
-
-		if (!use_json)
-			vty_out(vty, "      Address families by peer:\n        ");
-
-		FOREACH_AFI_SAFI (afi, safi) {
-			if (CHECK_FLAG(p->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV)) {
-				bool f_bit;
-
-				f_bit = CHECK_FLAG(p->af_cap[afi][safi],
-						   PEER_CAP_RESTART_AF_PRESERVE_RCV);
-
-				if (use_json) {
-					json_object *json_sub = NULL;
-
-					json_sub = json_object_new_object();
-					if (f_bit)
-						json_object_boolean_true_add(json_sub, "preserved");
-					json_object_object_add(json_restart,
-							       get_afi_safi_str(afi, safi, true),
-							       json_sub);
-				} else {
-					vty_out(vty, "%s%s(%s)", r_afc ? ", " : "",
-						get_afi_safi_str(afi, safi, false),
-						f_bit ? "preserved" : "not preserved");
-				}
-				r_afc++;
-			}
-		}
-		if (!r_afc) {
-			if (use_json) {
-				json_object_string_add(json_cap, "addressFamiliesByPeer", "none");
-				json_object_free(json_restart);
-			} else
-				vty_out(vty, "none\n");
-		} else {
-			if (use_json)
-				json_object_object_add(json_cap, "addressFamiliesByPeer",
-						       json_restart);
-			else
-				vty_out(vty, "\n");
-		}
-	}
-}
-
-static void bgp_show_peer_gr_extra_info(struct vty *vty, struct peer *p, bool use_json,
-					json_object *json_neigh)
-{
-	json_object *json_grace = NULL;
-	json_object *json_grace_send = NULL;
-	json_object *json_grace_recv = NULL;
-	int eor_send_af_count = 0;
-	int eor_receive_af_count = 0;
-	afi_t afi;
-	safi_t safi;
-
-	if (use_json) {
-		json_grace = json_object_new_object();
-		json_grace_send = json_object_new_object();
-		json_grace_recv = json_object_new_object();
-
-		if (peer_established(p->connection) && CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
-			FOREACH_AFI_SAFI (afi, safi) {
-				if (CHECK_FLAG(p->af_sflags[afi][safi], PEER_STATUS_EOR_SEND)) {
-					json_object_boolean_true_add(json_grace_send,
-								     get_afi_safi_str(afi, safi,
-										      true));
-					eor_send_af_count++;
-				}
-
-				if (CHECK_FLAG(p->af_sflags[afi][safi], PEER_STATUS_EOR_RECEIVED)) {
-					json_object_boolean_true_add(json_grace_recv,
-								     get_afi_safi_str(afi, safi,
-										      true));
-					eor_receive_af_count++;
-				}
-			}
-		}
-		json_object_object_add(json_grace, "endOfRibSend", json_grace_send);
-		json_object_object_add(json_grace, "endOfRibRecv", json_grace_recv);
-
-
-		if (p->connection->t_gr_restart)
-			json_object_int_add(json_grace, "gracefulRestartTimerSec",
-					    event_timer_remain_second(p->connection->t_gr_restart));
-
-		if (p->connection->t_gr_stale)
-			json_object_int_add(json_grace, "gracefulStalepathTimerSec",
-					    event_timer_remain_second(p->connection->t_gr_stale));
-		/* more gr info in new format */
-		BGP_SHOW_PEER_GR_CAPABILITY(vty, p, json_grace);
-		json_object_object_add(json_neigh, "gracefulRestartInfo", json_grace);
-	} else {
-		vty_out(vty, "  Graceful restart information:\n");
-		if (peer_established(p->connection) && CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
-			vty_out(vty, "    End-of-RIB send: ");
-			FOREACH_AFI_SAFI (afi, safi) {
-				if (CHECK_FLAG(p->af_sflags[afi][safi], PEER_STATUS_EOR_SEND)) {
-					vty_out(vty, "%s%s", eor_send_af_count ? ", " : "",
-						get_afi_safi_str(afi, safi, false));
-					eor_send_af_count++;
-				}
-			}
-			vty_out(vty, "\n");
-			vty_out(vty, "    End-of-RIB received: ");
-			FOREACH_AFI_SAFI (afi, safi) {
-				if (CHECK_FLAG(p->af_sflags[afi][safi], PEER_STATUS_EOR_RECEIVED)) {
-					vty_out(vty, "%s%s", eor_receive_af_count ? ", " : "",
-						get_afi_safi_str(afi, safi, false));
-					eor_receive_af_count++;
-				}
-			}
-			vty_out(vty, "\n");
-		}
-
-		if (p->connection->t_gr_restart)
-			vty_out(vty, "    The remaining time of restart timer is %ld\n",
-				event_timer_remain_second(p->connection->t_gr_restart));
-
-		if (p->connection->t_gr_stale)
-			vty_out(vty, "    The remaining time of stalepath timer is %ld\n",
-				event_timer_remain_second(p->connection->t_gr_stale));
-
-		/* more gr info in new format */
-		BGP_SHOW_PEER_GR_CAPABILITY(vty, p, NULL);
-	}
-}
-
-static void bgp_show_peer_gr_info(struct vty *vty, struct peer *p, bool use_json,
-				  json_object *json_neigh)
-{
-	json_object *json_cap = NULL;
-
-	if (use_json) {
-		/* Administrative shutdown. */
-		if (CHECK_FLAG(p->flags, PEER_FLAG_SHUTDOWN))
-			json_object_boolean_true_add(json_neigh, "adminShutDown");
-	} else {
-		/* Administrative shutdown. */
-		if (CHECK_FLAG(p->flags, PEER_FLAG_SHUTDOWN))
-			vty_out(vty, " Administratively shut down\n");
-	}
-
-	/* Status. */
-	bgp_show_peer_status(vty, p, use_json, json_neigh);
-
-	/* GR capability info */
-	if (use_json)
-		json_cap = json_object_new_object();
-	else
-		vty_out(vty, "  Neighbor GR capabilities:\n");
-	bgp_show_peer_gr_capability(vty, p, use_json, json_cap);
-	if (use_json)
-		json_object_object_add(json_neigh, "neighborCapabilities", json_cap);
-
-	/* more gr info */
-	bgp_show_peer_gr_extra_info(vty, p, use_json, json_neigh);
-}
-
-static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bool use_json,
-			  json_object *json)
+static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags,
+			  bool use_json, json_object *json)
 {
 	struct bgp *bgp;
-	char buf[PREFIX2STR_BUFFER];
 	char timebuf[BGP_UPTIME_LEN];
-	char dn_flag[2] = {};
+	char dn_flag[2];
 	afi_t afi;
 	safi_t safi;
 	uint16_t i;
 	int len = 0;
 	uint8_t *msg;
-	json_object *json_neigh = NULL, *json_stat = NULL, *json_addr_family_info = NULL;
+	json_object *json_neigh = NULL, *json_stat = NULL,
+		    *json_addr_family_info = NULL;
+	time_t epoch_tbuf;
 	uint32_t sync_tcp_mss;
 	int neighbor_col_default_width = 16;
 	struct peer_af *paf;
@@ -16380,6 +6043,7 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 	if (use_json)
 		json_neigh = json_object_new_object();
 
+	memset(dn_flag, '\0', sizeof(dn_flag));
 	if (!p->conf_if && peer_dynamic_neighbor(p))
 		dn_flag[0] = '*';
 
@@ -16388,15 +6052,20 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 			time_t uptime;
 
 			if (p->hostname)
-				json_object_string_add(json_neigh, "hostname", p->hostname);
+				json_object_string_add(json_neigh, "hostname",
+						       p->hostname);
 			else
-				json_object_string_add(json_neigh, "hostname", "Unknown");
-			asn_asn2json(json_neigh, "remoteAs", p->as, bgp->asnotation);
+				json_object_string_add(json_neigh, "hostname",
+						       "Unknown");
+			asn_asn2json(json_neigh, "remoteAs", p->as,
+				     bgp->asnotation);
 			if (p->change_local_as)
-				asn_asn2json(json_neigh, "localAs", p->change_local_as,
+				asn_asn2json(json_neigh, "localAs",
+					     p->change_local_as,
 					     bgp->asnotation);
 			else
-				asn_asn2json(json_neigh, "localAs", p->local_as, bgp->asnotation);
+				asn_asn2json(json_neigh, "localAs", p->local_as,
+					     bgp->asnotation);
 			json_object_string_add(json_neigh, "lastResetDueTo",
 					       peer_down_str[(int)p->last_reset]);
 			bgp_show_peer_status(vty, p, use_json, json_neigh);
@@ -16407,77 +6076,79 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 			json_object_int_add(json_neigh, "lastResetTimerMsecs",
 					    (int64_t)uptime * 1000);
 			json_stat = json_object_new_object();
-			json_object_int_add(json_stat, "totalSent", PEER_TOTAL_TX(p));
-			json_object_int_add(json_stat, "totalRecv", PEER_TOTAL_RX(p));
-			json_object_object_add(json_neigh, "messageStats", json_stat);
+			json_object_int_add(json_stat, "totalSent",
+					    PEER_TOTAL_TX(p));
+			json_object_int_add(json_stat, "totalRecv",
+					    PEER_TOTAL_RX(p));
+			json_object_object_add(json_neigh, "messageStats",
+					       json_stat);
 			json_addr_family_info = json_object_new_object();
 			json_object_object_add(json_neigh, "addressFamilyInfo",
 					       json_addr_family_info);
 			if (p->conf_if)
-				json_object_object_add(json, p->conf_if, json_neigh);
+				json_object_object_add(json, p->conf_if,
+						       json_neigh);
 			else
 				json_object_object_add(json, p->host, json_neigh);
 		} else {
-			if (p->hostname && CHECK_FLAG(bgp->flags, BGP_FLAG_SHOW_HOSTNAME))
-				len = vty_out(vty, "%s%s(%s)", dn_flag, p->hostname, p->host);
+			if (p->hostname &&
+			    CHECK_FLAG(bgp->flags, BGP_FLAG_SHOW_HOSTNAME))
+				len = vty_out(vty, "%s%s(%s)", dn_flag,
+					      p->hostname, p->host);
 			else
 				len = vty_out(vty, "%s%s", dn_flag, p->host);
 			if (len < neighbor_col_default_width)
-				vty_out(vty, "%*s", neighbor_col_default_width - len, " ");
-			vty_out(vty, "%10u %9u %9u %10s %12s ", p->as, PEER_TOTAL_RX(p),
-				PEER_TOTAL_TX(p),
-				peer_uptime(p->resettime, timebuf, BGP_UPTIME_LEN, 0, NULL),
-				lookup_msg(bgp_status_msg, p->connection->status, NULL));
+				vty_out(vty, "%*s",
+					neighbor_col_default_width - len, " ");
+			vty_out(vty, "%10u %9u %9u %10s %12s ", p->as,
+				PEER_TOTAL_RX(p), PEER_TOTAL_TX(p),
+				peer_uptime(p->resettime, timebuf,
+					    BGP_UPTIME_LEN, 0, NULL),
+				lookup_msg(bgp_status_msg, p->connection->status,
+					   NULL));
 		}
 		FOREACH_AFI_SAFI (afi, safi) {
 			if (p->afc[afi][safi]) {
 				paf = peer_af_find(p, afi, safi);
 				peer_pcount = p->pcount[afi][safi];
-				peer_scount = ((paf && PAF_SUBGRP(paf)) ? PAF_SUBGRP(paf)->scount
-									: 0);
+				peer_scount = ((paf && PAF_SUBGRP(paf))
+						       ? PAF_SUBGRP(paf)->scount
+						       : 0);
 				if (!use_json) {
-					afi_safi = get_afi_safi_str(afi, safi, false);
+					afi_safi = get_afi_safi_str(afi, safi,
+								    false);
 					if (is_first_afi_safi) {
-						vty_out(vty, "%16s %9u %9u\n", afi_safi,
-							peer_pcount, peer_scount);
+						vty_out(vty,
+							"%16s %9u %9u\n",
+							afi_safi, peer_pcount,
+							peer_scount);
 						is_first_afi_safi = false;
 					} else
-						vty_out(vty, "%70s %16s %9u %9u\n", " ", afi_safi,
+						vty_out(vty,
+							"%70s %16s %9u %9u\n",
+							" ", afi_safi,
 							peer_pcount, peer_scount);
 				} else {
-					afi_safi = get_afi_safi_str(afi, safi, true);
-					json_object *json_addr = json_object_new_object();
-					json_object_int_add(json_addr, "acceptedPrefixCounter",
+					afi_safi = get_afi_safi_str(afi, safi,
+								    true);
+					json_object *json_addr =
+						json_object_new_object();
+					json_object_int_add(json_addr,
+							    "acceptedPrefixCounter",
 							    peer_pcount);
-					json_object_int_add(json_addr, "sentPrefixCounter",
+					json_object_int_add(json_addr,
+							    "sentPrefixCounter",
 							    peer_scount);
-					json_object_object_add(json_addr_family_info, afi_safi,
-							       json_addr);
+					json_object_object_add(
+						json_addr_family_info, afi_safi,
+						json_addr);
 				}
 			}
 		}
 		return;
 	}
 
-	if (use_json) {
-		if (p->conf_if && BGP_CONNECTION_SU_UNSPEC(p->connection))
-			json_object_string_add(json_neigh, "bgpNeighborAddr", "none");
-		else if (p->conf_if && !BGP_CONNECTION_SU_UNSPEC(p->connection))
-			json_object_string_add(json_neigh, "bgpNeighborAddr",
-					       sockunion2str(&p->connection->su, buf,
-							     SU_ADDRSTRLEN));
-
-		if (p->conf_if)
-			json_object_string_addf(json_neigh, "neighborAddr", "%pSU",
-						&p->connection->su);
-		else {
-			char neighborAddr[INET6_ADDRSTRLEN + 1] = { 0 };
-
-			snprintf(neighborAddr, sizeof(neighborAddr), "%s%s", dn_flag, p->host);
-
-			json_object_string_add(json_neigh, "neighborAddr", neighborAddr);
-		}
-	} else {
+	if (!use_json) {
 		if (p->conf_if) /* Configured interface name. */
 			vty_out(vty, "BGP neighbor on %s: %pSU, ", p->conf_if,
 				&p->connection->su);
@@ -16590,22 +6261,6 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 			bgp_get_name_by_role(p->remote_role));
 	}
 
-	/* Are we showing specific information? */
-	if (sh_flags) {
-		if (sh_flags & VTY_BGP_PEER_SHOW_GR_INFO)
-			bgp_show_peer_gr_info(vty, p, use_json, json_neigh);
-
-		/* Finish JSON, if needed. */
-		if (use_json) {
-			if (p->conf_if) /* Configured interface name. */
-				json_object_object_add(json, p->conf_if, json_neigh);
-			else /* Configured IP address. */
-				json_object_object_add(json, p->host, json_neigh);
-		}
-
-		return;
-	}
-
 	/* Description. */
 	if (p->desc) {
 		if (use_json)
@@ -16699,7 +6354,34 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 						     "nbrCommonAdmin");
 
 		/* Status. */
-		bgp_show_peer_status(vty, p, use_json, json_neigh);
+		json_object_string_add(json_neigh, "bgpState",
+				       lookup_msg(bgp_status_msg,
+						  p->connection->status, NULL));
+
+		if (peer_established(p->connection)) {
+			time_t uptime;
+
+			uptime = monotime(NULL);
+			uptime -= p->uptime;
+			epoch_tbuf = time(NULL) - uptime;
+
+			json_object_int_add(json_neigh, "bgpTimerUpMsec",
+					    uptime * 1000);
+			json_object_string_add(json_neigh, "bgpTimerUpString",
+					       peer_uptime(p->uptime, timebuf,
+							   BGP_UPTIME_LEN, 0,
+							   NULL));
+			json_object_int_add(json_neigh,
+					    "bgpTimerUpEstablishedEpoch",
+					    epoch_tbuf);
+		} else if (p->connection->status == Active) {
+			if (CHECK_FLAG(p->flags, PEER_FLAG_PASSIVE))
+				json_object_string_add(json_neigh, "bgpStateIs",
+						       "passive");
+			else if (CHECK_FLAG(p->sflags, PEER_STATUS_NSF_WAIT))
+				json_object_string_add(json_neigh, "bgpStateIs",
+						       "passiveNSF");
+		}
 
 		/* read timer */
 		time_t uptime;
@@ -16794,7 +6476,20 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 				"  Neighbor under common administration\n");
 
 		/* Status. */
-		bgp_show_peer_status(vty, p, use_json, json_neigh);
+		vty_out(vty, "  BGP state = %s",
+			lookup_msg(bgp_status_msg, p->connection->status, NULL));
+
+		if (peer_established(p->connection))
+			vty_out(vty, ", up for %8s",
+				peer_uptime(p->uptime, timebuf, BGP_UPTIME_LEN,
+					    0, NULL));
+		else if (p->connection->status == Active) {
+			if (CHECK_FLAG(p->flags, PEER_FLAG_PASSIVE))
+				vty_out(vty, " (passive)");
+			else if (CHECK_FLAG(p->sflags, PEER_STATUS_NSF_WAIT))
+				vty_out(vty, " (NSF passive)");
+		}
+		vty_out(vty, "\n");
 
 		/* read timer */
 		vty_out(vty, "  Last read %s",
@@ -17104,7 +6799,6 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 				json_object *json_nxt = NULL;
 				const char *print_store;
 
-
 				if (CHECK_FLAG(p->cap, PEER_CAP_ENHE_ADV) &&
 				    CHECK_FLAG(p->cap, PEER_CAP_ENHE_RCV))
 					json_object_string_add(
@@ -17293,7 +6987,6 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 						: "n/a");
 			}
 
-
 			if (CHECK_FLAG(p->cap, PEER_CAP_HOSTNAME_RCV)) {
 				json_object_string_add(
 					json_hname, "rcvHostName",
@@ -17338,7 +7031,72 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 			json_object_object_add(json_cap, "linkLocalNextHop", json_link_local);
 
 			/* Graceful Restart */
-			bgp_show_peer_gr_capability(vty, p, use_json, json_cap);
+			if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV) ||
+			    CHECK_FLAG(p->cap, PEER_CAP_RESTART_ADV)) {
+				if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_ADV) &&
+				    CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
+					json_object_string_add(
+						json_cap, "gracefulRestart",
+						"advertisedAndReceived");
+				} else if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_ADV)) {
+					json_object_string_add(json_cap, "gracefulRestart",
+							       "advertised");
+				} else if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
+					json_object_string_add(json_cap, "gracefulRestart",
+							       "received");
+				}
+
+				if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
+					int restart_af_count = 0;
+					json_object *json_restart = NULL;
+					json_restart = json_object_new_object();
+
+					json_object_int_add(
+						json_cap,
+						"gracefulRestartRemoteTimerMsecs",
+						p->v_gr_restart * 1000);
+
+					FOREACH_AFI_SAFI (afi, safi) {
+						if (CHECK_FLAG(
+							    p->af_cap[afi]
+								     [safi],
+							    PEER_CAP_RESTART_AF_RCV)) {
+							json_object *json_sub =
+								NULL;
+							json_sub =
+								json_object_new_object();
+
+							if (CHECK_FLAG(
+								    p->af_cap
+									    [afi]
+									    [safi],
+								    PEER_CAP_RESTART_AF_PRESERVE_RCV))
+								json_object_boolean_true_add(
+									json_sub,
+									"preserved");
+							restart_af_count++;
+							json_object_object_add(
+								json_restart,
+								get_afi_safi_str(
+									afi,
+									safi,
+									true),
+								json_sub);
+						}
+					}
+					if (!restart_af_count) {
+						json_object_string_add(
+							json_cap,
+							"addressFamiliesByPeer",
+							"none");
+						json_object_free(json_restart);
+					} else
+						json_object_object_add(
+							json_cap,
+							"addressFamiliesByPeer",
+							json_restart);
+				}
+			}
 			json_object_object_add(
 				json_neigh, "neighborCapabilities", json_cap);
 		} else {
@@ -17716,21 +7474,147 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 				vty_out(vty, "\n");
 
 				if (CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
+					int restart_af_count = 0;
+
 					vty_out(vty,
 						"      Remote Restart timer is %d seconds\n",
 						p->v_gr_restart);
 					vty_out(vty,
 						"      Address families by peer:\n        ");
 
-					/* Graceful Restart */
-					bgp_show_peer_gr_capability(vty, p, use_json, NULL);
+					FOREACH_AFI_SAFI (afi, safi)
+						if (CHECK_FLAG(
+							    p->af_cap[afi]
+								     [safi],
+							    PEER_CAP_RESTART_AF_RCV)) {
+							vty_out(vty, "%s%s(%s)",
+								restart_af_count
+									? ", "
+									: "",
+								get_afi_safi_str(
+									afi,
+									safi,
+									false),
+								CHECK_FLAG(
+									p->af_cap
+										[afi]
+										[safi],
+									PEER_CAP_RESTART_AF_PRESERVE_RCV)
+									? "preserved"
+									: "not preserved");
+							restart_af_count++;
+						}
+					if (!restart_af_count)
+						vty_out(vty, "none");
+					vty_out(vty, "\n");
 				}
-			}
+			} /* Graceful Restart */
 		}
 	}
 
 	/* graceful restart information */
-	bgp_show_peer_gr_extra_info(vty, p, use_json, json_neigh);
+	json_object *json_grace = NULL;
+	json_object *json_grace_send = NULL;
+	json_object *json_grace_recv = NULL;
+	int eor_send_af_count = 0;
+	int eor_receive_af_count = 0;
+
+	if (use_json) {
+		json_grace = json_object_new_object();
+		json_grace_send = json_object_new_object();
+		json_grace_recv = json_object_new_object();
+
+		if ((peer_established(p->connection)) &&
+		    CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
+			FOREACH_AFI_SAFI (afi, safi) {
+				if (CHECK_FLAG(p->af_sflags[afi][safi],
+					       PEER_STATUS_EOR_SEND)) {
+					json_object_boolean_true_add(
+						json_grace_send,
+						get_afi_safi_str(afi, safi,
+								 true));
+					eor_send_af_count++;
+				}
+			}
+			FOREACH_AFI_SAFI (afi, safi) {
+				if (CHECK_FLAG(p->af_sflags[afi][safi],
+					       PEER_STATUS_EOR_RECEIVED)) {
+					json_object_boolean_true_add(
+						json_grace_recv,
+						get_afi_safi_str(afi, safi,
+								 true));
+					eor_receive_af_count++;
+				}
+			}
+		}
+		json_object_object_add(json_grace, "endOfRibSend",
+				       json_grace_send);
+		json_object_object_add(json_grace, "endOfRibRecv",
+				       json_grace_recv);
+
+		if (p->connection->t_gr_restart)
+			json_object_int_add(json_grace,
+					    "gracefulRestartTimerMsecs",
+					    event_timer_remain_second(
+						    p->connection->t_gr_restart) *
+						    1000);
+
+		if (p->connection->t_gr_stale)
+			json_object_int_add(json_grace,
+					    "gracefulStalepathTimerMsecs",
+					    event_timer_remain_second(
+						    p->connection->t_gr_stale) *
+						    1000);
+		/* more gr info in new format */
+		BGP_SHOW_PEER_GR_CAPABILITY(vty, p, json_grace);
+		json_object_object_add(json_neigh, "gracefulRestartInfo",
+				       json_grace);
+	} else {
+		vty_out(vty, "  Graceful restart information:\n");
+		if ((peer_established(p->connection)) &&
+		    CHECK_FLAG(p->cap, PEER_CAP_RESTART_RCV)) {
+			vty_out(vty, "    End-of-RIB send: ");
+			FOREACH_AFI_SAFI (afi, safi) {
+				if (CHECK_FLAG(p->af_sflags[afi][safi],
+					       PEER_STATUS_EOR_SEND)) {
+					vty_out(vty, "%s%s",
+						eor_send_af_count ? ", " : "",
+						get_afi_safi_str(afi, safi,
+								 false));
+					eor_send_af_count++;
+				}
+			}
+			vty_out(vty, "\n");
+			vty_out(vty, "    End-of-RIB received: ");
+			FOREACH_AFI_SAFI (afi, safi) {
+				if (CHECK_FLAG(p->af_sflags[afi][safi],
+					       PEER_STATUS_EOR_RECEIVED)) {
+					vty_out(vty, "%s%s",
+						eor_receive_af_count ? ", "
+								     : "",
+						get_afi_safi_str(afi, safi,
+								 false));
+					eor_receive_af_count++;
+				}
+			}
+			vty_out(vty, "\n");
+		}
+
+		if (p->connection->t_gr_restart)
+			vty_out(vty,
+				"    The remaining time of restart timer is %ld\n",
+				event_timer_remain_second(
+					p->connection->t_gr_restart));
+
+		if (p->connection->t_gr_stale)
+			vty_out(vty,
+				"    The remaining time of stalepath timer is %ld\n",
+				event_timer_remain_second(
+					p->connection->t_gr_stale));
+
+		/* more gr info in new format */
+		BGP_SHOW_PEER_GR_CAPABILITY(vty, p, NULL);
+	}
 
 	if (use_json) {
 		json_object *json_pfx_stat = NULL;
@@ -17880,21 +7764,11 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 							"updateSource", "%pSU",
 							p->update_source);
 		}
-
-		/* update-delay timer */
-		json_object_int_add(json_neigh, "bgpUpdateDelayTimerMsecs",
-				    bgp->v_update_delay * 1000);
-		json_object_int_add(json_neigh, "bgpUpdateDelayTimerMsecsRemaining",
-				    event_timer_remain_second(bgp->t_update_delay) * 1000);
 	} else {
 		/* advertisement-interval */
 		vty_out(vty,
 			"  Minimum time between advertisement runs is %d seconds\n",
 			p->v_routeadv);
-
-		/* update delay timer */
-		vty_out(vty, "  Update delay timer is %u seconds (remaining: %lu)\n",
-			bgp->v_update_delay, event_timer_remain_second(bgp->t_update_delay));
 
 		/* Update-source. */
 		if (p->update_if || p->update_source) {
@@ -17931,12 +7805,12 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 		vty_out(vty, "  Connections established %d; dropped %d\n",
 			p->established, p->dropped);
 
-	if (p->last_reset == PEER_DOWN_NONE) {
+	if (!p->last_reset) {
 		if (use_json)
 			json_object_string_add(json_neigh, "lastReset",
-					       peer_down_str[PEER_DOWN_NONE]);
+					       "never");
 		else
-			vty_out(vty, "  Last reset %s\n", peer_down_str[PEER_DOWN_NONE]);
+			vty_out(vty, "  Last reset never\n");
 	} else {
 		if (use_json) {
 			time_t uptime;
@@ -18251,6 +8125,79 @@ static void bgp_show_peer(struct vty *vty, struct peer *p, uint16_t sh_flags, bo
 	}
 }
 
+static int bgp_show_neighbor_graceful_restart(struct vty *vty, struct bgp *bgp,
+					      enum show_type type,
+					      union sockunion *su,
+					      const char *conf_if, afi_t afi,
+					      json_object *json)
+{
+	struct listnode *node, *nnode;
+	struct peer *peer;
+	bool found = false;
+	safi_t safi = SAFI_UNICAST;
+	json_object *json_neighbor = NULL;
+
+	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
+
+		if (!CHECK_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE))
+			continue;
+
+		if ((peer->afc[afi][safi]) == 0)
+			continue;
+
+		if (json)
+			json_neighbor = json_object_new_object();
+
+		if (type == show_all) {
+			bgp_show_peer_gr_status(vty, peer, json_neighbor);
+
+			if (json)
+				json_object_object_add(json, peer->host,
+						       json_neighbor);
+
+		} else if (type == show_peer) {
+			if (conf_if) {
+				if ((peer->conf_if
+				     && !strcmp(peer->conf_if, conf_if))
+				    || (peer->hostname
+					&& !strcmp(peer->hostname, conf_if))) {
+					found = true;
+					bgp_show_peer_gr_status(vty, peer,
+								json_neighbor);
+				}
+			} else {
+				if (sockunion_same(&peer->connection->su, su)) {
+					found = true;
+					bgp_show_peer_gr_status(vty, peer,
+								json_neighbor);
+				}
+			}
+			if (json) {
+				if (found)
+					json_object_object_add(json, peer->host,
+							       json_neighbor);
+				else
+					json_object_free(json_neighbor);
+			}
+		}
+
+		if (found)
+			break;
+	}
+
+	if (type == show_peer && !found) {
+		if (json)
+			json_object_boolean_true_add(json, "bgpNoSuchNeighbor");
+		else
+			vty_out(vty, "%% No such neighbor\n");
+	}
+
+	if (!json)
+		vty_out(vty, "\n");
+
+	return CMD_SUCCESS;
+}
+
 static bool match_peer_state(struct peer *bpeer, uint32_t sh_flags)
 {
 	bool show_estab = CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO);
@@ -18262,33 +8209,35 @@ static bool match_peer_state(struct peer *bpeer, uint32_t sh_flags)
 	/* show flag for bgp state established is enabled and
 	 * bgp state is established
 	 */
-	else if (show_estab && bpeer->connection && peer_established(bpeer->connection))
+	else if (show_estab && bpeer->connection &&
+		 peer_established(bpeer->connection))
 		return true;
 	/* show flag for bgp state failed (not-established)
 	 * is enabled and bgp state is not established
 	 */
-	else if (show_not_estab && bpeer->connection && !peer_established(bpeer->connection))
+	else if (show_not_estab && bpeer->connection &&
+		 !peer_established(bpeer->connection))
 		return true;
 
 	/* peer state does not match with show flag */
 	return false;
 }
 
-static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp, enum show_type type,
-			     union sockunion *su, const char *conf_if, uint16_t sh_flags,
+static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp,
+			     enum show_type type, union sockunion *su,
+			     const char *conf_if, uint16_t sh_flags,
 			     bool use_json, json_object *json)
 {
 	struct listnode *node, *nnode;
 	struct peer *peer;
 	int find = 0;
-	bool peer_wrong_state = false;
 	bool nbr_output = false;
-	afi_t afi = AFI_MAX;
-	safi_t safi = SAFI_MAX;
 	bool is_first = true;
 	bool show_brief = ((CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO) ||
 			    CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_STATE_FAILED_INFO) ||
 			    CHECK_FLAG(sh_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO)));
+	afi_t afi = AFI_MAX;
+	safi_t safi = SAFI_MAX;
 
 	if (type == show_ipv4_peer || type == show_ipv4_all) {
 		afi = AFI_IP;
@@ -18299,72 +8248,79 @@ static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp, enum show_type ty
 	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
 		if (!peer_is_config_node(peer))
 			continue;
-		else if ((type == show_all || type == show_ipv4_all || type == show_ipv6_all) &&
-			 !match_peer_state(peer, sh_flags))
-			continue;
 		else if (show_brief && is_first && !use_json) {
 			vty_out(vty, BGP_SHOW_NEIGHBORS_BRIEF_HEADER);
 			is_first = false;
 		}
 		switch (type) {
 		case show_all:
+			if (!match_peer_state(peer, sh_flags))
+				continue;
+			if (show_brief && is_first && !use_json) {
+				vty_out(vty, BGP_SHOW_NEIGHBORS_BRIEF_HEADER);
+				is_first = false;
+			}
 			bgp_show_peer(vty, peer, sh_flags, use_json, json);
 			nbr_output = true;
 			break;
 		case show_peer:
 			if (conf_if) {
-				if ((peer->conf_if && strmatch(peer->conf_if, conf_if)) ||
-				    (peer->hostname && strmatch(peer->hostname, conf_if))) {
-					if (!match_peer_state(peer, sh_flags)) {
-						peer_wrong_state = true;
-						break;
-					}
+				if ((peer->conf_if
+				     && !strcmp(peer->conf_if, conf_if))
+				    || (peer->hostname
+					&& !strcmp(peer->hostname, conf_if))) {
 					find = 1;
-					bgp_show_peer(vty, peer, sh_flags, use_json, json);
+					bgp_show_peer(vty, peer, sh_flags,
+						      use_json, json);
 				}
 			} else {
 				if (sockunion_same(&peer->connection->su, su)) {
-					if (!match_peer_state(peer, sh_flags)) {
-						peer_wrong_state = true;
-						break;
-					}
 					find = 1;
-					bgp_show_peer(vty, peer, sh_flags, use_json, json);
+					bgp_show_peer(vty, peer, sh_flags,
+						      use_json, json);
 				}
 			}
 			break;
 		case show_ipv4_peer:
-		case show_ipv6_peer: {
-			bool matched = false;
-
+		case show_ipv6_peer:
 			FOREACH_SAFI (safi) {
-				if (!peer->afc[afi][safi])
-					continue;
-				if (conf_if) {
-					matched = (peer->conf_if &&
-						   strmatch(peer->conf_if, conf_if)) ||
-						  (peer->hostname &&
-						   strmatch(peer->hostname, conf_if));
-				} else {
-					matched = sockunion_same(&peer->connection->su, su);
-				}
-				if (matched) {
-					if (!match_peer_state(peer, sh_flags)) {
-						peer_wrong_state = true;
-						break;
+				if (peer->afc[afi][safi]) {
+					if (conf_if) {
+						if ((peer->conf_if
+						     && !strcmp(peer->conf_if, conf_if))
+						    || (peer->hostname
+							&& !strcmp(peer->hostname, conf_if))) {
+							find = 1;
+							bgp_show_peer(vty, peer, sh_flags,
+								      use_json, json);
+							break;
+						}
+					} else {
+						if (sockunion_same(&peer->connection
+									    ->su,
+								   su)) {
+							find = 1;
+							bgp_show_peer(vty, peer, sh_flags,
+								      use_json, json);
+							break;
+						}
 					}
-					find = 1;
-					bgp_show_peer(vty, peer, sh_flags, use_json, json);
-					break;
 				}
 			}
 			break;
-		}
 		case show_ipv4_all:
 		case show_ipv6_all:
 			FOREACH_SAFI (safi) {
 				if (peer->afc[afi][safi]) {
-					bgp_show_peer(vty, peer, sh_flags, use_json, json);
+					if (!match_peer_state(peer, sh_flags))
+						break;
+					if (show_brief && is_first && !use_json) {
+						vty_out(vty,
+							BGP_SHOW_NEIGHBORS_BRIEF_HEADER);
+						is_first = false;
+					}
+					bgp_show_peer(vty, peer, sh_flags,
+						      use_json, json);
 					nbr_output = true;
 					break;
 				}
@@ -18375,18 +8331,10 @@ static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp, enum show_type ty
 
 	if ((type == show_peer || type == show_ipv4_peer ||
 	     type == show_ipv6_peer) && !find) {
-		if (peer_wrong_state) {
-			if (use_json)
-				json_object_boolean_true_add(json,
-							     "bgpNeighborNotInRequestedState");
-			else
-				vty_out(vty, "%% Neighbor is not in the requested state\n");
-		} else {
-			if (use_json)
-				json_object_boolean_true_add(json, "bgpNoSuchNeighbor");
-			else
-				vty_out(vty, "%% No such neighbor in this view/vrf\n");
-		}
+		if (use_json)
+			json_object_boolean_true_add(json, "bgpNoSuchNeighbor");
+		else
+			vty_out(vty, "%% No such neighbor in this view/vrf\n");
 	}
 
 	if (type != show_peer && type != show_ipv4_peer &&
@@ -18403,8 +8351,33 @@ static int bgp_show_neighbor(struct vty *vty, struct bgp *bgp, enum show_type ty
 	return CMD_SUCCESS;
 }
 
-static void bgp_show_all_instances_neighbors_vty(struct vty *vty, enum show_type type,
-						 const char *ip_str, uint16_t sh_flags,
+static void bgp_show_neighbor_graceful_restart_vty(struct vty *vty, struct bgp *bgp,
+						   enum show_type type, const char *ip_str,
+						   afi_t afi, json_object *json)
+{
+	int ret;
+	union sockunion su;
+
+	if (!json)
+		bgp_show_global_graceful_restart_mode_vty(vty, bgp);
+
+	if (ip_str) {
+		ret = str2sockunion(ip_str, &su);
+		if (ret < 0)
+			bgp_show_neighbor_graceful_restart(vty, bgp, type, NULL,
+							   ip_str, afi, json);
+		else
+			bgp_show_neighbor_graceful_restart(vty, bgp, type, &su,
+							   NULL, afi, json);
+	} else
+		bgp_show_neighbor_graceful_restart(vty, bgp, type, NULL, NULL,
+						   afi, json);
+}
+
+static void bgp_show_all_instances_neighbors_vty(struct vty *vty,
+						 enum show_type type,
+						 const char *ip_str,
+						 uint16_t sh_flags,
 						 bool use_json)
 {
 	struct listnode *node, *nnode;
@@ -18461,23 +8434,18 @@ static void bgp_show_all_instances_neighbors_vty(struct vty *vty, enum show_type
 					: bgp->name);
 		}
 
-		if (!use_json && sh_flags) {
-			/* Any special header text for non-JSON */
-			if (sh_flags & VTY_BGP_PEER_SHOW_GR_INFO)
-				vty_out(vty, "\n%s", SHOW_GR_HEADER);
-		}
-
 		if (type == show_peer || type == show_ipv4_peer ||
 		    type == show_ipv6_peer) {
 			ret = str2sockunion(ip_str, &su);
 			if (ret < 0)
-				bgp_show_neighbor(vty, bgp, type, NULL, ip_str, sh_flags, use_json,
-						  json);
+				bgp_show_neighbor(vty, bgp, type, NULL, ip_str,
+						  sh_flags, use_json, json);
 			else
-				bgp_show_neighbor(vty, bgp, type, &su, NULL, sh_flags, use_json,
-						  json);
+				bgp_show_neighbor(vty, bgp, type, &su, NULL,
+						  sh_flags, use_json, json);
 		} else {
-			bgp_show_neighbor(vty, bgp, type, NULL, NULL, sh_flags, use_json, json);
+			bgp_show_neighbor(vty, bgp, type, NULL, NULL,
+					  sh_flags, use_json, json);
 		}
 		json_object_free(json);
 		json = NULL;
@@ -18489,8 +8457,9 @@ static void bgp_show_all_instances_neighbors_vty(struct vty *vty, enum show_type
 		vty_out(vty, "%% BGP instance not found\n");
 }
 
-static int bgp_show_neighbor_vty(struct vty *vty, const char *name, enum show_type type,
-				 const char *ip_str, uint16_t sh_flags, bool use_json)
+static int bgp_show_neighbor_vty(struct vty *vty, const char *name,
+				 enum show_type type, const char *ip_str,
+				 uint16_t sh_flags, bool use_json)
 {
 	int ret;
 	struct bgp *bgp;
@@ -18499,7 +8468,9 @@ static int bgp_show_neighbor_vty(struct vty *vty, const char *name, enum show_ty
 
 	if (name) {
 		if (strmatch(name, "all")) {
-			bgp_show_all_instances_neighbors_vty(vty, type, ip_str, sh_flags, use_json);
+			bgp_show_all_instances_neighbors_vty(vty, type, ip_str,
+							     sh_flags,
+							     use_json);
 			return CMD_SUCCESS;
 		} else {
 			bgp = bgp_lookup_by_name(name);
@@ -18519,22 +8490,18 @@ static int bgp_show_neighbor_vty(struct vty *vty, const char *name, enum show_ty
 	}
 
 	if (bgp) {
-		if (!use_json && sh_flags) {
-			/* Any special header text for non-JSON */
-			if (sh_flags & VTY_BGP_PEER_SHOW_GR_INFO)
-				vty_out(vty, "\n%s", SHOW_GR_HEADER);
-		}
 		json = json_object_new_object();
 		if (ip_str) {
 			ret = str2sockunion(ip_str, &su);
 			if (ret < 0)
-				bgp_show_neighbor(vty, bgp, type, NULL, ip_str, sh_flags, use_json,
-						  json);
+				bgp_show_neighbor(vty, bgp, type, NULL, ip_str,
+						  sh_flags, use_json, json);
 			else
-				bgp_show_neighbor(vty, bgp, type, &su, NULL, sh_flags, use_json,
-						  json);
+				bgp_show_neighbor(vty, bgp, type, &su, NULL,
+						  sh_flags, use_json, json);
 		} else {
-			bgp_show_neighbor(vty, bgp, type, NULL, NULL, sh_flags, use_json, json);
+			bgp_show_neighbor(vty, bgp, type, NULL, NULL, sh_flags,
+					  use_json, json);
 		}
 		json_object_free(json);
 	} else {
@@ -18547,15 +8514,56 @@ static int bgp_show_neighbor_vty(struct vty *vty, const char *name, enum show_ty
 	return CMD_SUCCESS;
 }
 
+/* "show [ip] bgp neighbors graceful-restart" commands.  */
+DEFPY (show_ip_bgp_neighbors_graceful_restart,
+       show_ip_bgp_neighbors_graceful_restart_cmd,
+       "show bgp [<ipv4|ipv6>]$afi [<view|vrf> VIEWVRFNAME$vrf] neighbors [<A.B.C.D|X:X::X:X|WORD>$neigh] graceful-restart [json]$json",
+       SHOW_STR
+       BGP_STR
+       IP_STR
+       IPV6_STR
+       BGP_INSTANCE_HELP_STR
+       NEIGHBOR_STR
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Neighbor on BGP configured interface\n"
+       GR_SHOW
+       JSON_STR)
+{
+	enum show_type sh_type = show_all;
+	afi_t afiz = AFI_IP;
+	bool uj = !!json;
+	struct bgp *bgp;
+
+	if (afi)
+		afiz = bgp_vty_afi_from_str(afi);
+
+	if (neigh)
+		sh_type = show_peer;
+
+	bgp = vrf ? bgp_lookup_by_name(vrf) : bgp_get_default();
+
+	if (!bgp) {
+		vty_out(vty, "No such bgp instance %s", vrf ? vrf : "");
+		return CMD_WARNING;
+	}
+
+	return bgp_show_neighbor_graceful_restart_afi_all(vty, bgp, sh_type, neigh, afiz, uj);
+}
+
 /* "show [ip] bgp neighbors" commands.  */
 DEFPY(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
-      "show [ip] bgp [<view|vrf> VIEWVRFNAME] [<ipv4|ipv6>] neighbors [<A.B.C.D|X:X::X:X|WORD>] [graceful-restart] [json$uj [brief$brief [established|failed]]]",
-      SHOW_STR IP_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AF_STR BGP_AF_STR
+      "show [ip] bgp [<view|vrf> VIEWVRFNAME] [<ipv4|ipv6>] neighbors [<A.B.C.D|X:X::X:X|WORD>] [json$uj [brief$brief [established|failed]]]",
+      SHOW_STR
+      IP_STR
+      BGP_STR
+      BGP_INSTANCE_HELP_STR
+      BGP_AF_STR
+      BGP_AF_STR
       "Detailed information on TCP and BGP neighbor connections\n"
       "Neighbor to display information about\n"
       "Neighbor to display information about\n"
       "Neighbor on BGP configured interface\n"
-      "Neighbor graceful restart information\n"
       JSON_STR
       "Brief information on BGP neighbors (JSON output)\n"
       "Display only neighbors in Established state\n"
@@ -18565,12 +8573,9 @@ DEFPY(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
 	char *sh_arg = NULL;
 	enum show_type sh_type;
 	afi_t afi = AFI_MAX;
-
 	bool use_json = !!uj;
-	int idx = 0;
-	int gr_idx = 0;
-	bool show_gr = false;
 	uint16_t peer_show_flags = 0;
+	int idx = 0;
 
 	/* [<vrf> VIEWVRFNAME] */
 	if (argv_find(argv, argc, "vrf", &idx)) {
@@ -18583,24 +8588,14 @@ DEFPY(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
 
 	idx++;
 
-	if (argv_find(argv, argc, "graceful-restart", &gr_idx))
-		show_gr = true;
-
-	/* If operator wants to see GR information for a neighbor or all
-	 * neighbors, the AFI negotiation is ignored.
-	 */
-	if (show_gr)
+	if (argv_find(argv, argc, "ipv4", &idx)) {
+		sh_type = show_ipv4_all;
+		afi = AFI_IP;
+	} else if (argv_find(argv, argc, "ipv6", &idx)) {
+		sh_type = show_ipv6_all;
+		afi = AFI_IP6;
+	} else {
 		sh_type = show_all;
-	else {
-		if (argv_find(argv, argc, "ipv4", &idx)) {
-			sh_type = show_ipv4_all;
-			afi = AFI_IP;
-		} else if (argv_find(argv, argc, "ipv6", &idx)) {
-			sh_type = show_ipv6_all;
-			afi = AFI_IP6;
-		} else {
-			sh_type = show_all;
-		}
 	}
 
 	if (argv_find(argv, argc, "A.B.C.D", &idx)
@@ -18610,24 +8605,25 @@ DEFPY(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
 		sh_arg = argv[idx]->arg;
 	}
 
-	if (!show_gr) {
-		if (sh_type == show_peer && afi == AFI_IP)
-			sh_type = show_ipv4_peer;
-		else if (sh_type == show_peer && afi == AFI_IP6)
-			sh_type = show_ipv6_peer;
+	if (sh_type == show_peer && afi == AFI_IP) {
+		sh_type = show_ipv4_peer;
+	} else if (sh_type == show_peer && afi == AFI_IP6) {
+		sh_type = show_ipv6_peer;
 	}
 
-	if (show_gr)
-		peer_show_flags |= VTY_BGP_PEER_SHOW_GR_INFO;
-	else if (use_json && brief) {
+	if (use_json && brief) {
 		SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO);
+		idx = 0;
 		if (argv_find(argv, argc, "established", &idx))
-			SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO);
+			SET_FLAG(peer_show_flags,
+				 VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO);
 		else if (argv_find(argv, argc, "failed", &idx))
-			SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_STATE_FAILED_INFO);
+			SET_FLAG(peer_show_flags,
+				 VTY_BGP_PEER_SHOW_STATE_FAILED_INFO);
 	}
 
-	return bgp_show_neighbor_vty(vty, vrf, sh_type, sh_arg, peer_show_flags, use_json);
+	return bgp_show_neighbor_vty(vty, vrf, sh_type, sh_arg, peer_show_flags,
+				     use_json);
 }
 
 /* Show BGP's AS paths internal data.  There are both `show [ip] bgp
@@ -18706,6 +8702,68 @@ DEFUN (show_ip_bgp_lcommunity_info,
 
 	return CMD_SUCCESS;
 }
+/* Graceful Restart */
+
+static void bgp_show_global_graceful_restart_mode_vty(struct vty *vty,
+						      struct bgp *bgp)
+{
+
+	vty_out(vty, "\n%s", SHOW_GR_HEADER);
+
+	enum global_mode bgp_global_gr_mode = bgp_global_gr_mode_get(bgp);
+
+	switch (bgp_global_gr_mode) {
+
+	case GLOBAL_HELPER:
+		vty_out(vty, "Global BGP GR Mode :  Helper\n");
+		break;
+
+	case GLOBAL_GR:
+		vty_out(vty, "Global BGP GR Mode :  Restart\n");
+		break;
+
+	case GLOBAL_DISABLE:
+		vty_out(vty, "Global BGP GR Mode :  Disable\n");
+		break;
+
+	case GLOBAL_INVALID:
+		vty_out(vty,
+			"Global BGP GR Mode  Invalid\n");
+		break;
+	}
+	vty_out(vty, "\n");
+}
+
+static int bgp_show_neighbor_graceful_restart_afi_all(struct vty *vty, struct bgp *bgp,
+						      enum show_type type, const char *ip_str,
+						      afi_t afi, bool use_json)
+{
+	json_object *json = NULL;
+
+	if (use_json)
+		json = json_object_new_object();
+
+	if ((afi == AFI_MAX) && (ip_str == NULL)) {
+		afi = AFI_IP;
+
+		while ((afi != AFI_L2VPN) && (afi < AFI_MAX)) {
+			bgp_show_neighbor_graceful_restart_vty(vty, bgp, type, ip_str, afi, json);
+			afi++;
+		}
+	} else if (afi != AFI_MAX) {
+		bgp_show_neighbor_graceful_restart_vty(vty, bgp, type, ip_str, afi, json);
+	} else {
+		if (json)
+			json_object_free(json);
+		return CMD_ERR_INCOMPLETE;
+	}
+
+	if (json)
+		vty_json(vty, json);
+
+	return CMD_SUCCESS;
+}
+/* Graceful Restart */
 
 DEFPY (show_ip_bgp_attr_info,
        show_ip_bgp_attr_info_cmd,
@@ -19093,23 +9151,20 @@ DEFUN (show_bgp_instance_all_ipv6_updgrps,
 	return CMD_SUCCESS;
 }
 
-DEFPY(show_bgp_l2vpn_evpn_updgrps,
-      show_bgp_l2vpn_evpn_updgrps_cmd,
-      "show [ip] bgp l2vpn evpn update-groups [subgroup-id (1-1000)$subgrpid] [json$json]",
-      SHOW_STR
-      IP_STR
-      BGP_STR
-      "l2vpn address family\n"
-      "evpn sub-address family\n"
-      "Detailed info about dynamic update groups\n"
-      "Specific subgroup to display detailed info\n"
-      "Subgroup identifier\n"
-      JSON_STR)
+DEFUN (show_bgp_l2vpn_evpn_updgrps,
+	show_bgp_l2vpn_evpn_updgrps_cmd,
+	"show [ip] bgp l2vpn evpn update-groups",
+	SHOW_STR
+	IP_STR
+	BGP_STR
+	"l2vpn address family\n"
+	"evpn sub-address family\n"
+	"Detailed info about dynamic update groups\n")
 {
 	char *vrf = NULL;
-	bool uj = !!json;
+	uint64_t subgrp_id = 0;
 
-	bgp_show_update_groups(vty, vrf, AFI_L2VPN, SAFI_EVPN, subgrpid, uj);
+	bgp_show_update_groups(vty, vrf, AFI_L2VPN, SAFI_EVPN, subgrp_id, 0);
 	return CMD_SUCCESS;
 }
 
@@ -19482,702 +9537,7 @@ DEFUN(show_ip_bgp_peer_groups, show_ip_bgp_peer_groups_cmd,
 	return bgp_show_peer_group_vty(vty, vrf, pg, uj);
 }
 
-
 /* Redistribute VTY commands.  */
-
-DEFUN (bgp_redistribute_ipv4,
-       bgp_redistribute_ipv4_cmd,
-       "redistribute " FRR_IP_REDIST_STR_BGPD,
-       "Redistribute information from another routing protocol\n"
-       FRR_IP_REDIST_HELP_STR_BGPD)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	uint8_t type;
-
-	type = proto_redistnum(AFI_IP, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_redist_add(bgp, AFI_IP, type, 0);
-	return bgp_redistribute_set(bgp, AFI_IP, type, 0, false);
-}
-
-ALIAS_HIDDEN(
-	bgp_redistribute_ipv4, bgp_redistribute_ipv4_hidden_cmd,
-	"redistribute " FRR_IP_REDIST_STR_BGPD,
-	"Redistribute information from another routing protocol\n" FRR_IP_REDIST_HELP_STR_BGPD)
-
-DEFUN (bgp_redistribute_ipv4_rmap,
-       bgp_redistribute_ipv4_rmap_cmd,
-       "redistribute " FRR_IP_REDIST_STR_BGPD " route-map RMAP_NAME",
-       "Redistribute information from another routing protocol\n"
-       FRR_IP_REDIST_HELP_STR_BGPD
-       "Route map reference\n"
-       "Pointer to route-map entries\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	int idx_word = 3;
-	uint8_t type;
-	struct bgp_redist *red;
-	bool changed;
-	struct route_map *route_map = route_map_lookup_warn_noexist(
-		vty, argv[idx_word]->arg);
-
-	type = proto_redistnum(AFI_IP, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	red = bgp_redist_add(bgp, AFI_IP, type, 0);
-	changed =
-		bgp_redistribute_rmap_set(red, argv[idx_word]->arg, route_map);
-	return bgp_redistribute_set(bgp, AFI_IP, type, 0, changed);
-}
-
-ALIAS_HIDDEN(
-	bgp_redistribute_ipv4_rmap, bgp_redistribute_ipv4_rmap_hidden_cmd,
-	"redistribute " FRR_IP_REDIST_STR_BGPD " route-map RMAP_NAME",
-	"Redistribute information from another routing protocol\n" FRR_IP_REDIST_HELP_STR_BGPD
-	"Route map reference\n"
-	"Pointer to route-map entries\n")
-
-DEFUN (bgp_redistribute_ipv4_metric,
-       bgp_redistribute_ipv4_metric_cmd,
-       "redistribute " FRR_IP_REDIST_STR_BGPD " metric (0-4294967295)",
-       "Redistribute information from another routing protocol\n"
-       FRR_IP_REDIST_HELP_STR_BGPD
-       "Metric for redistributed routes\n"
-       "Default metric\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	int idx_number = 3;
-	uint8_t type;
-	uint32_t metric;
-	struct bgp_redist *red;
-	bool changed;
-
-	type = proto_redistnum(AFI_IP, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	metric = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	red = bgp_redist_add(bgp, AFI_IP, type, 0);
-	changed = bgp_redistribute_metric_set(bgp, red, AFI_IP, type, metric);
-	return bgp_redistribute_set(bgp, AFI_IP, type, 0, changed);
-}
-
-ALIAS_HIDDEN(
-	bgp_redistribute_ipv4_metric, bgp_redistribute_ipv4_metric_hidden_cmd,
-	"redistribute " FRR_IP_REDIST_STR_BGPD " metric (0-4294967295)",
-	"Redistribute information from another routing protocol\n" FRR_IP_REDIST_HELP_STR_BGPD
-	"Metric for redistributed routes\n"
-	"Default metric\n")
-
-DEFUN (bgp_redistribute_ipv4_rmap_metric,
-       bgp_redistribute_ipv4_rmap_metric_cmd,
-       "redistribute " FRR_IP_REDIST_STR_BGPD " route-map RMAP_NAME metric (0-4294967295)",
-       "Redistribute information from another routing protocol\n"
-       FRR_IP_REDIST_HELP_STR_BGPD
-       "Route map reference\n"
-       "Pointer to route-map entries\n"
-       "Metric for redistributed routes\n"
-       "Default metric\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	int idx_word = 3;
-	int idx_number = 5;
-	uint8_t type;
-	uint32_t metric;
-	struct bgp_redist *red;
-	bool changed;
-	struct route_map *route_map =
-		route_map_lookup_warn_noexist(vty, argv[idx_word]->arg);
-
-	type = proto_redistnum(AFI_IP, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	metric = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	red = bgp_redist_add(bgp, AFI_IP, type, 0);
-	changed =
-		bgp_redistribute_rmap_set(red, argv[idx_word]->arg, route_map);
-	changed |= bgp_redistribute_metric_set(bgp, red, AFI_IP, type, metric);
-	return bgp_redistribute_set(bgp, AFI_IP, type, 0, changed);
-}
-
-ALIAS_HIDDEN(
-	bgp_redistribute_ipv4_rmap_metric,
-	bgp_redistribute_ipv4_rmap_metric_hidden_cmd,
-	"redistribute " FRR_IP_REDIST_STR_BGPD
-	" route-map RMAP_NAME metric (0-4294967295)",
-	"Redistribute information from another routing protocol\n" FRR_IP_REDIST_HELP_STR_BGPD
-	"Route map reference\n"
-	"Pointer to route-map entries\n"
-	"Metric for redistributed routes\n"
-	"Default metric\n")
-
-DEFUN (bgp_redistribute_ipv4_metric_rmap,
-       bgp_redistribute_ipv4_metric_rmap_cmd,
-       "redistribute " FRR_IP_REDIST_STR_BGPD " metric (0-4294967295) route-map RMAP_NAME",
-       "Redistribute information from another routing protocol\n"
-       FRR_IP_REDIST_HELP_STR_BGPD
-       "Metric for redistributed routes\n"
-       "Default metric\n"
-       "Route map reference\n"
-       "Pointer to route-map entries\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	int idx_number = 3;
-	int idx_word = 5;
-	uint8_t type;
-	uint32_t metric;
-	struct bgp_redist *red;
-	bool changed;
-	struct route_map *route_map =
-		route_map_lookup_warn_noexist(vty, argv[idx_word]->arg);
-
-	type = proto_redistnum(AFI_IP, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	metric = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	red = bgp_redist_add(bgp, AFI_IP, type, 0);
-	changed = bgp_redistribute_metric_set(bgp, red, AFI_IP, type, metric);
-	changed |=
-		bgp_redistribute_rmap_set(red, argv[idx_word]->arg, route_map);
-	return bgp_redistribute_set(bgp, AFI_IP, type, 0, changed);
-}
-
-ALIAS_HIDDEN(
-	bgp_redistribute_ipv4_metric_rmap,
-	bgp_redistribute_ipv4_metric_rmap_hidden_cmd,
-	"redistribute " FRR_IP_REDIST_STR_BGPD
-	" metric (0-4294967295) route-map RMAP_NAME",
-	"Redistribute information from another routing protocol\n" FRR_IP_REDIST_HELP_STR_BGPD
-	"Metric for redistributed routes\n"
-	"Default metric\n"
-	"Route map reference\n"
-	"Pointer to route-map entries\n")
-
-DEFUN (bgp_redistribute_ipv4_ospf,
-       bgp_redistribute_ipv4_ospf_cmd,
-       "redistribute <ospf|table|table-direct> (1-65535)",
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPFv2)\n"
-       "Non-main Kernel Routing Table\n"
-       "Non-main Kernel Routing Table - Direct\n"
-       "Instance ID/Table ID\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_ospf_table = 1;
-	int idx_number = 2;
-	unsigned short instance;
-	unsigned short protocol;
-
-	instance = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	if (strncmp(argv[idx_ospf_table]->arg, "o", 1) == 0)
-		protocol = ZEBRA_ROUTE_OSPF;
-	else {
-		if (strncmp(argv[idx_ospf_table]->arg, "table-direct",
-			    strlen("table-direct")) == 0) {
-			protocol = ZEBRA_ROUTE_TABLE_DIRECT;
-			if (instance == RT_TABLE_MAIN ||
-			    instance == RT_TABLE_LOCAL) {
-				vty_out(vty,
-					"%% 'table-direct', can not use %u routing table\n",
-					instance);
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-		} else
-			protocol = ZEBRA_ROUTE_TABLE;
-	}
-
-	bgp_redist_add(bgp, AFI_IP, protocol, instance);
-	return bgp_redistribute_set(bgp, AFI_IP, protocol, instance, false);
-}
-
-ALIAS_HIDDEN(bgp_redistribute_ipv4_ospf, bgp_redistribute_ipv4_ospf_hidden_cmd,
-	     "redistribute <ospf|table|table-direct> (1-65535)",
-	     "Redistribute information from another routing protocol\n"
-	     "Open Shortest Path First (OSPFv2)\n"
-	     "Non-main Kernel Routing Table\n"
-	     "Non-main Kernel Routing Table - Direct\n"
-	     "Instance ID/Table ID\n")
-
-DEFUN (bgp_redistribute_ipv4_ospf_rmap,
-       bgp_redistribute_ipv4_ospf_rmap_cmd,
-       "redistribute <ospf|table|table-direct> (1-65535) route-map RMAP_NAME",
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPFv2)\n"
-       "Non-main Kernel Routing Table\n"
-       "Non-main Kernel Routing Table - Direct\n"
-       "Instance ID/Table ID\n"
-       "Route map reference\n"
-       "Pointer to route-map entries\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_ospf_table = 1;
-	int idx_number = 2;
-	int idx_word = 4;
-	struct bgp_redist *red;
-	unsigned short instance;
-	int protocol;
-	bool changed;
-	struct route_map *route_map =
-		route_map_lookup_warn_noexist(vty, argv[idx_word]->arg);
-
-	instance = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	if (strncmp(argv[idx_ospf_table]->arg, "o", 1) == 0)
-		protocol = ZEBRA_ROUTE_OSPF;
-	else {
-		if (strncmp(argv[idx_ospf_table]->arg, "table-direct",
-			    strlen("table-direct")) == 0) {
-			protocol = ZEBRA_ROUTE_TABLE_DIRECT;
-			if (instance == RT_TABLE_MAIN ||
-			    instance == RT_TABLE_LOCAL) {
-				vty_out(vty,
-					"%% 'table-direct', can not use %u routing table\n",
-					instance);
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-		} else
-			protocol = ZEBRA_ROUTE_TABLE;
-	}
-
-	red = bgp_redist_add(bgp, AFI_IP, protocol, instance);
-	changed =
-		bgp_redistribute_rmap_set(red, argv[idx_word]->arg, route_map);
-	return bgp_redistribute_set(bgp, AFI_IP, protocol, instance, changed);
-}
-
-ALIAS_HIDDEN(bgp_redistribute_ipv4_ospf_rmap,
-	     bgp_redistribute_ipv4_ospf_rmap_hidden_cmd,
-	     "redistribute <ospf|table|table-direct> (1-65535) route-map RMAP_NAME",
-	     "Redistribute information from another routing protocol\n"
-	     "Open Shortest Path First (OSPFv2)\n"
-	     "Non-main Kernel Routing Table\n"
-	     "Non-main Kernel Routing Table - Direct\n"
-	     "Instance ID/Table ID\n"
-	     "Route map reference\n"
-	     "Pointer to route-map entries\n")
-
-DEFUN (bgp_redistribute_ipv4_ospf_metric,
-       bgp_redistribute_ipv4_ospf_metric_cmd,
-       "redistribute <ospf|table|table-direct> (1-65535) metric (0-4294967295)",
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPFv2)\n"
-       "Non-main Kernel Routing Table\n"
-       "Non-main Kernel Routing Table - Direct\n"
-       "Instance ID/Table ID\n"
-       "Metric for redistributed routes\n"
-       "Default metric\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_ospf_table = 1;
-	int idx_number = 2;
-	int idx_number_2 = 4;
-	uint32_t metric;
-	struct bgp_redist *red;
-	unsigned short instance;
-	int protocol;
-	bool changed;
-
-	instance = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	if (strncmp(argv[idx_ospf_table]->arg, "o", 1) == 0)
-		protocol = ZEBRA_ROUTE_OSPF;
-	else {
-		if (strncmp(argv[idx_ospf_table]->arg, "table-direct",
-			    strlen("table-direct")) == 0) {
-			protocol = ZEBRA_ROUTE_TABLE_DIRECT;
-			if (instance == RT_TABLE_MAIN ||
-			    instance == RT_TABLE_LOCAL) {
-				vty_out(vty,
-					"%% 'table-direct', can not use %u routing table\n",
-					instance);
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-		} else
-			protocol = ZEBRA_ROUTE_TABLE;
-	}
-
-	metric = strtoul(argv[idx_number_2]->arg, NULL, 10);
-
-	red = bgp_redist_add(bgp, AFI_IP, protocol, instance);
-	changed = bgp_redistribute_metric_set(bgp, red, AFI_IP, protocol,
-						metric);
-	return bgp_redistribute_set(bgp, AFI_IP, protocol, instance, changed);
-}
-
-ALIAS_HIDDEN(bgp_redistribute_ipv4_ospf_metric,
-	     bgp_redistribute_ipv4_ospf_metric_hidden_cmd,
-	     "redistribute <ospf|table|table-direct> (1-65535) metric (0-4294967295)",
-	     "Redistribute information from another routing protocol\n"
-	     "Open Shortest Path First (OSPFv2)\n"
-	     "Non-main Kernel Routing Table\n"
-	     "Non-main Kernel Routing Table - Direct\n"
-	     "Instance ID/Table ID\n"
-	     "Metric for redistributed routes\n"
-	     "Default metric\n")
-
-DEFUN (bgp_redistribute_ipv4_ospf_rmap_metric,
-       bgp_redistribute_ipv4_ospf_rmap_metric_cmd,
-       "redistribute <ospf|table|table-direct> (1-65535) route-map RMAP_NAME metric (0-4294967295)",
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPFv2)\n"
-       "Non-main Kernel Routing Table\n"
-       "Non-main Kernel Routing Table - Direct\n"
-       "Instance ID/Table ID\n"
-       "Route map reference\n"
-       "Pointer to route-map entries\n"
-       "Metric for redistributed routes\n"
-       "Default metric\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_ospf_table = 1;
-	int idx_number = 2;
-	int idx_word = 4;
-	int idx_number_2 = 6;
-	uint32_t metric;
-	struct bgp_redist *red;
-	unsigned short instance;
-	int protocol;
-	bool changed;
-	struct route_map *route_map =
-		route_map_lookup_warn_noexist(vty, argv[idx_word]->arg);
-
-	instance = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	if (strncmp(argv[idx_ospf_table]->arg, "o", 1) == 0)
-		protocol = ZEBRA_ROUTE_OSPF;
-	else {
-		if (strncmp(argv[idx_ospf_table]->arg, "table-direct",
-			    strlen("table-direct")) == 0) {
-			protocol = ZEBRA_ROUTE_TABLE_DIRECT;
-			if (instance == RT_TABLE_MAIN ||
-			    instance == RT_TABLE_LOCAL) {
-				vty_out(vty,
-					"%% 'table-direct', can not use %u routing table\n",
-					instance);
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-		} else
-			protocol = ZEBRA_ROUTE_TABLE;
-	}
-
-	metric = strtoul(argv[idx_number_2]->arg, NULL, 10);
-
-	red = bgp_redist_add(bgp, AFI_IP, protocol, instance);
-	changed =
-		bgp_redistribute_rmap_set(red, argv[idx_word]->arg, route_map);
-	changed |= bgp_redistribute_metric_set(bgp, red, AFI_IP, protocol,
-						metric);
-	return bgp_redistribute_set(bgp, AFI_IP, protocol, instance, changed);
-}
-
-ALIAS_HIDDEN(
-	bgp_redistribute_ipv4_ospf_rmap_metric,
-	bgp_redistribute_ipv4_ospf_rmap_metric_hidden_cmd,
-	"redistribute <ospf|table|table-direct> (1-65535) route-map RMAP_NAME metric (0-4294967295)",
-	"Redistribute information from another routing protocol\n"
-	"Open Shortest Path First (OSPFv2)\n"
-	"Non-main Kernel Routing Table\n"
-        "Non-main Kernel Routing Table - Direct\n"
-	"Instance ID/Table ID\n"
-	"Route map reference\n"
-	"Pointer to route-map entries\n"
-	"Metric for redistributed routes\n"
-	"Default metric\n")
-
-DEFUN (bgp_redistribute_ipv4_ospf_metric_rmap,
-       bgp_redistribute_ipv4_ospf_metric_rmap_cmd,
-       "redistribute <ospf|table|table-direct> (1-65535) metric (0-4294967295) route-map RMAP_NAME",
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPFv2)\n"
-       "Non-main Kernel Routing Table\n"
-       "Non-main Kernel Routing Table - Direct\n"
-       "Instance ID/Table ID\n"
-       "Metric for redistributed routes\n"
-       "Default metric\n"
-       "Route map reference\n"
-       "Pointer to route-map entries\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_ospf_table = 1;
-	int idx_number = 2;
-	int idx_number_2 = 4;
-	int idx_word = 6;
-	uint32_t metric;
-	struct bgp_redist *red;
-	unsigned short instance;
-	int protocol;
-	bool changed;
-	struct route_map *route_map =
-		route_map_lookup_warn_noexist(vty, argv[idx_word]->arg);
-
-	instance = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	if (strncmp(argv[idx_ospf_table]->arg, "o", 1) == 0)
-		protocol = ZEBRA_ROUTE_OSPF;
-	else {
-		if (strncmp(argv[idx_ospf_table]->arg, "table-direct", strlen("table-direct")) == 0) {
-			protocol = ZEBRA_ROUTE_TABLE_DIRECT;
-			if (instance == RT_TABLE_MAIN ||
-			    instance == RT_TABLE_LOCAL) {
-				vty_out(vty,
-					"%% 'table-direct', can not use %u routing table\n",
-					instance);
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-		} else
-			protocol = ZEBRA_ROUTE_TABLE;
-	}
-
-	instance = strtoul(argv[idx_number]->arg, NULL, 10);
-	metric = strtoul(argv[idx_number_2]->arg, NULL, 10);
-
-	red = bgp_redist_add(bgp, AFI_IP, protocol, instance);
-	changed = bgp_redistribute_metric_set(bgp, red, AFI_IP, protocol,
-						metric);
-	changed |=
-		bgp_redistribute_rmap_set(red, argv[idx_word]->arg, route_map);
-	return bgp_redistribute_set(bgp, AFI_IP, protocol, instance, changed);
-}
-
-ALIAS_HIDDEN(
-	bgp_redistribute_ipv4_ospf_metric_rmap,
-	bgp_redistribute_ipv4_ospf_metric_rmap_hidden_cmd,
-	"redistribute <ospf|table|table-direct> (1-65535) metric (0-4294967295) route-map RMAP_NAME",
-	"Redistribute information from another routing protocol\n"
-	"Open Shortest Path First (OSPFv2)\n"
-	"Non-main Kernel Routing Table\n"
-        "Non-main Kernel Routing Table - Direct\n"
-	"Instance ID/Table ID\n"
-	"Metric for redistributed routes\n"
-	"Default metric\n"
-	"Route map reference\n"
-	"Pointer to route-map entries\n")
-
-DEFUN (no_bgp_redistribute_ipv4_ospf,
-       no_bgp_redistribute_ipv4_ospf_cmd,
-       "no redistribute <ospf|table|table-direct> (1-65535) [{metric (0-4294967295)|route-map RMAP_NAME}]",
-       NO_STR
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPFv2)\n"
-       "Non-main Kernel Routing Table\n"
-       "Non-main Kernel Routing Table - Direct\n"
-       "Instance ID/Table ID\n"
-       "Metric for redistributed routes\n"
-       "Default metric\n"
-       "Route map reference\n"
-       "Pointer to route-map entries\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_ospf_table = 2;
-	int idx_number = 3;
-	unsigned short instance;
-	int protocol;
-
-	instance = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	if (strncmp(argv[idx_ospf_table]->arg, "o", 1) == 0)
-		protocol = ZEBRA_ROUTE_OSPF;
-	else {
-		if (strncmp(argv[idx_ospf_table]->arg, "table-direct",
-			    strlen("table-direct")) == 0) {
-			protocol = ZEBRA_ROUTE_TABLE_DIRECT;
-			if (instance == RT_TABLE_MAIN ||
-			    instance == RT_TABLE_LOCAL) {
-				vty_out(vty,
-					"%% 'table-direct', can not use %u routing table\n",
-					instance);
-				return CMD_WARNING_CONFIG_FAILED;
-			}
-		} else
-			protocol = ZEBRA_ROUTE_TABLE;
-	}
-
-	bgp_redistribute_unset(bgp, AFI_IP, protocol, instance);
-	return CMD_SUCCESS;
-}
-
-ALIAS_HIDDEN(
-	no_bgp_redistribute_ipv4_ospf, no_bgp_redistribute_ipv4_ospf_hidden_cmd,
-	"no redistribute <ospf|table|table-direct> (1-65535) [{metric (0-4294967295)|route-map RMAP_NAME}]",
-	NO_STR
-	"Redistribute information from another routing protocol\n"
-	"Open Shortest Path First (OSPFv2)\n"
-	"Non-main Kernel Routing Table\n"
-	"Non-main Kernel Routing Table - Direct\n"
-	"Instance ID/Table ID\n"
-	"Metric for redistributed routes\n"
-	"Default metric\n"
-	"Route map reference\n"
-	"Pointer to route-map entries\n")
-
-DEFUN (no_bgp_redistribute_ipv4,
-       no_bgp_redistribute_ipv4_cmd,
-       "no redistribute " FRR_IP_REDIST_STR_BGPD " [{metric (0-4294967295)|route-map RMAP_NAME}]",
-       NO_STR
-       "Redistribute information from another routing protocol\n"
-       FRR_IP_REDIST_HELP_STR_BGPD
-       "Metric for redistributed routes\n"
-       "Default metric\n"
-       "Route map reference\n"
-       "Pointer to route-map entries\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 2;
-	uint8_t type;
-
-	type = proto_redistnum(AFI_IP, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	bgp_redistribute_unset(bgp, AFI_IP, type, 0);
-	return CMD_SUCCESS;
-}
-
-ALIAS_HIDDEN(
-	no_bgp_redistribute_ipv4, no_bgp_redistribute_ipv4_hidden_cmd,
-	"no redistribute " FRR_IP_REDIST_STR_BGPD
-	" [{metric (0-4294967295)|route-map RMAP_NAME}]",
-	NO_STR
-	"Redistribute information from another routing protocol\n" FRR_IP_REDIST_HELP_STR_BGPD
-	"Metric for redistributed routes\n"
-	"Default metric\n"
-	"Route map reference\n"
-	"Pointer to route-map entries\n")
-
-DEFUN (bgp_redistribute_ipv6,
-       bgp_redistribute_ipv6_cmd,
-       "redistribute " FRR_IP6_REDIST_STR_BGPD,
-       "Redistribute information from another routing protocol\n"
-       FRR_IP6_REDIST_HELP_STR_BGPD)
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	uint8_t type;
-
-	type = proto_redistnum(AFI_IP6, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_redist_add(bgp, AFI_IP6, type, 0);
-	return bgp_redistribute_set(bgp, AFI_IP6, type, 0, false);
-}
-
-DEFUN (bgp_redistribute_ipv6_rmap,
-       bgp_redistribute_ipv6_rmap_cmd,
-       "redistribute " FRR_IP6_REDIST_STR_BGPD " route-map RMAP_NAME",
-       "Redistribute information from another routing protocol\n"
-       FRR_IP6_REDIST_HELP_STR_BGPD
-       "Route map reference\n"
-       "Pointer to route-map entries\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	int idx_word = 3;
-	uint8_t type;
-	struct bgp_redist *red;
-	bool changed;
-	struct route_map *route_map =
-		route_map_lookup_warn_noexist(vty, argv[idx_word]->arg);
-
-	type = proto_redistnum(AFI_IP6, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	red = bgp_redist_add(bgp, AFI_IP6, type, 0);
-	changed =
-		bgp_redistribute_rmap_set(red, argv[idx_word]->arg, route_map);
-	return bgp_redistribute_set(bgp, AFI_IP6, type, 0, changed);
-}
-
-DEFUN (bgp_redistribute_ipv6_metric,
-       bgp_redistribute_ipv6_metric_cmd,
-       "redistribute " FRR_IP6_REDIST_STR_BGPD " metric (0-4294967295)",
-       "Redistribute information from another routing protocol\n"
-       FRR_IP6_REDIST_HELP_STR_BGPD
-       "Metric for redistributed routes\n"
-       "Default metric\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	int idx_number = 3;
-	uint8_t type;
-	uint32_t metric;
-	struct bgp_redist *red;
-	bool changed;
-
-	type = proto_redistnum(AFI_IP6, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	metric = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	red = bgp_redist_add(bgp, AFI_IP6, type, 0);
-	changed = bgp_redistribute_metric_set(bgp, red, AFI_IP6, type, metric);
-	return bgp_redistribute_set(bgp, AFI_IP6, type, 0, changed);
-}
-
-DEFUN (bgp_redistribute_ipv6_rmap_metric,
-       bgp_redistribute_ipv6_rmap_metric_cmd,
-       "redistribute " FRR_IP6_REDIST_STR_BGPD " route-map RMAP_NAME metric (0-4294967295)",
-       "Redistribute information from another routing protocol\n"
-       FRR_IP6_REDIST_HELP_STR_BGPD
-       "Route map reference\n"
-       "Pointer to route-map entries\n"
-       "Metric for redistributed routes\n"
-       "Default metric\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	int idx_word = 3;
-	int idx_number = 5;
-	uint8_t type;
-	uint32_t metric;
-	struct bgp_redist *red;
-	bool changed;
-	struct route_map *route_map =
-		route_map_lookup_warn_noexist(vty, argv[idx_word]->arg);
-
-	type = proto_redistnum(AFI_IP6, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	metric = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	red = bgp_redist_add(bgp, AFI_IP6, type, 0);
-	changed =
-		bgp_redistribute_rmap_set(red, argv[idx_word]->arg, route_map);
-	changed |= bgp_redistribute_metric_set(bgp, red, AFI_IP6, type,
-						metric);
-	return bgp_redistribute_set(bgp, AFI_IP6, type, 0, changed);
-}
 
 DEFPY(bgp_redistribute_ipv6_table, bgp_redistribute_ipv6_table_cmd,
       "redistribute table-direct (1-65535)$table_id [{metric$metric (0-4294967295)$metric_val|route-map WORD$rmap}]",
@@ -20203,7 +9563,8 @@ DEFPY(bgp_redistribute_ipv6_table, bgp_redistribute_ipv6_table_cmd,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 	if (table_id == RT_TABLE_MAIN || table_id == RT_TABLE_LOCAL) {
-		vty_out(vty, "%% 'table-direct', can not use %" PRIu64 " routing table\n",
+		vty_out(vty,
+			"%% 'table-direct', can not use %llu routing table\n",
 			table_id);
 		return CMD_WARNING_CONFIG_FAILED;
 	}
@@ -20238,442 +9599,14 @@ DEFPY(no_bgp_redistribute_ipv6_table, no_bgp_redistribute_ipv6_table_cmd,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 	if (table_id == RT_TABLE_MAIN || table_id == RT_TABLE_LOCAL) {
-		vty_out(vty, "%% 'table-direct', can not use %" PRIu64 " routing table\n",
+		vty_out(vty,
+			"%% 'table-direct', can not use %llu routing table\n",
 			table_id);
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
 	bgp_redistribute_unset(bgp, AFI_IP6, ZEBRA_ROUTE_TABLE_DIRECT, table_id);
 	return CMD_SUCCESS;
-}
-
-DEFUN (bgp_redistribute_ipv6_metric_rmap,
-       bgp_redistribute_ipv6_metric_rmap_cmd,
-       "redistribute " FRR_IP6_REDIST_STR_BGPD " metric (0-4294967295) route-map RMAP_NAME",
-       "Redistribute information from another routing protocol\n"
-       FRR_IP6_REDIST_HELP_STR_BGPD
-       "Metric for redistributed routes\n"
-       "Default metric\n"
-       "Route map reference\n"
-       "Pointer to route-map entries\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 1;
-	int idx_number = 3;
-	int idx_word = 5;
-	uint8_t type;
-	uint32_t metric;
-	struct bgp_redist *red;
-	bool changed;
-	struct route_map *route_map =
-		route_map_lookup_warn_noexist(vty, argv[idx_word]->arg);
-
-	type = proto_redistnum(AFI_IP6, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	metric = strtoul(argv[idx_number]->arg, NULL, 10);
-
-	red = bgp_redist_add(bgp, AFI_IP6, type, 0);
-	changed = bgp_redistribute_metric_set(bgp, red, AFI_IP6, SAFI_UNICAST,
-						metric);
-	changed |=
-		bgp_redistribute_rmap_set(red, argv[idx_word]->arg, route_map);
-	return bgp_redistribute_set(bgp, AFI_IP6, type, 0, changed);
-}
-
-DEFUN (no_bgp_redistribute_ipv6,
-       no_bgp_redistribute_ipv6_cmd,
-       "no redistribute " FRR_IP6_REDIST_STR_BGPD " [{metric (0-4294967295)|route-map RMAP_NAME}]",
-       NO_STR
-       "Redistribute information from another routing protocol\n"
-       FRR_IP6_REDIST_HELP_STR_BGPD
-       "Metric for redistributed routes\n"
-       "Default metric\n"
-       "Route map reference\n"
-       "Pointer to route-map entries\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	int idx_protocol = 2;
-	uint8_t type;
-
-	type = proto_redistnum(AFI_IP6, argv[idx_protocol]->text);
-	if (type == ZEBRA_ROUTE_ERROR) {
-		vty_out(vty, "%% Invalid route type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_redistribute_unset(bgp, AFI_IP6, type, 0);
-	return CMD_SUCCESS;
-}
-
-/* Neighbor update tcp-mss. */
-static int peer_tcp_mss_vty(struct vty *vty, const char *peer_str,
-			    const char *tcp_mss_str)
-{
-	struct peer *peer;
-	uint32_t tcp_mss_val = 0;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (tcp_mss_str) {
-		tcp_mss_val = strtoul(tcp_mss_str, NULL, 10);
-		peer_tcp_mss_set(peer, tcp_mss_val);
-	} else {
-		peer_tcp_mss_unset(peer);
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN(neighbor_tcp_mss, neighbor_tcp_mss_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD> tcp-mss (1-65535)",
-      NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-      "TCP max segment size\n"
-      "TCP MSS value\n")
-{
-	int peer_index = 1;
-	int mss_index = 3;
-
-	vty_out(vty,
-		" Warning: Reset BGP session for tcp-mss value to take effect\n");
-	return peer_tcp_mss_vty(vty, argv[peer_index]->arg,
-				argv[mss_index]->arg);
-}
-
-DEFUN(no_neighbor_tcp_mss, no_neighbor_tcp_mss_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD> tcp-mss [(1-65535)]",
-      NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
-      "TCP max segment size\n"
-      "TCP MSS value\n")
-{
-	int peer_index = 2;
-
-	vty_out(vty,
-		" Warning: Reset BGP session for tcp-mss value to take effect\n");
-	return peer_tcp_mss_vty(vty, argv[peer_index]->arg, NULL);
-}
-
-DEFPY(neighbor_ip_transparent,
-      neighbor_ip_transparent_cmd,
-      "[no$no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor ip-transparent",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Enable IP_TRANSPARENT on the BGP TCP socket\n")
-{
-	struct peer *peer;
-	int ret;
-
-	peer = peer_and_group_lookup_vty(vty, neighbor);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (!no && !peergroup_flag_check(peer, PEER_FLAG_UPDATE_SOURCE)) {
-		vty_out(vty, "%% Missing update-source\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	if (no)
-		ret = peer_flag_unset_vty(vty, neighbor, PEER_FLAG_IP_TRANSPARENT);
-	else
-		ret = peer_flag_set_vty(vty, neighbor, PEER_FLAG_IP_TRANSPARENT);
-
-	return bgp_vty_return(vty, ret);
-}
-
-DEFPY(bgp_retain_route_target, bgp_retain_route_target_cmd,
-      "[no$no] bgp retain route-target all",
-      NO_STR BGP_STR
-      "Retain BGP updates\n"
-      "Retain BGP updates based on route-target values\n"
-      "Retain all BGP updates\n")
-{
-	bool check;
-	struct bgp *bgp = VTY_GET_CONTEXT(bgp);
-
-	if (!bgp)
-		return CMD_WARNING;
-
-	check = CHECK_FLAG(bgp->af_flags[bgp_node_afi(vty)][bgp_node_safi(vty)],
-			   BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL);
-	if (check != !no) {
-		if (!no)
-			SET_FLAG(bgp->af_flags[bgp_node_afi(vty)]
-					      [bgp_node_safi(vty)],
-				 BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL);
-		else
-			UNSET_FLAG(bgp->af_flags[bgp_node_afi(vty)]
-						[bgp_node_safi(vty)],
-				   BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL);
-		/* trigger a flush to re-sync with ADJ-RIB-in */
-		bgp_clear(vty, bgp, bgp_node_afi(vty), bgp_node_safi(vty),
-			  clear_all, BGP_CLEAR_SOFT_IN, NULL);
-	}
-	return CMD_SUCCESS;
-}
-
-DEFPY(bgp_ls_distribute_bgp_fabric,
-      bgp_ls_distribute_bgp_fabric_cmd,
-      "distribute bgp-fabric-link-state [instance-id WORD$instance_id_str]",
-      "Distribute BGP link-state topology information\n"
-      "Enable BGP fabric link-state topology distribution\n"
-      "BGP-LS instance identifier\n"
-      "Instance ID value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	uint64_t instance_id = 0;
-	char *endp = NULL;
-
-	if (!bgp->ls_info) {
-		vty_out(vty, "%% BGP-LS not initialized\n");
-		return CMD_WARNING;
-	}
-
-	if (instance_id_str) {
-		errno = 0;
-		instance_id = strtoull(instance_id_str, &endp, 10);
-		if (errno == ERANGE || endp == instance_id_str || *endp != '\0') {
-			vty_out(vty, "%% Invalid instance-id\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	}
-
-	if (bgp->ls_info->enable_distribution && bgp->ls_info->instance_id == instance_id)
-		return CMD_SUCCESS;
-
-	/*
-	 * If already enabled with a different instance-id, withdraw all
-	 * existing NLRIs before re-exporting with the new instance-id.
-	 */
-	if (bgp->ls_info->enable_distribution && bgp->ls_info->instance_id != instance_id)
-		bgp_ls_withdraw_all(bgp);
-
-	bgp->ls_info->instance_id = instance_id;
-	bgp->ls_info->enable_distribution = true;
-
-	if (bgp_ls_export_bgp_topology(bgp) != 0) {
-		vty_out(vty, "%% Failed to export BGP topology\n");
-		return CMD_WARNING;
-	}
-
-	if (BGP_DEBUG(linkstate, LINKSTATE))
-		vty_out(vty,
-			"BGP-LS: BGP fabric topology export enabled (instance-id %" PRIu64 ")\n",
-			instance_id);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(no_bgp_ls_distribute_bgp_fabric,
-      no_bgp_ls_distribute_bgp_fabric_cmd,
-      "no distribute bgp-fabric-link-state [instance-id WORD$instance_id_str]",
-      NO_STR
-      "Distribute BGP link-state topology information\n"
-      "Disable BGP fabric link-state topology distribution\n"
-      "BGP-LS instance identifier\n"
-      "Instance ID value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	char *endp = NULL;
-
-	if (instance_id_str) {
-		errno = 0;
-		strtoull(instance_id_str, &endp, 10);
-		if (errno == ERANGE || endp == instance_id_str || *endp != '\0') {
-			vty_out(vty, "%% Invalid instance-id\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	}
-
-	if (bgp->ls_info) {
-		if (!bgp->ls_info->enable_distribution)
-			return CMD_SUCCESS;
-
-		bgp->ls_info->enable_distribution = false;
-		bgp->ls_info->instance_id = 0;
-		bgp_ls_withdraw_all(bgp);
-	}
-
-	if (BGP_DEBUG(linkstate, LINKSTATE))
-		vty_out(vty, "BGP-LS: BGP fabric topology export disabled\n");
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(neighbor_ls_local_link_id,
-      neighbor_ls_local_link_id_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD>$peer_str local-link-id (1-4294967295)$link_id",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Configure local link ID for BGP-LS topology\n"
-      "Link identifier value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* If link ID unchanged, nothing to do. */
-	if (CHECK_FLAG(peer->flags, PEER_FLAG_LS_LOCAL_LINK_ID) &&
-	    peer->ls_local_link_id == link_id)
-		return CMD_SUCCESS;
-
-	/* Withdraw the existing link NLRI before changing the key. */
-	if (bgp->ls_info && bgp->ls_info->enable_distribution)
-		bgp_ls_withdraw_bgp_link(bgp, peer);
-
-	peer->ls_local_link_id = link_id;
-	SET_FLAG(peer->flags, PEER_FLAG_LS_LOCAL_LINK_ID);
-
-	/* Re-originate with the new local link ID. */
-	if (bgp->ls_info && bgp->ls_info->enable_distribution)
-		bgp_ls_originate_bgp_link(bgp, peer);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(no_neighbor_ls_local_link_id,
-      no_neighbor_ls_local_link_id_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD>$peer_str local-link-id [(1-4294967295)$link_id]",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Configure local link ID for BGP-LS topology\n"
-      "Link identifier value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (!CHECK_FLAG(peer->flags, PEER_FLAG_LS_LOCAL_LINK_ID))
-		return CMD_SUCCESS;
-
-	/* Withdraw the existing link NLRI before clearing the key. */
-	if (bgp->ls_info && bgp->ls_info->enable_distribution)
-		bgp_ls_withdraw_bgp_link(bgp, peer);
-
-	peer->ls_local_link_id = 0;
-	UNSET_FLAG(peer->flags, PEER_FLAG_LS_LOCAL_LINK_ID);
-
-	/* Re-originate using the fallback local link ID (ifindex). */
-	if (bgp->ls_info && bgp->ls_info->enable_distribution)
-		bgp_ls_originate_bgp_link(bgp, peer);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(neighbor_ls_remote_link_id,
-      neighbor_ls_remote_link_id_cmd,
-      "neighbor <A.B.C.D|X:X::X:X|WORD>$peer_str remote-link-id (1-4294967295)$link_id",
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Configure remote link ID for BGP-LS topology\n"
-      "Link identifier value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	/* If link ID unchanged, nothing to do. */
-	if (CHECK_FLAG(peer->flags, PEER_FLAG_LS_REMOTE_LINK_ID) &&
-	    peer->ls_remote_link_id == link_id)
-		return CMD_SUCCESS;
-
-	/* Withdraw the existing link NLRI before changing the key. */
-	if (bgp->ls_info && bgp->ls_info->enable_distribution)
-		bgp_ls_withdraw_bgp_link(bgp, peer);
-
-	peer->ls_remote_link_id = link_id;
-	SET_FLAG(peer->flags, PEER_FLAG_LS_REMOTE_LINK_ID);
-
-	/* Re-originate with the new remote link ID. */
-	if (bgp->ls_info && bgp->ls_info->enable_distribution)
-		bgp_ls_originate_bgp_link(bgp, peer);
-
-	return CMD_SUCCESS;
-}
-
-DEFPY(no_neighbor_ls_remote_link_id,
-      no_neighbor_ls_remote_link_id_cmd,
-      "no neighbor <A.B.C.D|X:X::X:X|WORD>$peer_str remote-link-id [(1-4294967295)$link_id]",
-      NO_STR
-      NEIGHBOR_STR
-      NEIGHBOR_ADDR_STR2
-      "Configure remote link ID for BGP-LS topology\n"
-      "Link identifier value\n")
-{
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct peer *peer;
-
-	peer = peer_and_group_lookup_vty(vty, peer_str);
-	if (!peer)
-		return CMD_WARNING_CONFIG_FAILED;
-
-	if (!CHECK_FLAG(peer->flags, PEER_FLAG_LS_REMOTE_LINK_ID))
-		return CMD_SUCCESS;
-
-	/* Withdraw the existing link NLRI before clearing the key. */
-	if (bgp->ls_info && bgp->ls_info->enable_distribution)
-		bgp_ls_withdraw_bgp_link(bgp, peer);
-
-	peer->ls_remote_link_id = 0;
-	UNSET_FLAG(peer->flags, PEER_FLAG_LS_REMOTE_LINK_ID);
-
-	/* Re-originate using the fallback remote link ID (0). */
-	if (bgp->ls_info && bgp->ls_info->enable_distribution)
-		bgp_ls_originate_bgp_link(bgp, peer);
-
-	return CMD_SUCCESS;
-}
-
-static void bgp_config_write_redistribute(struct vty *vty, struct bgp *bgp,
-					  afi_t afi, safi_t safi)
-{
-	int i;
-
-	/* Unicast redistribution only.  */
-	if (safi != SAFI_UNICAST)
-		return;
-
-	for (i = 0; i < ZEBRA_ROUTE_MAX; i++) {
-		/* Redistribute BGP does not make sense.  */
-		if (i != ZEBRA_ROUTE_BGP) {
-			struct list *red_list;
-			struct listnode *node;
-			struct bgp_redist *red;
-
-			red_list = bgp->redist[afi][i];
-			if (!red_list)
-				continue;
-
-			for (ALL_LIST_ELEMENTS_RO(red_list, node, red)) {
-				/* "redistribute" configuration.  */
-				vty_out(vty, "  redistribute %s",
-					zebra_route_string(i));
-				if (red->instance)
-					vty_out(vty, " %d", red->instance);
-				if (red->redist_metric_flag)
-					vty_out(vty, " metric %u",
-						red->redist_metric);
-				if (red->rmap.name)
-					vty_out(vty, " route-map %s",
-						red->rmap.name);
-				vty_out(vty, "\n");
-			}
-		}
-	}
 }
 
 /* peer-group helpers for config-write */
@@ -20703,1764 +9636,114 @@ bool peergroup_af_flag_check(struct peer *peer, afi_t afi, safi_t safi,
 	return !!CHECK_FLAG(peer->af_flags_override[afi][safi], flag);
 }
 
-static bool peergroup_filter_check(struct peer *peer, afi_t afi, safi_t safi,
-				   uint8_t type, int direct)
-{
-	struct bgp_filter *filter;
-	filter = &peer->filter[afi][safi];
-
-	if (peer_group_active(peer)) {
-		/* This is required because the filter_override stores only the filter type.
-		 * To determine whether exist-map or non-exist-map is configured along with adv-map filter,
-		 * 'advmap.condition == direct' is evaluated where 'direct' should be passed appropriately by the caller */
-		if (type == PEER_FT_ADVERTISE_MAP) {
-			if (CHECK_FLAG(peer->filter_override[afi][safi][RMAP_OUT], type)) {
-				/* Only return true if the condition matches what we're checking for */
-				return (filter->advmap.condition == direct);
-			}
-			return false;
-		}
-		return !!CHECK_FLAG(peer->filter_override[afi][safi][direct],
-				    type);
-	}
-
-	switch (type) {
-	case PEER_FT_DISTRIBUTE_LIST:
-		return !!(filter->dlist[direct].name);
-	case PEER_FT_FILTER_LIST:
-		return !!(filter->aslist[direct].name);
-	case PEER_FT_PREFIX_LIST:
-		return !!(filter->plist[direct].name);
-	case PEER_FT_ROUTE_MAP:
-		return !!(filter->map[direct].name);
-	case PEER_FT_UNSUPPRESS_MAP:
-		return !!(filter->usmap.name);
-	case PEER_FT_ADVERTISE_MAP:
-		return !!(filter->advmap.aname
-			  && ((filter->advmap.condition == direct)
-			      && filter->advmap.cname));
-	default:
-		return false;
-	}
-}
-
-/* Return true if the addpath type is set for peer and different from
- * peer-group.
- */
-static bool peergroup_af_addpath_check(struct peer *peer, afi_t afi,
-				       safi_t safi)
-{
-	enum bgp_addpath_strat type, g_type;
-
-	type = peer->addpath_type[afi][safi];
-
-	if (type != BGP_ADDPATH_NONE) {
-		if (peer_group_active(peer)) {
-			g_type = peer->group->conf->addpath_type[afi][safi];
-
-			if (type != g_type)
-				return true;
-			else
-				return false;
-		}
-
-		return true;
-	}
-
-	return false;
-}
-
-/* This is part of the address-family block (unicast only) */
-static void bgp_vpn_policy_config_write_afi(struct vty *vty, struct bgp *bgp,
-					    afi_t afi)
-{
-	int indent = 2;
-	uint32_t tovpn_sid_index = 0;
-
-	if (bgp->vpn_policy[afi].rmap_name[BGP_VPN_POLICY_DIR_FROMVPN]) {
-		if (CHECK_FLAG(bgp->af_flags[afi][SAFI_UNICAST],
-			       BGP_CONFIG_VRF_TO_VRF_IMPORT))
-			vty_out(vty, "%*simport vrf route-map %s\n", indent, "",
-				bgp->vpn_policy[afi]
-				.rmap_name[BGP_VPN_POLICY_DIR_FROMVPN]);
-		else
-			vty_out(vty, "%*sroute-map vpn import %s\n", indent, "",
-				bgp->vpn_policy[afi]
-				.rmap_name[BGP_VPN_POLICY_DIR_FROMVPN]);
-	}
-	if (CHECK_FLAG(bgp->af_flags[afi][SAFI_UNICAST],
-		       BGP_CONFIG_VRF_TO_VRF_IMPORT)
-	    || CHECK_FLAG(bgp->af_flags[afi][SAFI_UNICAST],
-			  BGP_CONFIG_VRF_TO_VRF_EXPORT))
-		return;
-
-	if (CHECK_FLAG(bgp->vpn_policy[afi].flags,
-		BGP_VPN_POLICY_TOVPN_LABEL_AUTO)) {
-
-		vty_out(vty, "%*slabel vpn export %s\n", indent, "", "auto");
-
-	} else {
-		if (bgp->vpn_policy[afi].tovpn_label != MPLS_LABEL_NONE) {
-			vty_out(vty, "%*slabel vpn export %u\n", indent, "",
-				bgp->vpn_policy[afi].tovpn_label);
-		}
-	}
-
-	if (CHECK_FLAG(bgp->vpn_policy[afi].flags,
-		       BGP_VPN_POLICY_TOVPN_LABEL_PER_NEXTHOP))
-		vty_out(vty,
-			"%*slabel vpn export allocation-mode per-nexthop\n",
-			indent, "");
-
-	tovpn_sid_index = bgp->vpn_policy[afi].tovpn_sid_index;
-	if (CHECK_FLAG(bgp->vpn_policy[afi].flags,
-		       BGP_VPN_POLICY_TOVPN_SID_AUTO)) {
-		vty_out(vty, "%*ssid vpn export %s\n", indent, "", "auto");
-	} else if (CHECK_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_SID_EXPLICIT)) {
-		vty_out(vty, "%*ssid vpn export explicit %pI6\n", indent, "",
-			bgp->vpn_policy[afi].tovpn_sid_explicit);
-	} else if (tovpn_sid_index != 0) {
-		vty_out(vty, "%*ssid vpn export %u\n", indent, "", tovpn_sid_index);
-	}
-
-	if (CHECK_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_RD_SET))
-		vty_out(vty, "%*srd vpn export %s\n", indent, "",
-			bgp->vpn_policy[afi].tovpn_rd_pretty);
-
-	if (CHECK_FLAG(bgp->vpn_policy[afi].flags,
-		       BGP_VPN_POLICY_TOVPN_NEXTHOP_SET)) {
-
-		char buf[PREFIX_STRLEN];
-		if (inet_ntop(bgp->vpn_policy[afi].tovpn_nexthop.family,
-			      &bgp->vpn_policy[afi].tovpn_nexthop.u.prefix, buf,
-			      sizeof(buf))) {
-
-			vty_out(vty, "%*snexthop vpn export %s\n",
-				indent, "", buf);
-		}
-	}
-	if (bgp->vpn_policy[afi].rtlist[BGP_VPN_POLICY_DIR_FROMVPN]
-	    && bgp->vpn_policy[afi].rtlist[BGP_VPN_POLICY_DIR_TOVPN]
-	    && ecommunity_cmp(
-		       bgp->vpn_policy[afi].rtlist[BGP_VPN_POLICY_DIR_FROMVPN],
-		       bgp->vpn_policy[afi].rtlist[BGP_VPN_POLICY_DIR_TOVPN])) {
-
-		char *b = ecommunity_ecom2str(
-			bgp->vpn_policy[afi].rtlist[BGP_VPN_POLICY_DIR_TOVPN],
-			ECOMMUNITY_FORMAT_ROUTE_MAP, ECOMMUNITY_ROUTE_TARGET);
-		vty_out(vty, "%*srt vpn both %s\n", indent, "", b);
-		XFREE(MTYPE_ECOMMUNITY_STR, b);
-	} else {
-		if (bgp->vpn_policy[afi].rtlist[BGP_VPN_POLICY_DIR_FROMVPN]) {
-			char *b = ecommunity_ecom2str(
-				bgp->vpn_policy[afi]
-					.rtlist[BGP_VPN_POLICY_DIR_FROMVPN],
-				ECOMMUNITY_FORMAT_ROUTE_MAP,
-				ECOMMUNITY_ROUTE_TARGET);
-			vty_out(vty, "%*srt vpn import %s\n", indent, "", b);
-			XFREE(MTYPE_ECOMMUNITY_STR, b);
-		}
-		if (bgp->vpn_policy[afi].rtlist[BGP_VPN_POLICY_DIR_TOVPN]) {
-			char *b = ecommunity_ecom2str(
-				bgp->vpn_policy[afi]
-					.rtlist[BGP_VPN_POLICY_DIR_TOVPN],
-				ECOMMUNITY_FORMAT_ROUTE_MAP,
-				ECOMMUNITY_ROUTE_TARGET);
-			vty_out(vty, "%*srt vpn export %s\n", indent, "", b);
-			XFREE(MTYPE_ECOMMUNITY_STR, b);
-		}
-	}
-
-	if (bgp->vpn_policy[afi].rmap_name[BGP_VPN_POLICY_DIR_TOVPN])
-		vty_out(vty, "%*sroute-map vpn export %s\n", indent, "",
-			bgp->vpn_policy[afi]
-				.rmap_name[BGP_VPN_POLICY_DIR_TOVPN]);
-
-	if (bgp->vpn_policy[afi].import_redirect_rtlist) {
-		char *b = ecommunity_ecom2str(
-					bgp->vpn_policy[afi]
-					.import_redirect_rtlist,
-					ECOMMUNITY_FORMAT_ROUTE_MAP,
-					ECOMMUNITY_ROUTE_TARGET);
-
-		if (bgp->vpn_policy[afi].import_redirect_rtlist->unit_size
-		    != ECOMMUNITY_SIZE)
-			vty_out(vty, "%*srt6 redirect import %s\n",
-				indent, "", b);
-		else
-			vty_out(vty, "%*srt redirect import %s\n",
-				indent, "", b);
-		XFREE(MTYPE_ECOMMUNITY_STR, b);
-	}
-}
-
-static void bgp_config_write_filter(struct vty *vty, struct peer *peer,
-				    afi_t afi, safi_t safi)
-{
-	struct bgp_filter *filter;
-	char *addr;
-
-	addr = peer->host;
-	filter = &peer->filter[afi][safi];
-
-	/* distribute-list. */
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_DISTRIBUTE_LIST,
-				   FILTER_IN))
-		vty_out(vty, "  neighbor %s distribute-list %s in\n", addr,
-			filter->dlist[FILTER_IN].name);
-
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_DISTRIBUTE_LIST,
-				   FILTER_OUT))
-		vty_out(vty, "  neighbor %s distribute-list %s out\n", addr,
-			filter->dlist[FILTER_OUT].name);
-
-	/* prefix-list. */
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_PREFIX_LIST,
-				   FILTER_IN))
-		vty_out(vty, "  neighbor %s prefix-list %s in\n", addr,
-			filter->plist[FILTER_IN].name);
-
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_PREFIX_LIST,
-				   FILTER_OUT))
-		vty_out(vty, "  neighbor %s prefix-list %s out\n", addr,
-			filter->plist[FILTER_OUT].name);
-
-	/* route-map. */
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_ROUTE_MAP, RMAP_IN))
-		vty_out(vty, "  neighbor %s route-map %s in\n", addr,
-			filter->map[RMAP_IN].name);
-
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_ROUTE_MAP,
-				   RMAP_OUT))
-		vty_out(vty, "  neighbor %s route-map %s out\n", addr,
-			filter->map[RMAP_OUT].name);
-
-	/* unsuppress-map */
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_UNSUPPRESS_MAP, 0))
-		vty_out(vty, "  neighbor %s unsuppress-map %s\n", addr,
-			filter->usmap.name);
-
-	/* advertise-map : always applied in OUT direction*/
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_ADVERTISE_MAP,
-				   CONDITION_NON_EXIST))
-		vty_out(vty,
-			"  neighbor %s advertise-map %s non-exist-map %s\n",
-			addr, filter->advmap.aname, filter->advmap.cname);
-
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_ADVERTISE_MAP,
-				   CONDITION_EXIST))
-		vty_out(vty, "  neighbor %s advertise-map %s exist-map %s\n",
-			addr, filter->advmap.aname, filter->advmap.cname);
-
-	/* filter-list. */
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_FILTER_LIST,
-				   FILTER_IN))
-		vty_out(vty, "  neighbor %s filter-list %s in\n", addr,
-			filter->aslist[FILTER_IN].name);
-
-	if (peergroup_filter_check(peer, afi, safi, PEER_FT_FILTER_LIST,
-				   FILTER_OUT))
-		vty_out(vty, "  neighbor %s filter-list %s out\n", addr,
-			filter->aslist[FILTER_OUT].name);
-}
-
-/* BGP peer configuration display function. */
-static void bgp_config_write_peer_global(struct vty *vty, struct bgp *bgp,
-					 struct peer *peer)
-{
-	struct peer *g_peer = NULL;
-	char *addr;
-	int if_pg_printed = false;
-	int if_ras_printed = false;
-
-	/* Skip dynamic neighbors. */
-	if (peer_dynamic_neighbor(peer))
-		return;
-
-	if (peer->conf_if)
-		addr = peer->conf_if;
-	else
-		addr = peer->host;
-
-	/************************************
-	 ****** Global to the neighbor ******
-	 ************************************/
-	if (peer->conf_if) {
-		if (CHECK_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY))
-			vty_out(vty, " neighbor %s interface v6only", addr);
-		else
-			vty_out(vty, " neighbor %s interface", addr);
-
-		if (peer_group_active(peer)) {
-			vty_out(vty, " peer-group %s", peer->group->name);
-			if_pg_printed = true;
-		} else if (peer->as_type == AS_SPECIFIED) {
-			vty_out(vty, " remote-as %s", peer->as_pretty);
-			if_ras_printed = true;
-		} else if (peer->as_type == AS_INTERNAL) {
-			vty_out(vty, " remote-as internal");
-			if_ras_printed = true;
-		} else if (peer->as_type == AS_EXTERNAL) {
-			vty_out(vty, " remote-as external");
-			if_ras_printed = true;
-		} else if (CHECK_FLAG(peer->as_type, AS_AUTO)) {
-			vty_out(vty, " remote-as auto");
-			if_ras_printed = true;
-		}
-
-		vty_out(vty, "\n");
-	}
-
-	/* remote-as and peer-group */
-	/* peer is a member of a peer-group */
-	if (peer_group_active(peer)) {
-		g_peer = peer->group->conf;
-
-		/* For swpX peers we displayed the peer-group
-		 * via 'neighbor swpX interface peer-group PGNAME' */
-		if (!if_pg_printed)
-			vty_out(vty, " neighbor %s peer-group %s\n", addr, peer->group->name);
-
-		if ((g_peer->as_type != peer->as_type ||
-		     (peer->as_type == AS_SPECIFIED && g_peer->as != peer->as)) &&
-		    !if_ras_printed) {
-			if (peer->as_type == AS_SPECIFIED) {
-				vty_out(vty, " neighbor %s remote-as %s\n",
-					addr, peer->as_pretty);
-			} else if (peer->as_type == AS_INTERNAL) {
-				vty_out(vty,
-					" neighbor %s remote-as internal\n",
-					addr);
-			} else if (peer->as_type == AS_EXTERNAL) {
-				vty_out(vty,
-					" neighbor %s remote-as external\n",
-					addr);
-			} else if (CHECK_FLAG(peer->as_type, AS_AUTO)) {
-				vty_out(vty, " neighbor %s remote-as auto\n",
-					addr);
-			}
-		}
-	}
-
-	/* peer is NOT a member of a peer-group */
-	else {
-		/* peer is a peer-group, declare the peer-group */
-		if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
-			vty_out(vty, " neighbor %s peer-group\n", addr);
-		}
-
-		if (!if_ras_printed) {
-			if (peer->as_type == AS_SPECIFIED) {
-				vty_out(vty, " neighbor %s remote-as %s\n",
-					addr, peer->as_pretty);
-			} else if (peer->as_type == AS_INTERNAL) {
-				vty_out(vty,
-					" neighbor %s remote-as internal\n",
-					addr);
-			} else if (peer->as_type == AS_EXTERNAL) {
-				vty_out(vty,
-					" neighbor %s remote-as external\n",
-					addr);
-			} else if (CHECK_FLAG(peer->as_type, AS_AUTO)) {
-				vty_out(vty, " neighbor %s remote-as auto\n",
-					addr);
-			}
-		}
-	}
-
-	/* local-as */
-	if (peergroup_flag_check(peer, PEER_FLAG_LOCAL_AS)) {
-		vty_out(vty, " neighbor %s local-as %s", addr,
-			peer->change_local_as_pretty);
-		if (peergroup_flag_check(peer, PEER_FLAG_LOCAL_AS_NO_PREPEND))
-			vty_out(vty, " no-prepend");
-		if (peergroup_flag_check(peer, PEER_FLAG_LOCAL_AS_REPLACE_AS))
-			vty_out(vty, " replace-as");
-		if (peergroup_flag_check(peer, PEER_FLAG_DUAL_AS))
-			vty_out(vty, " dual-as");
-		vty_out(vty, "\n");
-	}
-
-	/* description */
-	if (peer->desc) {
-		vty_out(vty, " neighbor %s description %s\n", addr, peer->desc);
-	}
-
-	/* shutdown */
-	if (peergroup_flag_check(peer, PEER_FLAG_SHUTDOWN)) {
-		if (peer->tx_shutdown_message)
-			vty_out(vty, " neighbor %s shutdown message %s\n", addr,
-				peer->tx_shutdown_message);
-		else
-			vty_out(vty, " neighbor %s shutdown\n", addr);
-	}
-
-	if (peergroup_flag_check(peer, PEER_FLAG_RTT_SHUTDOWN))
-		vty_out(vty, " neighbor %s shutdown rtt %u count %u\n", addr,
-			peer->rtt_expected, peer->rtt_keepalive_conf);
-
-	/* bfd */
-	if (peer->bfd_config)
-		bgp_bfd_peer_config_write(vty, peer, addr);
-
-	/* password */
-	if (peergroup_flag_check(peer, PEER_FLAG_PASSWORD))
-		vty_out(vty, " neighbor %s password %s\n", addr,
-			peer->password);
-
-	/* neighbor solo */
-	if (peergroup_flag_check(peer, PEER_FLAG_LONESOUL))
-		vty_out(vty, " neighbor %s solo\n", addr);
-
-	/* BGP port */
-	if (peer->port != BGP_PORT_DEFAULT) {
-		vty_out(vty, " neighbor %s port %d\n", addr, peer->port);
-	}
-
-	/* Local interface name */
-	if (peer->ifname) {
-		vty_out(vty, " neighbor %s interface %s\n", addr, peer->ifname);
-	}
-
-	/* TCP max segment size */
-	if (peergroup_flag_check(peer, PEER_FLAG_TCP_MSS))
-		vty_out(vty, " neighbor %s tcp-mss %d\n", addr, peer->tcp_mss);
-
-	/* passive */
-	if (peergroup_flag_check(peer, PEER_FLAG_PASSIVE))
-		vty_out(vty, " neighbor %s passive\n", addr);
-
-	/* ebgp-multihop */
-	if (peer->sort != BGP_PEER_IBGP && peer->ttl != BGP_DEFAULT_TTL
-	    && !(peer->gtsm_hops != BGP_GTSM_HOPS_DISABLED
-		 && peer->ttl == MAXTTL)) {
-		if (!peer_group_active(peer) || g_peer->ttl != peer->ttl) {
-			if (peer->ttl != MAXTTL)
-				vty_out(vty, " neighbor %s ebgp-multihop %d\n",
-					addr, peer->ttl);
-			else
-				vty_out(vty, " neighbor %s ebgp-multihop\n",
-					addr);
-		}
-	}
-
-	/* aigp */
-	if (peergroup_flag_check(peer, PEER_FLAG_AIGP))
-		vty_out(vty, " neighbor %s aigp\n", addr);
-
-	/* graceful-shutdown */
-	if (peergroup_flag_check(peer, PEER_FLAG_GRACEFUL_SHUTDOWN))
-		vty_out(vty, " neighbor %s graceful-shutdown\n", addr);
-
-	/* role */
-	if (peergroup_flag_check(peer, PEER_FLAG_ROLE) &&
-	    peer->local_role != ROLE_UNDEFINED)
-		vty_out(vty, " neighbor %s local-role %s%s\n", addr,
-			bgp_get_name_by_role(peer->local_role),
-			CHECK_FLAG(peer->flags, PEER_FLAG_ROLE_STRICT_MODE)
-				? " strict-mode"
-				: "");
-
-	if (peer->sub_sort == BGP_PEER_EBGP_OAD)
-		vty_out(vty, " neighbor %s oad\n", addr);
-
-	/* ttl-security hops */
-	if (peer->gtsm_hops != BGP_GTSM_HOPS_DISABLED) {
-		if (!peer_group_active(peer)
-		    || g_peer->gtsm_hops != peer->gtsm_hops) {
-			vty_out(vty, " neighbor %s ttl-security hops %d\n",
-				addr, peer->gtsm_hops);
-		}
-	}
-
-	/* disable-connected-check */
-	if (peergroup_flag_check(peer, PEER_FLAG_DISABLE_CONNECTED_CHECK))
-		vty_out(vty, " neighbor %s disable-connected-check\n", addr);
-
-	/* link-bw-encoding-ieee */
-	if (peergroup_flag_check(peer, PEER_FLAG_DISABLE_LINK_BW_ENCODING_IEEE))
-		vty_out(vty, " neighbor %s disable-link-bw-encoding-ieee\n",
-			addr);
-
-	if (peergroup_flag_check(peer, PEER_FLAG_EXTENDED_LINK_BANDWIDTH))
-		vty_out(vty, " neighbor %s extended-link-bandwidth\n", addr);
-
-	/* extended-optional-parameters */
-	if (peergroup_flag_check(peer, PEER_FLAG_EXTENDED_OPT_PARAMS))
-		vty_out(vty, " neighbor %s extended-optional-parameters\n",
-			addr);
-
-	/* enforce-first-as */
-	if (CHECK_FLAG(bgp->flags, BGP_FLAG_ENFORCE_FIRST_AS)) {
-		/* The `no` form is printed because by default this enforcing
-		 * is enabled, thus we need to print it inverted.
-		 * See peer_new().
-		 */
-		if (peergroup_flag_check(peer, PEER_FLAG_ENFORCE_FIRST_AS))
-			vty_out(vty, " no neighbor %s enforce-first-as\n", addr);
-	} else {
-		if (peergroup_flag_check(peer, PEER_FLAG_ENFORCE_FIRST_AS))
-			vty_out(vty, " neighbor %s enforce-first-as\n", addr);
-	}
-
-	/* update-source */
-	if (peergroup_flag_check(peer, PEER_FLAG_UPDATE_SOURCE)) {
-		if (peer->update_source)
-			vty_out(vty, " neighbor %s update-source %pSU\n", addr,
-				peer->update_source);
-		else if (peer->update_if)
-			vty_out(vty, " neighbor %s update-source %s\n", addr,
-				peer->update_if);
-	}
-
-	/* ip-transparent on/off */
-	if (peergroup_flag_check(peer, PEER_FLAG_IP_TRANSPARENT))
-		vty_out(vty, " neighbor %s ip-transparent\n", addr);
-
-	/* BGP-LS link identifiers */
-	if (CHECK_FLAG(peer->flags, PEER_FLAG_LS_LOCAL_LINK_ID))
-		vty_out(vty, " neighbor %s local-link-id %u\n", addr, peer->ls_local_link_id);
-	if (CHECK_FLAG(peer->flags, PEER_FLAG_LS_REMOTE_LINK_ID))
-		vty_out(vty, " neighbor %s remote-link-id %u\n", addr, peer->ls_remote_link_id);
-
-	/* advertisement-interval */
-	if (peergroup_flag_check(peer, PEER_FLAG_ROUTEADV))
-		vty_out(vty, " neighbor %s advertisement-interval %u\n", addr,
-			peer->routeadv);
-
-	/* timers */
-	if (peergroup_flag_check(peer, PEER_FLAG_TIMER))
-		vty_out(vty, " neighbor %s timers %u %u\n", addr,
-			peer->keepalive, peer->holdtime);
-
-	/* timers connect */
-	if (peergroup_flag_check(peer, PEER_FLAG_TIMER_CONNECT))
-		vty_out(vty, " neighbor %s timers connect %u\n", addr,
-			peer->connect);
-	/* need special-case handling for changed default values due to
-	 * config profile / version (because there is no "timers bgp connect"
-	 * command, we need to save this per-peer :/)
-	 */
-	else if (!peer_group_active(peer) && !peer->connect &&
-		 peer->bgp->default_connect_retry != SAVE_BGP_CONNECT_RETRY)
-		vty_out(vty, " neighbor %s timers connect %u\n", addr,
-			peer->bgp->default_connect_retry);
-
-	/* timers delayopen */
-	if (peergroup_flag_check(peer, PEER_FLAG_TIMER_DELAYOPEN))
-		vty_out(vty, " neighbor %s timers delayopen %u\n", addr,
-			peer->delayopen);
-	/* Save config even though flag is not set if default values have been
-	 * changed
-	 */
-	else if (!peer_group_active(peer) && !peer->delayopen
-		 && peer->bgp->default_delayopen != BGP_DEFAULT_DELAYOPEN)
-		vty_out(vty, " neighbor %s timers delayopen %u\n", addr,
-			peer->bgp->default_delayopen);
-
-	/* capability software-version */
-	if (CHECK_FLAG(bgp->flags, BGP_FLAG_DYNAMIC_CAPABILITY)) {
-		if (!peergroup_flag_check(peer, PEER_FLAG_DYNAMIC_CAPABILITY))
-			vty_out(vty, " no neighbor %s capability dynamic\n",
-				addr);
-	} else {
-		if (peergroup_flag_check(peer, PEER_FLAG_DYNAMIC_CAPABILITY))
-			vty_out(vty, " neighbor %s capability dynamic\n", addr);
-	}
-
-	/* capability extended-nexthop */
-	if (peergroup_flag_check(peer, PEER_FLAG_CAPABILITY_ENHE)) {
-		if (CHECK_FLAG(peer->flags_invert, PEER_FLAG_CAPABILITY_ENHE) &&
-		    !peer->conf_if)
-			vty_out(vty,
-				" no neighbor %s capability extended-nexthop\n",
-				addr);
-		else if (!peer->conf_if)
-			vty_out(vty,
-				" neighbor %s capability extended-nexthop\n",
-				addr);
-	}
-
-	/* capability software-version */
-	if (CHECK_FLAG(bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_OLD)) {
-		if (!peergroup_flag_check(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD))
-			vty_out(vty,
-				" no neighbor %s capability software-version\n",
-				addr);
-	} else {
-		if (peergroup_flag_check(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD))
-			vty_out(vty,
-				" neighbor %s capability software-version\n",
-				addr);
-	}
-
-	/* capability software-version latest-encoding */
-	if (CHECK_FLAG(bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_NEW)) {
-		if (!peergroup_flag_check(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW))
-			vty_out(vty,
-				" no neighbor %s capability software-version latest-encoding\n",
-				addr);
-	} else {
-		if (peergroup_flag_check(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW))
-			vty_out(vty, " neighbor %s capability software-version latest-encoding\n",
-				addr);
-	}
-
-	if (peergroup_flag_check(peer, PEER_FLAG_RPKI_STRICT))
-		vty_out(vty, " neighbor %s rpki strict\n", addr);
-
-	/* capability link-local */
-	if (CHECK_FLAG(bgp->flags, BGP_FLAG_LINK_LOCAL_CAPABILITY)) {
-		if (!peergroup_flag_check(peer, PEER_FLAG_CAPABILITY_LINK_LOCAL))
-			vty_out(vty, " no neighbor %s capability link-local\n", addr);
-	} else {
-		if (!peer->conf_if && peergroup_flag_check(peer, PEER_FLAG_CAPABILITY_LINK_LOCAL))
-			vty_out(vty, " neighbor %s capability link-local\n", addr);
-		else if (peer->conf_if &&
-			 !peergroup_flag_check(peer, PEER_FLAG_CAPABILITY_LINK_LOCAL))
-			vty_out(vty, " no neighbor %s capability link-local\n", addr);
-	}
-
-	/* dont-capability-negotiation */
-	if (peergroup_flag_check(peer, PEER_FLAG_DONT_CAPABILITY))
-		vty_out(vty, " neighbor %s dont-capability-negotiate\n", addr);
-
-	/* capability fqdn */
-	if (peergroup_flag_check(peer, PEER_FLAG_CAPABILITY_FQDN))
-		vty_out(vty,
-			" no neighbor %s capability fqdn\n",
-			addr);
-
-	/* override-capability */
-	if (peergroup_flag_check(peer, PEER_FLAG_OVERRIDE_CAPABILITY))
-		vty_out(vty, " neighbor %s override-capability\n", addr);
-
-	/* strict-capability-match */
-	if (peergroup_flag_check(peer, PEER_FLAG_STRICT_CAP_MATCH))
-		vty_out(vty, " neighbor %s strict-capability-match\n", addr);
-
-	/* Sender side AS path loop detection. */
-	if (peergroup_flag_check(peer, PEER_FLAG_AS_LOOP_DETECTION))
-		vty_out(vty, " neighbor %s sender-as-path-loop-detection\n",
-			addr);
-
-	/* path-attribute discard */
-	char discard_attrs_str[BUFSIZ] = {0};
-	bool discard_attrs = bgp_path_attribute_discard(
-		peer, discard_attrs_str, sizeof(discard_attrs_str));
-
-	if (discard_attrs)
-		vty_out(vty, " neighbor %s path-attribute discard %s\n", addr,
-			discard_attrs_str);
-
-	/* path-attribute treat-as-withdraw */
-	char withdraw_attrs_str[BUFSIZ] = {0};
-	bool withdraw_attrs = bgp_path_attribute_treat_as_withdraw(
-		peer, withdraw_attrs_str, sizeof(withdraw_attrs_str));
-
-	if (withdraw_attrs)
-		vty_out(vty,
-			" neighbor %s path-attribute treat-as-withdraw %s\n",
-			addr, withdraw_attrs_str);
-
-	if (!CHECK_FLAG(peer->peer_gr_new_status_flag,
-			PEER_GRACEFUL_RESTART_NEW_STATE_INHERIT)) {
-
-		if (CHECK_FLAG(peer->peer_gr_new_status_flag,
-			       PEER_GRACEFUL_RESTART_NEW_STATE_HELPER)) {
-			vty_out(vty,
-				" neighbor %s graceful-restart-helper\n", addr);
-		} else if (CHECK_FLAG(
-				   peer->peer_gr_new_status_flag,
-				   PEER_GRACEFUL_RESTART_NEW_STATE_RESTART)) {
-			vty_out(vty,
-				" neighbor %s graceful-restart\n", addr);
-		} else if (
-			(!(CHECK_FLAG(peer->peer_gr_new_status_flag,
-				      PEER_GRACEFUL_RESTART_NEW_STATE_HELPER))
-			 && !(CHECK_FLAG(
-				 peer->peer_gr_new_status_flag,
-				 PEER_GRACEFUL_RESTART_NEW_STATE_RESTART)))) {
-			vty_out(vty, " neighbor %s graceful-restart-disable\n",
-				addr);
-		}
-	}
-
-	if (peergroup_flag_check(peer, PEER_FLAG_SEND_NHC_ATTRIBUTE))
-		vty_out(vty, " neighbor %s send-nexthop-characteristics\n", addr);
-}
-
-/* BGP peer configuration display function. */
-static void bgp_config_write_peer_af(struct vty *vty, struct bgp *bgp,
-				     struct peer *peer, afi_t afi, safi_t safi)
-{
-	struct peer *g_peer = NULL;
-	char *addr;
-	bool flag_scomm, flag_secomm, flag_slcomm;
-
-	/* skip hidden default vrf bgp instance */
-	if (IS_BGP_INSTANCE_HIDDEN(bgp))
-		return;
-
-	/* Skip dynamic neighbors. */
-	if (peer_dynamic_neighbor(peer))
-		return;
-
-	if (peer->conf_if)
-		addr = peer->conf_if;
-	else
-		addr = peer->host;
-
-	/************************************
-	 ****** Per AF to the neighbor ******
-	 ************************************/
-	if (peer_group_active(peer)) {
-		g_peer = peer->group->conf;
-
-		/* If the peer-group is active but peer is not, print a 'no
-		 * activate' */
-		if (g_peer->afc[afi][safi] && !peer->afc[afi][safi]) {
-			vty_out(vty, "  no neighbor %s activate\n", addr);
-		}
-
-		/* If the peer-group is not active but peer is, print an
-		   'activate' */
-		else if (!g_peer->afc[afi][safi] && peer->afc[afi][safi]) {
-			vty_out(vty, "  neighbor %s activate\n", addr);
-		}
-	} else {
-		if (peer->afc[afi][safi]) {
-			if (safi == SAFI_ENCAP)
-				vty_out(vty, "  neighbor %s activate\n", addr);
-			else if (!bgp->default_af[afi][safi])
-				vty_out(vty, "  neighbor %s activate\n", addr);
-		} else {
-			if (bgp->default_af[afi][safi])
-				vty_out(vty, "  no neighbor %s activate\n",
-					addr);
-		}
-	}
-
-	/* addpath TX knobs */
-	if (peergroup_af_addpath_check(peer, afi, safi)) {
-		switch (peer->addpath_type[afi][safi]) {
-		case BGP_ADDPATH_ALL:
-			vty_out(vty, "  neighbor %s addpath-tx-all-paths\n",
-				addr);
-			break;
-		case BGP_ADDPATH_BEST_PER_AS:
-			vty_out(vty,
-				"  neighbor %s addpath-tx-bestpath-per-AS\n",
-				addr);
-			break;
-		case BGP_ADDPATH_BEST_SELECTED:
-			if (peer->addpath_best_selected[afi][safi])
-				vty_out(vty,
-					"  neighbor %s addpath-tx-best-selected %u\n",
-					addr,
-					peer->addpath_best_selected[afi][safi]);
-			break;
-		case BGP_ADDPATH_MAX:
-		case BGP_ADDPATH_NONE:
-			break;
-		}
-	}
-
-	if (CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_DISABLE_ADDPATH_RX))
-		vty_out(vty, "  neighbor %s disable-addpath-rx\n", addr);
-
-	if (CHECK_FLAG(peer->af_flags[afi][safi],
-		       PEER_FLAG_ADDPATH_RX_PATHS_LIMIT))
-		vty_out(vty, "  neighbor %s addpath-rx-paths-limit %u\n", addr,
-			peer->addpath_paths_limit[afi][safi].send);
-
-	/* ORF capability.  */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_ORF_PREFIX_SM)
-	    || peergroup_af_flag_check(peer, afi, safi,
-				       PEER_FLAG_ORF_PREFIX_RM)) {
-		vty_out(vty, "  neighbor %s capability orf prefix-list", addr);
-
-		if (peergroup_af_flag_check(peer, afi, safi,
-					    PEER_FLAG_ORF_PREFIX_SM)
-		    && peergroup_af_flag_check(peer, afi, safi,
-					       PEER_FLAG_ORF_PREFIX_RM))
-			vty_out(vty, " both");
-		else if (peergroup_af_flag_check(peer, afi, safi,
-						 PEER_FLAG_ORF_PREFIX_SM))
-			vty_out(vty, " send");
-		else
-			vty_out(vty, " receive");
-		vty_out(vty, "\n");
-	}
-
-	/* Route reflector client. */
-	if (peergroup_af_flag_check(peer, afi, safi,
-				    PEER_FLAG_REFLECTOR_CLIENT)) {
-		vty_out(vty, "  neighbor %s route-reflector-client\n", addr);
-	}
-
-	/* next-hop-self force */
-	if (peergroup_af_flag_check(peer, afi, safi,
-				    PEER_FLAG_FORCE_NEXTHOP_SELF)) {
-		vty_out(vty, "  neighbor %s next-hop-self force\n", addr);
-	}
-
-	/* next-hop-self */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_NEXTHOP_SELF)) {
-		vty_out(vty, "  neighbor %s next-hop-self\n", addr);
-	}
-
-	/* remove-private-AS */
-	if (peergroup_af_flag_check(peer, afi, safi,
-				    PEER_FLAG_REMOVE_PRIVATE_AS_ALL_REPLACE)) {
-		vty_out(vty, "  neighbor %s remove-private-AS all replace-AS\n",
-			addr);
-	}
-
-	else if (peergroup_af_flag_check(peer, afi, safi,
-					 PEER_FLAG_REMOVE_PRIVATE_AS_REPLACE)) {
-		vty_out(vty, "  neighbor %s remove-private-AS replace-AS\n",
-			addr);
-	}
-
-	else if (peergroup_af_flag_check(peer, afi, safi,
-					 PEER_FLAG_REMOVE_PRIVATE_AS_ALL)) {
-		vty_out(vty, "  neighbor %s remove-private-AS all\n", addr);
-	}
-
-	else if (peergroup_af_flag_check(peer, afi, safi,
-					 PEER_FLAG_REMOVE_PRIVATE_AS)) {
-		vty_out(vty, "  neighbor %s remove-private-AS\n", addr);
-	}
-
-	/* as-override */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_AS_OVERRIDE)) {
-		vty_out(vty, "  neighbor %s as-override\n", addr);
-	}
-
-	/* send-community print. */
-	flag_scomm = peergroup_af_flag_check(peer, afi, safi,
-					     PEER_FLAG_SEND_COMMUNITY);
-	flag_secomm = peergroup_af_flag_check(peer, afi, safi,
-					      PEER_FLAG_SEND_EXT_COMMUNITY);
-	flag_slcomm = peergroup_af_flag_check(peer, afi, safi,
-					      PEER_FLAG_SEND_LARGE_COMMUNITY);
-
-	if (flag_scomm && flag_secomm && flag_slcomm) {
-		vty_out(vty, "  no neighbor %s send-community all\n", addr);
-	} else {
-		if (flag_scomm)
-			vty_out(vty, "  no neighbor %s send-community\n", addr);
-		if (flag_secomm)
-			vty_out(vty,
-				"  no neighbor %s send-community extended\n",
-				addr);
-
-		if (flag_slcomm)
-			vty_out(vty, "  no neighbor %s send-community large\n",
-				addr);
-
-		if (peergroup_af_flag_check(peer, afi, safi,
-					    PEER_FLAG_SEND_EXT_COMMUNITY_RPKI))
-			vty_out(vty, "  neighbor %s send-community extended rpki\n", addr);
-	}
-
-	/* Default information */
-	if (peergroup_af_flag_check(peer, afi, safi,
-				    PEER_FLAG_DEFAULT_ORIGINATE)) {
-		vty_out(vty, "  neighbor %s default-originate", addr);
-
-		if (peer->default_rmap[afi][safi].name)
-			vty_out(vty, " route-map %s",
-				peer->default_rmap[afi][safi].name);
-
-		vty_out(vty, "\n");
-	}
-
-	/* Soft reconfiguration inbound. */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_SOFT_RECONFIG)) {
-		vty_out(vty, "  neighbor %s soft-reconfiguration inbound\n",
-			addr);
-	}
-
-	/* maximum-prefix. */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_MAX_PREFIX)) {
-		vty_out(vty, "  neighbor %s maximum-prefix %u", addr,
-			peer->pmax[afi][safi]);
-
-		if (peer->pmax_threshold[afi][safi]
-		    != MAXIMUM_PREFIX_THRESHOLD_DEFAULT)
-			vty_out(vty, " %u", peer->pmax_threshold[afi][safi]);
-		if (peer_af_flag_check(peer, afi, safi,
-				       PEER_FLAG_MAX_PREFIX_WARNING))
-			vty_out(vty, " warning-only");
-		if (peer->pmax_restart[afi][safi])
-			vty_out(vty, " restart %u",
-				peer->pmax_restart[afi][safi]);
-		if (peer_af_flag_check(peer, afi, safi,
-				       PEER_FLAG_MAX_PREFIX_FORCE))
-			vty_out(vty, " force");
-
-		vty_out(vty, "\n");
-	}
-
-	/* maximum-prefix-out */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_MAX_PREFIX_OUT))
-		vty_out(vty, "  neighbor %s maximum-prefix-out %u\n",
-			addr, peer->pmax_out[afi][safi]);
-
-	/* Route server client. */
-	if (peergroup_af_flag_check(peer, afi, safi,
-				    PEER_FLAG_RSERVER_CLIENT)) {
-		vty_out(vty, "  neighbor %s route-server-client\n", addr);
-	}
-
-	/* Nexthop-local unchanged. */
-	if (peergroup_af_flag_check(peer, afi, safi,
-				    PEER_FLAG_NEXTHOP_LOCAL_UNCHANGED)) {
-		vty_out(vty, "  neighbor %s nexthop-local unchanged\n", addr);
-	}
-
-	/* allowas-in <1-10> */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_ALLOWAS_IN)) {
-		if (peer_af_flag_check(peer, afi, safi,
-				       PEER_FLAG_ALLOWAS_IN_ORIGIN)) {
-			vty_out(vty, "  neighbor %s allowas-in origin\n", addr);
-		} else if (peer->allowas_in[afi][safi] == BGP_ALLOWAS_IN_DEFAULT) {
-			vty_out(vty, "  neighbor %s allowas-in\n", addr);
-		} else {
-			vty_out(vty, "  neighbor %s allowas-in %d\n", addr,
-				peer->allowas_in[afi][safi]);
-		}
-	}
-
-	/* accept-own */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_ACCEPT_OWN))
-		vty_out(vty, "  neighbor %s accept-own\n", addr);
-
-	/* soo */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_SOO)) {
-		char *soo_str = ecommunity_ecom2str(
-			peer->soo[afi][safi], ECOMMUNITY_FORMAT_ROUTE_MAP, 0);
-
-		vty_out(vty, "  neighbor %s soo %s\n", addr, soo_str);
-		XFREE(MTYPE_ECOMMUNITY_STR, soo_str);
-	}
-
-	/* weight */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_WEIGHT))
-		vty_out(vty, "  neighbor %s weight %lu\n", addr,
-			peer->weight[afi][safi]);
-
-	/* encapsulation-srv6|encapsulation-mpls */
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_CONFIG_ENCAPSULATION_SRV6))
-		vty_out(vty, "  neighbor %s encapsulation-srv6\n", addr);
-	else if (peergroup_af_flag_check(peer, afi, safi,
-					 PEER_FLAG_CONFIG_ENCAPSULATION_SRV6_RELAX))
-		vty_out(vty, "  neighbor %s encapsulation-srv6-relax\n", addr);
-	if (peergroup_af_flag_check(peer, afi, safi, PEER_FLAG_CONFIG_ENCAPSULATION_MPLS))
-		vty_out(vty, "  neighbor %s encapsulation-mpls\n", addr);
-
-	/* Filter. */
-	bgp_config_write_filter(vty, peer, afi, safi);
-
-	/* atribute-unchanged. */
-	if (peer_af_flag_check(peer, afi, safi, PEER_FLAG_AS_PATH_UNCHANGED)
-	    || (safi != SAFI_EVPN
-		&& peer_af_flag_check(peer, afi, safi,
-				      PEER_FLAG_NEXTHOP_UNCHANGED))
-	    || peer_af_flag_check(peer, afi, safi, PEER_FLAG_MED_UNCHANGED)) {
-
-		if (!peer_group_active(peer)
-		    || peergroup_af_flag_check(peer, afi, safi,
-					       PEER_FLAG_AS_PATH_UNCHANGED)
-		    || peergroup_af_flag_check(peer, afi, safi,
-					       PEER_FLAG_NEXTHOP_UNCHANGED)
-		    || peergroup_af_flag_check(peer, afi, safi,
-					       PEER_FLAG_MED_UNCHANGED)) {
-
-			vty_out(vty,
-				"  neighbor %s attribute-unchanged%s%s%s\n",
-				addr,
-				peer_af_flag_check(peer, afi, safi,
-						   PEER_FLAG_AS_PATH_UNCHANGED)
-					? " as-path"
-					: "",
-				peer_af_flag_check(peer, afi, safi,
-						   PEER_FLAG_NEXTHOP_UNCHANGED)
-					? " next-hop"
-					: "",
-				peer_af_flag_check(peer, afi, safi,
-						   PEER_FLAG_MED_UNCHANGED)
-					? " med"
-					: "");
-		}
-	}
-}
-
-static void bgp_vpn_config_write(struct vty *vty, struct bgp *bgp, afi_t afi,
-				 safi_t safi)
-{
-	if (!CHECK_FLAG(bgp->af_flags[afi][safi],
-			BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL))
-		vty_out(vty, "  no bgp retain route-target all\n");
-}
-
-/* Address family based peer configuration display.  */
-static void bgp_config_write_family(struct vty *vty, struct bgp *bgp, afi_t afi,
-				    safi_t safi)
-{
-	struct peer *peer;
-	struct peer_group *group;
-	struct listnode *node, *nnode;
-
-	/* skip hidden default vrf bgp instance */
-	if (IS_BGP_INSTANCE_HIDDEN(bgp))
-		return;
-
-	vty_frame(vty, " !\n address-family ");
-	if (afi == AFI_IP) {
-		if (safi == SAFI_UNICAST)
-			vty_frame(vty, "ipv4 unicast");
-		else if (safi == SAFI_LABELED_UNICAST)
-			vty_frame(vty, "ipv4 labeled-unicast");
-		else if (safi == SAFI_MULTICAST)
-			vty_frame(vty, "ipv4 multicast");
-		else if (safi == SAFI_MPLS_VPN)
-			vty_frame(vty, "ipv4 vpn");
-		else if (safi == SAFI_ENCAP)
-			vty_frame(vty, "ipv4 encap");
-		else if (safi == SAFI_FLOWSPEC)
-			vty_frame(vty, "ipv4 flowspec");
-	} else if (afi == AFI_IP6) {
-		if (safi == SAFI_UNICAST)
-			vty_frame(vty, "ipv6 unicast");
-		else if (safi == SAFI_LABELED_UNICAST)
-			vty_frame(vty, "ipv6 labeled-unicast");
-		else if (safi == SAFI_MULTICAST)
-			vty_frame(vty, "ipv6 multicast");
-		else if (safi == SAFI_MPLS_VPN)
-			vty_frame(vty, "ipv6 vpn");
-		else if (safi == SAFI_ENCAP)
-			vty_frame(vty, "ipv6 encap");
-		else if (safi == SAFI_FLOWSPEC)
-			vty_frame(vty, "ipv6 flowspec");
-	} else if (afi == AFI_L2VPN) {
-		if (safi == SAFI_EVPN)
-			vty_frame(vty, "l2vpn evpn");
-	} else if (afi == AFI_BGP_LS) {
-		if (safi == SAFI_BGP_LS)
-			vty_frame(vty, "link-state link-state");
-	}
-	vty_frame(vty, "\n");
-
-	/* BGP-only fabric distribution */
-	if (afi == AFI_BGP_LS && safi == SAFI_BGP_LS && bgp->ls_info &&
-	    bgp->ls_info->enable_distribution) {
-		if (bgp->ls_info->instance_id != 0)
-			vty_out(vty, "  distribute bgp-fabric-link-state instance-id %" PRIu64 "\n",
-				bgp->ls_info->instance_id);
-		else
-			vty_out(vty, "  distribute bgp-fabric-link-state\n");
-	}
-
-	bgp_config_write_distance(vty, bgp, afi, safi);
-
-	bgp_config_write_network(vty, bgp, afi, safi);
-
-	bgp_config_write_redistribute(vty, bgp, afi, safi);
-
-	bgp_config_write_ipv6_nexthop_prefer_global(vty, bgp, afi, safi);
-
-	/* BGP flag dampening. */
-	if (CHECK_FLAG(bgp->af_flags[afi][safi], BGP_CONFIG_DAMPENING))
-		bgp_config_write_damp(vty, bgp, afi, safi);
-	for (ALL_LIST_ELEMENTS_RO(bgp->group, node, group))
-		if (peer_af_flag_check(group->conf, afi, safi,
-				       PEER_FLAG_CONFIG_DAMPENING))
-			bgp_config_write_peer_damp(vty, group->conf, afi, safi);
-	for (ALL_LIST_ELEMENTS_RO(bgp->peer, node, peer))
-		if (peer_is_config_node(peer) &&
-		    peer_af_flag_check(peer, afi, safi, PEER_FLAG_CONFIG_DAMPENING))
-			bgp_config_write_peer_damp(vty, peer, afi, safi);
-
-	for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group))
-		bgp_config_write_peer_af(vty, bgp, group->conf, afi, safi);
-
-	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-		/* Do not display doppelganger peers */
-		if (peer_is_config_node(peer))
-			bgp_config_write_peer_af(vty, bgp, peer, afi, safi);
-	}
-
-	bgp_config_write_maxpaths(vty, bgp, afi, safi);
-	bgp_config_write_table_map(vty, bgp, afi, safi);
-
-	if (safi == SAFI_EVPN)
-		bgp_config_write_evpn_info(vty, bgp, afi, safi);
-
-	if (safi == SAFI_FLOWSPEC)
-		bgp_fs_config_write_pbr(vty, bgp, afi, safi);
-
-	if (safi == SAFI_MPLS_VPN)
-		bgp_vpn_config_write(vty, bgp, afi, safi);
-
-	if (safi == SAFI_UNICAST) {
-		bgp_vpn_policy_config_write_afi(vty, bgp, afi);
-		if (CHECK_FLAG(bgp->af_flags[afi][safi],
-			       BGP_CONFIG_VRF_TO_MPLSVPN_EXPORT)) {
-
-			vty_out(vty, "  export vpn\n");
-		}
-		if (CHECK_FLAG(bgp->af_flags[afi][safi],
-			       BGP_CONFIG_MPLSVPN_TO_VRF_IMPORT)) {
-
-			vty_out(vty, "  import vpn\n");
-		}
-		if (CHECK_FLAG(bgp->af_flags[afi][safi],
-			       BGP_CONFIG_VRF_TO_VRF_IMPORT)) {
-			char *name;
-
-			for (ALL_LIST_ELEMENTS_RO(
-				     bgp->vpn_policy[afi].import_vrf, node,
-				     name))
-				vty_out(vty, "  import vrf %s\n", name);
-		}
-
-		if (is_srv6_unicast_enabled(bgp, afi)) {
-			if (CHECK_FLAG(bgp->srv6_unicast[afi].flags, SRV6_POLICY_FLAG_SID_AUTO))
-				vty_out(vty, "  sid export auto");
-			else if (bgp->srv6_unicast[afi].sid_explicit)
-				vty_out(vty, "  sid export explicit %pI6",
-					bgp->srv6_unicast[afi].sid_explicit);
-			else if (bgp->srv6_unicast[afi].sid_index)
-				vty_out(vty, "  sid export %u", bgp->srv6_unicast[afi].sid_index);
-			if (is_srv6_unicast_dt46_enabled(bgp, afi))
-				vty_out(vty, " behavior dt46");
-			if (bgp->srv6_unicast[afi].rmap_name)
-				vty_out(vty, " route-map %s", bgp->srv6_unicast[afi].rmap_name);
-			vty_out(vty, "\n");
-		}
-	}
-
-	vty_endframe(vty, " exit-address-family\n");
-}
-
 int bgp_config_write(struct vty *vty)
 {
-	struct bgp *bgp;
-	struct peer_group *group;
-	struct peer *peer;
-	struct listnode *node, *nnode;
-	struct listnode *mnode, *mnnode;
-	afi_t afi;
-	safi_t safi;
-	uint32_t tovpn_sid_index = 0;
+	int write = 0;
 
+	/*
+	 * When bgpd is an mgmtd backend, the YANG tree config is output by
+	 * mgmtd's config_write. This function only outputs daemon-level
+	 * (bm/bgp_master) settings that are NOT in the YANG tree.
+	 */
 	hook_call(bgp_snmp_traps_config_write, vty);
 
-	vty_out(vty, "!\n");
-	if (bm->rmap_update_timer != RMAP_DEFAULT_UPDATE_TIMER)
+	if (bm->rmap_update_timer != RMAP_DEFAULT_UPDATE_TIMER) {
 		vty_out(vty, "bgp route-map delay-timer %u\n",
 			bm->rmap_update_timer);
+		write++;
+	}
 
 	if (bm->v_update_delay != BGP_UPDATE_DELAY_DEFAULT) {
 		vty_out(vty, "bgp update-delay %d", bm->v_update_delay);
 		if (bm->v_update_delay != bm->v_establish_wait)
 			vty_out(vty, " %d", bm->v_establish_wait);
 		vty_out(vty, "\n");
+		write++;
 	}
 
-	if (bm->v_advertisement_delay != BGP_ADVERTISEMENT_DELAY_DEFAULT)
-		vty_out(vty, "bgp advertisement-delay %d\n", bm->v_advertisement_delay);
+	/* bgp suppress-fib-pending now emitted by mgmtd cli_show on
+	 * /frr-bgp:daemon-settings/suppress-fib-pending — see
+	 * bgpd_suppress_fib_pending_cli_show in bgp_cli.c. */
 
-	if (bm->wait_for_fib) {
-		if (bm->suppress_fib_adv_delay != BGP_DEFAULT_SUPPRESS_FIB_ADV_DELAY)
-			vty_out(vty, "bgp suppress-fib-pending %u\n",
-				bm->suppress_fib_adv_delay);
-		else
-			vty_out(vty, "bgp suppress-fib-pending\n");
-	}
-
-	if (bm->stalepath_time != BGP_DEFAULT_STALEPATH_TIME)
+	if (bm->stalepath_time != BGP_DEFAULT_STALEPATH_TIME) {
 		vty_out(vty, "bgp graceful-restart stalepath-time %u\n",
 			bm->stalepath_time);
+		write++;
+	}
 
-	if (bm->restart_time != BGP_DEFAULT_RESTART_TIME)
+	if (bm->restart_time != BGP_DEFAULT_RESTART_TIME) {
 		vty_out(vty, "bgp graceful-restart restart-time %u\n",
 			bm->restart_time);
+		write++;
+	}
 
-	if (bm->select_defer_time != BGP_DEFAULT_SELECT_DEFERRAL_TIME)
+	if (bm->select_defer_time != BGP_DEFAULT_SELECT_DEFERRAL_TIME) {
 		vty_out(vty, "bgp graceful-restart select-defer-time %u\n",
 			bm->select_defer_time);
+		write++;
+	}
 
-	if (CHECK_FLAG(bm->flags, BM_FLAG_GR_RESTARTER))
-		vty_out(vty, "bgp graceful-restart\n");
-	else if (CHECK_FLAG(bm->flags, BM_FLAG_GR_DISABLED))
+	/* bgp graceful-restart (RESTARTER) now emitted by mgmtd cli_show on
+	 * /frr-bgp:daemon-settings/graceful-restart/enabled — see
+	 * bgpd_graceful_restart_enabled_cli_show in bgp_cli.c.
+	 * Other GR master flags still emit here pending migration. */
+	if (CHECK_FLAG(bm->flags, BM_FLAG_GR_DISABLED)) {
 		vty_out(vty, "bgp graceful-restart-disable\n");
+		write++;
+	}
 
-	if (CHECK_FLAG(bm->flags, BM_FLAG_GR_PRESERVE_FWD))
+	if (CHECK_FLAG(bm->flags, BM_FLAG_GR_PRESERVE_FWD)) {
 		vty_out(vty, "bgp graceful-restart preserve-fw-state\n");
+		write++;
+	}
 
-	if (bm->rib_stale_time != BGP_DEFAULT_RIB_STALE_TIME)
+	if (bm->rib_stale_time != BGP_DEFAULT_RIB_STALE_TIME) {
 		vty_out(vty, "bgp graceful-restart rib-stale-time %u\n",
 			bm->rib_stale_time);
+		write++;
+	}
 
-	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN))
+	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN)) {
 		vty_out(vty, "bgp graceful-shutdown\n");
+		write++;
+	}
 
 	/* No-RIB (Zebra) option flag configuration */
-	if (bgp_option_check(BGP_OPT_NO_FIB))
+	if (bgp_option_check(BGP_OPT_NO_FIB)) {
 		vty_out(vty, "bgp no-rib\n");
+		write++;
+	}
 
-	if (CHECK_FLAG(bm->flags, BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA))
-		vty_out(vty, "bgp send-extra-data zebra\n");
+	/* send-extra-data default is ON, so output when disabled */
+	if (!CHECK_FLAG(bm->flags, BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA)) {
+		vty_out(vty, "no bgp send-extra-data zebra\n");
+		write++;
+	}
 
-	if (CHECK_FLAG(bm->flags, BM_FLAG_IPV6_NO_AUTO_RA))
+	if (CHECK_FLAG(bm->flags, BM_FLAG_IPV6_NO_AUTO_RA)) {
 		vty_out(vty, "no bgp ipv6-auto-ra\n");
+		write++;
+	}
 
 	/* DSCP value for outgoing packets in BGP connections */
-	if (bm->ip_tos != IPTOS_PREC_INTERNETCONTROL)
+	if (bm->ip_tos != IPTOS_PREC_INTERNETCONTROL) {
 		vty_out(vty, "bgp session-dscp %u\n", bm->ip_tos >> 2);
+		write++;
+	}
 
 	/* BGP InQ limit */
-	if (bm->inq_limit != BM_DEFAULT_Q_LIMIT)
+	if (bm->inq_limit != BM_DEFAULT_Q_LIMIT) {
 		vty_out(vty, "bgp input-queue-limit %u\n", bm->inq_limit);
-
-	if (bm->outq_limit != BM_DEFAULT_Q_LIMIT)
-		vty_out(vty, "bgp output-queue-limit %u\n", bm->outq_limit);
-
-	vty_out(vty, "!\n");
-
-	/* BGP configuration. */
-	for (ALL_LIST_ELEMENTS(bm->bgp, mnode, mnnode, bgp)) {
-
-		/* skip all auto created vrf as they dont have user config */
-		if (CHECK_FLAG(bgp->vrf_flags, BGP_VRF_AUTO))
-			continue;
-
-		/* skip hidden default vrf bgp instance */
-		if (IS_BGP_INSTANCE_HIDDEN(bgp))
-			continue;
-
-		/* Router bgp ASN */
-		vty_out(vty, "router bgp %s", bgp->as_pretty);
-
-		if (bgp->name)
-			vty_out(vty, " %s %s",
-				(bgp->inst_type  == BGP_INSTANCE_TYPE_VIEW)
-				? "view" : "vrf", bgp->name);
-		if (CHECK_FLAG(bgp->config, BGP_CONFIG_ASNOTATION))
-			vty_out(vty, " as-notation %s",
-				asn_mode2str(bgp->asnotation));
-
-		vty_out(vty, "\n");
-
-		/* BGP fast-external-failover. */
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_NO_FAST_EXT_FAILOVER))
-			vty_out(vty, " no bgp fast-external-failover\n");
-
-		/* BGP router ID. */
-		if (bgp->router_id_static.s_addr != INADDR_ANY)
-			vty_out(vty, " bgp router-id %pI4\n",
-				&bgp->router_id_static);
-
-		/* Suppress fib pending */
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_FIB_PENDING)) {
-			if (bgp->suppress_fib_adv_delay !=
-			    BGP_DEFAULT_SUPPRESS_FIB_ADV_DELAY)
-				vty_out(vty,
-					" bgp suppress-fib-pending %u\n",
-					bgp->suppress_fib_adv_delay);
-			else
-				vty_out(vty, " bgp suppress-fib-pending\n");
-		}
-
-		/* BGP log-neighbor-changes. */
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_LOG_NEIGHBOR_CHANGES)
-		    != SAVE_BGP_LOG_NEIGHBOR_CHANGES)
-			vty_out(vty, " %sbgp log-neighbor-changes\n",
-				CHECK_FLAG(bgp->flags,
-					   BGP_FLAG_LOG_NEIGHBOR_CHANGES)
-					? ""
-					: "no ");
-
-		/* BGP configuration. */
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_ALWAYS_COMPARE_MED))
-			vty_out(vty, " bgp always-compare-med\n");
-
-		/* RFC8212 default eBGP policy. */
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_EBGP_REQUIRES_POLICY)
-		    != SAVE_BGP_EBGP_REQUIRES_POLICY)
-			vty_out(vty, " %sbgp ebgp-requires-policy\n",
-				CHECK_FLAG(bgp->flags,
-					   BGP_FLAG_EBGP_REQUIRES_POLICY)
-					? ""
-					: "no ");
-
-		/* bgp enforce-first-as */
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_ENFORCE_FIRST_AS) !=
-		    SAVE_BGP_ENFORCE_FIRST_AS)
-			vty_out(vty, " %sbgp enforce-first-as\n",
-				CHECK_FLAG(bgp->flags,
-					   BGP_FLAG_ENFORCE_FIRST_AS)
-					? ""
-					: "no ");
-
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_LU_IPV4_EXPLICIT_NULL) &&
-		    !!CHECK_FLAG(bgp->flags, BGP_FLAG_LU_IPV6_EXPLICIT_NULL))
-			vty_out(vty, " bgp labeled-unicast explicit-null\n");
-		else if (!!CHECK_FLAG(bgp->flags,
-				      BGP_FLAG_LU_IPV4_EXPLICIT_NULL))
-			vty_out(vty,
-				" bgp labeled-unicast ipv4-explicit-null\n");
-		else if (!!CHECK_FLAG(bgp->flags,
-				      BGP_FLAG_LU_IPV6_EXPLICIT_NULL))
-			vty_out(vty,
-				" bgp labeled-unicast ipv6-explicit-null\n");
-
-		/* rfc9774 */
-		if (!bgp->reject_as_sets)
-			vty_out(vty, " no bgp reject-as-sets\n");
-
-		/* Suppress duplicate updates if the route actually not changed
-		 */
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_SUPPRESS_DUPLICATES)
-		    != SAVE_BGP_SUPPRESS_DUPLICATES)
-			vty_out(vty, " %sbgp suppress-duplicates\n",
-				CHECK_FLAG(bgp->flags,
-					   BGP_FLAG_SUPPRESS_DUPLICATES)
-					? ""
-					: "no ");
-
-		/* Send Hard Reset CEASE Notification for 'Administrative Reset'
-		 */
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_HARD_ADMIN_RESET) !=
-		    SAVE_BGP_HARD_ADMIN_RESET)
-			vty_out(vty, " %sbgp hard-administrative-reset\n",
-				CHECK_FLAG(bgp->flags,
-					   BGP_FLAG_HARD_ADMIN_RESET)
-					? ""
-					: "no ");
-
-		/* BGP default <afi>-<safi> */
-		FOREACH_AFI_SAFI (afi, safi) {
-			if (afi == AFI_IP && safi == SAFI_UNICAST) {
-				if (!bgp->default_af[afi][safi])
-					vty_out(vty, " no bgp default %s\n",
-						get_bgp_default_af_flag(afi,
-									safi));
-			} else if (bgp->default_af[afi][safi])
-				vty_out(vty, " bgp default %s\n",
-					get_bgp_default_af_flag(afi, safi));
-		}
-
-		/* BGP default local-preference. */
-		if (bgp->default_local_pref != BGP_DEFAULT_LOCAL_PREF)
-			vty_out(vty, " bgp default local-preference %u\n",
-				bgp->default_local_pref);
-
-		/* BGP default show-hostname */
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_SHOW_HOSTNAME)
-		    != SAVE_BGP_SHOW_HOSTNAME)
-			vty_out(vty, " %sbgp default show-hostname\n",
-				CHECK_FLAG(bgp->flags, BGP_FLAG_SHOW_HOSTNAME)
-					? ""
-					: "no ");
-
-		/* BGP default show-nexthop-hostname */
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_SHOW_NEXTHOP_HOSTNAME)
-		    != SAVE_BGP_SHOW_HOSTNAME)
-			vty_out(vty, " %sbgp default show-nexthop-hostname\n",
-				CHECK_FLAG(bgp->flags,
-					   BGP_FLAG_SHOW_NEXTHOP_HOSTNAME)
-					? ""
-					: "no ");
-
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_OLD) !=
-		    SAVE_BGP_SOFT_VERSION_CAPABILITY_OLD)
-			vty_out(vty, " %sbgp default software-version-capability\n",
-				CHECK_FLAG(bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_OLD)
-					? ""
-					: "no ");
-
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_NEW) !=
-		    SAVE_BGP_SOFT_VERSION_CAPABILITY_NEW)
-			vty_out(vty, " %sbgp default software-version-capability latest-encoding\n",
-				CHECK_FLAG(bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_NEW)
-					? ""
-					: "no ");
-
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_LINK_LOCAL_CAPABILITY) !=
-		    SAVE_BGP_LINK_LOCAL_CAPABILITY)
-			vty_out(vty, " %sbgp default link-local-capability\n",
-				CHECK_FLAG(bgp->flags, BGP_FLAG_LINK_LOCAL_CAPABILITY) ? "" : "no ");
-
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_DYNAMIC_CAPABILITY) !=
-		    SAVE_BGP_DYNAMIC_CAPABILITY)
-			vty_out(vty,
-				" %sbgp default dynamic-capability\n",
-				CHECK_FLAG(bgp->flags,
-					   BGP_FLAG_DYNAMIC_CAPABILITY)
-					? ""
-					: "no ");
-
-		/* BGP default subgroup-pkt-queue-max. */
-		if (bgp->default_subgroup_pkt_queue_max
-		    != BGP_DEFAULT_SUBGROUP_PKT_QUEUE_MAX)
-			vty_out(vty, " bgp default subgroup-pkt-queue-max %u\n",
-				bgp->default_subgroup_pkt_queue_max);
-
-		/* BGP client-to-client reflection. */
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_NO_CLIENT_TO_CLIENT))
-			vty_out(vty, " no bgp client-to-client reflection\n");
-
-		/* BGP cluster ID. */
-		if (CHECK_FLAG(bgp->config, BGP_CONFIG_CLUSTER_ID))
-			vty_out(vty, " bgp cluster-id %pI4\n",
-				&bgp->cluster_id);
-
-		/* Disable ebgp connected nexthop check */
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_DISABLE_NH_CONNECTED_CHK))
-			vty_out(vty,
-				" bgp disable-ebgp-connected-route-check\n");
-
-		/* Confederation identifier*/
-		if (CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION))
-			vty_out(vty, " bgp confederation identifier %s\n",
-				bgp->confed_id_pretty);
-
-		/* Confederation peer */
-		if (bgp->confed_peers_cnt > 0) {
-			int i;
-
-			vty_out(vty, " bgp confederation peers");
-
-			for (i = 0; i < bgp->confed_peers_cnt; i++)
-				vty_out(vty, " %s",
-					bgp->confed_peers[i].as_pretty);
-
-			vty_out(vty, "\n");
-		}
-
-		/* BGP deterministic-med. */
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_DETERMINISTIC_MED)
-		    != SAVE_BGP_DETERMINISTIC_MED)
-			vty_out(vty, " %sbgp deterministic-med\n",
-				CHECK_FLAG(bgp->flags,
-					   BGP_FLAG_DETERMINISTIC_MED)
-					? ""
-					: "no ");
-
-		/* BGP update-delay. */
-		bgp_config_write_update_delay(vty, bgp);
-
-		/* BGP advertisement-delay. */
-		bgp_config_write_advertisement_delay(vty, bgp);
-
-		if (bgp->v_maxmed_onstartup
-		    != BGP_MAXMED_ONSTARTUP_UNCONFIGURED) {
-			vty_out(vty, " bgp max-med on-startup %u",
-				bgp->v_maxmed_onstartup);
-			if (bgp->maxmed_onstartup_value
-			    != BGP_MAXMED_VALUE_DEFAULT)
-				vty_out(vty, " %u",
-					bgp->maxmed_onstartup_value);
-			vty_out(vty, "\n");
-		}
-		if (bgp->v_maxmed_admin != BGP_MAXMED_ADMIN_UNCONFIGURED) {
-			vty_out(vty, " bgp max-med administrative");
-			if (bgp->maxmed_admin_value != BGP_MAXMED_VALUE_DEFAULT)
-				vty_out(vty, " %u", bgp->maxmed_admin_value);
-			vty_out(vty, "\n");
-		}
-
-		/* write quanta */
-		bgp_config_write_wpkt_quanta(vty, bgp);
-		/* read quanta */
-		bgp_config_write_rpkt_quanta(vty, bgp);
-
-		/* coalesce time */
-		bgp_config_write_coalesce_time(vty, bgp);
-
-		/* BGP per-instance graceful-shutdown */
-		/* BGP-wide settings and per-instance settings are mutually
-		 * exclusive.
-		 */
-		if (!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN))
-			if (CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN))
-				vty_out(vty, " bgp graceful-shutdown\n");
-
-		/* Long-lived Graceful Restart */
-		if (bgp->llgr_stale_time != BGP_DEFAULT_LLGR_STALE_TIME)
-			vty_out(vty,
-				" bgp long-lived-graceful-restart stale-time %u\n",
-				bgp->llgr_stale_time);
-
-		/* BGP per-instance graceful-restart. */
-		/* BGP-wide settings and per-instance settings are mutually
-		 * exclusive.
-		 */
-		if (bm->stalepath_time == BGP_DEFAULT_STALEPATH_TIME)
-			if (bgp->stalepath_time != BGP_DEFAULT_STALEPATH_TIME)
-				vty_out(vty,
-					" bgp graceful-restart stalepath-time %u\n",
-					bgp->stalepath_time);
-
-		if (bm->restart_time == BGP_DEFAULT_RESTART_TIME)
-			if (bgp->restart_time != BGP_DEFAULT_RESTART_TIME)
-				vty_out(vty,
-					" bgp graceful-restart restart-time %u\n",
-					bgp->restart_time);
-
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_NOTIFICATION) !=
-		    SAVE_BGP_GRACEFUL_NOTIFICATION)
-			vty_out(vty, " %sbgp graceful-restart notification\n",
-				CHECK_FLAG(bgp->flags,
-					   BGP_FLAG_GRACEFUL_NOTIFICATION)
-					? ""
-					: "no ");
-
-		if (bm->select_defer_time == BGP_DEFAULT_SELECT_DEFERRAL_TIME)
-			if (bgp->select_defer_time !=
-			    BGP_DEFAULT_SELECT_DEFERRAL_TIME)
-				vty_out(vty,
-					" bgp graceful-restart select-defer-time %u\n",
-					bgp->select_defer_time);
-
-		if (!CHECK_FLAG(bm->flags, BM_FLAG_GR_CONFIGURED)) {
-			if (bgp_global_gr_mode_get(bgp) == GLOBAL_GR)
-				vty_out(vty, " bgp graceful-restart\n");
-
-			if (bgp_global_gr_mode_get(bgp) == GLOBAL_DISABLE)
-				vty_out(vty, " bgp graceful-restart-disable\n");
-		}
-
-		if (!CHECK_FLAG(bm->flags, BM_FLAG_GR_PRESERVE_FWD))
-			if (CHECK_FLAG(bgp->flags, BGP_FLAG_GR_PRESERVE_FWD))
-				vty_out(vty,
-					" bgp graceful-restart preserve-fw-state\n");
-
-		/* BGP TCP keepalive */
-		bgp_config_tcp_keepalive(vty, bgp);
-
-		if (bm->rib_stale_time == BGP_DEFAULT_RIB_STALE_TIME)
-			if (bgp->rib_stale_time != BGP_DEFAULT_RIB_STALE_TIME)
-				vty_out(vty,
-					" bgp graceful-restart rib-stale-time %u\n",
-					bgp->rib_stale_time);
-
-		/* BGP bestpath method. */
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_ASPATH_IGNORE))
-			vty_out(vty, " bgp bestpath as-path ignore\n");
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_ASPATH_CONFED))
-			vty_out(vty, " bgp bestpath as-path confed\n");
-
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_ASPATH_MULTIPATH_RELAX)) {
-			if (CHECK_FLAG(bgp->flags,
-				       BGP_FLAG_MULTIPATH_RELAX_AS_SET)) {
-				vty_out(vty,
-					" bgp bestpath as-path multipath-relax as-set\n");
-			} else {
-				vty_out(vty,
-					" bgp bestpath as-path multipath-relax\n");
-			}
-		}
-
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY) !=
-		    SAVE_BGP_RR_ALLOW_OUTBOUND_POLICY)
-			vty_out(vty, " %sbgp route-reflector allow-outbound-policy\n",
-				CHECK_FLAG(bgp->flags, BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY) ? ""
-											  : "no ");
-
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_COMPARE_ROUTER_ID))
-			vty_out(vty, " bgp bestpath compare-routerid\n");
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_BESTPATH_USE_IMPORTED_ATTRS))
-			vty_out(vty, " bgp bestpath use-imported-attributes\n");
-
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_COMPARE_AIGP) != SAVE_BGP_COMPARE_AIGP)
-			vty_out(vty, " %sbgp bestpath aigp\n",
-				CHECK_FLAG(bgp->flags, BGP_FLAG_COMPARE_AIGP) ? "" : "no ");
-
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_MED_CONFED)
-		    || CHECK_FLAG(bgp->flags, BGP_FLAG_MED_MISSING_AS_WORST)) {
-			vty_out(vty, " bgp bestpath med");
-			if (CHECK_FLAG(bgp->flags, BGP_FLAG_MED_CONFED))
-				vty_out(vty, " confed");
-			if (CHECK_FLAG(bgp->flags,
-				       BGP_FLAG_MED_MISSING_AS_WORST))
-				vty_out(vty, " missing-as-worst");
-			vty_out(vty, "\n");
-		}
-
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_PEERTYPE_MULTIPATH_RELAX))
-			vty_out(vty,
-				" bgp bestpath peer-type multipath-relax\n");
-
-		/* Link bandwidth handling. */
-		if (bgp->lb_handling == BGP_LINK_BW_IGNORE_BW)
-			vty_out(vty, " bgp bestpath bandwidth ignore\n");
-		else if (bgp->lb_handling == BGP_LINK_BW_SKIP_MISSING)
-			vty_out(vty, " bgp bestpath bandwidth skip-missing\n");
-		else if (bgp->lb_handling == BGP_LINK_BW_DEFWT_4_MISSING)
-			vty_out(vty, " bgp bestpath bandwidth default-weight-for-missing\n");
-
-		/* BGP network import check. */
-		if (!!CHECK_FLAG(bgp->flags, BGP_FLAG_IMPORT_CHECK)
-		    != SAVE_BGP_IMPORT_CHECK)
-			vty_out(vty, " %sbgp network import-check\n",
-				CHECK_FLAG(bgp->flags, BGP_FLAG_IMPORT_CHECK)
-					? ""
-					: "no ");
-
-		/* BGP timers configuration. */
-		if (bgp->default_keepalive != SAVE_BGP_KEEPALIVE
-		    || bgp->default_holdtime != SAVE_BGP_HOLDTIME)
-			vty_out(vty, " timers bgp %u %u\n",
-				bgp->default_keepalive, bgp->default_holdtime);
-
-		/* BGP minimum holdtime configuration. */
-		if (bgp->default_min_holdtime != SAVE_BGP_HOLDTIME
-		    && bgp->default_min_holdtime != 0)
-			vty_out(vty, " bgp minimum-holdtime %u\n",
-				bgp->default_min_holdtime);
-
-		/* Conditional advertisement timer configuration */
-		if (bgp->condition_check_period
-		    != DEFAULT_CONDITIONAL_ROUTES_POLL_TIME)
-			vty_out(vty,
-				" bgp conditional-advertisement timer %u\n",
-				bgp->condition_check_period);
-
-		/* default-originate timer configuration */
-		if (bgp->rmap_def_originate_eval_timer &&
-		    bgp->rmap_def_originate_eval_timer !=
-			    RMAP_DEFAULT_ORIGINATE_EVAL_TIMER)
-			vty_out(vty, " bgp default-originate timer %u\n",
-				bgp->rmap_def_originate_eval_timer);
-
-		/* peer-group */
-		for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group)) {
-			bgp_config_write_peer_global(vty, bgp, group->conf);
-		}
-
-		/* Normal neighbor configuration. */
-		for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer)) {
-			if (peer_is_config_node(peer))
-				bgp_config_write_peer_global(vty, bgp, peer);
-		}
-
-		/* listen range and limit for dynamic BGP neighbors */
-		bgp_config_write_listen(vty, bgp);
-
-		/*
-		 * BGP default autoshutdown neighbors
-		 *
-		 * This must be placed after any peer and peer-group
-		 * configuration, to avoid setting all peers to shutdown after
-		 * a daemon restart, which is undesired behavior. (see #2286)
-		 */
-		if (bgp->autoshutdown)
-			vty_out(vty, " bgp default shutdown\n");
-
-		/* BGP instance administrative shutdown */
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_SHUTDOWN))
-			vty_out(vty, " bgp shutdown\n");
-
-		/* Automatic RA enabling by BGP */
-		if (!CHECK_FLAG(bm->flags, BM_FLAG_IPV6_NO_AUTO_RA))
-			if (CHECK_FLAG(bgp->flags, BGP_FLAG_IPV6_NO_AUTO_RA))
-				vty_out(vty, " no bgp ipv6-auto-ra\n");
-
-		if (bgp->allow_martian)
-			vty_out(vty, " bgp allow-martian-nexthop\n");
-
-		if (CHECK_FLAG(bgp->flags, BGP_WECMP_BEHAVIOR_USE_RECURSIVE_VALUE))
-			vty_out(vty, " use-underlays-nexthop-weight\n");
-
-		if (bgp->fast_convergence)
-			vty_out(vty, " bgp fast-convergence\n");
-
-		if (bgp_srv6_locator_is_configured(bgp) || bgp->srv6_only == false ||
-		    bgp->srv6_encap_behavior != SRV6_HEADEND_BEHAVIOR_H_ENCAPS) {
-			vty_frame(vty, " !\n segment-routing srv6\n");
-			if (strlen(bgp->srv6_locator_name))
-				vty_out(vty, "  locator %s\n",
-					bgp->srv6_locator_name);
-			if (bgp->srv6_encap_behavior != SRV6_HEADEND_BEHAVIOR_H_ENCAPS)
-				vty_out(vty, "  encap-behavior %s\n",
-					srv6_headend_behavior2str(bgp->srv6_encap_behavior, true));
-			if (bgp->srv6_only == false)
-				vty_out(vty, "  no srv6-only\n");
-
-			vty_endframe(vty, " exit\n");
-		}
-
-		tovpn_sid_index = bgp->tovpn_sid_index;
-		if (CHECK_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_AUTO)) {
-			vty_out(vty, " sid vpn per-vrf export auto\n");
-		} else if (CHECK_FLAG(bgp->vrf_flags, BGP_VRF_TOVPN_SID_EXPLICIT)) {
-			vty_out(vty, " sid vpn per-vrf export explicit %pI6\n",
-				bgp->tovpn_sid_explicit);
-		} else if (tovpn_sid_index != 0) {
-			vty_out(vty, " sid vpn per-vrf export %u\n", tovpn_sid_index);
-		}
-
-		/* IPv4 unicast configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP, SAFI_UNICAST);
-
-		/* IPv4 multicast configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP, SAFI_MULTICAST);
-
-		/* IPv4 labeled-unicast configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP, SAFI_LABELED_UNICAST);
-
-		/* IPv4 VPN configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP, SAFI_MPLS_VPN);
-
-		/* ENCAPv4 configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP, SAFI_ENCAP);
-
-		/* FLOWSPEC v4 configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP, SAFI_FLOWSPEC);
-
-		/* IPv6 unicast configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP6, SAFI_UNICAST);
-
-		/* IPv6 multicast configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP6, SAFI_MULTICAST);
-
-		/* IPv6 labeled-unicast configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP6,
-					SAFI_LABELED_UNICAST);
-
-		/* IPv6 VPN configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP6, SAFI_MPLS_VPN);
-
-		/* ENCAPv6 configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP6, SAFI_ENCAP);
-
-		/* FLOWSPEC v6 configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_IP6, SAFI_FLOWSPEC);
-
-		/* EVPN configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_L2VPN, SAFI_EVPN);
-
-		/* BGP-LS configuration.  */
-		bgp_config_write_family(vty, bgp, AFI_BGP_LS, SAFI_BGP_LS);
-
-		hook_call(bgp_inst_config_write, bgp, vty);
-
-#ifdef ENABLE_BGP_VNC
-		bgp_rfapi_cfg_write(vty, bgp);
-#endif
-
-		vty_out(vty, "exit\n");
-		vty_out(vty, "!\n");
+		write++;
 	}
-	return 0;
-}
 
+	if (bm->outq_limit != BM_DEFAULT_Q_LIMIT) {
+		vty_out(vty, "bgp output-queue-limit %u\n", bm->outq_limit);
+		write++;
+	}
+
+	return write;
+}
 
 /* BGP node structure. */
 static struct cmd_node bgp_node = {
@@ -22566,12 +9849,7 @@ static struct cmd_node bgp_flowspecv6_node = {
 	.no_xpath = true,
 };
 
-static struct cmd_node bgp_srv6_node = {
-	.name = "bgp srv6",
-	.node = BGP_SRV6_NODE,
-	.parent_node = BGP_NODE,
-	.prompt = "%s(config-router-srv6)# ",
-};
+/* bgp_srv6_node is defined in bgp_cli.c for mgmtd compatibility */
 
 static struct cmd_node bgp_ls_node = {
 	.name = "bgp link-state",
@@ -22674,6 +9952,7 @@ static void bgp_config_end_timeout(struct event *t)
 
 static void bgp_config_start(struct vty *vty)
 {
+	(void)vty;
 	event_cancel(&t_bgp_cfg);
 	event_add_timer(bm->master, bgp_config_end_timeout, NULL,
 			BGP_PRE_CONFIG_MAX_WAIT_SECONDS, &t_bgp_cfg);
@@ -22686,6 +9965,7 @@ static void bgp_config_start(struct vty *vty)
  */
 static void bgp_config_end(struct vty *vty)
 {
+	(void)vty;
 #define BGP_POST_CONFIG_DELAY_SECONDS 1
 	uint32_t bgp_post_config_delay =
 		event_is_scheduled(bm->t_rmap_update)
@@ -22697,11 +9977,6 @@ static void bgp_config_end(struct vty *vty)
 	 */
 	if (!bgp_config_inprocess())
 		return;
-
-	SET_FLAG(bm->flags, BM_FLAG_CONFIG_LOADED);
-
-	if (bgp_in_graceful_restart())
-		bgp_gr_start_peers();
 
 	event_cancel(&t_bgp_cfg);
 
@@ -22865,17 +10140,162 @@ DEFPY (no_bgp_outq_limit,
 	return CMD_SUCCESS;
 }
 
-
 /* Initialization of BGP interface. */
 static void bgp_vty_if_init(void)
 {
 	/* Install interface node. */
 	if_cmd_init(config_write_interface);
 
-	/* "mpls bgp forwarding" commands. */
-	install_element(INTERFACE_NODE, &mpls_bgp_forwarding_cmd);
-	install_element(INTERFACE_NODE,
-			&mpls_bgp_l3vpn_multi_domain_switching_cmd);
+	/* `mpls bgp forwarding` and `mpls bgp l3vpn-multi-domain-switching`
+	 * at INTERFACE_NODE are installed by bgp_cli.c (DEFPY_YANG:
+	 * mpls_bgp_forwarding_cli_cmd /
+	 * mpls_bgp_l3vpn_multi_domain_switching_cli_cmd).
+	 */
+}
+
+/*
+ * `distribute bgp-fabric-link-state` is handled via the NB-converted
+ * version in bgp_cli.c (bgp_ls_distribute_bgp_fabric_cli_cmd) which
+ * routes through mgmtd. The legacy DEFPY restored from upstream e15218968f
+ * caused a vtysh routing ambiguity (two DEFSH entries with same prefix
+ * matching the same input but routing to different daemons), so the
+ * config silently dropped. Removed; the NB version handles the syntax
+ * `distribute bgp-fabric-link-state` (without instance-id, which is not
+ * yet exposed via NB).
+ */
+
+DEFPY(neighbor_ls_local_link_id,
+      neighbor_ls_local_link_id_cmd,
+      "neighbor <A.B.C.D|X:X::X:X|WORD>$peer_str local-link-id (1-4294967295)$link_id",
+      NEIGHBOR_STR
+      NEIGHBOR_ADDR_STR2
+      "Configure local link ID for BGP-LS topology\n"
+      "Link identifier value\n")
+{
+	VTY_DECLVAR_CONTEXT(bgp, bgp);
+	struct peer *peer;
+
+	peer = peer_and_group_lookup_vty(vty, peer_str);
+	if (!peer)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	/* If link ID unchanged, nothing to do. */
+	if (CHECK_FLAG(peer->flags, PEER_FLAG_LS_LOCAL_LINK_ID) &&
+	    peer->ls_local_link_id == link_id)
+		return CMD_SUCCESS;
+
+	/* Withdraw the existing link NLRI before changing the key. */
+	if (bgp->ls_info && bgp->ls_info->enable_distribution)
+		bgp_ls_withdraw_bgp_link(bgp, peer);
+
+	peer->ls_local_link_id = link_id;
+	SET_FLAG(peer->flags, PEER_FLAG_LS_LOCAL_LINK_ID);
+
+	/* Re-originate with the new local link ID. */
+	if (bgp->ls_info && bgp->ls_info->enable_distribution)
+		bgp_ls_originate_bgp_link(bgp, peer);
+
+	return CMD_SUCCESS;
+}
+
+DEFPY(no_neighbor_ls_local_link_id,
+      no_neighbor_ls_local_link_id_cmd,
+      "no neighbor <A.B.C.D|X:X::X:X|WORD>$peer_str local-link-id [(1-4294967295)$link_id]",
+      NO_STR
+      NEIGHBOR_STR
+      NEIGHBOR_ADDR_STR2
+      "Configure local link ID for BGP-LS topology\n"
+      "Link identifier value\n")
+{
+	VTY_DECLVAR_CONTEXT(bgp, bgp);
+	struct peer *peer;
+
+	peer = peer_and_group_lookup_vty(vty, peer_str);
+	if (!peer)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	if (!CHECK_FLAG(peer->flags, PEER_FLAG_LS_LOCAL_LINK_ID))
+		return CMD_SUCCESS;
+
+	/* Withdraw the existing link NLRI before clearing the key. */
+	if (bgp->ls_info && bgp->ls_info->enable_distribution)
+		bgp_ls_withdraw_bgp_link(bgp, peer);
+
+	peer->ls_local_link_id = 0;
+	UNSET_FLAG(peer->flags, PEER_FLAG_LS_LOCAL_LINK_ID);
+
+	/* Re-originate using the fallback local link ID (ifindex). */
+	if (bgp->ls_info && bgp->ls_info->enable_distribution)
+		bgp_ls_originate_bgp_link(bgp, peer);
+
+	return CMD_SUCCESS;
+}
+
+DEFPY(neighbor_ls_remote_link_id,
+      neighbor_ls_remote_link_id_cmd,
+      "neighbor <A.B.C.D|X:X::X:X|WORD>$peer_str remote-link-id (1-4294967295)$link_id",
+      NEIGHBOR_STR
+      NEIGHBOR_ADDR_STR2
+      "Configure remote link ID for BGP-LS topology\n"
+      "Link identifier value\n")
+{
+	VTY_DECLVAR_CONTEXT(bgp, bgp);
+	struct peer *peer;
+
+	peer = peer_and_group_lookup_vty(vty, peer_str);
+	if (!peer)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	/* If link ID unchanged, nothing to do. */
+	if (CHECK_FLAG(peer->flags, PEER_FLAG_LS_REMOTE_LINK_ID) &&
+	    peer->ls_remote_link_id == link_id)
+		return CMD_SUCCESS;
+
+	/* Withdraw the existing link NLRI before changing the key. */
+	if (bgp->ls_info && bgp->ls_info->enable_distribution)
+		bgp_ls_withdraw_bgp_link(bgp, peer);
+
+	peer->ls_remote_link_id = link_id;
+	SET_FLAG(peer->flags, PEER_FLAG_LS_REMOTE_LINK_ID);
+
+	/* Re-originate with the new remote link ID. */
+	if (bgp->ls_info && bgp->ls_info->enable_distribution)
+		bgp_ls_originate_bgp_link(bgp, peer);
+
+	return CMD_SUCCESS;
+}
+
+DEFPY(no_neighbor_ls_remote_link_id,
+      no_neighbor_ls_remote_link_id_cmd,
+      "no neighbor <A.B.C.D|X:X::X:X|WORD>$peer_str remote-link-id [(1-4294967295)$link_id]",
+      NO_STR
+      NEIGHBOR_STR
+      NEIGHBOR_ADDR_STR2
+      "Configure remote link ID for BGP-LS topology\n"
+      "Link identifier value\n")
+{
+	VTY_DECLVAR_CONTEXT(bgp, bgp);
+	struct peer *peer;
+
+	peer = peer_and_group_lookup_vty(vty, peer_str);
+	if (!peer)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	if (!CHECK_FLAG(peer->flags, PEER_FLAG_LS_REMOTE_LINK_ID))
+		return CMD_SUCCESS;
+
+	/* Withdraw the existing link NLRI before clearing the key. */
+	if (bgp->ls_info && bgp->ls_info->enable_distribution)
+		bgp_ls_withdraw_bgp_link(bgp, peer);
+
+	peer->ls_remote_link_id = 0;
+	UNSET_FLAG(peer->flags, PEER_FLAG_LS_REMOTE_LINK_ID);
+
+	/* Re-originate using the fallback remote link ID (0). */
+	if (bgp->ls_info && bgp->ls_info->enable_distribution)
+		bgp_ls_originate_bgp_link(bgp, peer);
+
+	return CMD_SUCCESS;
 }
 
 void bgp_vty_init(void)
@@ -22899,8 +10319,8 @@ void bgp_vty_init(void)
 	install_node(&bgp_evpn_vni_node);
 	install_node(&bgp_flowspecv4_node);
 	install_node(&bgp_flowspecv6_node);
-	install_node(&bgp_srv6_node);
 	install_node(&bgp_ls_node);
+	/* bgp_srv6_node is installed in bgp_cli.c for mgmtd compatibility */
 
 	/* Install default VTY commands to new nodes.  */
 	install_default(BGP_NODE);
@@ -22916,1494 +10336,106 @@ void bgp_vty_init(void)
 	install_default(BGP_FLOWSPECV6_NODE);
 	install_default(BGP_EVPN_NODE);
 	install_default(BGP_EVPN_VNI_NODE);
-	install_default(BGP_SRV6_NODE);
-	install_default(BGP_LS_NODE);
-
-	/* "global bgp inq-limit command */
-	install_element(CONFIG_NODE, &bgp_inq_limit_cmd);
-	install_element(CONFIG_NODE, &no_bgp_inq_limit_cmd);
-	install_element(CONFIG_NODE, &bgp_outq_limit_cmd);
-	install_element(CONFIG_NODE, &no_bgp_outq_limit_cmd);
+	/* BGP_SRV6_NODE default is installed in bgp_cli.c */
 
 	/* "bgp local-mac" hidden commands. */
 	install_element(CONFIG_NODE, &bgp_local_mac_cmd);
 	install_element(CONFIG_NODE, &no_bgp_local_mac_cmd);
 
-	/* "bgp suppress-fib-pending" global */
-	install_element(CONFIG_NODE, &bgp_global_suppress_fib_pending_cmd);
-
-	/* bgp route-map delay-timer commands. */
-	install_element(CONFIG_NODE, &bgp_set_route_map_delay_timer_cmd);
-	install_element(CONFIG_NODE, &no_bgp_set_route_map_delay_timer_cmd);
-
-	install_element(BGP_NODE, &bgp_allow_martian_cmd);
-
-	/* bgp fast-convergence command */
-	install_element(BGP_NODE, &bgp_fast_convergence_cmd);
-	install_element(BGP_NODE, &no_bgp_fast_convergence_cmd);
-
-	/* global bgp ipv6-auto-ra command */
-	install_element(CONFIG_NODE, &bgp_ipv6_auto_ra_cmd);
-
-	/* bgp ipv6-auto-ra command */
-	install_element(BGP_NODE, &bgp_ipv6_auto_ra_cmd);
-
-	/* global bgp update-delay command */
-	install_element(CONFIG_NODE, &bgp_global_update_delay_cmd);
-	install_element(CONFIG_NODE, &no_bgp_global_update_delay_cmd);
-
-	/* global bgp advertisement-delay command */
-	install_element(CONFIG_NODE, &bgp_global_advertisement_delay_cmd);
-	install_element(CONFIG_NODE, &no_bgp_global_advertisement_delay_cmd);
-
-	/* global bgp graceful-shutdown command */
-	install_element(CONFIG_NODE, &bgp_graceful_shutdown_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_shutdown_cmd);
-
-	/* BGP-wide graceful-restart commands. */
-	install_element(CONFIG_NODE, &bgp_graceful_restart_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_restart_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_disable_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_restart_disable_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_stalepath_time_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_graceful_restart_stalepath_time_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_restart_time_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_restart_restart_time_cmd);
-	install_element(CONFIG_NODE,
-			&bgp_graceful_restart_select_defer_time_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_graceful_restart_select_defer_time_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_preserve_fw_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_restart_preserve_fw_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_rib_stale_time_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_graceful_restart_rib_stale_time_cmd);
-
-	/* "router bgp" commands. */
-	install_element(CONFIG_NODE, &router_bgp_cmd);
-
-	/* "no router bgp" commands. */
-	install_element(CONFIG_NODE, &no_router_bgp_cmd);
-
-	/* "bgp session-dscp command */
-	install_element(CONFIG_NODE, &bgp_session_dscp_cmd);
-	install_element(CONFIG_NODE, &no_bgp_session_dscp_cmd);
-
-	/* "bgp router-id" commands. */
-	install_element(BGP_NODE, &bgp_router_id_cmd);
-	install_element(BGP_NODE, &no_bgp_router_id_cmd);
-
-	/* "bgp suppress-fib-pending" command */
-	install_element(BGP_NODE, &bgp_suppress_fib_pending_cmd);
-
-	/* "bgp cluster-id" commands. */
-	install_element(BGP_NODE, &bgp_cluster_id_cmd);
-	install_element(BGP_NODE, &no_bgp_cluster_id_cmd);
-
-	/* "bgp no-rib" commands. */
-	install_element(CONFIG_NODE, &bgp_norib_cmd);
-	install_element(CONFIG_NODE, &no_bgp_norib_cmd);
-
-	install_element(CONFIG_NODE, &no_bgp_send_extra_data_cmd);
-
-	/* "bgp confederation" commands. */
-	install_element(BGP_NODE, &bgp_confederation_identifier_cmd);
-	install_element(BGP_NODE, &no_bgp_confederation_identifier_cmd);
-
-	/* "bgp confederation peers" commands. */
-	install_element(BGP_NODE, &bgp_confederation_peers_cmd);
-	install_element(BGP_NODE, &no_bgp_confederation_peers_cmd);
-
-	/* bgp max-med command */
-	install_element(BGP_NODE, &bgp_maxmed_admin_cmd);
-	install_element(BGP_NODE, &no_bgp_maxmed_admin_cmd);
-	install_element(BGP_NODE, &bgp_maxmed_admin_medv_cmd);
-	install_element(BGP_NODE, &bgp_maxmed_onstartup_cmd);
-	install_element(BGP_NODE, &no_bgp_maxmed_onstartup_cmd);
-
-	/* "neighbor role" commands. */
-	install_element(BGP_NODE, &neighbor_role_cmd);
-	install_element(BGP_NODE, &neighbor_role_strict_cmd);
-	install_element(BGP_NODE, &no_neighbor_role_cmd);
-
-	/* "neighbor oad" commands. */
-	install_element(BGP_NODE, &neighbor_oad_cmd);
-
-	/* "neighbor aigp" commands. */
-	install_element(BGP_NODE, &neighbor_aigp_cmd);
-
-	/* "neighbor graceful-shutdown" command */
-	install_element(BGP_NODE, &neighbor_graceful_shutdown_cmd);
-
-	/* bgp disable-ebgp-connected-nh-check */
-	install_element(BGP_NODE, &bgp_disable_connected_route_check_cmd);
-	install_element(BGP_NODE, &no_bgp_disable_connected_route_check_cmd);
-
-	/* bgp update-delay command */
-	install_element(BGP_NODE, &bgp_update_delay_cmd);
-	install_element(BGP_NODE, &no_bgp_update_delay_cmd);
-
-	/* bgp advertisement-delay command */
-	install_element(BGP_NODE, &bgp_advertisement_delay_cmd);
-	install_element(BGP_NODE, &no_bgp_advertisement_delay_cmd);
-
-	install_element(BGP_NODE, &bgp_wpkt_quanta_cmd);
-	install_element(BGP_NODE, &bgp_rpkt_quanta_cmd);
-
-	install_element(BGP_NODE, &bgp_coalesce_time_cmd);
-	install_element(BGP_NODE, &no_bgp_coalesce_time_cmd);
-
-	install_element(BGP_NODE, &bgp_use_underlying_nexthop_weight_cmd);
-
-	/* "nexthop prefer-global" commands */
-	install_element(BGP_IPV6_NODE, &bgp_af_nexthop_prefer_global_cmd);
-	install_element(BGP_IPV6M_NODE, &bgp_af_nexthop_prefer_global_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_af_nexthop_prefer_global_cmd);
-
-	/* "maximum-paths" commands. */
-	install_element(BGP_NODE, &bgp_maxpaths_hidden_cmd);
-	install_element(BGP_NODE, &no_bgp_maxpaths_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_maxpaths_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_maxpaths_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_maxpaths_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_maxpaths_cmd);
-	install_element(BGP_NODE, &bgp_maxpaths_ibgp_hidden_cmd);
-	install_element(BGP_NODE, &bgp_maxpaths_ibgp_cluster_hidden_cmd);
-	install_element(BGP_NODE, &no_bgp_maxpaths_ibgp_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_maxpaths_ibgp_cluster_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_maxpaths_ibgp_cluster_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_maxpaths_ibgp_cmd);
-
-	install_element(BGP_IPV4L_NODE, &bgp_maxpaths_cmd);
-	install_element(BGP_IPV4L_NODE, &no_bgp_maxpaths_cmd);
-	install_element(BGP_IPV4L_NODE, &bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV4L_NODE, &bgp_maxpaths_ibgp_cluster_cmd);
-	install_element(BGP_IPV4L_NODE, &no_bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_maxpaths_cmd);
-	install_element(BGP_IPV6L_NODE, &no_bgp_maxpaths_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_maxpaths_ibgp_cluster_cmd);
-	install_element(BGP_IPV6L_NODE, &no_bgp_maxpaths_ibgp_cmd);
-
-	/* "timers bgp" commands. */
-	install_element(BGP_NODE, &bgp_timers_cmd);
-	install_element(BGP_NODE, &no_bgp_timers_cmd);
-
-	/* "minimum-holdtime" commands. */
-	install_element(BGP_NODE, &bgp_minimum_holdtime_cmd);
-	install_element(BGP_NODE, &no_bgp_minimum_holdtime_cmd);
-
-	/* route-map delay-timer commands - per instance for backwards compat.
-	 */
-	install_element(BGP_NODE, &bgp_set_route_map_delay_timer_cmd);
-	install_element(BGP_NODE, &no_bgp_set_route_map_delay_timer_cmd);
-
-	/* "bgp client-to-client reflection" commands */
-	install_element(BGP_NODE, &no_bgp_client_to_client_reflection_cmd);
-	install_element(BGP_NODE, &bgp_client_to_client_reflection_cmd);
-
-	/* "bgp always-compare-med" commands */
-	install_element(BGP_NODE, &bgp_always_compare_med_cmd);
-	install_element(BGP_NODE, &no_bgp_always_compare_med_cmd);
-
-	/* bgp ebgp-requires-policy */
-	install_element(BGP_NODE, &bgp_ebgp_requires_policy_cmd);
-	install_element(BGP_NODE, &no_bgp_ebgp_requires_policy_cmd);
-
-	/* bgp enforce-first-as */
-	install_element(BGP_NODE, &bgp_enforce_first_as_cmd);
-
-	/* bgp labeled-unicast explicit-null */
-	install_element(BGP_NODE, &bgp_lu_uses_explicit_null_cmd);
-
-	/* bgp suppress-duplicates */
-	install_element(BGP_NODE, &bgp_suppress_duplicates_cmd);
-	install_element(BGP_NODE, &no_bgp_suppress_duplicates_cmd);
-
-	/* bgp reject-as-sets */
-	install_element(BGP_NODE, &bgp_reject_as_sets_cmd);
-	install_element(BGP_NODE, &no_bgp_reject_as_sets_cmd);
-
-	/* "bgp deterministic-med" commands */
-	install_element(BGP_NODE, &bgp_deterministic_med_cmd);
-	install_element(BGP_NODE, &no_bgp_deterministic_med_cmd);
-
-	/* "bgp graceful-restart" command */
-	install_element(BGP_NODE, &bgp_graceful_restart_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_restart_cmd);
-
-	/* "bgp graceful-restart-disable" command */
-	install_element(BGP_NODE, &bgp_graceful_restart_disable_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_restart_disable_cmd);
-
-	/* "neighbor a:b:c:d graceful-restart" command */
-	install_element(BGP_NODE, &bgp_neighbor_graceful_restart_set_cmd);
-	install_element(BGP_NODE, &no_bgp_neighbor_graceful_restart_set_cmd);
-
-	/* "neighbor a:b:c:d graceful-restart-disable" command */
-	install_element(BGP_NODE,
-			&bgp_neighbor_graceful_restart_disable_set_cmd);
-	install_element(BGP_NODE,
-			&no_bgp_neighbor_graceful_restart_disable_set_cmd);
-
-	/* "neighbor a:b:c:d graceful-restart-helper" command */
-	install_element(BGP_NODE,
-			&bgp_neighbor_graceful_restart_helper_set_cmd);
-	install_element(BGP_NODE,
-			&no_bgp_neighbor_graceful_restart_helper_set_cmd);
-
-	install_element(BGP_NODE, &bgp_graceful_restart_stalepath_time_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_restart_stalepath_time_cmd);
-	install_element(BGP_NODE, &bgp_graceful_restart_restart_time_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_restart_restart_time_cmd);
-	install_element(BGP_NODE, &bgp_graceful_restart_select_defer_time_cmd);
-	install_element(BGP_NODE,
-			&no_bgp_graceful_restart_select_defer_time_cmd);
-	install_element(BGP_NODE, &bgp_graceful_restart_preserve_fw_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_restart_preserve_fw_cmd);
-	install_element(BGP_NODE, &bgp_graceful_restart_notification_cmd);
-
-	install_element(BGP_NODE, &bgp_graceful_restart_disable_eor_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_restart_disable_eor_cmd);
-	install_element(BGP_NODE, &bgp_graceful_restart_rib_stale_time_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_restart_rib_stale_time_cmd);
-
-	/* "bgp graceful-shutdown" commands */
-	install_element(BGP_NODE, &bgp_graceful_shutdown_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_shutdown_cmd);
-
-	/* "bgp hard-administrative-reset" commands */
-	install_element(BGP_NODE, &bgp_administrative_reset_cmd);
-
-	/* "bgp long-lived-graceful-restart" commands */
-	install_element(BGP_NODE, &bgp_llgr_stalepath_time_cmd);
-	install_element(BGP_NODE, &no_bgp_llgr_stalepath_time_cmd);
-
-	/* "bgp fast-external-failover" commands */
-	install_element(BGP_NODE, &bgp_fast_external_failover_cmd);
-	install_element(BGP_NODE, &no_bgp_fast_external_failover_cmd);
-
-	/* "bgp bestpath aigp" commands */
-	install_element(BGP_NODE, &bgp_bestpath_aigp_cmd);
-
-	/* "bgp bestpath compare-routerid" commands */
-	install_element(BGP_NODE, &bgp_bestpath_compare_router_id_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_compare_router_id_cmd);
-
-	/* "bgp bestpath as-path ignore" commands */
-	install_element(BGP_NODE, &bgp_bestpath_aspath_ignore_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_aspath_ignore_cmd);
-
-	/* "bgp bestpath use-imported-attributes" commands */
-	install_element(BGP_NODE, &bgp_bestpath_use_imported_attrs_cmd);
-
-	/* "bgp bestpath as-path confed" commands */
-	install_element(BGP_NODE, &bgp_bestpath_aspath_confed_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_aspath_confed_cmd);
-
-	/* "bgp bestpath as-path multipath-relax" commands */
-	install_element(BGP_NODE, &bgp_bestpath_aspath_multipath_relax_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_aspath_multipath_relax_cmd);
-
-	/* "bgp bestpath peer-type multipath-relax" commands */
-	install_element(BGP_NODE, &bgp_bestpath_peer_type_multipath_relax_cmd);
-	install_element(BGP_NODE,
-			&no_bgp_bestpath_peer_type_multipath_relax_cmd);
-
-	/* "bgp log-neighbor-changes" commands */
-	install_element(BGP_NODE, &bgp_log_neighbor_changes_cmd);
-	install_element(BGP_NODE, &no_bgp_log_neighbor_changes_cmd);
-
-	/* "bgp bestpath med" commands */
-	install_element(BGP_NODE, &bgp_bestpath_med_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_med_cmd);
-
-	/* "bgp bestpath bandwidth" commands */
-	install_element(BGP_NODE, &bgp_bestpath_bw_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_bw_cmd);
-
-	/* "no bgp default <afi>-<safi>" commands. */
-	install_element(BGP_NODE, &bgp_default_afi_safi_cmd);
-
-	/* "bgp network import-check" commands. */
-	install_element(BGP_NODE, &bgp_network_import_check_cmd);
-	install_element(BGP_NODE, &no_bgp_network_import_check_cmd);
-
-	/* "bgp default local-preference" commands. */
-	install_element(BGP_NODE, &bgp_default_local_preference_cmd);
-	install_element(BGP_NODE, &no_bgp_default_local_preference_cmd);
-
-	/* bgp default show-hostname */
-	install_element(BGP_NODE, &bgp_default_show_hostname_cmd);
-	install_element(BGP_NODE, &no_bgp_default_show_hostname_cmd);
-
-	/* bgp default show-nexthop-hostname */
-	install_element(BGP_NODE, &bgp_default_show_nexthop_hostname_cmd);
-	install_element(BGP_NODE, &no_bgp_default_show_nexthop_hostname_cmd);
-
-	/* bgp default software-version-capability */
-	install_element(BGP_NODE, &bgp_default_software_version_capability_cmd);
-
-	/* bgp default link-local-capability */
-	install_element(BGP_NODE, &bgp_default_link_local_capability_cmd);
-
-	/* bgp default dynamic-capability */
-	install_element(BGP_NODE, &bgp_default_dynamic_capability_cmd);
-
-	/* "bgp default subgroup-pkt-queue-max" commands. */
-	install_element(BGP_NODE, &bgp_default_subgroup_pkt_queue_max_cmd);
-	install_element(BGP_NODE, &no_bgp_default_subgroup_pkt_queue_max_cmd);
-
-	/* bgp ibgp-allow-policy-mods command */
-	install_element(BGP_NODE, &bgp_rr_allow_outbound_policy_cmd);
-	install_element(BGP_NODE, &no_bgp_rr_allow_outbound_policy_cmd);
-
-	/* "bgp listen limit" commands. */
-	install_element(BGP_NODE, &bgp_listen_limit_cmd);
-	install_element(BGP_NODE, &no_bgp_listen_limit_cmd);
-
-	/* "bgp listen range" commands. */
-	install_element(BGP_NODE, &bgp_listen_range_cmd);
-	install_element(BGP_NODE, &no_bgp_listen_range_cmd);
-
-	/* "bgp default shutdown" command */
-	install_element(BGP_NODE, &bgp_default_shutdown_cmd);
-
-	/* "bgp shutdown" commands */
-	install_element(BGP_NODE, &bgp_shutdown_cmd);
-	install_element(BGP_NODE, &bgp_shutdown_msg_cmd);
-	install_element(BGP_NODE, &no_bgp_shutdown_cmd);
-	install_element(BGP_NODE, &no_bgp_shutdown_msg_cmd);
-
-	/* "neighbor remote-as" commands. */
-	install_element(BGP_NODE, &neighbor_remote_as_cmd);
-	install_element(BGP_NODE, &neighbor_interface_config_cmd);
-	install_element(BGP_NODE, &neighbor_interface_config_v6only_cmd);
-	install_element(BGP_NODE, &neighbor_interface_config_remote_as_cmd);
-	install_element(BGP_NODE,
-			&neighbor_interface_v6only_config_remote_as_cmd);
-	install_element(BGP_NODE, &no_neighbor_cmd);
-	install_element(BGP_NODE, &no_neighbor_interface_config_cmd);
-
-	/* "neighbor peer-group" commands. */
-	install_element(BGP_NODE, &neighbor_peer_group_cmd);
-	install_element(BGP_NODE, &no_neighbor_peer_group_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_interface_peer_group_remote_as_cmd);
-
-	/* "neighbor local-as" commands. */
-	install_element(BGP_NODE, &neighbor_local_as_cmd);
-	install_element(BGP_NODE, &neighbor_local_as_no_prepend_cmd);
-	install_element(BGP_NODE, &neighbor_local_as_no_prepend_replace_as_cmd);
-	install_element(BGP_NODE, &no_neighbor_local_as_cmd);
-
-	/* "neighbor solo" commands. */
-	install_element(BGP_NODE, &neighbor_solo_cmd);
-	install_element(BGP_NODE, &no_neighbor_solo_cmd);
-
-	/* "neighbor password" commands. */
-	install_element(BGP_NODE, &neighbor_password_cmd);
-	install_element(BGP_NODE, &no_neighbor_password_cmd);
-
-	/* "neighbor activate" commands. */
-	install_element(BGP_NODE, &neighbor_activate_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_activate_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_activate_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_activate_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_activate_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_activate_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_activate_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_activate_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_activate_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &neighbor_activate_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &neighbor_activate_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_activate_cmd);
-	install_element(BGP_LS_NODE, &neighbor_activate_cmd);
-
-	/* "no neighbor activate" commands. */
-	install_element(BGP_NODE, &no_neighbor_activate_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_LS_NODE, &no_neighbor_activate_cmd);
-
-	/* "neighbor peer-group" set commands. */
-	install_element(BGP_NODE, &neighbor_set_peer_group_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_FLOWSPECV4_NODE,
-			&neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_FLOWSPECV6_NODE,
-			&neighbor_set_peer_group_hidden_cmd);
-
-	/* "no neighbor peer-group unset" commands. */
-	install_element(BGP_NODE, &no_neighbor_set_peer_group_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_FLOWSPECV4_NODE,
-			&no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_FLOWSPECV6_NODE,
-			&no_neighbor_set_peer_group_hidden_cmd);
+	/* "bgp router-id" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "bgp suppress-fib-pending" command - handled by bgp_cli.c via mgmtd */
+
+	/* "neighbor graceful-shutdown" command - handled by bgp_cli.c via mgmtd */
+
+	/* "bgp always-compare-med" commands - handled by bgp_cli.c via mgmtd */
+
+	/* bgp ebgp-requires-policy - handled by bgp_cli.c via mgmtd */
+
+	/* bgp enforce-first-as - handled by bgp_cli.c via mgmtd */
+
+	/* bgp labeled-unicast explicit-null - handled by bgp_cli.c via mgmtd */
+
+	/* bgp suppress-duplicates - handled by bgp_cli.c via mgmtd */
+
+	/* "bgp deterministic-med" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "bgp graceful-shutdown" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "bgp fast-external-failover" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "bgp log-neighbor-changes" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "no bgp default <afi>-<safi>" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "bgp network import-check" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "neighbor peer-group" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "neighbor activate" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "no neighbor activate" commands - handled by bgp_cli.c via mgmtd */
+
+	/* "neighbor peer-group" set commands - handled by bgp_cli.c via mgmtd */
+
+	/* "no neighbor peer-group unset" commands - handled by bgp_cli.c via mgmtd */
 
 	/* "neighbor softreconfiguration inbound" commands.*/
-	install_element(BGP_NODE, &neighbor_soft_reconfiguration_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_soft_reconfiguration_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_FLOWSPECV4_NODE,
-			&neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_FLOWSPECV4_NODE,
-			&no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_FLOWSPECV6_NODE,
-			&neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_FLOWSPECV6_NODE,
-			&no_neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_soft_reconfiguration_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_soft_reconfiguration_cmd);
 
-	/* "neighbor attribute-unchanged" commands.  */
-	install_element(BGP_NODE, &neighbor_attr_unchanged_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_attr_unchanged_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_attr_unchanged_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_attr_unchanged_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_attr_unchanged_cmd);
+	/* "nexthop-local unchanged" commands - handled by bgp_cli.c via mgmtd */
+	/* install_element(BGP_IPV6_NODE, &neighbor_nexthop_local_unchanged_cmd); */
+	/* install_element(BGP_IPV6_NODE, &no_neighbor_nexthop_local_unchanged_cmd); */
 
-	install_element(BGP_EVPN_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_attr_unchanged_cmd);
+	/* "neighbor next-hop-self" commands - IPV4/IPV6/VPNV4/VPNV6 handled by bgp_cli.c via mgmtd */
 
-	install_element(BGP_FLOWSPECV4_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &no_neighbor_attr_unchanged_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &neighbor_attr_unchanged_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &no_neighbor_attr_unchanged_cmd);
+	/* "neighbor next-hop-self force" commands - IPV4/IPV6/VPNV4/VPNV6 handled by bgp_cli.c via mgmtd */
 
-	/* "nexthop-local unchanged" commands */
-	install_element(BGP_IPV6_NODE, &neighbor_nexthop_local_unchanged_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_neighbor_nexthop_local_unchanged_cmd);
-
-	/* "neighbor next-hop-self" commands. */
-	install_element(BGP_NODE, &neighbor_nexthop_self_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_nexthop_self_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_nexthop_self_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_nexthop_self_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_nexthop_self_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_nexthop_self_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_nexthop_self_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_nexthop_self_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_nexthop_self_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_nexthop_self_cmd);
-
-	/* "neighbor next-hop-self force" commands. */
-	install_element(BGP_NODE, &neighbor_nexthop_self_force_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_nexthop_self_force_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV4_NODE,
-			&no_neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&no_neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&no_neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&no_neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_nexthop_self_force_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&no_neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_nexthop_self_force_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_nexthop_self_force_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&no_neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_nexthop_self_force_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_nexthop_self_force_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&no_neighbor_nexthop_self_all_hidden_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_nexthop_self_force_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_nexthop_self_force_cmd);
-
-	/* "neighbor as-override" commands. */
-	install_element(BGP_NODE, &neighbor_as_override_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_as_override_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_as_override_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_as_override_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_as_override_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_as_override_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_as_override_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_as_override_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_as_override_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_as_override_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_as_override_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_as_override_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_as_override_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_as_override_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_as_override_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_as_override_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_as_override_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_as_override_cmd);
-
-	/* "neighbor remove-private-AS" commands. */
-	install_element(BGP_NODE, &neighbor_remove_private_as_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_remove_private_as_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_remove_private_as_all_hidden_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_remove_private_as_all_hidden_cmd);
-	install_element(BGP_NODE,
-			&neighbor_remove_private_as_replace_as_hidden_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_remove_private_as_replace_as_hidden_cmd);
-	install_element(BGP_NODE,
-			&neighbor_remove_private_as_all_replace_as_hidden_cmd);
-	install_element(
-		BGP_NODE,
-		&no_neighbor_remove_private_as_all_replace_as_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV4_NODE,
-			&neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV4_NODE,
-			&no_neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV4_NODE,
-			&neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV4_NODE,
-			&no_neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&no_neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&no_neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&no_neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&no_neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&no_neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&no_neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_remove_private_as_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_remove_private_as_all_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&no_neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&no_neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_remove_private_as_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_remove_private_as_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_remove_private_as_all_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_remove_private_as_all_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&no_neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&no_neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_remove_private_as_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_remove_private_as_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_remove_private_as_all_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_remove_private_as_all_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&no_neighbor_remove_private_as_replace_as_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_remove_private_as_all_replace_as_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&no_neighbor_remove_private_as_all_replace_as_cmd);
+	/* AF-specific removed: now in bgp_cli.c */
 
 	/* "neighbor send-community" commands.*/
-	install_element(BGP_NODE, &neighbor_send_community_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_send_community_type_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_send_community_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_send_community_type_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_ecommunity_rpki_cmd);
-
+	
 	/* "neighbor route-reflector" commands.*/
-	install_element(BGP_NODE, &neighbor_route_reflector_client_hidden_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_route_reflector_client_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_route_reflector_client_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_route_reflector_client_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_route_reflector_client_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_FLOWSPECV4_NODE,
-			&neighbor_route_reflector_client_cmd);
-	install_element(BGP_FLOWSPECV4_NODE,
-			&no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_FLOWSPECV6_NODE,
-			&neighbor_route_reflector_client_cmd);
-	install_element(BGP_FLOWSPECV6_NODE,
-			&no_neighbor_route_reflector_client_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_route_reflector_client_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_route_reflector_client_cmd);
-
-	/* "neighbor route-server" commands.*/
-	install_element(BGP_NODE, &neighbor_route_server_client_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_route_server_client_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_route_server_client_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_route_server_client_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_route_server_client_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_route_server_client_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_route_server_client_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_route_server_client_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_route_server_client_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_route_server_client_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_route_server_client_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_FLOWSPECV4_NODE,
-			&no_neighbor_route_server_client_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &neighbor_route_server_client_cmd);
-	install_element(BGP_FLOWSPECV6_NODE,
-			&no_neighbor_route_server_client_cmd);
-
-	/* "neighbor disable-addpath-rx" commands. */
-	install_element(BGP_IPV4_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_disable_addpath_rx_cmd);
 
 	/* "neighbor addpath-tx-all-paths" commands.*/
-	install_element(BGP_NODE, &neighbor_addpath_tx_all_paths_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_addpath_tx_all_paths_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-
-	/* "neighbor addpath-tx-best-selected" commands.*/
-	install_element(BGP_IPV4_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_addpath_tx_best_selected_paths_cmd);
-
+	
 	/* "neighbor addpath-tx-bestpath-per-AS" commands.*/
-	install_element(BGP_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_hidden_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_hidden_cmd);
-	install_element(BGP_IPV4_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_addpath_tx_bestpath_per_as_cmd);
-
+	
 	/* "neighbor addpath-rx-paths-limit" commands.*/
-	install_element(BGP_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_addpath_paths_limit_cmd);
-
+	
 	/* "neighbor sender-as-path-loop-detection" commands. */
-	install_element(BGP_NODE, &neighbor_aspath_loop_detection_cmd);
-	install_element(BGP_NODE, &no_neighbor_aspath_loop_detection_cmd);
+	
+	/* "neighbor capability extended-nexthop" commands - handled by bgp_cli.c via mgmtd */
 
-	/* "neighbor path-attribute discard" commands. */
-	install_element(BGP_NODE, &neighbor_path_attribute_discard_cmd);
-	install_element(BGP_NODE, &no_neighbor_path_attribute_discard_cmd);
-
-	/* "neighbor path-attribute treat-as-withdraw" commands. */
-	install_element(BGP_NODE,
-			&neighbor_path_attribute_treat_as_withdraw_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_path_attribute_treat_as_withdraw_cmd);
-
-	/* "neighbor passive" commands. */
-	install_element(BGP_NODE, &neighbor_passive_cmd);
-	install_element(BGP_NODE, &no_neighbor_passive_cmd);
-
-
-	/* "neighbor shutdown" commands. */
-	install_element(BGP_NODE, &neighbor_shutdown_cmd);
-	install_element(BGP_NODE, &no_neighbor_shutdown_cmd);
-	install_element(BGP_NODE, &neighbor_shutdown_msg_cmd);
-	install_element(BGP_NODE, &no_neighbor_shutdown_msg_cmd);
-	install_element(BGP_NODE, &neighbor_shutdown_rtt_cmd);
-	install_element(BGP_NODE, &no_neighbor_shutdown_rtt_cmd);
-
-	/* "neighbor capability extended-nexthop" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_enhe_cmd);
-	install_element(BGP_NODE, &no_neighbor_capability_enhe_cmd);
-
-	/* "neighbor capability software-version" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_software_version_cmd);
-
-	/* "neighbor capability link-local" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_link_local_cmd);
-
-	/* neighbor rpki ... commands. */
-	install_element(BGP_NODE, &neighbor_rpki_strict_cmd);
-
-	/* "neighbor capability orf prefix-list" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_orf_prefix_hidden_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_capability_orf_prefix_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_capability_orf_prefix_cmd);
-
-	/* "neighbor capability dynamic" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_dynamic_cmd);
-	install_element(BGP_NODE, &no_neighbor_capability_dynamic_cmd);
-
-	/* "neighbor dont-capability-negotiate" commands. */
-	install_element(BGP_NODE, &neighbor_dont_capability_negotiate_cmd);
-	install_element(BGP_NODE, &no_neighbor_dont_capability_negotiate_cmd);
-
-	/* "neighbor capability fqdn" command. */
-	install_element(BGP_NODE, &neighbor_capability_fqdn_cmd);
-
-	/* "neighbor ebgp-multihop" commands. */
-	install_element(BGP_NODE, &neighbor_ebgp_multihop_cmd);
-	install_element(BGP_NODE, &neighbor_ebgp_multihop_ttl_cmd);
-	install_element(BGP_NODE, &no_neighbor_ebgp_multihop_cmd);
-
-	/* "neighbor disable-connected-check" commands.  */
-	install_element(BGP_NODE, &neighbor_disable_connected_check_cmd);
-	install_element(BGP_NODE, &no_neighbor_disable_connected_check_cmd);
-
-	/* "neighbor disable-link-bw-encoding-ieee" commands.  */
-	install_element(BGP_NODE, &neighbor_disable_link_bw_encoding_ieee_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_disable_link_bw_encoding_ieee_cmd);
-
-
-	install_element(BGP_NODE, &neighbor_extended_link_bw_cmd);
-
-	install_element(BGP_NODE, &neighbor_nhc_attribute_cmd);
-
-	/* "neighbor extended-optional-parameters" commands.  */
-	install_element(BGP_NODE, &neighbor_extended_optional_parameters_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_extended_optional_parameters_cmd);
-
-	/* "neighbor enforce-first-as" commands. */
-	install_element(BGP_NODE, &neighbor_enforce_first_as_cmd);
-	install_element(BGP_NODE, &no_neighbor_enforce_first_as_cmd);
-
-	/* "neighbor description" commands. */
-	install_element(BGP_NODE, &neighbor_description_cmd);
-	install_element(BGP_NODE, &no_neighbor_description_cmd);
-	install_element(BGP_NODE, &no_neighbor_description_comment_cmd);
-
-	/* "neighbor update-source" commands. "*/
-	install_element(BGP_NODE, &neighbor_update_source_cmd);
-	install_element(BGP_NODE, &no_neighbor_update_source_cmd);
-
-	/* "neighbor default-originate" commands. */
-	install_element(BGP_NODE, &neighbor_default_originate_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_default_originate_rmap_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_default_originate_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_default_originate_cmd);
-
-	/* "neighbor port" commands. */
-	install_element(BGP_NODE, &neighbor_port_cmd);
-	install_element(BGP_NODE, &no_neighbor_port_cmd);
+	/* "neighbor update-source" commands - handled by bgp_cli.c via mgmtd */
 
 	/* "neighbor weight" commands. */
-	install_element(BGP_NODE, &neighbor_weight_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_weight_hidden_cmd);
-
-	install_element(BGP_IPV4_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_weight_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_weight_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_weight_cmd);
-
-	/* "neighbor encapsulation-srv6|encapsulation-mpls" commands. */
-	install_element(BGP_VPNV4_NODE, &neighbor_encapsulation_srv6_or_mpls_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_encapsulation_srv6_or_mpls_cmd);
-
-	/* "neighbor override-capability" commands. */
-	install_element(BGP_NODE, &neighbor_override_capability_cmd);
-	install_element(BGP_NODE, &no_neighbor_override_capability_cmd);
-
-	/* "neighbor strict-capability-match" commands. */
-	install_element(BGP_NODE, &neighbor_strict_capability_cmd);
-	install_element(BGP_NODE, &no_neighbor_strict_capability_cmd);
-
-	/* "neighbor timers" commands. */
-	install_element(BGP_NODE, &neighbor_timers_cmd);
-	install_element(BGP_NODE, &no_neighbor_timers_cmd);
-
-	/* "neighbor timers connect" commands. */
-	install_element(BGP_NODE, &neighbor_timers_connect_cmd);
-	install_element(BGP_NODE, &no_neighbor_timers_connect_cmd);
-
-	/* "neighbor timers delayopen" commands. */
-	install_element(BGP_NODE, &neighbor_timers_delayopen_cmd);
-	install_element(BGP_NODE, &no_neighbor_timers_delayopen_cmd);
-
-	/* "neighbor advertisement-interval" commands. */
-	install_element(BGP_NODE, &neighbor_advertise_interval_cmd);
-	install_element(BGP_NODE, &no_neighbor_advertise_interval_cmd);
-
-	/* "neighbor interface" commands. */
-	install_element(BGP_NODE, &neighbor_interface_cmd);
-	install_element(BGP_NODE, &no_neighbor_interface_cmd);
-
+	
 	/* "neighbor distribute" commands. */
-	install_element(BGP_NODE, &neighbor_distribute_list_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_distribute_list_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_distribute_list_cmd);
-
+	
 	/* "neighbor prefix-list" commands. */
-	install_element(BGP_NODE, &neighbor_prefix_list_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_prefix_list_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &no_neighbor_prefix_list_cmd);
-
+	
 	/* "neighbor filter-list" commands. */
-	install_element(BGP_NODE, &neighbor_filter_list_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_filter_list_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &no_neighbor_filter_list_cmd);
-
+	
 	/* "neighbor route-map" commands. */
-	install_element(BGP_NODE, &neighbor_route_map_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_route_map_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_LS_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_LS_NODE, &no_neighbor_route_map_cmd);
-
+	
 	/* "neighbor unsuppress-map" commands. */
-	install_element(BGP_NODE, &neighbor_unsuppress_map_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_unsuppress_map_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_unsuppress_map_cmd);
-
+	
 	/* "neighbor advertise-map" commands. */
-	install_element(BGP_NODE, &bgp_condadv_period_cmd);
-	install_element(BGP_NODE, &neighbor_advertise_map_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_advertise_map_cmd);
-
-	/* bgp default-originate timer */
-	install_element(BGP_NODE, &bgp_def_originate_eval_cmd);
-
-	/* neighbor maximum-prefix-out commands. */
-	install_element(BGP_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_maximum_prefix_out_cmd);
-
-	/* "neighbor maximum-prefix" commands. */
-	install_element(BGP_NODE, &neighbor_maximum_prefix_hidden_cmd);
-	install_element(BGP_NODE,
-			&neighbor_maximum_prefix_threshold_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_maximum_prefix_warning_hidden_cmd);
-	install_element(BGP_NODE,
-			&neighbor_maximum_prefix_threshold_warning_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_maximum_prefix_restart_hidden_cmd);
-	install_element(BGP_NODE,
-			&neighbor_maximum_prefix_threshold_restart_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_maximum_prefix_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV4_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV4_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_EVPN_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_EVPN_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_maximum_prefix_cmd);
 
 	/* "neighbor allowas-in" */
-	install_element(BGP_NODE, &neighbor_allowas_in_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_allowas_in_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_allowas_in_cmd);
-
-	/* neighbor accept-own */
-	install_element(BGP_VPNV4_NODE, &neighbor_accept_own_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_accept_own_cmd);
-
-	/* "neighbor soo" */
-	install_element(BGP_IPV4_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_soo_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_soo_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_soo_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_soo_cmd);
+	
+	/* neighbor accept-own - handled by bgp_cli.c via mgmtd */
+	/* install_element(BGP_VPNV4_NODE, &neighbor_accept_own_cmd); */
+	/* install_element(BGP_VPNV6_NODE, &neighbor_accept_own_cmd); */
 
 	/* "neighbor dampening" commands. */
-	install_element(BGP_NODE, &neighbor_damp_cmd);
-	install_element(BGP_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_damp_cmd);
+	/* BGP_NODE still uses legacy command for now */
 	install_element(VIEW_NODE, &show_ip_bgp_neighbor_damp_param_cmd);
 
-	/* address-family commands. */
-	install_element(BGP_NODE, &address_family_ipv4_safi_cmd);
-	install_element(BGP_NODE, &address_family_ipv6_safi_cmd);
 #ifdef KEEP_OLD_VPN_COMMANDS
-	install_element(BGP_NODE, &address_family_vpnv4_cmd);
-	install_element(BGP_NODE, &address_family_vpnv6_cmd);
 #endif /* KEEP_OLD_VPN_COMMANDS */
 
-	install_element(BGP_NODE, &address_family_evpn_cmd);
-	install_element(BGP_NODE, &address_family_link_state_cmd);
-
-	/* "exit-address-family" command. */
-	install_element(BGP_IPV4_NODE, &exit_address_family_cmd);
-	install_element(BGP_IPV4M_NODE, &exit_address_family_cmd);
-	install_element(BGP_IPV4L_NODE, &exit_address_family_cmd);
-	install_element(BGP_IPV6_NODE, &exit_address_family_cmd);
-	install_element(BGP_IPV6M_NODE, &exit_address_family_cmd);
-	install_element(BGP_IPV6L_NODE, &exit_address_family_cmd);
-	install_element(BGP_VPNV4_NODE, &exit_address_family_cmd);
-	install_element(BGP_VPNV6_NODE, &exit_address_family_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &exit_address_family_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &exit_address_family_cmd);
-	install_element(BGP_EVPN_NODE, &exit_address_family_cmd);
-	install_element(BGP_LS_NODE, &exit_address_family_cmd);
-
-	/* BGP retain all route-target */
-	install_element(BGP_VPNV4_NODE, &bgp_retain_route_target_cmd);
-	install_element(BGP_VPNV6_NODE, &bgp_retain_route_target_cmd);
+	/* "exit-address-family" command - handled by bgp_cli.c via mgmtd */
 
 	/* "clear ip bgp commands" */
 	install_element(ENABLE_NODE, &clear_ip_bgp_all_cmd);
@@ -24425,6 +10457,8 @@ void bgp_vty_init(void)
 	/* "show [ip] bgp neighbors" commands. */
 	install_element(VIEW_NODE, &show_ip_bgp_neighbors_cmd);
 
+	install_element(VIEW_NODE, &show_ip_bgp_neighbors_graceful_restart_cmd);
+
 	/* "show [ip] bgp peer-group" commands. */
 	install_element(VIEW_NODE, &show_ip_bgp_peer_groups_cmd);
 
@@ -24442,63 +10476,8 @@ void bgp_vty_init(void)
 	install_element(VIEW_NODE, &show_ip_bgp_route_leak_cmd);
 
 	/* "redistribute" commands.  */
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_hidden_cmd);
-	install_element(BGP_NODE, &no_bgp_redistribute_ipv4_hidden_cmd);
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_rmap_hidden_cmd);
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_metric_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_rmap_metric_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_metric_rmap_hidden_cmd);
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_ospf_hidden_cmd);
-	install_element(BGP_NODE, &no_bgp_redistribute_ipv4_ospf_hidden_cmd);
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_ospf_rmap_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_ospf_metric_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_ospf_rmap_metric_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_ospf_metric_rmap_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_redistribute_ipv4_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_rmap_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_metric_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_rmap_metric_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_metric_rmap_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_ospf_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_redistribute_ipv4_ospf_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_ospf_rmap_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_ospf_metric_cmd);
-	install_element(BGP_IPV4_NODE,
-			&bgp_redistribute_ipv4_ospf_rmap_metric_cmd);
-	install_element(BGP_IPV4_NODE,
-			&bgp_redistribute_ipv4_ospf_metric_rmap_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_redistribute_ipv6_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_rmap_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_metric_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_rmap_metric_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_metric_rmap_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_table_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_redistribute_ipv6_table_cmd);
-
-	/* redistribute show commands */
-	install_element(VIEW_NODE, &show_bgp_redistribute_cmd);
-
-	/* import|export vpn [route-map RMAP_NAME] */
-	install_element(BGP_IPV4_NODE, &bgp_imexport_vpn_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_imexport_vpn_cmd);
-
-	install_element(BGP_IPV4_NODE, &bgp_imexport_vrf_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_imexport_vrf_cmd);
-
-	/* ttl_security commands */
-	install_element(BGP_NODE, &neighbor_ttl_security_cmd);
-	install_element(BGP_NODE, &no_neighbor_ttl_security_cmd);
-
-	/* "bgp tcp-keepalive" commands */
-	install_element(BGP_NODE, &bgp_tcp_keepalive_cmd);
-	install_element(BGP_NODE, &no_bgp_tcp_keepalive_cmd);
+	/* 		&bgp_redistribute_ipv4_ospf_rmap_metric_cmd); */
+	/* 		&bgp_redistribute_ipv4_ospf_metric_rmap_cmd); */
 
 	/* "show [ip] bgp memory" commands. */
 	install_element(VIEW_NODE, &show_bgp_memory_cmd);
@@ -24525,64 +10504,11 @@ void bgp_vty_init(void)
 
 	community_alias_vty();
 
-	/* vpn-policy commands */
-	install_element(BGP_IPV4_NODE, &af_rd_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_rd_vpn_export_cmd);
-	install_element(BGP_IPV4_NODE, &af_label_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_label_vpn_export_cmd);
-	install_element(BGP_IPV4_NODE,
-			&af_label_vpn_export_allocation_mode_cmd);
-	install_element(BGP_IPV6_NODE,
-			&af_label_vpn_export_allocation_mode_cmd);
-	install_element(BGP_IPV4_NODE, &af_nexthop_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_nexthop_vpn_export_cmd);
-	install_element(BGP_IPV4_NODE, &af_rt_vpn_imexport_cmd);
-	install_element(BGP_IPV6_NODE, &af_rt_vpn_imexport_cmd);
-	install_element(BGP_IPV4_NODE, &af_route_map_vpn_imexport_cmd);
-	install_element(BGP_IPV6_NODE, &af_route_map_vpn_imexport_cmd);
-	install_element(BGP_IPV4_NODE, &af_import_vrf_route_map_cmd);
-	install_element(BGP_IPV6_NODE, &af_import_vrf_route_map_cmd);
+	/* install_element(BGP_NODE, &neighbor_ip_transparent_cmd); */
 
-	install_element(BGP_IPV4_NODE, &af_routetarget_import_cmd);
-	install_element(BGP_IPV6_NODE, &af_routetarget_import_cmd);
-
-	install_element(BGP_IPV4_NODE, &af_no_rd_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_no_rd_vpn_export_cmd);
-	install_element(BGP_IPV4_NODE, &af_no_label_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_no_label_vpn_export_cmd);
-	install_element(BGP_IPV4_NODE, &af_no_rt_vpn_imexport_cmd);
-	install_element(BGP_IPV6_NODE, &af_no_rt_vpn_imexport_cmd);
-	install_element(BGP_IPV4_NODE, &af_no_route_map_vpn_imexport_cmd);
-	install_element(BGP_IPV6_NODE, &af_no_route_map_vpn_imexport_cmd);
-	install_element(BGP_IPV4_NODE, &af_no_import_vrf_route_map_cmd);
-	install_element(BGP_IPV6_NODE, &af_no_import_vrf_route_map_cmd);
-
-	/* tcp-mss command */
-	install_element(BGP_NODE, &neighbor_tcp_mss_cmd);
-	install_element(BGP_NODE, &no_neighbor_tcp_mss_cmd);
-
-	install_element(BGP_NODE, &neighbor_ip_transparent_cmd);
-
-	/* srv6 commands */
 	install_element(VIEW_NODE, &show_bgp_srv6_cmd);
-	install_element(BGP_NODE, &bgp_segment_routing_srv6_cmd);
-	install_element(BGP_NODE, &no_bgp_segment_routing_srv6_cmd);
-	install_element(BGP_SRV6_NODE, &bgp_srv6_locator_cmd);
-	install_element(BGP_SRV6_NODE, &no_bgp_srv6_locator_cmd);
-	install_element(BGP_SRV6_NODE, &bgp_srv6_only_cmd);
-	install_element(BGP_SRV6_NODE, &bgp_srv6_encap_behavior_cmd);
-	install_element(BGP_IPV4_NODE, &af_sid_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_sid_vpn_export_cmd);
-	install_element(BGP_NODE, &bgp_sid_vpn_export_cmd);
-	install_element(BGP_IPV4_NODE, &sid_export_cmd);
-	install_element(BGP_IPV6_NODE, &sid_export_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_encap_srv6_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_encap_srv6_cmd);
-	install_element(BGP_NODE, &no_bgp_sid_vpn_export_cmd);
 
-	/* BGP-LS commands */
-	install_element(BGP_LS_NODE, &bgp_ls_distribute_bgp_fabric_cmd);
-	install_element(BGP_LS_NODE, &no_bgp_ls_distribute_bgp_fabric_cmd);
+	/* BGP-LS commands. distribute is NB-handled via bgp_cli.c. */
 	install_element(BGP_NODE, &neighbor_ls_local_link_id_cmd);
 	install_element(BGP_NODE, &no_neighbor_ls_local_link_id_cmd);
 	install_element(BGP_NODE, &neighbor_ls_remote_link_id_cmd);
@@ -24612,7 +10538,7 @@ static const char *community_direct_str(int direct)
 }
 
 /* Display error string.  */
-static void community_list_perror(struct vty *vty, int ret)
+static __attribute__((unused)) void community_list_perror(struct vty *vty, int ret)
 {
 	switch (ret) {
 	case COMMUNITY_LIST_ERR_MALFORMED_VAL:
@@ -24633,220 +10559,8 @@ static void community_list_perror(struct vty *vty, int ret)
 #define COMMUNITY_LIST_STR "Add a community list entry\n"
 
 /*community-list standard */
-DEFUN (community_list_standard,
-       bgp_community_list_standard_cmd,
-       "bgp community-list <(1-99)|standard COMMUNITY_LIST_NAME> [seq (0-4294967295)] <deny|permit> AA:NN...",
-       BGP_STR
-       COMMUNITY_LIST_STR
-       "Community list number (standard)\n"
-       "Add an standard community-list entry\n"
-       "Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify community to reject\n"
-       "Specify community to accept\n"
-       COMMUNITY_VAL_STR)
-{
-	char *cl_name_or_number = NULL;
-	char *seq = NULL;
-	int direct = 0;
-	int style = COMMUNITY_LIST_STANDARD;
-	int idx = 0;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	idx = 0;
-	argv_find(argv, argc, "(1-99)", &idx);
-	argv_find(argv, argc, "COMMUNITY_LIST_NAME", &idx);
-	cl_name_or_number = argv[idx]->arg;
-	direct = argv_find(argv, argc, "permit", &idx) ? COMMUNITY_PERMIT
-						       : COMMUNITY_DENY;
-	argv_find(argv, argc, "AA:NN", &idx);
-	char *str = argv_concat(argv, argc, idx);
-
-	assert(str);
-	int ret = community_list_set(bgp_clist, cl_name_or_number, str, seq,
-				     direct, style);
-
-	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		/* Display error string.  */
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_community_list_standard_all,
-       no_bgp_community_list_standard_all_cmd,
-       "no bgp community-list <(1-99)|standard COMMUNITY_LIST_NAME> [seq (0-4294967295)] <deny|permit> AA:NN...",
-       NO_STR
-       BGP_STR
-       COMMUNITY_LIST_STR
-       "Community list number (standard)\n"
-       "Add an standard community-list entry\n"
-       "Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify community to reject\n"
-       "Specify community to accept\n"
-       COMMUNITY_VAL_STR)
-{
-	char *cl_name_or_number = NULL;
-	char *str = NULL;
-	int direct = 0;
-	int style = COMMUNITY_LIST_STANDARD;
-	char *seq = NULL;
-	int idx = 0;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	idx = 0;
-	argv_find(argv, argc, "permit", &idx);
-	argv_find(argv, argc, "deny", &idx);
-
-	if (idx) {
-		direct = argv_find(argv, argc, "permit", &idx)
-				 ? COMMUNITY_PERMIT
-				 : COMMUNITY_DENY;
-
-		idx = 0;
-		argv_find(argv, argc, "AA:NN", &idx);
-		str = argv_concat(argv, argc, idx);
-	}
-
-	idx = 0;
-	argv_find(argv, argc, "(1-99)", &idx);
-	argv_find(argv, argc, "COMMUNITY_LIST_NAME", &idx);
-	cl_name_or_number = argv[idx]->arg;
-
-	community_list_unset(bgp_clist, cl_name_or_number, str, seq, direct,
-			     style);
-
-	XFREE(MTYPE_TMP, str);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS(no_community_list_standard_all, no_bgp_community_list_standard_all_list_cmd,
-      "no bgp community-list <(1-99)|standard COMMUNITY_LIST_NAME>",
-      NO_STR BGP_STR COMMUNITY_LIST_STR
-      "Community list number (standard)\n"
-      "Add an standard community-list entry\n"
-      "Community list name\n")
 
 /*community-list expanded */
-DEFUN (community_list_expanded_all,
-       bgp_community_list_expanded_all_cmd,
-       "bgp community-list <(100-500)|expanded COMMUNITY_LIST_NAME> [seq (0-4294967295)] <deny|permit> AA:NN...",
-       BGP_STR
-       COMMUNITY_LIST_STR
-       "Community list number (expanded)\n"
-       "Add an expanded community-list entry\n"
-       "Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify community to reject\n"
-       "Specify community to accept\n"
-       COMMUNITY_VAL_STR)
-{
-	char *cl_name_or_number = NULL;
-	char *seq = NULL;
-	int direct = 0;
-	int style = COMMUNITY_LIST_EXPANDED;
-	int idx = 0;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	idx = 0;
-
-	argv_find(argv, argc, "(100-500)", &idx);
-	argv_find(argv, argc, "COMMUNITY_LIST_NAME", &idx);
-	cl_name_or_number = argv[idx]->arg;
-	direct = argv_find(argv, argc, "permit", &idx) ? COMMUNITY_PERMIT
-						       : COMMUNITY_DENY;
-	argv_find(argv, argc, "AA:NN", &idx);
-	char *str = argv_concat(argv, argc, idx);
-
-	assert(str);
-	int ret = community_list_set(bgp_clist, cl_name_or_number, str, seq,
-				     direct, style);
-
-	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		/* Display error string.  */
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_community_list_expanded_all,
-       no_bgp_community_list_expanded_all_cmd,
-       "no bgp community-list <(100-500)|expanded COMMUNITY_LIST_NAME> [seq (0-4294967295)] <deny|permit> AA:NN...",
-       NO_STR
-       BGP_STR
-       COMMUNITY_LIST_STR
-       "Community list number (expanded)\n"
-       "Add an expanded community-list entry\n"
-       "Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify community to reject\n"
-       "Specify community to accept\n"
-       COMMUNITY_VAL_STR)
-{
-	char *cl_name_or_number = NULL;
-	char *seq = NULL;
-	char *str = NULL;
-	int direct = 0;
-	int style = COMMUNITY_LIST_EXPANDED;
-	int idx = 0;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	idx = 0;
-	argv_find(argv, argc, "permit", &idx);
-	argv_find(argv, argc, "deny", &idx);
-
-	if (idx) {
-		direct = argv_find(argv, argc, "permit", &idx)
-				 ? COMMUNITY_PERMIT
-				 : COMMUNITY_DENY;
-
-		idx = 0;
-		argv_find(argv, argc, "AA:NN", &idx);
-		str = argv_concat(argv, argc, idx);
-	}
-
-	idx = 0;
-	argv_find(argv, argc, "(100-500)", &idx);
-	argv_find(argv, argc, "COMMUNITY_LIST_NAME", &idx);
-	cl_name_or_number = argv[idx]->arg;
-
-	community_list_unset(bgp_clist, cl_name_or_number, str, seq, direct,
-			     style);
-
-	XFREE(MTYPE_TMP, str);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS(no_community_list_expanded_all,
-      no_bgp_community_list_expanded_all_list_cmd,
-      "no bgp community-list <(100-500)|expanded COMMUNITY_LIST_NAME>",
-      NO_STR BGP_STR COMMUNITY_LIST_STR
-      "Community list number (expanded)\n"
-      "Add an expanded community-list entry\n"
-      "Community list name\n")
 
 /* Return configuration string of community-list entry.  */
 static const char *community_list_config_str(struct community_entry *entry)
@@ -24935,284 +10649,9 @@ DEFUN (show_community_list_arg,
 	return CMD_SUCCESS;
 }
 
-/*
- * Large Community code.
- */
-static int lcommunity_list_set_vty(struct vty *vty, int argc,
-				   struct cmd_token **argv, int style,
-				   int reject_all_digit_name)
-{
-	int ret;
-	int direct;
-	char *str;
-	int idx = 0;
-	char *cl_name;
-	char *seq = NULL;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	idx = 0;
-	direct = argv_find(argv, argc, "permit", &idx) ? COMMUNITY_PERMIT
-						       : COMMUNITY_DENY;
-
-	/* All digit name check.  */
-	idx = 0;
-	argv_find(argv, argc, "LCOMMUNITY_LIST_NAME", &idx);
-	argv_find(argv, argc, "(1-99)", &idx);
-	argv_find(argv, argc, "(100-500)", &idx);
-	cl_name = argv[idx]->arg;
-	if (reject_all_digit_name && all_digit(cl_name)) {
-		vty_out(vty, "%% Community name cannot have all digits\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	idx = 0;
-	argv_find(argv, argc, "AA:BB:CC", &idx);
-	argv_find(argv, argc, "LINE", &idx);
-	/* Concat community string argument. */
-	if (idx)
-		str = argv_concat(argv, argc, idx);
-	else
-		str = NULL;
-
-	ret = lcommunity_list_set(bgp_clist, cl_name, str, seq, direct, style);
-
-	/* Free temporary community list string allocated by
-	   argv_concat().  */
-	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-	return CMD_SUCCESS;
-}
-
-static int lcommunity_list_unset_vty(struct vty *vty, int argc,
-				     struct cmd_token **argv, int style)
-{
-	int direct = 0;
-	char *str = NULL;
-	int idx = 0;
-	char *seq = NULL;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	idx = 0;
-	argv_find(argv, argc, "permit", &idx);
-	argv_find(argv, argc, "deny", &idx);
-
-	if (idx) {
-		/* Check the list direct. */
-		if (strncmp(argv[idx]->arg, "p", 1) == 0)
-			direct = COMMUNITY_PERMIT;
-		else
-			direct = COMMUNITY_DENY;
-
-		idx = 0;
-		argv_find(argv, argc, "LINE", &idx);
-		argv_find(argv, argc, "AA:AA:NN", &idx);
-		/* Concat community string argument.  */
-		str = argv_concat(argv, argc, idx);
-	}
-
-	idx = 0;
-	argv_find(argv, argc, "(1-99)", &idx);
-	argv_find(argv, argc, "(100-500)", &idx);
-	argv_find(argv, argc, "LCOMMUNITY_LIST_NAME", &idx);
-
-	/* Unset community list.  */
-	lcommunity_list_unset(bgp_clist, argv[idx]->arg, str, seq, direct,
-			      style);
-
-	/* Free temporary community list string allocated by
-	   argv_concat().  */
-	XFREE(MTYPE_TMP, str);
-
-	return CMD_SUCCESS;
-}
-
 /* "large-community-list" keyword help string.  */
 #define LCOMMUNITY_LIST_STR "Add a large community list entry\n"
 #define LCOMMUNITY_VAL_STR  "large community in 'aa:bb:cc' format\n"
-
-DEFUN (lcommunity_list_standard,
-       bgp_lcommunity_list_standard_cmd,
-       "bgp large-community-list (1-99) [seq (0-4294967295)] <deny|permit> AA:BB:CC...",
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Large Community list number (standard)\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify large community to reject\n"
-       "Specify large community to accept\n"
-       LCOMMUNITY_VAL_STR)
-{
-	return lcommunity_list_set_vty(vty, argc, argv,
-				       LARGE_COMMUNITY_LIST_STANDARD, 0);
-}
-
-DEFUN (lcommunity_list_expanded,
-       bgp_lcommunity_list_expanded_cmd,
-       "bgp large-community-list (100-500) [seq (0-4294967295)] <deny|permit> LINE...",
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Large Community list number (expanded)\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify large community to reject\n"
-       "Specify large community to accept\n"
-       "An ordered list as a regular-expression\n")
-{
-	return lcommunity_list_set_vty(vty, argc, argv,
-				       LARGE_COMMUNITY_LIST_EXPANDED, 0);
-}
-
-DEFUN (lcommunity_list_name_standard,
-       bgp_lcommunity_list_name_standard_cmd,
-       "bgp large-community-list standard LCOMMUNITY_LIST_NAME [seq (0-4294967295)] <deny|permit> AA:BB:CC...",
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Specify standard large-community-list\n"
-       "Large Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify large community to reject\n"
-       "Specify large community to accept\n"
-       LCOMMUNITY_VAL_STR)
-{
-	return lcommunity_list_set_vty(vty, argc, argv,
-				       LARGE_COMMUNITY_LIST_STANDARD, 1);
-}
-
-DEFUN (lcommunity_list_name_expanded,
-       bgp_lcommunity_list_name_expanded_cmd,
-       "bgp large-community-list expanded LCOMMUNITY_LIST_NAME [seq (0-4294967295)] <deny|permit> LINE...",
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Specify expanded large-community-list\n"
-       "Large Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify large community to reject\n"
-       "Specify large community to accept\n"
-       "An ordered list as a regular-expression\n")
-{
-	return lcommunity_list_set_vty(vty, argc, argv,
-				       LARGE_COMMUNITY_LIST_EXPANDED, 1);
-}
-
-DEFUN (no_lcommunity_list_all,
-       no_bgp_lcommunity_list_all_cmd,
-       "no bgp large-community-list <(1-99)|(100-500)|LCOMMUNITY_LIST_NAME>",
-       NO_STR
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Large Community list number (standard)\n"
-       "Large Community list number (expanded)\n"
-       "Large Community list name\n")
-{
-	return lcommunity_list_unset_vty(vty, argc, argv,
-					 LARGE_COMMUNITY_LIST_STANDARD);
-}
-
-DEFUN (no_lcommunity_list_name_standard_all,
-       no_bgp_lcommunity_list_name_standard_all_cmd,
-       "no bgp large-community-list standard LCOMMUNITY_LIST_NAME",
-       NO_STR
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Specify standard large-community-list\n"
-       "Large Community list name\n")
-{
-	return lcommunity_list_unset_vty(vty, argc, argv,
-					 LARGE_COMMUNITY_LIST_STANDARD);
-}
-
-DEFUN (no_lcommunity_list_name_expanded_all,
-       no_bgp_lcommunity_list_name_expanded_all_cmd,
-       "no bgp large-community-list expanded LCOMMUNITY_LIST_NAME",
-       NO_STR
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Specify expanded large-community-list\n"
-       "Large Community list name\n")
-{
-	return lcommunity_list_unset_vty(vty, argc, argv,
-					 LARGE_COMMUNITY_LIST_EXPANDED);
-}
-
-DEFUN (no_lcommunity_list_standard,
-       no_bgp_lcommunity_list_standard_cmd,
-       "no bgp large-community-list (1-99) [seq (0-4294967295)] <deny|permit> AA:AA:NN...",
-       NO_STR
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Large Community list number (standard)\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify large community to reject\n"
-       "Specify large community to accept\n"
-       LCOMMUNITY_VAL_STR)
-{
-	return lcommunity_list_unset_vty(vty, argc, argv,
-					 LARGE_COMMUNITY_LIST_STANDARD);
-}
-
-DEFUN (no_lcommunity_list_expanded,
-       no_bgp_lcommunity_list_expanded_cmd,
-       "no bgp large-community-list (100-500) [seq (0-4294967295)] <deny|permit> LINE...",
-       NO_STR
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Large Community list number (expanded)\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify large community to reject\n"
-       "Specify large community to accept\n"
-       "An ordered list as a regular-expression\n")
-{
-	return lcommunity_list_unset_vty(vty, argc, argv,
-					 LARGE_COMMUNITY_LIST_EXPANDED);
-}
-
-DEFUN (no_lcommunity_list_name_standard,
-       no_bgp_lcommunity_list_name_standard_cmd,
-       "no bgp large-community-list standard LCOMMUNITY_LIST_NAME [seq (0-4294967295)] <deny|permit> AA:AA:NN...",
-       NO_STR
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Specify standard large-community-list\n"
-       "Large Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify large community to reject\n"
-       "Specify large community to accept\n"
-       LCOMMUNITY_VAL_STR)
-{
-	return lcommunity_list_unset_vty(vty, argc, argv,
-					 LARGE_COMMUNITY_LIST_STANDARD);
-}
-
-DEFUN (no_lcommunity_list_name_expanded,
-       no_bgp_lcommunity_list_name_expanded_cmd,
-       "no bgp large-community-list expanded LCOMMUNITY_LIST_NAME [seq (0-4294967295)] <deny|permit> LINE...",
-       NO_STR
-       BGP_STR
-       LCOMMUNITY_LIST_STR
-       "Specify expanded large-community-list\n"
-       "Large community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify large community to reject\n"
-       "Specify large community to accept\n"
-       "An ordered list as a regular-expression\n")
-{
-	return lcommunity_list_unset_vty(vty, argc, argv,
-					 LARGE_COMMUNITY_LIST_EXPANDED);
-}
 
 static void lcommunity_list_show(struct vty *vty, struct community_list *list)
 {
@@ -25292,216 +10731,6 @@ DEFUN (show_lcommunity_list_arg,
 /* "extcommunity-list" keyword help string.  */
 #define EXTCOMMUNITY_LIST_STR "Add a extended community list entry\n"
 #define EXTCOMMUNITY_VAL_STR  "Extended community attribute in 'rt aa:nn_or_IPaddr:nn' OR 'soo aa:nn_or_IPaddr:nn' format\n"
-
-DEFUN (extcommunity_list_standard,
-       bgp_extcommunity_list_standard_cmd,
-       "bgp extcommunity-list <(1-99)|standard EXTCOMMUNITY_LIST_NAME> [seq (0-4294967295)] <deny|permit> AA:NN...",
-       BGP_STR
-       EXTCOMMUNITY_LIST_STR
-       "Extended Community list number (standard)\n"
-       "Specify standard extcommunity-list\n"
-       "Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify community to reject\n"
-       "Specify community to accept\n"
-       EXTCOMMUNITY_VAL_STR)
-{
-	int style = EXTCOMMUNITY_LIST_STANDARD;
-	int direct = 0;
-	char *cl_number_or_name = NULL;
-	char *seq = NULL;
-
-	int idx = 0;
-
-	argv_find(argv, argc, "(1-99)", &idx);
-	argv_find(argv, argc, "EXTCOMMUNITY_LIST_NAME", &idx);
-	cl_number_or_name = argv[idx]->arg;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	direct = argv_find(argv, argc, "permit", &idx) ? COMMUNITY_PERMIT
-						       : COMMUNITY_DENY;
-	argv_find(argv, argc, "AA:NN", &idx);
-	char *str = argv_concat(argv, argc, idx);
-
-	int ret = extcommunity_list_set(bgp_clist, cl_number_or_name, str, seq,
-					direct, style);
-
-	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (extcommunity_list_name_expanded,
-       bgp_extcommunity_list_name_expanded_cmd,
-       "bgp extcommunity-list <(100-500)|expanded EXTCOMMUNITY_LIST_NAME> [seq (0-4294967295)] <deny|permit> LINE...",
-       BGP_STR
-       EXTCOMMUNITY_LIST_STR
-       "Extended Community list number (expanded)\n"
-       "Specify expanded extcommunity-list\n"
-       "Extended Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify community to reject\n"
-       "Specify community to accept\n"
-       "An ordered list as a regular-expression\n")
-{
-	int style = EXTCOMMUNITY_LIST_EXPANDED;
-	int direct = 0;
-	char *cl_number_or_name = NULL;
-	char *seq = NULL;
-	int idx = 0;
-
-	argv_find(argv, argc, "(100-500)", &idx);
-	argv_find(argv, argc, "EXTCOMMUNITY_LIST_NAME", &idx);
-	cl_number_or_name = argv[idx]->arg;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	direct = argv_find(argv, argc, "permit", &idx) ? COMMUNITY_PERMIT
-						       : COMMUNITY_DENY;
-	argv_find(argv, argc, "LINE", &idx);
-	char *str = argv_concat(argv, argc, idx);
-
-	int ret = extcommunity_list_set(bgp_clist, cl_number_or_name, str, seq,
-					direct, style);
-
-	XFREE(MTYPE_TMP, str);
-
-	if (ret < 0) {
-		community_list_perror(vty, ret);
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	return CMD_SUCCESS;
-}
-
-DEFUN (no_extcommunity_list_standard_all,
-       no_bgp_extcommunity_list_standard_all_cmd,
-       "no bgp extcommunity-list <(1-99)|standard EXTCOMMUNITY_LIST_NAME> [seq (0-4294967295)] <deny|permit> AA:NN...",
-       NO_STR
-       BGP_STR
-       EXTCOMMUNITY_LIST_STR
-       "Extended Community list number (standard)\n"
-       "Specify standard extcommunity-list\n"
-       "Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify community to reject\n"
-       "Specify community to accept\n"
-       EXTCOMMUNITY_VAL_STR)
-{
-	int style = EXTCOMMUNITY_LIST_STANDARD;
-	int direct = 0;
-	char *cl_number_or_name = NULL;
-	char *str = NULL;
-	char *seq = NULL;
-	int idx = 0;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	idx = 0;
-	argv_find(argv, argc, "permit", &idx);
-	argv_find(argv, argc, "deny", &idx);
-	if (idx) {
-		direct = argv_find(argv, argc, "permit", &idx)
-				 ? COMMUNITY_PERMIT
-				 : COMMUNITY_DENY;
-
-		idx = 0;
-		argv_find(argv, argc, "AA:NN", &idx);
-		str = argv_concat(argv, argc, idx);
-	}
-
-	idx = 0;
-	argv_find(argv, argc, "(1-99)", &idx);
-	argv_find(argv, argc, "EXTCOMMUNITY_LIST_NAME", &idx);
-	cl_number_or_name = argv[idx]->arg;
-
-	extcommunity_list_unset(bgp_clist, cl_number_or_name, str, seq, direct,
-				style);
-
-	XFREE(MTYPE_TMP, str);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS(no_extcommunity_list_standard_all,
-      no_bgp_extcommunity_list_standard_all_list_cmd,
-      "no bgp extcommunity-list <(1-99)|standard EXTCOMMUNITY_LIST_NAME>",
-      NO_STR BGP_STR EXTCOMMUNITY_LIST_STR
-      "Extended Community list number (standard)\n"
-      "Specify standard extcommunity-list\n"
-      "Community list name\n")
-
-DEFUN (no_extcommunity_list_expanded_all,
-       no_bgp_extcommunity_list_expanded_all_cmd,
-       "no bgp extcommunity-list <(100-500)|expanded EXTCOMMUNITY_LIST_NAME> [seq (0-4294967295)] <deny|permit> LINE...",
-       NO_STR
-       BGP_STR
-       EXTCOMMUNITY_LIST_STR
-       "Extended Community list number (expanded)\n"
-       "Specify expanded extcommunity-list\n"
-       "Extended Community list name\n"
-       "Sequence number of an entry\n"
-       "Sequence number\n"
-       "Specify community to reject\n"
-       "Specify community to accept\n"
-       "An ordered list as a regular-expression\n")
-{
-	int style = EXTCOMMUNITY_LIST_EXPANDED;
-	int direct = 0;
-	char *cl_number_or_name = NULL;
-	char *str = NULL;
-	char *seq = NULL;
-	int idx = 0;
-
-	if (argv_find(argv, argc, "(0-4294967295)", &idx))
-		seq = argv[idx]->arg;
-
-	idx = 0;
-	argv_find(argv, argc, "permit", &idx);
-	argv_find(argv, argc, "deny", &idx);
-
-	if (idx) {
-		direct = argv_find(argv, argc, "permit", &idx)
-				 ? COMMUNITY_PERMIT
-				 : COMMUNITY_DENY;
-
-		idx = 0;
-		argv_find(argv, argc, "LINE", &idx);
-		str = argv_concat(argv, argc, idx);
-	}
-
-	idx = 0;
-	argv_find(argv, argc, "(100-500)", &idx);
-	argv_find(argv, argc, "EXTCOMMUNITY_LIST_NAME", &idx);
-	cl_number_or_name = argv[idx]->arg;
-
-	extcommunity_list_unset(bgp_clist, cl_number_or_name, str, seq, direct,
-				style);
-
-	XFREE(MTYPE_TMP, str);
-
-	return CMD_SUCCESS;
-}
-
-ALIAS(no_extcommunity_list_expanded_all,
-      no_bgp_extcommunity_list_expanded_all_list_cmd,
-      "no bgp extcommunity-list <(100-500)|expanded EXTCOMMUNITY_LIST_NAME>",
-      NO_STR BGP_STR EXTCOMMUNITY_LIST_STR
-      "Extended Community list number (expanded)\n"
-      "Specify expanded extcommunity-list\n"
-      "Extended Community list name\n")
 
 static void extcommunity_list_show(struct vty *vty, struct community_list *list)
 {
@@ -25634,7 +10863,6 @@ static int community_list_config_write(struct vty *vty)
 			write++;
 		}
 
-
 	/* lcommunity-list.  */
 	cm = community_list_master_lookup(bgp_clist,
 					  LARGE_COMMUNITY_LIST_MASTER);
@@ -25676,42 +10904,15 @@ static void community_list_vty(void)
 {
 	install_node(&community_list_node);
 
-	/* Community-list.  */
-	install_element(CONFIG_NODE, &bgp_community_list_standard_cmd);
-	install_element(CONFIG_NODE, &bgp_community_list_expanded_all_cmd);
-	install_element(CONFIG_NODE, &no_bgp_community_list_standard_all_cmd);
-	install_element(CONFIG_NODE, &no_bgp_community_list_standard_all_list_cmd);
-	install_element(CONFIG_NODE, &no_bgp_community_list_expanded_all_cmd);
-	install_element(CONFIG_NODE, &no_bgp_community_list_expanded_all_list_cmd);
+	/* Community-list show commands (config commands in bgp_filter_cli.c) */
 	install_element(VIEW_NODE, &show_bgp_community_list_cmd);
 	install_element(VIEW_NODE, &show_bgp_community_list_arg_cmd);
 
-	/* Extcommunity-list.  */
-	install_element(CONFIG_NODE, &bgp_extcommunity_list_standard_cmd);
-	install_element(CONFIG_NODE, &bgp_extcommunity_list_name_expanded_cmd);
-	install_element(CONFIG_NODE, &no_bgp_extcommunity_list_standard_all_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_extcommunity_list_standard_all_list_cmd);
-	install_element(CONFIG_NODE, &no_bgp_extcommunity_list_expanded_all_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_extcommunity_list_expanded_all_list_cmd);
+	/* Extcommunity-list show commands (config commands in bgp_filter_cli.c) */
 	install_element(VIEW_NODE, &show_bgp_extcommunity_list_cmd);
 	install_element(VIEW_NODE, &show_bgp_extcommunity_list_arg_cmd);
 
-	/* Large Community List */
-	install_element(CONFIG_NODE, &bgp_lcommunity_list_standard_cmd);
-	install_element(CONFIG_NODE, &bgp_lcommunity_list_expanded_cmd);
-	install_element(CONFIG_NODE, &bgp_lcommunity_list_name_standard_cmd);
-	install_element(CONFIG_NODE, &bgp_lcommunity_list_name_expanded_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_all_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_lcommunity_list_name_standard_all_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_lcommunity_list_name_expanded_all_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_standard_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_expanded_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_name_standard_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_name_expanded_cmd);
+	/* Large Community List show commands (config commands in bgp_filter_cli.c) */
 	install_element(VIEW_NODE, &show_bgp_lcommunity_list_cmd);
 	install_element(VIEW_NODE, &show_bgp_lcommunity_list_arg_cmd);
 
@@ -25728,9 +10929,6 @@ static struct cmd_node community_alias_node = {
 void community_alias_vty(void)
 {
 	install_node(&community_alias_node);
-
-	/* Community-list.  */
-	install_element(CONFIG_NODE, &bgp_community_alias_cmd);
 
 	bgp_community_alias_command_completion_setup();
 }
