@@ -102,28 +102,25 @@ int lib_route_map_entry_match_condition_rmap_match_condition_vpn_dataplane_modif
 	const char *dataplane;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		dataplane = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "vpn dataplane";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	dataplane = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "vpn dataplane", dataplane,
-					  RMAP_EVENT_MATCH_ADDED, args->errmsg, args->errmsg_len);
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "vpn dataplane";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+
+	ret = bgp_route_match_add(rhc->rhc_rmi, "vpn dataplane", dataplane,
+				  RMAP_EVENT_MATCH_ADDED, args->errmsg, args->errmsg_len);
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -131,14 +128,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_vpn_dataplane_modif
 int lib_route_map_entry_match_condition_rmap_match_condition_vpn_dataplane_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -154,30 +148,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_local_preference_modify
 	const char *local_pref;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		local_pref = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "local-preference";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	local_pref = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "local-preference",
-				local_pref, RMAP_EVENT_MATCH_ADDED,
-				args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "local-preference";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "local-preference",
+			local_pref, RMAP_EVENT_MATCH_ADDED,
+			args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 		return NB_OK;
 }
@@ -186,14 +177,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_local_preference_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -209,32 +197,28 @@ int lib_route_map_entry_match_condition_rmap_match_condition_alias_modify(
 	const char *alias;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		alias = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "alias";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	alias = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "alias", alias,
-					  RMAP_EVENT_MATCH_ADDED, args->errmsg,
-					  args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "alias";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_VALIDATION;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "alias", alias,
+				  RMAP_EVENT_MATCH_ADDED, args->errmsg,
+				  args->errmsg_len);
 
-		break;
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_VALIDATION;
 	}
+
+
 
 	return NB_OK;
 }
@@ -242,14 +226,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_alias_modify(
 int lib_route_map_entry_match_condition_rmap_match_condition_alias_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -265,30 +246,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_script_modify(
 	const char *script;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		script = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "script";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	script = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "script",
-				script, RMAP_EVENT_MATCH_ADDED,
-				args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "script";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "script",
+			script, RMAP_EVENT_MATCH_ADDED,
+			args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -297,14 +275,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_script_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -320,30 +295,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_origin_modify(
 	const char *origin;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		origin = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "origin";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	origin = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "origin", origin,
-					  RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "origin";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "origin", origin,
+				  RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -352,14 +324,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_origin_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -375,30 +344,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_rpki_modify(
 	const char *rpki;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		rpki = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "rpki";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	rpki = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "rpki", rpki,
-				RMAP_EVENT_MATCH_ADDED,
-				args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "rpki";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "rpki", rpki,
+			RMAP_EVENT_MATCH_ADDED,
+			args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -407,14 +373,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_rpki_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -430,30 +393,27 @@ int lib_route_map_entry_match_condition_rmap_match_condition_source_protocol_mod
 	enum rmap_compile_rets ret;
 	const char *proto;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		proto = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "source-protocol";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	proto = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "source-protocol",
-					  proto, RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "source-protocol";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "source-protocol",
+				  proto, RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -461,14 +421,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_source_protocol_mod
 int lib_route_map_entry_match_condition_rmap_match_condition_source_protocol_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -484,30 +441,27 @@ int lib_route_map_entry_match_condition_rmap_match_condition_rpki_extcommunity_m
 	const char *rpki;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		rpki = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "rpki-extcommunity";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	rpki = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "rpki-extcommunity",
-					  rpki, RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "rpki-extcommunity";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "rpki-extcommunity",
+				  rpki, RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -515,14 +469,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_rpki_extcommunity_m
 int lib_route_map_entry_match_condition_rmap_match_condition_rpki_extcommunity_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -538,30 +489,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_probability_modify(
 	const char *probability;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		probability = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "probability";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	probability = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "probability",
-					  probability, RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "probability";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "probability",
+				  probability, RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -570,14 +518,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_probability_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -593,30 +538,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_source_vrf_modify(
 	const char *vrf;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		vrf = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "source-vrf";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	vrf = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "source-vrf", vrf,
-					  RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "source-vrf";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "source-vrf", vrf,
+				  RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -625,14 +567,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_source_vrf_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -648,30 +587,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_peer_ipv4_address_modif
 	const char *peer;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		peer = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "peer";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	peer = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "peer", peer,
-					  RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "peer";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "peer", peer,
+				  RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -680,14 +616,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_peer_ipv4_address_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -703,30 +636,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_peer_interface_modify(
 	const char *peer;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		peer = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "peer";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	peer = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "peer", peer,
-				RMAP_EVENT_MATCH_ADDED,
-				args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "peer";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "peer", peer,
+			RMAP_EVENT_MATCH_ADDED,
+			args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -735,14 +665,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_peer_interface_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -758,30 +685,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_peer_ipv6_address_modif
 	const char *peer;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		peer = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "peer";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	peer = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "peer", peer,
-				RMAP_EVENT_MATCH_ADDED,
-				args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "peer";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "peer", peer,
+			RMAP_EVENT_MATCH_ADDED,
+			args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -790,14 +714,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_peer_ipv6_address_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -813,33 +734,30 @@ lib_route_map_entry_match_condition_rmap_match_condition_peer_local_modify(
 	bool value;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		value = yang_dnode_get_bool(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "peer";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	value = yang_dnode_get_bool(args->dnode, NULL);
 
-		if (value) {
-			ret = bgp_route_match_add(rhc->rhc_rmi, "peer",
-						"local",
-						RMAP_EVENT_MATCH_ADDED,
-						args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "peer";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-			if (ret != RMAP_COMPILE_SUCCESS) {
-				rhc->rhc_mhook = NULL;
-				return NB_ERR_INCONSISTENCY;
-			}
+	if (value) {
+		ret = bgp_route_match_add(rhc->rhc_rmi, "peer",
+					"local",
+					RMAP_EVENT_MATCH_ADDED,
+					args->errmsg, args->errmsg_len);
+
+		if (ret != RMAP_COMPILE_SUCCESS) {
+			rhc->rhc_mhook = NULL;
+			return NB_ERR_INCONSISTENCY;
 		}
 	}
+
 
 	return NB_OK;
 }
@@ -848,14 +766,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_peer_local_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -870,29 +785,26 @@ int lib_route_map_entry_match_condition_rmap_match_condition_src_peer_ipv4_addre
 	const char *peer;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		peer = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "src-peer";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	peer = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "src-peer", peer, RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "src-peer";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "src-peer", peer, RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -900,14 +812,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_src_peer_ipv4_addre
 int lib_route_map_entry_match_condition_rmap_match_condition_src_peer_ipv4_address_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -922,29 +831,26 @@ int lib_route_map_entry_match_condition_rmap_match_condition_src_peer_interface_
 	const char *peer;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		peer = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "src-peer";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	peer = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "src-peer", peer, RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "src-peer";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "src-peer", peer, RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -952,14 +858,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_src_peer_interface_
 int lib_route_map_entry_match_condition_rmap_match_condition_src_peer_interface_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -974,29 +877,26 @@ int lib_route_map_entry_match_condition_rmap_match_condition_src_peer_ipv6_addre
 	const char *peer;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		peer = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "src-peer";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	peer = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "src-peer", peer, RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "src-peer";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "src-peer", peer, RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1004,14 +904,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_src_peer_ipv6_addre
 int lib_route_map_entry_match_condition_rmap_match_condition_src_peer_ipv6_address_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1028,65 +925,62 @@ lib_route_map_entry_match_condition_rmap_match_condition_list_name_modify(
 	enum rmap_compile_rets ret = RMAP_COMPILE_SUCCESS;
 	const char *condition;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		list_name = yang_dnode_get_string(args->dnode, NULL);
-		condition = yang_dnode_get_string(args->dnode,
-				"../../frr-route-map:condition");
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		if (IS_MATCH_AS_LIST(condition)) {
-			/* Set destroy information. */
-			rhc->rhc_mhook = bgp_route_match_delete;
-			rhc->rhc_rule = "as-path";
-			rhc->rhc_event = RMAP_EVENT_ASLIST_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	list_name = yang_dnode_get_string(args->dnode, NULL);
+	condition = yang_dnode_get_string(args->dnode,
+			"../../frr-route-map:condition");
 
-			ret = bgp_route_match_add(rhc->rhc_rmi, "as-path",
-					list_name, RMAP_EVENT_ASLIST_ADDED,
-					args->errmsg, args->errmsg_len);
-		} else if (IS_MATCH_MAC_LIST(condition)) {
-			/* Set destroy information. */
-			rhc->rhc_mhook = bgp_route_match_delete;
-			rhc->rhc_rule = "mac address";
-			rhc->rhc_event = RMAP_EVENT_FILTER_DELETED;
+	if (IS_MATCH_AS_LIST(condition)) {
+		/* Set destroy information. */
+		rhc->rhc_mhook = bgp_route_match_delete;
+		rhc->rhc_rule = "as-path";
+		rhc->rhc_event = RMAP_EVENT_ASLIST_DELETED;
 
-			ret = bgp_route_match_add(rhc->rhc_rmi,
-						  "mac address",
-						  list_name,
-						  RMAP_EVENT_FILTER_ADDED,
-						  args->errmsg, args->errmsg_len);
-		} else if (IS_MATCH_ROUTE_SRC(condition)) {
-			/* Set destroy information. */
-			rhc->rhc_mhook = bgp_route_match_delete;
-			rhc->rhc_rule = "ip route-source";
-			rhc->rhc_event = RMAP_EVENT_FILTER_DELETED;
+		ret = bgp_route_match_add(rhc->rhc_rmi, "as-path",
+				list_name, RMAP_EVENT_ASLIST_ADDED,
+				args->errmsg, args->errmsg_len);
+	} else if (IS_MATCH_MAC_LIST(condition)) {
+		/* Set destroy information. */
+		rhc->rhc_mhook = bgp_route_match_delete;
+		rhc->rhc_rule = "mac address";
+		rhc->rhc_event = RMAP_EVENT_FILTER_DELETED;
 
-			ret = bgp_route_match_add(rhc->rhc_rmi,
-					"ip route-source",
-					list_name, RMAP_EVENT_FILTER_ADDED,
-					args->errmsg, args->errmsg_len);
-		} else if (IS_MATCH_ROUTE_SRC_PL(condition)) {
-			/* Set destroy information. */
-			rhc->rhc_mhook = bgp_route_match_delete;
-			rhc->rhc_rule = "ip route-source prefix-list";
-			rhc->rhc_event = RMAP_EVENT_PLIST_DELETED;
+		ret = bgp_route_match_add(rhc->rhc_rmi,
+					  "mac address",
+					  list_name,
+					  RMAP_EVENT_FILTER_ADDED,
+					  args->errmsg, args->errmsg_len);
+	} else if (IS_MATCH_ROUTE_SRC(condition)) {
+		/* Set destroy information. */
+		rhc->rhc_mhook = bgp_route_match_delete;
+		rhc->rhc_rule = "ip route-source";
+		rhc->rhc_event = RMAP_EVENT_FILTER_DELETED;
 
-			ret = bgp_route_match_add(rhc->rhc_rmi,
-					"ip route-source prefix-list",
-					list_name, RMAP_EVENT_PLIST_ADDED,
-					args->errmsg, args->errmsg_len);
-		}
+		ret = bgp_route_match_add(rhc->rhc_rmi,
+				"ip route-source",
+				list_name, RMAP_EVENT_FILTER_ADDED,
+				args->errmsg, args->errmsg_len);
+	} else if (IS_MATCH_ROUTE_SRC_PL(condition)) {
+		/* Set destroy information. */
+		rhc->rhc_mhook = bgp_route_match_delete;
+		rhc->rhc_rule = "ip route-source prefix-list";
+		rhc->rhc_event = RMAP_EVENT_PLIST_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+		ret = bgp_route_match_add(rhc->rhc_rmi,
+				"ip route-source prefix-list",
+				list_name, RMAP_EVENT_PLIST_ADDED,
+				args->errmsg, args->errmsg_len);
 	}
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
+	}
+
 
 	return NB_OK;
 }
@@ -1095,14 +989,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_list_name_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1117,29 +1008,26 @@ lib_route_map_entry_match_condition_rmap_match_condition_evpn_default_route_crea
 	struct routemap_hook_context *rhc;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "evpn default-route";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "evpn default-route",
-					  NULL, RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "evpn default-route";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "evpn default-route",
+				  NULL, RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1148,14 +1036,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_evpn_default_route_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1171,30 +1056,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_evpn_vni_modify(
 	const char *vni;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		vni = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "evpn vni";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	vni = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "evpn vni", vni,
-				RMAP_EVENT_MATCH_ADDED,
-				args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "evpn vni";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "evpn vni", vni,
+			RMAP_EVENT_MATCH_ADDED,
+			args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1203,14 +1085,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_evpn_vni_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1226,31 +1105,28 @@ lib_route_map_entry_match_condition_rmap_match_condition_evpn_route_type_modify(
 	const char *type;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "evpn route-type";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "evpn route-type",
-					  type,
-					  RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "evpn route-type";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "evpn route-type",
+				  type,
+				  RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1259,14 +1135,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_evpn_route_type_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1282,30 +1155,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_route_distinguisher_mod
 	const char *rd;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		rd = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "evpn rd";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	rd = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "evpn rd", rd,
-				RMAP_EVENT_MATCH_ADDED,
-				args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "evpn rd";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "evpn rd", rd,
+			RMAP_EVENT_MATCH_ADDED,
+			args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1314,14 +1184,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_route_distinguisher_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1336,28 +1203,25 @@ int lib_route_map_entry_match_condition_rmap_match_condition_community_limit_mod
 	const char *limit;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		limit = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "community-limit";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	limit = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "community-limit", limit,
-					  RMAP_EVENT_MATCH_ADDED, args->errmsg, args->errmsg_len);
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "community-limit";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "community-limit", limit,
+				  RMAP_EVENT_MATCH_ADDED, args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1365,14 +1229,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_community_limit_mod
 int lib_route_map_entry_match_condition_rmap_match_condition_community_limit_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1441,14 +1302,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_comm_list_create(
 int lib_route_map_entry_match_condition_rmap_match_condition_comm_list_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1619,30 +1477,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_ipv4_address_modify(
 	const char *peer;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		peer = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "ip next-hop address";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	peer = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, rhc->rhc_rule,
-					  peer, RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "ip next-hop address";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, rhc->rhc_rule,
+				  peer, RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1651,14 +1506,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_ipv4_address_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1674,30 +1526,27 @@ lib_route_map_entry_match_condition_rmap_match_condition_ipv6_address_modify(
 	const char *peer;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		peer = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "ipv6 next-hop address";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	peer = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, rhc->rhc_rule,
-					  peer, RMAP_EVENT_MATCH_ADDED,
-					  args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "ipv6 next-hop address";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, rhc->rhc_rule,
+				  peer, RMAP_EVENT_MATCH_ADDED,
+				  args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1706,14 +1555,11 @@ int
 lib_route_map_entry_match_condition_rmap_match_condition_ipv6_address_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1729,28 +1575,25 @@ int lib_route_map_entry_set_action_rmap_set_action_distance_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "distance";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "distance", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "distance";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "distance", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1758,14 +1601,11 @@ int lib_route_map_entry_set_action_rmap_set_action_distance_modify(
 int lib_route_map_entry_set_action_rmap_set_action_distance_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1780,28 +1620,25 @@ int lib_route_map_entry_match_condition_rmap_match_condition_extcommunity_limit_
 	const char *limit;
 	enum rmap_compile_rets ret;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		limit = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		rhc->rhc_mhook = bgp_route_match_delete;
-		rhc->rhc_rule = "extcommunity-limit";
-		rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	limit = yang_dnode_get_string(args->dnode, NULL);
 
-		ret = bgp_route_match_add(rhc->rhc_rmi, "extcommunity-limit", limit,
-					  RMAP_EVENT_MATCH_ADDED, args->errmsg, args->errmsg_len);
+	rhc->rhc_mhook = bgp_route_match_delete;
+	rhc->rhc_rule = "extcommunity-limit";
+	rhc->rhc_event = RMAP_EVENT_MATCH_DELETED;
 
-		if (ret != RMAP_COMPILE_SUCCESS) {
-			rhc->rhc_mhook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	ret = bgp_route_match_add(rhc->rhc_rmi, "extcommunity-limit", limit,
+				  RMAP_EVENT_MATCH_ADDED, args->errmsg, args->errmsg_len);
+
+	if (ret != RMAP_COMPILE_SUCCESS) {
+		rhc->rhc_mhook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1809,14 +1646,11 @@ int lib_route_map_entry_match_condition_rmap_match_condition_extcommunity_limit_
 int lib_route_map_entry_match_condition_rmap_match_condition_extcommunity_limit_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_match_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_match_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1833,28 +1667,25 @@ lib_route_map_entry_set_action_rmap_set_action_extcommunity_rt_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "extcommunity rt";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "extcommunity rt", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "extcommunity rt";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "extcommunity rt", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1863,14 +1694,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_extcommunity_rt_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1886,28 +1714,25 @@ int lib_route_map_entry_set_action_rmap_set_action_extcommunity_nt_modify(
 	const char *str;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		str = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "extcommunity nt";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	str = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "extcommunity nt", str,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "extcommunity nt";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "extcommunity nt", str,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1915,14 +1740,11 @@ int lib_route_map_entry_set_action_rmap_set_action_extcommunity_nt_modify(
 int lib_route_map_entry_set_action_rmap_set_action_extcommunity_nt_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1939,29 +1761,26 @@ lib_route_map_entry_set_action_rmap_set_action_extcommunity_soo_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "extcommunity soo";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "extcommunity soo",
-				     type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "extcommunity soo";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "extcommunity soo",
+			     type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -1970,14 +1789,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_extcommunity_soo_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -1993,28 +1809,25 @@ int lib_route_map_entry_set_action_rmap_set_action_ipv4_address_modify(
 	const char *addr;
 	int rv = CMD_SUCCESS;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		addr = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
-		rhc->rhc_rule = "ipv4 vpn next-hop";
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	addr = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, addr,
-				     args->errmsg, args->errmsg_len);
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	rhc->rhc_rule = "ipv4 vpn next-hop";
 
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, addr,
+			     args->errmsg, args->errmsg_len);
+
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2022,14 +1835,11 @@ int lib_route_map_entry_set_action_rmap_set_action_ipv4_address_modify(
 int lib_route_map_entry_set_action_rmap_set_action_ipv4_address_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2045,29 +1855,26 @@ int lib_route_map_entry_set_action_rmap_set_action_ipv4_nexthop_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "ip next-hop";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, type,
-				    args->errmsg, args->errmsg_len);
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "ip next-hop";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
 
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, type,
+			    args->errmsg, args->errmsg_len);
+
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2075,14 +1882,11 @@ int lib_route_map_entry_set_action_rmap_set_action_ipv4_nexthop_modify(
 int lib_route_map_entry_set_action_rmap_set_action_ipv4_nexthop_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2147,14 +1951,11 @@ int lib_route_map_entry_set_action_rmap_set_action_ipv6_address_modify(
 int lib_route_map_entry_set_action_rmap_set_action_ipv6_address_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2171,39 +1972,36 @@ int lib_route_map_entry_set_action_rmap_set_action_preference_modify(
 	const char *action = NULL;
 	bool value;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		value = yang_dnode_get_bool(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	value = yang_dnode_get_bool(args->dnode, NULL);
 
-		action = yang_dnode_get_string(args->dnode,
-				"../../frr-route-map:action");
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
 
-		if (value) {
-			if (IS_SET_IPV6_PEER_ADDR(action))
-				/* Set destroy information. */
-				rhc->rhc_rule = "ipv6 next-hop peer-address";
-			else
-				rhc->rhc_rule = "ipv6 next-hop prefer-global";
+	action = yang_dnode_get_string(args->dnode,
+			"../../frr-route-map:action");
 
-			rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule,
-					     NULL,
-					     args->errmsg, args->errmsg_len);
-		}
+	if (value) {
+		if (IS_SET_IPV6_PEER_ADDR(action))
+			/* Set destroy information. */
+			rhc->rhc_rule = "ipv6 next-hop peer-address";
+		else
+			rhc->rhc_rule = "ipv6 next-hop prefer-global";
 
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+		rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule,
+				     NULL,
+				     args->errmsg, args->errmsg_len);
 	}
+
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
+	}
+
 
 	return NB_OK;
 }
@@ -2211,14 +2009,11 @@ int lib_route_map_entry_set_action_rmap_set_action_preference_modify(
 int lib_route_map_entry_set_action_rmap_set_action_preference_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2234,28 +2029,25 @@ int lib_route_map_entry_set_action_rmap_set_action_label_index_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "label-index";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "label-index", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "label-index";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "label-index", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2263,14 +2055,11 @@ int lib_route_map_entry_set_action_rmap_set_action_label_index_modify(
 int lib_route_map_entry_set_action_rmap_set_action_label_index_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2286,29 +2075,26 @@ int lib_route_map_entry_set_action_rmap_set_action_local_pref_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "local-preference";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "local-preference",
-				     type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "local-preference";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "local-preference",
+			     type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2316,14 +2102,11 @@ int lib_route_map_entry_set_action_rmap_set_action_local_pref_modify(
 int lib_route_map_entry_set_action_rmap_set_action_local_pref_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2339,28 +2122,25 @@ int lib_route_map_entry_set_action_rmap_set_action_weight_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "weight";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "weight", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "weight";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "weight", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2368,14 +2148,11 @@ int lib_route_map_entry_set_action_rmap_set_action_weight_modify(
 int lib_route_map_entry_set_action_rmap_set_action_weight_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2391,28 +2168,25 @@ int lib_route_map_entry_set_action_rmap_set_action_origin_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "origin";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "origin", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "origin";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "origin", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2420,15 +2194,12 @@ int lib_route_map_entry_set_action_rmap_set_action_origin_modify(
 int lib_route_map_entry_set_action_rmap_set_action_origin_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-	}
+	return lib_route_map_entry_set_destroy(args);
+
+
 
 	return NB_OK;
 }
@@ -2444,28 +2215,25 @@ int lib_route_map_entry_set_action_rmap_set_action_originator_id_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "originator-id";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "originator-id", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "originator-id";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "originator-id", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2473,14 +2241,11 @@ int lib_route_map_entry_set_action_rmap_set_action_originator_id_modify(
 int lib_route_map_entry_set_action_rmap_set_action_originator_id_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2496,28 +2261,25 @@ int lib_route_map_entry_set_action_rmap_set_action_table_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "table";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "table", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "table";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "table", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2525,14 +2287,11 @@ int lib_route_map_entry_set_action_rmap_set_action_table_modify(
 int lib_route_map_entry_set_action_rmap_set_action_table_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2548,27 +2307,24 @@ lib_route_map_entry_set_action_rmap_set_action_atomic_aggregate_create(
 	struct routemap_hook_context *rhc;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "atomic-aggregate";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
 
-		rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, NULL,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "atomic-aggregate";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, NULL,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2577,14 +2333,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_atomic_aggregate_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2600,28 +2353,25 @@ int lib_route_map_entry_set_action_rmap_set_action_aigp_metric_modify(
 	const char *aigp;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		aigp = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "aigp-metric";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	aigp = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, aigp,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "aigp-metric";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, aigp,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2629,14 +2379,11 @@ int lib_route_map_entry_set_action_rmap_set_action_aigp_metric_modify(
 int lib_route_map_entry_set_action_rmap_set_action_aigp_metric_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2653,29 +2400,26 @@ lib_route_map_entry_set_action_rmap_set_action_prepend_as_path_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "as-path prepend";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "as-path prepend",
-				     type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "as-path prepend";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "as-path prepend",
+			     type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2684,14 +2428,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_prepend_as_path_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2708,38 +2449,35 @@ int lib_route_map_entry_set_action_rmap_set_action_last_as_modify(
 	char *argstr;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		value = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "as-path prepend";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	value = yang_dnode_get_string(args->dnode, NULL);
 
-		argstr = XMALLOC(MTYPE_ROUTE_MAP_COMPILED,
-				strlen(value) + strlen("last-as") + 2);
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "as-path prepend";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
 
-		snprintf(argstr, (strlen(value) + strlen("last-as") + 2),
-			 "last-as %s", value);
+	argstr = XMALLOC(MTYPE_ROUTE_MAP_COMPILED,
+			strlen(value) + strlen("last-as") + 2);
 
-		rv = generic_set_add(rhc->rhc_rmi, "as-path prepend",
-				     argstr,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			XFREE(MTYPE_ROUTE_MAP_COMPILED, argstr);
-			return NB_ERR_INCONSISTENCY;
-		}
+	snprintf(argstr, (strlen(value) + strlen("last-as") + 2),
+		 "last-as %s", value);
 
+	rv = generic_set_add(rhc->rhc_rmi, "as-path prepend",
+			     argstr,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
 		XFREE(MTYPE_ROUTE_MAP_COMPILED, argstr);
+		return NB_ERR_INCONSISTENCY;
 	}
+
+	XFREE(MTYPE_ROUTE_MAP_COMPILED, argstr);
+
 
 	return NB_OK;
 }
@@ -2747,14 +2485,11 @@ int lib_route_map_entry_set_action_rmap_set_action_last_as_modify(
 int lib_route_map_entry_set_action_rmap_set_action_last_as_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2771,29 +2506,26 @@ lib_route_map_entry_set_action_rmap_set_action_exclude_as_path_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "as-path exclude";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "as-path exclude",
-				     type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "as-path exclude";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "as-path exclude",
+			     type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2802,14 +2534,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_exclude_as_path_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2825,28 +2554,25 @@ int lib_route_map_entry_set_action_rmap_set_action_replace_as_path_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "as-path replace";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "as-path replace", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "as-path replace";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "as-path replace", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2854,14 +2580,11 @@ int lib_route_map_entry_set_action_rmap_set_action_replace_as_path_modify(
 int lib_route_map_entry_set_action_rmap_set_action_replace_as_path_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2877,34 +2600,31 @@ int lib_route_map_entry_set_action_rmap_set_action_community_none_modify(
 	bool none = false;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		none = yang_dnode_get_bool(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "community";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	none = yang_dnode_get_bool(args->dnode, NULL);
 
-		if (none) {
-			rv = generic_set_add(rhc->rhc_rmi, "community",
-					     "none",
-					     args->errmsg, args->errmsg_len);
-			if (rv != CMD_SUCCESS) {
-				rhc->rhc_shook = NULL;
-				return NB_ERR_INCONSISTENCY;
-			}
-			return NB_OK;
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "community";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	if (none) {
+		rv = generic_set_add(rhc->rhc_rmi, "community",
+				     "none",
+				     args->errmsg, args->errmsg_len);
+		if (rv != CMD_SUCCESS) {
+			rhc->rhc_shook = NULL;
+			return NB_ERR_INCONSISTENCY;
 		}
-
-		return NB_ERR_INCONSISTENCY;
+		return NB_OK;
 	}
+
+	return NB_ERR_INCONSISTENCY;
+
 
 	return NB_OK;
 }
@@ -2913,14 +2633,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_community_none_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2937,28 +2654,25 @@ lib_route_map_entry_set_action_rmap_set_action_community_string_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "community";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "community", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "community";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "community", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -2967,14 +2681,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_community_string_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -2991,35 +2702,32 @@ lib_route_map_entry_set_action_rmap_set_action_large_community_none_modify(
 	bool none = false;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		none = yang_dnode_get_bool(args->dnode, NULL);
-
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "large-community";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
-
-		if (none) {
-			rv = generic_set_add(rhc->rhc_rmi,
-					     "large-community",
-					     "none",
-					      args->errmsg, args->errmsg_len);
-			if (rv != CMD_SUCCESS) {
-				rhc->rhc_shook = NULL;
-				return NB_ERR_INCONSISTENCY;
-			}
+	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-		}
 
-		return NB_ERR_INCONSISTENCY;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	none = yang_dnode_get_bool(args->dnode, NULL);
+
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "large-community";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	if (none) {
+		rv = generic_set_add(rhc->rhc_rmi,
+				     "large-community",
+				     "none",
+				      args->errmsg, args->errmsg_len);
+		if (rv != CMD_SUCCESS) {
+			rhc->rhc_shook = NULL;
+			return NB_ERR_INCONSISTENCY;
+		}
+	return NB_OK;
 	}
+
+	return NB_ERR_INCONSISTENCY;
+
 
 	return NB_OK;
 }
@@ -3028,14 +2736,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_large_community_none_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -3052,29 +2757,26 @@ lib_route_map_entry_set_action_rmap_set_action_large_community_string_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "large-community";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "large-community",
-				     type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "large-community";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "large-community",
+			     type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -3083,14 +2785,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_large_community_string_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -3108,14 +2807,11 @@ int lib_route_map_entry_set_action_rmap_set_action_aggregator_create(
 int lib_route_map_entry_set_action_rmap_set_action_aggregator_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -3215,38 +2911,35 @@ int lib_route_map_entry_set_action_rmap_set_action_comm_list_name_modify(
 	const char *action;
 	int rv = CMD_SUCCESS;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		value = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	value = yang_dnode_get_string(args->dnode, NULL);
 
-		action = yang_dnode_get_string(args->dnode,
-				"../../frr-route-map:action");
-		if (IS_SET_COMM_LIST_DEL(action))
-			rhc->rhc_rule = "comm-list";
-		else if (IS_SET_EXTCOMM_LIST_DEL(action))
-			rhc->rhc_rule = "extended-comm-list";
-		else
-			rhc->rhc_rule = "large-comm-list";
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
 
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	action = yang_dnode_get_string(args->dnode,
+			"../../frr-route-map:action");
+	if (IS_SET_COMM_LIST_DEL(action))
+		rhc->rhc_rule = "comm-list";
+	else if (IS_SET_EXTCOMM_LIST_DEL(action))
+		rhc->rhc_rule = "extended-comm-list";
+	else
+		rhc->rhc_rule = "large-comm-list";
 
-		rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, value,
-				     args->errmsg, args->errmsg_len);
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
 
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	rv = generic_set_add(rhc->rhc_rmi, rhc->rhc_rule, value,
+			     args->errmsg, args->errmsg_len);
+
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -3255,14 +2948,11 @@ int
 lib_route_map_entry_set_action_rmap_set_action_comm_list_name_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -3280,14 +2970,11 @@ int lib_route_map_entry_set_action_rmap_set_action_extcommunity_lb_create(
 int lib_route_map_entry_set_action_rmap_set_action_extcommunity_lb_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -3376,28 +3063,25 @@ int lib_route_map_entry_set_action_rmap_set_action_extcommunity_color_modify(
 	const char *str;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		str = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "extcommunity color";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	str = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "extcommunity color", str,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "extcommunity color";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "extcommunity color", str,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -3405,14 +3089,11 @@ int lib_route_map_entry_set_action_rmap_set_action_extcommunity_color_modify(
 int lib_route_map_entry_set_action_rmap_set_action_extcommunity_color_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -3439,34 +3120,31 @@ int lib_route_map_entry_set_action_rmap_set_action_extcommunity_none_modify(
 	bool none = false;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		none = yang_dnode_get_bool(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "extcommunity";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	none = yang_dnode_get_bool(args->dnode, NULL);
 
-		if (none) {
-			rv = generic_set_add(rhc->rhc_rmi, "extcommunity",
-					     "none", args->errmsg,
-					     args->errmsg_len);
-			if (rv != CMD_SUCCESS) {
-				rhc->rhc_shook = NULL;
-				return NB_ERR_INCONSISTENCY;
-			}
-			return NB_OK;
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "extcommunity";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	if (none) {
+		rv = generic_set_add(rhc->rhc_rmi, "extcommunity",
+				     "none", args->errmsg,
+				     args->errmsg_len);
+		if (rv != CMD_SUCCESS) {
+			rhc->rhc_shook = NULL;
+			return NB_ERR_INCONSISTENCY;
 		}
-
-		return NB_ERR_INCONSISTENCY;
+		return NB_OK;
 	}
+
+	return NB_ERR_INCONSISTENCY;
+
 
 	return NB_OK;
 }
@@ -3474,14 +3152,11 @@ int lib_route_map_entry_set_action_rmap_set_action_extcommunity_none_modify(
 int lib_route_map_entry_set_action_rmap_set_action_extcommunity_none_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -3497,28 +3172,25 @@ int lib_route_map_entry_set_action_rmap_set_action_evpn_gateway_ip_ipv4_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "evpn gateway-ip ipv4";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "evpn gateway-ip ipv4", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "evpn gateway-ip ipv4";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "evpn gateway-ip ipv4", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -3526,14 +3198,11 @@ int lib_route_map_entry_set_action_rmap_set_action_evpn_gateway_ip_ipv4_modify(
 int lib_route_map_entry_set_action_rmap_set_action_evpn_gateway_ip_ipv4_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -3549,28 +3218,25 @@ int lib_route_map_entry_set_action_rmap_set_action_evpn_gateway_ip_ipv6_modify(
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "evpn gateway-ip ipv6";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi, "evpn gateway-ip ipv6", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "evpn gateway-ip ipv6";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "evpn gateway-ip ipv6", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -3578,14 +3244,99 @@ int lib_route_map_entry_set_action_rmap_set_action_evpn_gateway_ip_ipv6_modify(
 int lib_route_map_entry_set_action_rmap_set_action_evpn_gateway_ip_ipv6_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
+
+	return NB_OK;
+}
+
+/*
+ * XPath:
+ * /frr-route-map:lib/route-map/entry/set-action/rmap-set-action/frr-bgp-route-map:ipv4-vpn-address
+ */
+int lib_route_map_entry_set_action_rmap_set_action_ipv4_vpn_address_modify(
+	struct nb_cb_modify_args *args)
+{
+	struct routemap_hook_context *rhc;
+	const char *addr;
+	int rv;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	addr = yang_dnode_get_string(args->dnode, NULL);
+
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "ipv4 vpn next-hop";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "ipv4 vpn next-hop", addr,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
+
+	return NB_OK;
+}
+
+int lib_route_map_entry_set_action_rmap_set_action_ipv4_vpn_address_destroy(
+	struct nb_cb_destroy_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
+
+	return NB_OK;
+}
+
+/*
+ * XPath:
+ * /frr-route-map:lib/route-map/entry/set-action/rmap-set-action/frr-bgp-route-map:ipv6-vpn-address
+ */
+int lib_route_map_entry_set_action_rmap_set_action_ipv6_vpn_address_modify(
+	struct nb_cb_modify_args *args)
+{
+	struct routemap_hook_context *rhc;
+	const char *addr;
+	int rv;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	addr = yang_dnode_get_string(args->dnode, NULL);
+
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "ipv6 vpn next-hop";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi, "ipv6 vpn next-hop", addr,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
+	}
+
+
+	return NB_OK;
+}
+
+int lib_route_map_entry_set_action_rmap_set_action_ipv6_vpn_address_destroy(
+	struct nb_cb_destroy_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }
@@ -3601,29 +3352,26 @@ int lib_route_map_entry_set_action_rmap_set_action_l3vpn_nexthop_encapsulation_m
 	const char *type;
 	int rv;
 
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		/* Add configuration. */
-		rhc = nb_running_get_entry(args->dnode, NULL, true);
-		type = yang_dnode_get_string(args->dnode, NULL);
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
 
-		/* Set destroy information. */
-		rhc->rhc_shook = generic_set_delete;
-		rhc->rhc_rule = "l3vpn next-hop encapsulation";
-		rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+	/* Add configuration. */
+	rhc = nb_running_get_entry(args->dnode, NULL, true);
+	type = yang_dnode_get_string(args->dnode, NULL);
 
-		rv = generic_set_add(rhc->rhc_rmi,
-				     "l3vpn next-hop encapsulation", type,
-				     args->errmsg, args->errmsg_len);
-		if (rv != CMD_SUCCESS) {
-			rhc->rhc_shook = NULL;
-			return NB_ERR_INCONSISTENCY;
-		}
+	/* Set destroy information. */
+	rhc->rhc_shook = generic_set_delete;
+	rhc->rhc_rule = "l3vpn next-hop encapsulation";
+	rhc->rhc_event = RMAP_EVENT_SET_DELETED;
+
+	rv = generic_set_add(rhc->rhc_rmi,
+			     "l3vpn next-hop encapsulation", type,
+			     args->errmsg, args->errmsg_len);
+	if (rv != CMD_SUCCESS) {
+		rhc->rhc_shook = NULL;
+		return NB_ERR_INCONSISTENCY;
 	}
+
 
 	return NB_OK;
 }
@@ -3631,14 +3379,11 @@ int lib_route_map_entry_set_action_rmap_set_action_l3vpn_nexthop_encapsulation_m
 int lib_route_map_entry_set_action_rmap_set_action_l3vpn_nexthop_encapsulation_destroy(
 	struct nb_cb_destroy_args *args)
 {
-	switch (args->event) {
-	case NB_EV_VALIDATE:
-	case NB_EV_PREPARE:
-	case NB_EV_ABORT:
-		break;
-	case NB_EV_APPLY:
-		return lib_route_map_entry_set_destroy(args);
-	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_route_map_entry_set_destroy(args);
+
 
 	return NB_OK;
 }

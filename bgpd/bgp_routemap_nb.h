@@ -12,6 +12,7 @@ extern "C" {
 #endif
 
 extern const struct frr_yang_module_info frr_bgp_route_map_info;
+extern const struct frr_yang_module_info frr_zebra_route_map_info;
 
 /* prototypes */
 int lib_route_map_entry_match_condition_rmap_match_condition_vpn_dataplane_modify(
@@ -191,6 +192,14 @@ int lib_route_map_entry_set_action_rmap_set_action_evpn_gateway_ip_ipv4_destroy(
 int lib_route_map_entry_set_action_rmap_set_action_evpn_gateway_ip_ipv6_modify(
 	struct nb_cb_modify_args *args);
 int lib_route_map_entry_set_action_rmap_set_action_evpn_gateway_ip_ipv6_destroy(
+	struct nb_cb_destroy_args *args);
+int lib_route_map_entry_set_action_rmap_set_action_ipv4_vpn_address_modify(
+	struct nb_cb_modify_args *args);
+int lib_route_map_entry_set_action_rmap_set_action_ipv4_vpn_address_destroy(
+	struct nb_cb_destroy_args *args);
+int lib_route_map_entry_set_action_rmap_set_action_ipv6_vpn_address_modify(
+	struct nb_cb_modify_args *args);
+int lib_route_map_entry_set_action_rmap_set_action_ipv6_vpn_address_destroy(
 	struct nb_cb_destroy_args *args);
 int lib_route_map_entry_set_action_rmap_set_action_extcommunity_color_modify(
 	struct nb_cb_modify_args *args);

@@ -486,10 +486,104 @@ const struct frr_yang_module_info frr_bgp_route_map_info = {
 			}
 		},
 		{
+			.xpath = "/frr-route-map:lib/route-map/entry/set-action/rmap-set-action/frr-bgp-route-map:ipv4-vpn-address",
+			.cbs = {
+				.modify = lib_route_map_entry_set_action_rmap_set_action_ipv4_vpn_address_modify,
+				.destroy = lib_route_map_entry_set_action_rmap_set_action_ipv4_vpn_address_destroy,
+			}
+		},
+		{
+			.xpath = "/frr-route-map:lib/route-map/entry/set-action/rmap-set-action/frr-bgp-route-map:ipv6-vpn-address",
+			.cbs = {
+				.modify = lib_route_map_entry_set_action_rmap_set_action_ipv6_vpn_address_modify,
+				.destroy = lib_route_map_entry_set_action_rmap_set_action_ipv6_vpn_address_destroy,
+			}
+		},
+		{
 			.xpath = "/frr-route-map:lib/route-map/entry/set-action/rmap-set-action/frr-bgp-route-map:l3vpn-nexthop-encapsulation",
 			.cbs = {
 				.modify = lib_route_map_entry_set_action_rmap_set_action_l3vpn_nexthop_encapsulation_modify,
 				.destroy = lib_route_map_entry_set_action_rmap_set_action_l3vpn_nexthop_encapsulation_destroy,
+			}
+		},
+		{
+			.xpath = NULL,
+		},
+	}
+};
+
+/*
+ * Secondary NB module info so bgpd also receives "match source-protocol"
+ * changes written by the zebra-owned DEFPY in mgmtd.
+ *
+ * The CLI `match source-protocol` is installed exactly once in mgmtd by
+ * zebra_cli_init (see zebra_cli.c), and it writes to the
+ * frr-zebra-route-map:source-protocol augment.  Without this registration
+ * mgmtd would deliver the config only to zebra, so bgpd's route_map_master
+ * would never see the match rule.  Installing a second DEFPY in bgpd would
+ * collide at RMAP_NODE and silently drop the command (duplicate install
+ * corrupts the command-graph merge); instead we load the frr-zebra-route-map
+ * module in bgpd and hook the same callback that already backs the
+ * frr-bgp-route-map:source-protocol leaf.
+ *
+ * The other five zebra-route-map xpaths (prefix-length, source-instance,
+ * ipv{4,6}-src-address) are zebra-only semantics that don't apply to BGP
+ * routes; they get no-op stubs so nb_validate_callbacks doesn't abort bgpd
+ * on startup.
+ */
+static int bgp_nb_zebra_rm_stub_modify(struct nb_cb_modify_args *args)
+{
+	return NB_OK;
+}
+
+static int bgp_nb_zebra_rm_stub_destroy(struct nb_cb_destroy_args *args)
+{
+	return NB_OK;
+}
+
+const struct frr_yang_module_info frr_zebra_route_map_info = {
+	.name = "frr-zebra-route-map",
+	.nodes = {
+		{
+			.xpath = "/frr-route-map:lib/route-map/entry/match-condition/rmap-match-condition/frr-zebra-route-map:ipv4-prefix-length",
+			.cbs = {
+				.modify = bgp_nb_zebra_rm_stub_modify,
+				.destroy = bgp_nb_zebra_rm_stub_destroy,
+			}
+		},
+		{
+			.xpath = "/frr-route-map:lib/route-map/entry/match-condition/rmap-match-condition/frr-zebra-route-map:ipv6-prefix-length",
+			.cbs = {
+				.modify = bgp_nb_zebra_rm_stub_modify,
+				.destroy = bgp_nb_zebra_rm_stub_destroy,
+			}
+		},
+		{
+			.xpath = "/frr-route-map:lib/route-map/entry/match-condition/rmap-match-condition/frr-zebra-route-map:source-instance",
+			.cbs = {
+				.modify = bgp_nb_zebra_rm_stub_modify,
+				.destroy = bgp_nb_zebra_rm_stub_destroy,
+			}
+		},
+		{
+			.xpath = "/frr-route-map:lib/route-map/entry/match-condition/rmap-match-condition/frr-zebra-route-map:source-protocol",
+			.cbs = {
+				.modify = lib_route_map_entry_match_condition_rmap_match_condition_source_protocol_modify,
+				.destroy = lib_route_map_entry_match_condition_rmap_match_condition_source_protocol_destroy,
+			}
+		},
+		{
+			.xpath = "/frr-route-map:lib/route-map/entry/set-action/rmap-set-action/frr-zebra-route-map:ipv4-src-address",
+			.cbs = {
+				.modify = bgp_nb_zebra_rm_stub_modify,
+				.destroy = bgp_nb_zebra_rm_stub_destroy,
+			}
+		},
+		{
+			.xpath = "/frr-route-map:lib/route-map/entry/set-action/rmap-set-action/frr-zebra-route-map:ipv6-src-address",
+			.cbs = {
+				.modify = bgp_nb_zebra_rm_stub_modify,
+				.destroy = bgp_nb_zebra_rm_stub_destroy,
 			}
 		},
 		{
