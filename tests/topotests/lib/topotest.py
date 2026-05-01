@@ -1786,6 +1786,18 @@ class Router(Node):
                     self.daemons_options["mgmtd"] = ""
                     # Auto-Started mgmtd has no config, so it will read from zebra config
 
+            if (daemon == "bgpd") and (self.daemons["mgmtd"] == 0):
+                # Add mgmtd with bgpd - required for NB-migrated CLI commands.
+                # In NB/mgmtd-backend FRR, `router bgp` and its subcommands are
+                # VTYSH_MGMTD; they must reach mgmtd for bgpd to receive the
+                # resulting backend push. Tests that load only RD_BGP without
+                # RD_MGMTD or RD_ZEBRA would otherwise have no path for
+                # configuration to reach bgpd.
+                mgmtd_path = os.path.join(self.daemondir, "mgmtd")
+                if os.path.isfile(mgmtd_path):
+                    self.daemons["mgmtd"] = 1
+                    self.daemons_options["mgmtd"] = ""
+
             if (daemon == "zebra") and (self.daemons["staticd"] == 0):
                 # Add staticd with zebra - if it exists
                 staticd_path = os.path.join(self.daemondir, "staticd")
