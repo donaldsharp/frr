@@ -102,6 +102,11 @@ module frr-bgp-types {
         description
           "External BGP peer.";
       }
+      enum "auto" {
+        value 4;
+        description
+          "Auto-detect remote AS from peer's OPEN message.";
+      }
     }
     description
       "AS type, which specifies the type of AS or BGP peer.";
@@ -166,5 +171,98 @@ module frr-bgp-types {
     }
     description
       "Direction of traffic flow, either ingress or egress.";
+  }
+
+  typedef afi {
+    type enumeration {
+      enum "ipv4" {
+        value 1;
+        description
+          "IPv4 address family.";
+      }
+      enum "ipv6" {
+        value 2;
+        description
+          "IPv6 address family.";
+      }
+      enum "l2vpn" {
+        value 25;
+        description
+          "L2VPN address family.";
+      }
+    }
+    description
+      "Address Family Identifier (AFI).";
+  }
+
+  typedef safi {
+    type enumeration {
+      enum "unicast" {
+        value 1;
+        description
+          "Unicast.";
+      }
+      enum "multicast" {
+        value 2;
+        description
+          "Multicast.";
+      }
+      enum "labeled-unicast" {
+        value 4;
+        description
+          "Labeled unicast.";
+      }
+      enum "vpn" {
+        value 128;
+        description
+          "MPLS L3VPN.";
+      }
+      enum "evpn" {
+        value 70;
+        description
+          "Ethernet VPN.";
+      }
+      enum "flowspec" {
+        value 133;
+        description
+          "BGP Flowspec.";
+      }
+    }
+    description
+      "Subsequent Address Family Identifier (SAFI).";
+  }
+
+  typedef bgp-local-role {
+    type enumeration {
+      enum "provider" {
+        value 0;
+        description
+          "This router is a provider for the peer.";
+      }
+      enum "rs-server" {
+        value 1;
+        description
+          "This router is a route server for the peer.";
+      }
+      enum "rs-client" {
+        value 2;
+        description
+          "This router is a route server client for the peer.";
+      }
+      enum "customer" {
+        value 3;
+        description
+          "This router is a customer of the peer.";
+      }
+      enum "peer" {
+        value 4;
+        description
+          "This router has a peering relationship with the peer.";
+      }
+    }
+    description
+      "BGP Role capability (RFC 9234).";
+    reference
+      "RFC 9234: Route Leak Prevention and Detection Using Roles in UPDATE and OPEN Messages";
   }
 }

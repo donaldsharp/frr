@@ -73,6 +73,25 @@ submodule frr-bgp-common-multiprotocol {
       }
       description
         "IPv4 unicast configuration options.";
+
+      leaf encapsulation {
+        type enumeration {
+          enum srv6 {
+            value 1;
+            description
+              "Advertise routes with SRv6 prefix SID.";
+          }
+          enum srv6-relax {
+            value 3;
+            description
+              "Advertise routes with and without SRv6 prefix SID.";
+          }
+        }
+        description
+          "SRv6 encapsulation for unicast routes.
+           CLI: neighbor <peer> encapsulation-srv6
+           CLI: neighbor <peer> encapsulation-srv6-relax";
+      }
     }
 
     container ipv6-unicast {
@@ -83,6 +102,25 @@ submodule frr-bgp-common-multiprotocol {
       }
       description
         "IPv6 unicast configuration options.";
+
+      leaf encapsulation {
+        type enumeration {
+          enum srv6 {
+            value 1;
+            description
+              "Advertise routes with SRv6 prefix SID.";
+          }
+          enum srv6-relax {
+            value 3;
+            description
+              "Advertise routes with and without SRv6 prefix SID.";
+          }
+        }
+        description
+          "SRv6 encapsulation for unicast routes.
+           CLI: neighbor <peer> encapsulation-srv6
+           CLI: neighbor <peer> encapsulation-srv6-relax";
+      }
     }
 
     container ipv4-labeled-unicast {
@@ -113,6 +151,21 @@ submodule frr-bgp-common-multiprotocol {
       }
       description
         "Unicast IPv4 L3VPN configuration options.";
+
+      leaf encapsulation-srv6 {
+        type boolean;
+        default "false";
+        description
+          "Accept L3VPN updates with SRv6 prefix SID.
+           CLI: neighbor <peer> encapsulation-srv6";
+      }
+      leaf encapsulation-mpls {
+        type boolean;
+        default "false";
+        description
+          "Accept L3VPN updates with MPLS prefix SID.
+           CLI: neighbor <peer> encapsulation-mpls";
+      }
     }
 
     container l3vpn-ipv6-unicast {
@@ -123,6 +176,21 @@ submodule frr-bgp-common-multiprotocol {
       }
       description
         "Unicast IPv6 L3VPN configuration options.";
+
+      leaf encapsulation-srv6 {
+        type boolean;
+        default "false";
+        description
+          "Accept L3VPN updates with SRv6 prefix SID.
+           CLI: neighbor <peer> encapsulation-srv6";
+      }
+      leaf encapsulation-mpls {
+        type boolean;
+        default "false";
+        description
+          "Accept L3VPN updates with MPLS prefix SID.
+           CLI: neighbor <peer> encapsulation-mpls";
+      }
     }
 
     container l3vpn-ipv4-multicast {
@@ -163,6 +231,16 @@ submodule frr-bgp-common-multiprotocol {
       }
       description
         "BGP EVPN configuration options.";
+    }
+
+    container l2vpn-link-state {
+      when "derived-from-or-self(../afi-safi-name, 'frr-rt:l2vpn-link-state')" {
+        description
+          "Include this container for BGP-LS (RFC 9552) specific
+           configuration.";
+      }
+      description
+        "BGP-LS (link-state) configuration options.";
     }
 
     container ipv4-multicast {

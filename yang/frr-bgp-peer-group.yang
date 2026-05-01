@@ -14,10 +14,6 @@ submodule frr-bgp-peer-group {
     prefix frr-bt;
   }
 
-  include "frr-bgp-common-structure";
-
-  include "frr-bgp-neighbor";
-
   organization
     "FRRouting";
   contact
@@ -67,13 +63,13 @@ submodule frr-bgp-peer-group {
     }
 
     leaf-list ipv4-listen-range {
-      type inet:ipv4-address;
+      type inet:ipv4-prefix;
       description
         "Configure BGP dynamic neighbors listen range.";
     }
 
     leaf-list ipv6-listen-range {
-      type inet:ipv6-address;
+      type inet:ipv6-prefix;
       description
         "Configure BGP dynamic neighbors listen range.";
     }
@@ -83,6 +79,8 @@ submodule frr-bgp-peer-group {
     uses neighbor-parameters;
 
     uses structure-neighbor-group-capability-options;
+
+    uses structure-neighbor-group-local-role;
   }
 
   grouping bgp-peer-group-list {

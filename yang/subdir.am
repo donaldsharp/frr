@@ -34,7 +34,6 @@ dist_yangmodels_DATA += yang/frr-route-map.yang
 dist_yangmodels_DATA += yang/frr-zebra-route-map.yang
 dist_yangmodels_DATA += yang/frr-ospf-route-map.yang
 dist_yangmodels_DATA += yang/frr-ospf6-route-map.yang
-dist_yangmodels_DATA += yang/frr-bgp-filter.yang
 dist_yangmodels_DATA += yang/frr-bgp-route-map.yang
 dist_yangmodels_DATA += yang/frr-vrf.yang
 dist_yangmodels_DATA += yang/frr-route-types.yang
@@ -91,16 +90,16 @@ dist_yangmodels_DATA += yang/frr-pim-candidate.yang
 endif
 
 if BGPD
-dist_yangmodels_DATA += yang/frr-bgp-common-structure.yang
+dist_yangmodels_DATA += yang/frr-bgp.yang
+dist_yangmodels_DATA += yang/frr-bgp-types.yang
 dist_yangmodels_DATA += yang/frr-bgp-common.yang
+dist_yangmodels_DATA += yang/frr-bgp-common-structure.yang
 dist_yangmodels_DATA += yang/frr-bgp-common-multiprotocol.yang
 dist_yangmodels_DATA += yang/frr-bgp-neighbor.yang
 dist_yangmodels_DATA += yang/frr-bgp-peer-group.yang
-dist_yangmodels_DATA += yang/frr-deviations-bgp-datacenter.yang
-dist_yangmodels_DATA += yang/frr-bgp-rpki.yang
 dist_yangmodels_DATA += yang/frr-bgp-bmp.yang
-dist_yangmodels_DATA += yang/frr-bgp-types.yang
-dist_yangmodels_DATA += yang/frr-bgp.yang
+dist_yangmodels_DATA += yang/frr-bgp-rpki.yang
+dist_yangmodels_DATA += yang/frr-bgp-filter.yang
 endif
 
 if OSPFD

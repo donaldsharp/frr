@@ -112,6 +112,10 @@ module frr-route-types {
         value 27;
         description "Openfabric route";
       }
+      enum table-direct {
+        value 31;
+        description "Table direct route";
+      }
     }
     description "Enumeration of supported IPv4 route types";
   }

@@ -14,8 +14,6 @@ submodule frr-bgp-bmp {
     prefix frr-bt;
   }
 
-  include "frr-bgp-common-multiprotocol";
-
   organization
     "FRRouting";
   contact
@@ -138,6 +136,13 @@ submodule frr-bgp-bmp {
         description
           "Send state after policy and filter processing.";
       }
+
+      leaf loc-rib {
+        type boolean;
+        default "false";
+        description
+          "Send state after decision process is applied (Loc-RIB).";
+      }
     }
   }
 
@@ -186,6 +191,27 @@ submodule frr-bgp-bmp {
           type frr-bt:access-list-ref;
           description
             "Access list to restrict BMP sessions.";
+        }
+
+        leaf stats-send-experimental {
+          type boolean;
+          default "true";
+          description
+            "Send experimental BMP statistics messages.";
+        }
+
+        list imported-vrf-list {
+          key "vrf-name";
+          description
+            "Other BGP VRF/view instances whose routes should be
+             reported to this BMP target. Mirrors the baseline
+             `bmp import-vrf-view VRFNAME` command.";
+          leaf vrf-name {
+            type string;
+            description
+              "Name of the VRF or view instance to import BMP data
+               from.";
+          }
         }
 
         uses bmp-afi-safis;
