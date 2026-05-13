@@ -900,7 +900,7 @@ void bgp_start_tier2_deferral_timer(struct bgp *bgp, afi_t afi, safi_t safi)
 	/*
 	 * tier-2 deferral timer is already running
 	 */
-	if (gr_info->t_select_deferral_tier2) {
+	if (event_is_scheduled(gr_info->t_select_deferral_tier2)) {
 		if (BGP_DEBUG(graceful_restart, GRACEFUL_RESTART))
 			zlog_debug("%s: tier-2 path-select deferral timer for %s, duration %d is running",
 				   bgp->name_pretty, get_afi_safi_str(afi, safi, false),
@@ -993,7 +993,7 @@ static bool bgp_update_delay_applicable(struct bgp *bgp)
 
 bool bgp_update_delay_active(struct bgp *bgp)
 {
-	if (bgp->t_update_delay)
+	if (event_is_scheduled(bgp->t_update_delay))
 		return true;
 	return false;
 }
@@ -1017,7 +1017,7 @@ bool bgp_advertisement_delay_applicable(struct bgp *bgp)
 
 bool bgp_advertisement_delay_active(struct bgp *bgp)
 {
-	if (bgp->t_advertisement_delay)
+	if (event_is_scheduled(bgp->t_advertisement_delay))
 		return true;
 	return false;
 }
@@ -1179,7 +1179,7 @@ void bgp_adjust_routeadv(struct peer *peer)
 	 *
 	 *                     (MRAI - m) < r
 	 */
-	if (connection->t_routeadv)
+	if (event_is_scheduled(connection->t_routeadv))
 		remain = event_timer_remain_second(connection->t_routeadv);
 	else
 		remain = peer->v_routeadv;
@@ -1206,7 +1206,7 @@ bool bgp_maxmed_onstartup_configured(struct bgp *bgp)
 
 bool bgp_maxmed_onstartup_active(struct bgp *bgp)
 {
-	if (bgp->t_maxmed_onstartup)
+	if (event_is_scheduled(bgp->t_maxmed_onstartup))
 		return true;
 	return false;
 }
@@ -1219,7 +1219,7 @@ void bgp_maxmed_update(struct bgp *bgp)
 	if (bgp->v_maxmed_admin) {
 		maxmed_active = 1;
 		maxmed_value = bgp->maxmed_admin_value;
-	} else if (bgp->t_maxmed_onstartup) {
+	} else if (event_is_scheduled(bgp->t_maxmed_onstartup)) {
 		maxmed_active = 1;
 		maxmed_value = bgp->maxmed_onstartup_value;
 	} else {
@@ -1644,7 +1644,7 @@ void bgp_gr_check_path_select(struct bgp *bgp, afi_t afi, safi_t safi)
 		 */
 		if (!BGP_SUPPRESS_FIB_ENABLED(bgp) || !bgp->gr_info[afi][safi].gr_deferred ||
 		    !bgp_fibupd_safi(safi)) {
-			if (gr_info->t_select_deferral) {
+			if (event_is_scheduled(gr_info->t_select_deferral)) {
 				void *info = EVENT_ARG(gr_info->t_select_deferral);
 
 				XFREE(MTYPE_TMP, info);
@@ -1657,7 +1657,7 @@ void bgp_gr_check_path_select(struct bgp *bgp, afi_t afi, safi_t safi)
 		 * then cancel the timer.
 		 */
 		if (!multihop_eors_pending) {
-			if (gr_info->t_select_deferral_tier2) {
+			if (event_is_scheduled(gr_info->t_select_deferral_tier2)) {
 				void *info = EVENT_ARG(gr_info->t_select_deferral_tier2);
 
 				XFREE(MTYPE_TMP, info);
@@ -1829,7 +1829,7 @@ void bgp_gr_start_all_deferral_timers(struct bgp *bgp)
 			continue;
 
 		gr_info = &(bgp->gr_info[afi][safi]);
-		if (!gr_info->t_select_deferral)
+		if (!event_is_scheduled(gr_info->t_select_deferral))
 			bgp_start_deferral_timer(bgp, afi, safi, gr_info);
 	}
 }
@@ -1875,7 +1875,8 @@ static void bgp_gr_process_peer_up_include(struct bgp *bgp, struct peer *peer)
 		} else {
 			SET_FLAG(peer->af_sflags[afi][safi], PEER_STATUS_GR_WAIT_EOR);
 			gr_info = &(bgp->gr_info[afi][safi]);
-			if (!gr_info->t_select_deferral && !gr_info->select_defer_over)
+			if (!event_is_scheduled(gr_info->t_select_deferral) &&
+			    !gr_info->select_defer_over)
 				bgp_start_deferral_timer(bgp, afi, safi, gr_info);
 		}
 	}
@@ -1945,7 +1946,7 @@ static bool gr_path_select_deferral_applicable(struct bgp *bgp)
 	 * settings and GR is not complete and path selection
 	 * deferral not yet done for this instance
 	 */
-	if (!bgp->t_startup && !bgp_in_graceful_restart())
+	if (!event_is_scheduled(bgp->t_startup) && !bgp_in_graceful_restart())
 		return false;
 
 	FOREACH_AFI_SAFI_NSF (afi, safi) {
@@ -2154,7 +2155,7 @@ enum bgp_fsm_state_progress bgp_stop(struct peer_connection *connection)
 		}
 
 		/* graceful restart */
-		if (connection->t_gr_stale) {
+		if (event_is_scheduled(connection->t_gr_stale)) {
 			event_cancel(&connection->t_gr_stale);
 			if (bgp_debug_neighbor_events(peer))
 				zlog_debug("%pBP graceful restart stalepath timer stopped for %s",
@@ -2183,7 +2184,7 @@ enum bgp_fsm_state_progress bgp_stop(struct peer_connection *connection)
 		}
 
 		/* Stop route-refresh stalepath timer */
-		if (peer->t_refresh_stalepath) {
+		if (event_is_scheduled(peer->t_refresh_stalepath)) {
 			event_cancel(&peer->t_refresh_stalepath);
 
 			if (bgp_debug_neighbor_events(peer))
@@ -2522,7 +2523,7 @@ bgp_connect_success_w_delayopen(struct peer_connection *connection)
 	peer->v_delayopen = peer->delayopen;
 
 	/* Start the DelayOpenTimer if it is not already running */
-	if (!connection->t_delayopen)
+	if (!event_is_scheduled(connection->t_delayopen))
 		BGP_TIMER_ON(connection->t_delayopen, bgp_delayopen_timer, peer->v_delayopen);
 
 	frrtrace(2, frr_bgp, session_state_change, peer, 6);
@@ -2808,7 +2809,7 @@ static void bgp_peer_process_gr_cap_clear_stale(struct peer *peer)
 	safi_t safi;
 	int nsf_af_count = 0;
 
-	if (peer->connection->t_gr_restart) {
+	if (event_is_scheduled(peer->connection->t_gr_restart)) {
 		event_cancel(&peer->connection->t_gr_restart);
 		if (bgp_debug_neighbor_events(peer))
 			zlog_debug("%pBP: graceful restart timer stopped", peer);
@@ -2850,7 +2851,7 @@ static void bgp_peer_process_gr_cap_clear_stale(struct peer *peer)
 		SET_FLAG(peer->sflags, PEER_STATUS_NSF_MODE);
 	else {
 		UNSET_FLAG(peer->sflags, PEER_STATUS_NSF_MODE);
-		if (peer->connection->t_gr_stale) {
+		if (event_is_scheduled(peer->connection->t_gr_stale)) {
 			event_cancel(&peer->connection->t_gr_stale);
 			if (bgp_debug_neighbor_events(peer))
 				zlog_debug("%s: graceful restart stalepath timer stopped",
@@ -2947,7 +2948,7 @@ bgp_establish(struct peer_connection *connection)
 	 * Stop Long-lived Graceful Restart timers.
 	 */
 	FOREACH_AFI_SAFI (afi, safi) {
-		if (peer->t_llgr_stale[afi][safi]) {
+		if (event_is_scheduled(peer->t_llgr_stale[afi][safi])) {
 			event_cancel(&peer->t_llgr_stale[afi][safi]);
 			if (bgp_debug_neighbor_events(peer))
 				zlog_debug("%pBP Long-lived stale timer stopped for afi/safi: %d/%d for %s",
