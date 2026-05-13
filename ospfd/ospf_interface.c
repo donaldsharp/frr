@@ -285,8 +285,6 @@ struct ospf_interface *ospf_if_new(struct ospf *ospf, struct interface *ifp,
 	oi->nbr_self = NULL;
 
 	oi->ls_upd_queue = route_table_init();
-	oi->t_ls_upd_event = NULL;
-	oi->t_ls_ack_direct = NULL;
 
 	oi->crypt_seqnum = frr_sequence32_next();
 
