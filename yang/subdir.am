@@ -99,8 +99,10 @@ dist_yangmodels_DATA += yang/frr-bgp-peer-group.yang
 dist_yangmodels_DATA += yang/frr-deviations-bgp-datacenter.yang
 dist_yangmodels_DATA += yang/frr-bgp-rpki.yang
 dist_yangmodels_DATA += yang/frr-bgp-bmp.yang
+dist_yangmodels_DATA += yang/frr-bgp-evpn.yang
 dist_yangmodels_DATA += yang/frr-bgp-types.yang
 dist_yangmodels_DATA += yang/frr-bgp.yang
+dist_yangmodels_DATA += yang/frr-bgp-vnc.yang
 endif
 
 if OSPFD

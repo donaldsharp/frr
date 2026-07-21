@@ -37,6 +37,13 @@ module frr-bgp-types {
      (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
      OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.";
 
+  revision 2026-07-21 {
+    description
+      "Add BGP Open Policy role typedef for neighbor local-role CLI.";
+    reference
+      "FRRouting";
+  }
+
   revision 2019-12-03 {
     description
       "Initial revision.";
@@ -166,5 +173,33 @@ module frr-bgp-types {
     }
     description
       "Direction of traffic flow, either ingress or egress.";
+  }
+
+  typedef bgp-role {
+    type enumeration {
+      enum provider {
+        description
+          "Local speaker provides transit to the remote peer.";
+      }
+      enum rs-server {
+        description
+          "Local speaker is a route server for the remote peer.";
+      }
+      enum rs-client {
+        description
+          "Local speaker is a route server client.";
+      }
+      enum customer {
+        description
+          "Local speaker receives transit from the remote peer.";
+      }
+      enum peer {
+        description
+          "Local speaker and remote peer have a lateral peering
+           relationship.";
+      }
+    }
+    description
+      "BGP Open Policy role as defined by RFC 9234.";
   }
 }

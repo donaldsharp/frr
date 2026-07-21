@@ -35,6 +35,14 @@ module frr-bgp-route-map {
   description
     "This module defines bgp route map settings";
 
+  revision 2026-07-21 {
+    description
+      "CLI audit against bgp_routemap.c: existing match/set identities
+       cover current BGP route-map configuration commands.";
+    reference
+      "FRRouting";
+  }
+
   revision 2020-01-02 {
     description
       "Initial revision";

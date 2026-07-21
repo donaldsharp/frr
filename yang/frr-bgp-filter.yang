@@ -19,6 +19,14 @@ module frr-bgp-filter {
   description
     "This module defines filter settings";
 
+  revision 2026-07-21 {
+    description
+      "CLI audit: community/AS-path lists remain authoritative for filter
+       CLI; community-alias is modeled under frr-bgp bgp-daemon.";
+    reference
+      "FRRouting";
+  }
+
   revision 2020-01-15 {
     description
       "Initial revision";
