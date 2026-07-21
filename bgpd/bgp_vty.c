@@ -24067,8 +24067,7 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV4_NODE, &af_sid_vpn_export_cmd);
 	install_element(BGP_IPV6_NODE, &af_sid_vpn_export_cmd);
 	install_element(BGP_NODE, &bgp_sid_vpn_export_cmd);
-	install_element(BGP_IPV4_NODE, &sid_export_cmd);
-	install_element(BGP_IPV6_NODE, &sid_export_cmd);
+	/* sid export — YANG: bgp_cli_init() */
 	install_element(BGP_IPV6_NODE, &neighbor_encap_srv6_cmd);
 	install_element(BGP_IPV4_NODE, &neighbor_encap_srv6_cmd);
 	install_element(BGP_NODE, &no_bgp_sid_vpn_export_cmd);
