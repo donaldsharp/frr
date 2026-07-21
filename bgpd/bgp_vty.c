@@ -24039,46 +24039,7 @@ void bgp_vty_init(void)
 	/* "show bgp aggregate-address" command */
 	install_element(VIEW_NODE, &show_bgp_aggregate_cmd);
 
-	/* "redistribute" commands.  */
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_hidden_cmd);
-	install_element(BGP_NODE, &no_bgp_redistribute_ipv4_hidden_cmd);
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_rmap_hidden_cmd);
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_metric_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_rmap_metric_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_metric_rmap_hidden_cmd);
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_ospf_hidden_cmd);
-	install_element(BGP_NODE, &no_bgp_redistribute_ipv4_ospf_hidden_cmd);
-	install_element(BGP_NODE, &bgp_redistribute_ipv4_ospf_rmap_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_ospf_metric_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_ospf_rmap_metric_hidden_cmd);
-	install_element(BGP_NODE,
-			&bgp_redistribute_ipv4_ospf_metric_rmap_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_redistribute_ipv4_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_rmap_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_metric_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_rmap_metric_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_metric_rmap_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_ospf_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_redistribute_ipv4_ospf_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_ospf_rmap_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_redistribute_ipv4_ospf_metric_cmd);
-	install_element(BGP_IPV4_NODE,
-			&bgp_redistribute_ipv4_ospf_rmap_metric_cmd);
-	install_element(BGP_IPV4_NODE,
-			&bgp_redistribute_ipv4_ospf_metric_rmap_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_redistribute_ipv6_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_rmap_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_metric_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_rmap_metric_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_metric_rmap_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_redistribute_ipv6_table_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_redistribute_ipv6_table_cmd);
+	/* "redistribute" commands — YANG: bgp_cli_init() */
 
 	/* redistribute show commands */
 	install_element(VIEW_NODE, &show_bgp_redistribute_cmd);

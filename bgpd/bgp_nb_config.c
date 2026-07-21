@@ -3,8 +3,11 @@
  * BGP Northbound configuration callbacks
  * Copyright (C) 2026 FRRouting
  */
-
 #include <zebra.h>
+
+#ifdef GNU_LINUX
+#include <linux/rtnetlink.h> //RT_TABLE_XXX
+#endif
 
 #include "northbound.h"
 #include "libfrr.h"
@@ -12,6 +15,7 @@
 #include "prefix.h"
 #include "lib_errors.h"
 #include "routing_nb.h"
+#include "zebra.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_open.h"
@@ -5746,6 +5750,194 @@ int bgp_nb_maxpaths_ibgp_cluster_modify(struct nb_cb_modify_args *args)
 		return NB_OK;
 
 	return bgp_nb_maxpaths_apply(yang_dnode_get(ibgp, "./maximum-paths"), BGP_PEER_IBGP, false);
+}
+
+/*
+ * redistribution-list (ipv4/ipv6 unicast)
+ */
+static int bgp_nb_redistribute_validate(struct bgp *bgp, afi_t afi, int type,
+					unsigned short instance, char *errmsg,
+					size_t errmsg_len)
+{
+	if (type == ZEBRA_ROUTE_BGP) {
+		snprintf(errmsg, errmsg_len,
+			 "Redistributing BGP into BGP is not allowed");
+		return NB_ERR_VALIDATION;
+	}
+
+	if (type == ZEBRA_ROUTE_TABLE || type == ZEBRA_ROUTE_TABLE_DIRECT) {
+		if (instance == 0) {
+			snprintf(errmsg, errmsg_len,
+				 "table redistribution requires an instance/table id");
+			return NB_ERR_VALIDATION;
+		}
+	}
+
+	if (type == ZEBRA_ROUTE_TABLE_DIRECT) {
+		if (instance == RT_TABLE_MAIN || instance == RT_TABLE_LOCAL) {
+			snprintf(errmsg, errmsg_len,
+				 "'table-direct' cannot use %u routing table",
+				 instance);
+			return NB_ERR_VALIDATION;
+		}
+		if (afi == AFI_IP6 && bgp->vrf_id != VRF_DEFAULT) {
+			snprintf(errmsg, errmsg_len,
+				 "Only default BGP instance can use 'table-direct'");
+			return NB_ERR_VALIDATION;
+		}
+	}
+
+	return NB_OK;
+}
+
+static int bgp_nb_redistribute_apply(const struct lyd_node *dnode)
+{
+	struct bgp *bgp;
+	afi_t afi;
+	safi_t safi;
+	int type;
+	unsigned short instance;
+	struct bgp_redist *red;
+	bool changed = false;
+	const char *rmap_name;
+	struct route_map *route_map;
+
+	bgp = nb_running_get_entry(dnode, NULL, true);
+	if (!bgp || !bgp_nb_dnode_afi_safi(dnode, &afi, &safi))
+		return NB_ERR_NOT_FOUND;
+
+	if (safi != SAFI_UNICAST)
+		return NB_ERR_VALIDATION;
+
+	type = yang_dnode_get_enum(dnode, "./route-type");
+	instance = yang_dnode_get_uint16(dnode, "./route-instance");
+
+	red = bgp_redist_add(bgp, afi, type, instance);
+	if (!red)
+		return NB_ERR_RESOURCE;
+
+	if (yang_dnode_exists(dnode, "./metric")) {
+		changed |= bgp_redistribute_metric_set(
+			bgp, red, afi, type,
+			yang_dnode_get_uint32(dnode, "./metric"));
+	} else if (red->redist_metric_flag) {
+		red->redist_metric_flag = 0;
+		red->redist_metric = 0;
+		changed = true;
+	}
+
+	if (yang_dnode_exists(dnode, "./rmap-policy-import")) {
+		rmap_name = yang_dnode_get_string(dnode, "./rmap-policy-import");
+		route_map = route_map_lookup_by_name(rmap_name);
+		changed |= bgp_redistribute_rmap_set(red, rmap_name, route_map);
+	} else if (red->rmap.name) {
+		XFREE(MTYPE_ROUTE_MAP_NAME, red->rmap.name);
+		route_map_counter_decrement(red->rmap.map);
+		red->rmap.map = NULL;
+		changed = true;
+	}
+
+	bgp_redistribute_set(bgp, afi, type, instance, changed);
+	return NB_OK;
+}
+
+int bgp_nb_redistribute_create(struct nb_cb_create_args *args)
+{
+	struct bgp *bgp;
+	afi_t afi;
+	safi_t safi;
+	int type;
+	unsigned short instance;
+
+	if (args->event == NB_EV_VALIDATE) {
+		bgp = nb_running_get_entry(args->dnode, NULL, false);
+		if (!bgp)
+			return NB_OK;
+		if (!bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
+			return NB_ERR_VALIDATION;
+		type = yang_dnode_get_enum(args->dnode, "./route-type");
+		instance = yang_dnode_get_uint16(args->dnode, "./route-instance");
+		return bgp_nb_redistribute_validate(bgp, afi, type, instance,
+						    args->errmsg,
+						    args->errmsg_len);
+	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_redistribute_apply(args->dnode);
+}
+
+int bgp_nb_redistribute_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	afi_t afi;
+	safi_t safi;
+	int type;
+	unsigned short instance;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (!bgp || !bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
+		return NB_OK;
+
+	type = yang_dnode_get_enum(args->dnode, "./route-type");
+	instance = yang_dnode_get_uint16(args->dnode, "./route-instance");
+	bgp_redistribute_unset(bgp, afi, type, instance);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_redistribute(struct vty *vty, const struct lyd_node *dnode,
+				  bool show_defaults)
+{
+	const char *type;
+	uint16_t instance;
+
+	type = yang_dnode_get_string(dnode, "./route-type");
+	instance = yang_dnode_get_uint16(dnode, "./route-instance");
+
+	vty_out(vty, "  redistribute %s", type);
+	if (instance)
+		vty_out(vty, " %u", instance);
+	if (yang_dnode_exists(dnode, "./metric"))
+		vty_out(vty, " metric %u",
+			yang_dnode_get_uint32(dnode, "./metric"));
+	if (yang_dnode_exists(dnode, "./rmap-policy-import"))
+		vty_out(vty, " route-map %s",
+			yang_dnode_get_string(dnode, "./rmap-policy-import"));
+	vty_out(vty, "\n");
+}
+
+int bgp_nb_redistribute_metric_modify(struct nb_cb_modify_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_redistribute_apply(
+		yang_dnode_get_parent(args->dnode, "redistribution-list"));
+}
+
+int bgp_nb_redistribute_metric_destroy(struct nb_cb_destroy_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_redistribute_apply(
+		yang_dnode_get_parent(args->dnode, "redistribution-list"));
+}
+
+int bgp_nb_redistribute_rmap_modify(struct nb_cb_modify_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_redistribute_apply(
+		yang_dnode_get_parent(args->dnode, "redistribution-list"));
+}
+
+int bgp_nb_redistribute_rmap_destroy(struct nb_cb_destroy_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_redistribute_apply(
+		yang_dnode_get_parent(args->dnode, "redistribution-list"));
 }
 
 
