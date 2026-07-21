@@ -1210,11 +1210,13 @@ submodule frr-bgp-common {
         description
           "Multi-Path parameters for EBGP.";
         leaf maximum-paths {
-          type uint16;
-          default "64";
+          type uint16 {
+            range "1..max";
+          }
           description
             "Maximum number of parallel paths to consider when using
-             BGP multi-path. The default is use a single path.";
+             BGP multi-path. Maps to: maximum-paths <1-MULTIPATH_NUM>.
+             Omit to keep the daemon multipath-num default.";
         }
       }
 
@@ -1222,22 +1224,23 @@ submodule frr-bgp-common {
         description
           "Multi-Path parameters for IBGP.";
         leaf maximum-paths {
-          type uint16;
-          default "64";
+          type uint16 {
+            range "1..max";
+          }
           description
             "Maximum number of parallel paths to consider when using
-             IBGP multi-path. The default is to use a single path.";
+             IBGP multi-path. Maps to: maximum-paths ibgp
+             <1-MULTIPATH_NUM>.";
         }
 
         leaf cluster-length-list {
-          when "../maximum-paths != 0";
+          when "../maximum-paths";
           type boolean;
           default "false";
           description
-            "When set to 'true' route with the shortest cluster-list
-             length is used. The cluster-list reflects the IBGP
-             reflection path the route has taken. It's the part
-             of route selection algo.";
+            "When set to 'true' prefer routes with the shortest
+             cluster-list length. Maps to: maximum-paths ibgp <n>
+             equal-cluster-length.";
         }
       }
     }

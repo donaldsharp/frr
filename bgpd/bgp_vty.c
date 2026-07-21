@@ -23636,32 +23636,7 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6L_NODE, &bgp_af_nexthop_prefer_global_cmd);
 
 	/* "maximum-paths" commands. */
-	install_element(BGP_NODE, &bgp_maxpaths_hidden_cmd);
-	install_element(BGP_NODE, &no_bgp_maxpaths_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_maxpaths_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_maxpaths_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_maxpaths_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_maxpaths_cmd);
-	install_element(BGP_NODE, &bgp_maxpaths_ibgp_hidden_cmd);
-	install_element(BGP_NODE, &bgp_maxpaths_ibgp_cluster_hidden_cmd);
-	install_element(BGP_NODE, &no_bgp_maxpaths_ibgp_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV4_NODE, &bgp_maxpaths_ibgp_cluster_cmd);
-	install_element(BGP_IPV4_NODE, &no_bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_maxpaths_ibgp_cluster_cmd);
-	install_element(BGP_IPV6_NODE, &no_bgp_maxpaths_ibgp_cmd);
 
-	install_element(BGP_IPV4L_NODE, &bgp_maxpaths_cmd);
-	install_element(BGP_IPV4L_NODE, &no_bgp_maxpaths_cmd);
-	install_element(BGP_IPV4L_NODE, &bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV4L_NODE, &bgp_maxpaths_ibgp_cluster_cmd);
-	install_element(BGP_IPV4L_NODE, &no_bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_maxpaths_cmd);
-	install_element(BGP_IPV6L_NODE, &no_bgp_maxpaths_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_maxpaths_ibgp_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_maxpaths_ibgp_cluster_cmd);
-	install_element(BGP_IPV6L_NODE, &no_bgp_maxpaths_ibgp_cmd);
 
 	/* "timers bgp" / minimum-holdtime — YANG: bgp_cli_init() */
 
