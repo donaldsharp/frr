@@ -23841,9 +23841,7 @@ void bgp_vty_init(void)
 
 	/* "neighbor advertisement-interval" commands. */
 
-	/* "neighbor interface" commands. */
-	install_element(BGP_NODE, &neighbor_interface_cmd);
-	install_element(BGP_NODE, &no_neighbor_interface_cmd);
+	/* "neighbor interface" — YANG: bgp_cli_init() */
 
 	/* "neighbor distribute" commands. */
 
@@ -23901,20 +23899,7 @@ void bgp_vty_init(void)
 	/* "neighbor soo" */
 
 	/* "neighbor dampening" commands. */
-	install_element(BGP_NODE, &neighbor_damp_cmd);
-	install_element(BGP_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_damp_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_damp_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_damp_cmd);
+	/* neighbor dampening: YANG in bgp_cli.c */
 	install_element(VIEW_NODE, &show_ip_bgp_neighbor_damp_param_cmd);
 
 	/* address-family commands. */
