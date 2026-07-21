@@ -24048,9 +24048,7 @@ void bgp_vty_init(void)
 	community_alias_vty();
 
 	/* vpn-policy commands */
-	/* rd / label vpn export — YANG: bgp_cli_init() */
-	install_element(BGP_IPV4_NODE, &af_nexthop_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_nexthop_vpn_export_cmd);
+	/* rd / label / nexthop vpn export — YANG: bgp_cli_init() */
 	install_element(BGP_IPV4_NODE, &af_rt_vpn_imexport_cmd);
 	install_element(BGP_IPV6_NODE, &af_rt_vpn_imexport_cmd);
 	/* route-map vpn — YANG: bgp_cli_init() */

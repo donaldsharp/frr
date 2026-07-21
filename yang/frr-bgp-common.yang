@@ -1708,7 +1708,8 @@ submodule frr-bgp-common {
     leaf nexthop {
       type inet:ip-address;
       description
-        "Nexthop IP address.";
+        "Nexthop IP address.
+         Maps to: nexthop vpn export <A.B.C.D|X:X::X:X>.";
     }
   }
 
