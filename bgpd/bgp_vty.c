@@ -23847,13 +23847,6 @@ void bgp_vty_init(void)
 	/* "neighbor passive" — YANG: bgp_cli_init() */
 
 	/* "neighbor upa" commands. */
-	install_element(BGP_IPV4_NODE, &neighbor_upa_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_upa_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_upa_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_upa_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_upa_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_upa_cmd);
-	install_element(BGP_NODE, &neighbor_upa_hidden_cmd);
 
 	install_element(VIEW_NODE, &show_bgp_neighbor_upa_cmd);
 
@@ -23872,21 +23865,6 @@ void bgp_vty_init(void)
 	/* neighbor rpki ... commands. */
 
 	/* "neighbor capability orf prefix-list" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_orf_prefix_hidden_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_capability_orf_prefix_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_capability_orf_prefix_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_capability_orf_prefix_cmd);
 
 	/* "neighbor capability dynamic" commands.*/
 
@@ -23964,15 +23942,6 @@ void bgp_vty_init(void)
 
 	/* "neighbor advertise-map" commands. */
 	install_element(BGP_NODE, &bgp_condadv_period_cmd);
-	install_element(BGP_NODE, &neighbor_advertise_map_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_advertise_map_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_advertise_map_cmd);
 
 	/* bgp default-originate timer */
 	install_element(BGP_NODE, &bgp_def_originate_eval_cmd);
@@ -24009,28 +23978,8 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6U_NODE, &no_neighbor_allowas_in_cmd);
 
 	/* neighbor accept-own */
-	install_element(BGP_VPNV4_NODE, &neighbor_accept_own_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_accept_own_cmd);
 
 	/* "neighbor soo" */
-	install_element(BGP_IPV4_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_soo_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_soo_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_soo_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_soo_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_soo_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_soo_cmd);
 
 	/* "neighbor dampening" commands. */
 	install_element(BGP_NODE, &neighbor_damp_cmd);
