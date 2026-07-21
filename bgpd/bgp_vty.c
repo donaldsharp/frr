@@ -23845,9 +23845,7 @@ void bgp_vty_init(void)
 	/* "neighbor weight" commands. */
 
 
-	/* "neighbor encapsulation-srv6|encapsulation-mpls" commands. */
-	install_element(BGP_VPNV4_NODE, &neighbor_encapsulation_srv6_or_mpls_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_encapsulation_srv6_or_mpls_cmd);
+	/* neighbor encapsulation-srv6|mpls — YANG: bgp_cli_init() */
 
 	/* "neighbor override-capability" commands. */
 
@@ -24062,8 +24060,7 @@ void bgp_vty_init(void)
 	/* sid vpn export (AF) — YANG: bgp_cli_init() */
 	/* sid vpn per-vrf export — YANG: bgp_cli_init() */
 	/* sid export — YANG: bgp_cli_init() */
-	install_element(BGP_IPV6_NODE, &neighbor_encap_srv6_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_encap_srv6_cmd);
+	/* neighbor encapsulation-srv6 — YANG: bgp_cli_init() */
 
 	/* BGP-LS commands */
 	install_element(BGP_LS_NODE, &bgp_ls_distribute_bgp_fabric_cmd);

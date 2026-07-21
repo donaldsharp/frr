@@ -3178,6 +3178,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/nexthop-self/next-hop-self",
 			.cbs = {
 				.modify = bgp_nb_peer_af_nexthop_self_modify,
@@ -3219,6 +3228,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 				.cli_show = bgp_nb_cli_show_peer_af_soft_reconfig,
 			},
 		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/nexthop-self/next-hop-self",
 			.cbs = {
@@ -3430,6 +3448,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/l3vpn-ipv4-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/l3vpn-ipv4-unicast/nexthop-self/next-hop-self",
 			.cbs = {
 				.modify = bgp_nb_peer_af_nexthop_self_modify,
@@ -3471,6 +3498,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 				.cli_show = bgp_nb_cli_show_peer_af_soft_reconfig,
 			},
 		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/l3vpn-ipv6-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/l3vpn-ipv6-unicast/nexthop-self/next-hop-self",
 			.cbs = {
@@ -3585,6 +3621,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/nexthop-self/next-hop-self",
 			.cbs = {
 				.modify = bgp_nb_peer_af_nexthop_self_modify,
@@ -3626,6 +3671,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 				.cli_show = bgp_nb_cli_show_peer_af_soft_reconfig,
 			},
 		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/nexthop-self/next-hop-self",
 			.cbs = {
@@ -3837,6 +3891,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/l3vpn-ipv4-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/l3vpn-ipv4-unicast/nexthop-self/next-hop-self",
 			.cbs = {
 				.modify = bgp_nb_peer_af_nexthop_self_modify,
@@ -3878,6 +3941,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 				.cli_show = bgp_nb_cli_show_peer_af_soft_reconfig,
 			},
 		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/l3vpn-ipv6-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/l3vpn-ipv6-unicast/nexthop-self/next-hop-self",
 			.cbs = {
@@ -3992,6 +4064,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/nexthop-self/next-hop-self",
 			.cbs = {
 				.modify = bgp_nb_peer_af_nexthop_self_modify,
@@ -4033,6 +4114,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 				.cli_show = bgp_nb_cli_show_peer_af_soft_reconfig,
 			},
 		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/nexthop-self/next-hop-self",
 			.cbs = {
@@ -4244,6 +4334,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/l3vpn-ipv4-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/l3vpn-ipv4-unicast/nexthop-self/next-hop-self",
 			.cbs = {
 				.modify = bgp_nb_peer_af_nexthop_self_modify,
@@ -4285,6 +4384,15 @@ const struct frr_yang_module_info frr_bgp_info = {
 				.cli_show = bgp_nb_cli_show_peer_af_soft_reconfig,
 			},
 		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/l3vpn-ipv6-unicast/encapsulation/type",
+			.cbs = {
+				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.destroy = bgp_nb_peer_af_encapsulation_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
+			},
+		},
+
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/l3vpn-ipv6-unicast/nexthop-self/next-hop-self",
 			.cbs = {

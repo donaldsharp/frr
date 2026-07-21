@@ -112,8 +112,6 @@ submodule frr-bgp-neighbor {
 
     uses structure-neighbor-group-path-attribute-options;
 
-    uses structure-neighbor-group-encapsulation;
-
     uses structure-neighbor-group-admin-shutdown;
 
     uses structure-neighbor-group-graceful-restart;
