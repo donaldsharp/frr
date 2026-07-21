@@ -7598,7 +7598,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/as-path-options/allow-own-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_as,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/as-path-options/allow-own-origin-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_origin_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_origin_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_origin_as,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/as-path-options/allow-own-origin-as",
 			.cbs = {
 				.modify = bgp_nb_peer_af_allow_own_origin_as_modify,
 				.destroy = bgp_nb_peer_af_allow_own_origin_as_destroy,
@@ -7614,7 +7630,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/as-path-options/allowas-in-route-map",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allowas_in_rmap_modify,
+				.destroy = bgp_nb_peer_af_allowas_in_rmap_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allowas_in_rmap,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/as-path-options/allow-own-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_as,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/as-path-options/allow-own-as",
 			.cbs = {
 				.modify = bgp_nb_peer_af_allow_own_as_modify,
 				.destroy = bgp_nb_peer_af_allow_own_as_destroy,
@@ -7630,7 +7662,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/as-path-options/allow-own-origin-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_origin_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_origin_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_origin_as,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/as-path-options/allowas-in-route-map",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allowas_in_rmap_modify,
+				.destroy = bgp_nb_peer_af_allowas_in_rmap_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allowas_in_rmap,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/as-path-options/allowas-in-route-map",
 			.cbs = {
 				.modify = bgp_nb_peer_af_allowas_in_rmap_modify,
 				.destroy = bgp_nb_peer_af_allowas_in_rmap_destroy,
@@ -7910,7 +7958,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/as-path-options/allow-own-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_as,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/as-path-options/allow-own-origin-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_origin_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_origin_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_origin_as,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/as-path-options/allow-own-origin-as",
 			.cbs = {
 				.modify = bgp_nb_peer_af_allow_own_origin_as_modify,
 				.destroy = bgp_nb_peer_af_allow_own_origin_as_destroy,
@@ -7926,7 +7990,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/as-path-options/allowas-in-route-map",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allowas_in_rmap_modify,
+				.destroy = bgp_nb_peer_af_allowas_in_rmap_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allowas_in_rmap,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/as-path-options/allow-own-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_as,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/as-path-options/allow-own-as",
 			.cbs = {
 				.modify = bgp_nb_peer_af_allow_own_as_modify,
 				.destroy = bgp_nb_peer_af_allow_own_as_destroy,
@@ -7942,7 +8022,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/as-path-options/allow-own-origin-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_origin_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_origin_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_origin_as,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/as-path-options/allowas-in-route-map",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allowas_in_rmap_modify,
+				.destroy = bgp_nb_peer_af_allowas_in_rmap_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allowas_in_rmap,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/as-path-options/allowas-in-route-map",
 			.cbs = {
 				.modify = bgp_nb_peer_af_allowas_in_rmap_modify,
 				.destroy = bgp_nb_peer_af_allowas_in_rmap_destroy,
@@ -8222,7 +8318,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/as-path-options/allow-own-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_as,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/as-path-options/allow-own-origin-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_origin_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_origin_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_origin_as,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/as-path-options/allow-own-origin-as",
 			.cbs = {
 				.modify = bgp_nb_peer_af_allow_own_origin_as_modify,
 				.destroy = bgp_nb_peer_af_allow_own_origin_as_destroy,
@@ -8238,7 +8350,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/as-path-options/allowas-in-route-map",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allowas_in_rmap_modify,
+				.destroy = bgp_nb_peer_af_allowas_in_rmap_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allowas_in_rmap,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/as-path-options/allow-own-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_as,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/as-path-options/allow-own-as",
 			.cbs = {
 				.modify = bgp_nb_peer_af_allow_own_as_modify,
 				.destroy = bgp_nb_peer_af_allow_own_as_destroy,
@@ -8254,7 +8382,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/as-path-options/allow-own-origin-as",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allow_own_origin_as_modify,
+				.destroy = bgp_nb_peer_af_allow_own_origin_as_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allow_own_origin_as,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/as-path-options/allowas-in-route-map",
+			.cbs = {
+				.modify = bgp_nb_peer_af_allowas_in_rmap_modify,
+				.destroy = bgp_nb_peer_af_allowas_in_rmap_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_allowas_in_rmap,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/as-path-options/allowas-in-route-map",
 			.cbs = {
 				.modify = bgp_nb_peer_af_allowas_in_rmap_modify,
 				.destroy = bgp_nb_peer_af_allowas_in_rmap_destroy,
@@ -8582,7 +8726,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/filter-config/rmap-import",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_import_modify,
+				.destroy = bgp_nb_peer_af_rmap_import_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_import,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/filter-config/rmap-export",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_export_modify,
+				.destroy = bgp_nb_peer_af_rmap_export_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_export,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/filter-config/rmap-export",
 			.cbs = {
 				.modify = bgp_nb_peer_af_rmap_export_modify,
 				.destroy = bgp_nb_peer_af_rmap_export_destroy,
@@ -8654,7 +8814,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/filter-config/rmap-import",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_import_modify,
+				.destroy = bgp_nb_peer_af_rmap_import_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_import,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/filter-config/rmap-export",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_export_modify,
+				.destroy = bgp_nb_peer_af_rmap_export_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_export,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/filter-config/rmap-export",
 			.cbs = {
 				.modify = bgp_nb_peer_af_rmap_export_modify,
 				.destroy = bgp_nb_peer_af_rmap_export_destroy,
@@ -9391,7 +9567,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/filter-config/rmap-import",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_import_modify,
+				.destroy = bgp_nb_peer_af_rmap_import_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_import,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/filter-config/rmap-export",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_export_modify,
+				.destroy = bgp_nb_peer_af_rmap_export_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_export,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/filter-config/rmap-export",
 			.cbs = {
 				.modify = bgp_nb_peer_af_rmap_export_modify,
 				.destroy = bgp_nb_peer_af_rmap_export_destroy,
@@ -9463,7 +9655,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/filter-config/rmap-import",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_import_modify,
+				.destroy = bgp_nb_peer_af_rmap_import_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_import,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/filter-config/rmap-export",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_export_modify,
+				.destroy = bgp_nb_peer_af_rmap_export_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_export,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/filter-config/rmap-export",
 			.cbs = {
 				.modify = bgp_nb_peer_af_rmap_export_modify,
 				.destroy = bgp_nb_peer_af_rmap_export_destroy,
@@ -10200,7 +10408,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/filter-config/rmap-import",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_import_modify,
+				.destroy = bgp_nb_peer_af_rmap_import_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_import,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/filter-config/rmap-export",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_export_modify,
+				.destroy = bgp_nb_peer_af_rmap_export_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_export,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/filter-config/rmap-export",
 			.cbs = {
 				.modify = bgp_nb_peer_af_rmap_export_modify,
 				.destroy = bgp_nb_peer_af_rmap_export_destroy,
@@ -10272,7 +10496,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/filter-config/rmap-import",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_import_modify,
+				.destroy = bgp_nb_peer_af_rmap_import_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_import,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/filter-config/rmap-export",
+			.cbs = {
+				.modify = bgp_nb_peer_af_rmap_export_modify,
+				.destroy = bgp_nb_peer_af_rmap_export_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_rmap_export,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/filter-config/rmap-export",
 			.cbs = {
 				.modify = bgp_nb_peer_af_rmap_export_modify,
 				.destroy = bgp_nb_peer_af_rmap_export_destroy,
@@ -10960,6 +11200,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list",
+			.cbs = {
+				.create = bgp_nb_peer_af_prefix_limit_create,
+				.destroy = bgp_nb_peer_af_prefix_limit_destroy,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/max-prefixes",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
@@ -10967,7 +11214,22 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/max-prefixes",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_max,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/force-check",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/force-check",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -10983,7 +11245,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/restart-timer",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -10999,7 +11277,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -11015,6 +11309,14 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tr-restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
@@ -11023,7 +11325,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/tw-warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tw-warning-only",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -11068,6 +11386,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list",
+			.cbs = {
+				.create = bgp_nb_peer_af_prefix_limit_create,
+				.destroy = bgp_nb_peer_af_prefix_limit_destroy,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/max-prefixes",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
@@ -11075,7 +11400,22 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/max-prefixes",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_max,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/force-check",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/force-check",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -11091,7 +11431,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/restart-timer",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -11107,7 +11463,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -11123,6 +11495,14 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tr-restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
@@ -11131,7 +11511,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/tw-warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tw-warning-only",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -11932,6 +12328,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list",
+			.cbs = {
+				.create = bgp_nb_peer_af_prefix_limit_create,
+				.destroy = bgp_nb_peer_af_prefix_limit_destroy,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/max-prefixes",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
@@ -11939,7 +12342,22 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/max-prefixes",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_max,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/force-check",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/force-check",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -11955,7 +12373,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/restart-timer",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -11971,7 +12405,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -11987,6 +12437,14 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tr-restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
@@ -11995,7 +12453,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/tw-warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tw-warning-only",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -12040,6 +12514,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list",
+			.cbs = {
+				.create = bgp_nb_peer_af_prefix_limit_create,
+				.destroy = bgp_nb_peer_af_prefix_limit_destroy,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/max-prefixes",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
@@ -12047,7 +12528,22 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/max-prefixes",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_max,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/force-check",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/force-check",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -12063,7 +12559,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/restart-timer",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -12079,7 +12591,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -12095,6 +12623,14 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tr-restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
@@ -12103,7 +12639,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/tw-warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tw-warning-only",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -12904,6 +13456,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list",
+			.cbs = {
+				.create = bgp_nb_peer_af_prefix_limit_create,
+				.destroy = bgp_nb_peer_af_prefix_limit_destroy,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/max-prefixes",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
@@ -12911,7 +13470,22 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/max-prefixes",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_max,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/force-check",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/force-check",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -12927,7 +13501,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/restart-timer",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -12943,7 +13533,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -12959,6 +13565,14 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tr-restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
@@ -12967,7 +13581,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/prefix-limit/direction-list/options/tw-warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unreachability/prefix-limit/direction-list/options/tw-warning-only",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -13012,6 +13642,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list",
+			.cbs = {
+				.create = bgp_nb_peer_af_prefix_limit_create,
+				.destroy = bgp_nb_peer_af_prefix_limit_destroy,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/max-prefixes",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
@@ -13019,7 +13656,22 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/max-prefixes",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_max_modify,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_max,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/force-check",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/force-check",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_force_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -13035,7 +13687,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/restart-timer",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -13051,7 +13719,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tr-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
@@ -13067,6 +13751,14 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tr-restart-timer",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
@@ -13075,7 +13767,23 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tw-shutdown-threshold-pct",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/prefix-limit/direction-list/options/tw-warning-only",
+			.cbs = {
+				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
+				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
+				.cli_show = bgp_nb_cli_show_peer_af_prefix_limit_noop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unreachability/prefix-limit/direction-list/options/tw-warning-only",
 			.cbs = {
 				.modify = bgp_nb_peer_af_prefix_limit_option_modify,
 				.destroy = bgp_nb_peer_af_prefix_limit_option_destroy,
