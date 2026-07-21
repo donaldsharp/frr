@@ -1793,6 +1793,14 @@ submodule frr-bgp-common {
       }
     }
 
+    leaf vrf-rmap-import {
+      type frr-route-map:route-map-ref;
+      description
+        "Route-map for VRF-to-VRF imported routes.
+         Maps to: import vrf route-map WORD.
+         Mutually exclusive with rmap-import (route-map vpn import).";
+    }
+
     uses rmap-policy-export {
       refine "rmap-export" {
         description

@@ -24014,9 +24014,7 @@ void bgp_vty_init(void)
 	install_element(VIEW_NODE, &show_bgp_redistribute_cmd);
 
 	/* import|export vpn — YANG: bgp_cli_init() */
-
-	install_element(BGP_IPV4_NODE, &bgp_imexport_vrf_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_imexport_vrf_cmd);
+	/* import vrf — YANG: bgp_cli_init() */
 
 	/* ttl_security commands */
 
@@ -24049,17 +24047,13 @@ void bgp_vty_init(void)
 
 	/* vpn-policy commands */
 	/* rd / label / nexthop / rt vpn — YANG: bgp_cli_init() */
-	/* route-map vpn — YANG: bgp_cli_init() */
-	install_element(BGP_IPV4_NODE, &af_import_vrf_route_map_cmd);
-	install_element(BGP_IPV6_NODE, &af_import_vrf_route_map_cmd);
+	/* route-map vpn / import vrf route-map — YANG: bgp_cli_init() */
 
 	install_element(BGP_IPV4_NODE, &af_routetarget_import_cmd);
 	install_element(BGP_IPV6_NODE, &af_routetarget_import_cmd);
 
 	/* no rd / label / rt vpn — YANG: bgp_cli_init() */
-	/* no route-map vpn — YANG: bgp_cli_init() */
-	install_element(BGP_IPV4_NODE, &af_no_import_vrf_route_map_cmd);
-	install_element(BGP_IPV6_NODE, &af_no_import_vrf_route_map_cmd);
+	/* no route-map vpn / import vrf route-map — YANG: bgp_cli_init() */
 
 	/* tcp-mss command */
 
