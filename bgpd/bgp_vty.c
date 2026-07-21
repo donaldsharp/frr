@@ -24064,7 +24064,6 @@ void bgp_vty_init(void)
 	/* sid export — YANG: bgp_cli_init() */
 	install_element(BGP_IPV6_NODE, &neighbor_encap_srv6_cmd);
 	install_element(BGP_IPV4_NODE, &neighbor_encap_srv6_cmd);
-	install_element(BGP_NODE, &no_bgp_sid_vpn_export_cmd);
 
 	/* BGP-LS commands */
 	install_element(BGP_LS_NODE, &bgp_ls_distribute_bgp_fabric_cmd);
