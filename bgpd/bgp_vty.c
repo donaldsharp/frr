@@ -23626,9 +23626,7 @@ void bgp_vty_init(void)
 	/* "neighbor graceful-shutdown" command */
 	install_element(BGP_NODE, &neighbor_graceful_shutdown_cmd);
 
-	/* bgp disable-ebgp-connected-nh-check */
-	install_element(BGP_NODE, &bgp_disable_connected_route_check_cmd);
-	install_element(BGP_NODE, &no_bgp_disable_connected_route_check_cmd);
+	/* bgp disable-ebgp-connected-nh-check — YANG: bgp_cli_init() */
 
 	/* bgp update-delay command */
 	install_element(BGP_NODE, &bgp_update_delay_cmd);
@@ -23698,8 +23696,7 @@ void bgp_vty_init(void)
 
 	/* bgp ebgp-requires-policy — YANG: bgp_cli_init() */
 
-	/* bgp enforce-first-as */
-	install_element(BGP_NODE, &bgp_enforce_first_as_cmd);
+	/* bgp enforce-first-as — YANG: bgp_cli_init() */
 
 	/* bgp labeled-unicast explicit-null */
 	install_element(BGP_NODE, &bgp_lu_uses_explicit_null_cmd);
@@ -23754,8 +23751,7 @@ void bgp_vty_init(void)
 	 * CONFIG_NODE remains classic (daemon-wide).
 	 */
 
-	/* "bgp hard-administrative-reset" commands */
-	install_element(BGP_NODE, &bgp_administrative_reset_cmd);
+	/* "bgp hard-administrative-reset" — YANG: bgp_cli_init() */
 
 	/* "bgp long-lived-graceful-restart" commands */
 	install_element(BGP_NODE, &bgp_llgr_stalepath_time_cmd);
@@ -23766,13 +23762,9 @@ void bgp_vty_init(void)
 	/* "bgp bestpath aigp" commands */
 	install_element(BGP_NODE, &bgp_bestpath_aigp_cmd);
 
-	/* "bgp bestpath compare-routerid" commands */
-	install_element(BGP_NODE, &bgp_bestpath_compare_router_id_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_compare_router_id_cmd);
+	/* "bgp bestpath compare-routerid" — YANG: bgp_cli_init() */
 
-	/* "bgp bestpath as-path ignore" commands */
-	install_element(BGP_NODE, &bgp_bestpath_aspath_ignore_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_aspath_ignore_cmd);
+	/* "bgp bestpath as-path ignore" — YANG: bgp_cli_init() */
 
 	/* "bgp bestpath use-imported-attributes" commands */
 	install_element(BGP_NODE, &bgp_bestpath_use_imported_attrs_cmd);
