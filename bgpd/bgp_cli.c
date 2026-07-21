@@ -19,6 +19,7 @@
 #include "routing_nb.h"
 
 #include "bgpd/bgpd.h"
+#include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_vty.h"
 #include "bgpd/bgp_nb.h"
@@ -26,6 +27,8 @@
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_zebra.h"
 #include "bgpd/bgp_damp.h"
+#include "bgpd/bgp_evpn.h"
+#include "bgpd/bgp_evpn_private.h"
 
 #include "bgpd/bgp_cli_clippy.c"
 
@@ -5462,6 +5465,189 @@ DEFPY_YANG(bgp_evpn_vrf_rt_auto_yang, bgp_evpn_vrf_rt_auto_yang_cmd,
 	return nb_cli_apply_changes(vty, NULL);
 }
 
+DEFPY_YANG_NOSH(bgp_evpn_vni_yang, bgp_evpn_vni_yang_cmd,
+		"vni (1-16777215)$vni",
+		"VXLAN Network Identifier\n"
+		"VNI number\n")
+{
+	char af_xpath[XPATH_MAXLEN];
+	char vni_rel[XPATH_MAXLEN + 256];
+	char vni_abs[XPATH_MAXLEN + 256];
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+	int ret;
+
+	bgp = VTY_GET_CONTEXT(bgp);
+	if (!bgp)
+		return CMD_WARNING;
+
+	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
+	snprintf(vni_rel, sizeof(vni_rel), "%s/vni[vni='%" PRIi64 "']", af_xpath,
+		 vni);
+
+	nb_cli_enqueue_change(vty, af_xpath, NB_OP_CREATE, NULL);
+	nb_cli_enqueue_change(vty, vni_rel, NB_OP_CREATE, NULL);
+	ret = nb_cli_apply_changes(vty, NULL);
+	if (ret != CMD_SUCCESS)
+		return ret;
+
+	vpn = bgp_evpn_lookup_vni(bgp, vni);
+	if (!vpn) {
+		vty_out(vty, "%% Failed to create VNI\n");
+		return CMD_WARNING;
+	}
+
+	if (vty->xpath_index == 0) {
+		vty_out(vty, "%% Missing BGP YANG context\n");
+		return CMD_WARNING;
+	}
+
+	snprintf(vni_abs, sizeof(vni_abs), "%s/global/afi-safis/afi-safi[afi-safi-name='frr-routing:l2vpn-evpn']/vni[vni='%" PRIi64 "']", VTY_CURR_XPATH, vni);
+	VTY_PUSH_XPATH(BGP_EVPN_VNI_NODE, vni_abs);
+	VTY_PUSH_CONTEXT_SUB(BGP_EVPN_VNI_NODE, vpn);
+	return CMD_SUCCESS;
+}
+
+DEFPY_YANG(no_bgp_evpn_vni_yang, no_bgp_evpn_vni_yang_cmd,
+	   "no vni (1-16777215)$vni",
+	   NO_STR
+	   "VXLAN Network Identifier\n"
+	   "VNI number\n")
+{
+	char af_xpath[XPATH_MAXLEN];
+	char vni_rel[XPATH_MAXLEN + 256];
+
+	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
+	snprintf(vni_rel, sizeof(vni_rel), "%s/vni[vni='%" PRIi64 "']", af_xpath,
+		 vni);
+	nb_cli_enqueue_change(vty, vni_rel, NB_OP_DESTROY, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFUN_YANG_NOSH(exit_vni_yang, exit_vni_yang_cmd, "exit-vni",
+		"Exit from VNI mode\n")
+{
+	if (vty->node == BGP_EVPN_VNI_NODE) {
+		vty->node = BGP_EVPN_NODE;
+		if (vty->xpath_index > 0)
+			vty->xpath_index--;
+	}
+	return CMD_SUCCESS;
+}
+
+DEFPY_YANG(bgp_evpn_vni_rd_yang, bgp_evpn_vni_rd_yang_cmd,
+	   "[no] rd [ASN:NN_OR_IP-ADDRESS:NN$rd]",
+	   NO_STR
+	   EVPN_RT_DIST_HELP_STR
+	   EVPN_ASN_IP_HELP_STR)
+{
+	if (no)
+		nb_cli_enqueue_change(vty, "./rd", NB_OP_DESTROY, NULL);
+	else {
+		if (!rd) {
+			vty_out(vty, "%% Incomplete command\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		nb_cli_enqueue_change(vty, "./rd", NB_OP_MODIFY, rd);
+	}
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(bgp_evpn_vni_rt_yang, bgp_evpn_vni_rt_yang_cmd,
+	   "[no] route-target <both|import|export>$type RT$rt",
+	   NO_STR
+	   "Route Target\n"
+	   "import and export\n"
+	   "import\n"
+	   "export\n"
+	   "Route target (A.B.C.D:MN|EF:OPQR|GHJK:MN)\n")
+{
+	char leaf[XPATH_MAXLEN];
+	bool do_import = false;
+	bool do_export = false;
+
+	if (strmatch(type, "import"))
+		do_import = true;
+	else if (strmatch(type, "export"))
+		do_export = true;
+	else if (strmatch(type, "both")) {
+		do_import = true;
+		do_export = true;
+	} else {
+		vty_out(vty, "%% Invalid Route Target type\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	if (do_import) {
+		snprintf(leaf, sizeof(leaf), "./import-route-target[.='%s']",
+			 rt);
+		nb_cli_enqueue_change(vty, leaf,
+				      no ? NB_OP_DESTROY : NB_OP_CREATE, NULL);
+	}
+	if (do_export) {
+		snprintf(leaf, sizeof(leaf), "./export-route-target[.='%s']",
+			 rt);
+		nb_cli_enqueue_change(vty, leaf,
+				      no ? NB_OP_DESTROY : NB_OP_CREATE, NULL);
+	}
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(bgp_evpn_vni_advertise_default_gw_yang,
+	   bgp_evpn_vni_advertise_default_gw_yang_cmd,
+	   "[no] advertise-default-gw",
+	   NO_STR
+	   "Advertise default g/w mac-ip routes in EVPN for a VNI\n")
+{
+	nb_cli_enqueue_change(vty, "./advertise-default-gateway", NB_OP_MODIFY,
+			      no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(bgp_evpn_vni_advertise_svi_ip_yang,
+	   bgp_evpn_vni_advertise_svi_ip_yang_cmd,
+	   "[no] advertise-svi-ip",
+	   NO_STR
+	   "Advertise svi mac-ip routes in EVPN for a VNI\n")
+{
+	nb_cli_enqueue_change(vty, "./advertise-svi-ip", NB_OP_MODIFY,
+			      no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(bgp_evpn_vni_advertise_subnet_yang,
+	   bgp_evpn_vni_advertise_subnet_yang_cmd,
+	   "[no] advertise-subnet",
+	   NO_STR
+	   "Advertise the subnet corresponding to VNI\n")
+{
+	nb_cli_enqueue_change(vty, "./advertise-subnet", NB_OP_MODIFY,
+			      no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(bgp_evpn_vni_flooding_yang, bgp_evpn_vni_flooding_yang_cmd,
+	   "[no] flooding <disable$disable|head-end-replication$her>",
+	   NO_STR
+	   "Specify handling for BUM packets\n"
+	   "Do not flood any BUM packets\n"
+	   "Flood BUM packets using head-end replication\n")
+{
+	const char *val;
+
+	if (no)
+		val = "inherit-global";
+	else if (disable)
+		val = "disable";
+	else if (her)
+		val = "head-end-replication";
+	else
+		return CMD_WARNING_CONFIG_FAILED;
+
+	nb_cli_enqueue_change(vty, "./flooding", NB_OP_MODIFY, val);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
 DEFPY_YANG(bgp_imexport_vpn_yang, bgp_imexport_vpn_yang_cmd,
 	   "[no] <import|export>$direction_str vpn",
 	   NO_STR
@@ -8125,6 +8311,18 @@ void bgp_cli_init(void)
 	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rd_yang_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_yang_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_auto_yang_cmd);
+	install_element(BGP_EVPN_NODE, &bgp_evpn_vni_yang_cmd);
+	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vni_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE, &exit_vni_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE,
+			&bgp_evpn_vni_advertise_default_gw_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE,
+			&bgp_evpn_vni_advertise_svi_ip_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE,
+			&bgp_evpn_vni_advertise_subnet_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_flooding_yang_cmd);
 
 	/* AF-level import|export vpn */
 	install_element(BGP_IPV4_NODE, &bgp_imexport_vpn_yang_cmd);

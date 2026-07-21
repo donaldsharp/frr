@@ -197,6 +197,24 @@ extern void evpn_process_default_originate_cmd(struct bgp *bgp_vrf, afi_t afi,
 extern void evpn_configure_vrf_rd(struct bgp *bgp_vrf, struct prefix_rd *rd,
 				  const char *rd_pretty);
 extern void evpn_unconfigure_vrf_rd(struct bgp *bgp_vrf);
+extern struct bgpevpn *evpn_create_update_vni(struct bgp *bgp, vni_t vni);
+extern void evpn_delete_vni(struct bgp *bgp, struct bgpevpn *vpn);
+extern struct bgpevpn *bgp_evpn_lookup_vni(struct bgp *bgp, vni_t vni);
+extern void evpn_configure_rd(struct bgp *bgp, struct bgpevpn *vpn,
+			      struct prefix_rd *rd, const char *rd_pretty);
+extern void evpn_unconfigure_rd(struct bgp *bgp, struct bgpevpn *vpn);
+extern void evpn_configure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				     struct ecommunity *ecomadd);
+extern void evpn_unconfigure_import_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				       struct ecommunity *ecomdel);
+extern void evpn_configure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				     struct ecommunity *ecomadd);
+extern void evpn_unconfigure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
+				       struct ecommunity *ecomdel);
+extern bool bgp_evpn_rt_matches_existing(struct list *rtl,
+					 struct ecommunity *ecomtarget);
+extern void evpn_set_advertise_subnet(struct bgp *bgp, struct bgpevpn *vpn);
+extern void evpn_unset_advertise_subnet(struct bgp *bgp, struct bgpevpn *vpn);
 extern void bgp_evpn_handle_global_macvrf_soo_change(struct bgp *bgp,
 						    struct ecommunity *new_soo);
 extern void bgp_evpn_cleanup_per_vni_routes(struct bgp *bgp);

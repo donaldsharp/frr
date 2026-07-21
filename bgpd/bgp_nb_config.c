@@ -8483,6 +8483,452 @@ void bgp_nb_cli_show_evpn_vrf_rt_auto(struct vty *vty,
 }
 
 /*
+ * EVPN VNI list and per-VNI knobs
+ */
+static struct bgp *bgp_nb_evpn_vni_underlay(const struct lyd_node *dnode)
+{
+	const struct lyd_node *af;
+
+	af = yang_dnode_get_parent(dnode, "afi-safi");
+	return nb_running_get_entry(af ? af : dnode, NULL, true);
+}
+
+int bgp_nb_evpn_vni_create(struct nb_cb_create_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+	vni_t vni;
+
+	switch (args->event) {
+	case NB_EV_VALIDATE:
+		bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+		if (!bgp) {
+			snprintf(args->errmsg, args->errmsg_len,
+				 "BGP instance not found");
+			return NB_ERR_VALIDATION;
+		}
+		vni = yang_dnode_get_uint32(args->dnode, "./vni");
+		if (bgp_evpn_lookup_l3vni_l2vni_table(vni)) {
+			snprintf(args->errmsg, args->errmsg_len,
+				 "Failed to create L2VNI %u, it is configured as L3VNI",
+				 vni);
+			return NB_ERR_VALIDATION;
+		}
+		return NB_OK;
+	case NB_EV_PREPARE:
+	case NB_EV_ABORT:
+		return NB_OK;
+	case NB_EV_APPLY:
+		break;
+	}
+
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!bgp)
+		return NB_ERR_NOT_FOUND;
+
+	vni = yang_dnode_get_uint32(args->dnode, "./vni");
+	vpn = evpn_create_update_vni(bgp, vni);
+	if (!vpn)
+		return NB_ERR_RESOURCE;
+
+	nb_running_set_entry(args->dnode, vpn);
+	return NB_OK;
+}
+
+int bgp_nb_evpn_vni_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	vpn = nb_running_unset_entry(args->dnode);
+	if (!bgp || !vpn)
+		return NB_OK;
+
+	evpn_delete_vni(bgp, vpn);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_evpn_vni(struct vty *vty, const struct lyd_node *dnode,
+			      bool show_defaults)
+{
+	vty_out(vty, "  vni %u\n", yang_dnode_get_uint32(dnode, "./vni"));
+}
+
+void bgp_nb_cli_show_evpn_vni_end(struct vty *vty, const struct lyd_node *dnode)
+{
+	vty_out(vty, "  exit-vni\n");
+}
+
+int bgp_nb_evpn_vni_rd_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+	struct prefix_rd prd;
+	const char *rd_str;
+
+	if (args->event == NB_EV_VALIDATE) {
+		rd_str = yang_dnode_get_string(args->dnode, NULL);
+		if (!str2prefix_rd(rd_str, &prd)) {
+			snprintf(args->errmsg, args->errmsg_len,
+				 "Malformed Route Distinguisher");
+			return NB_ERR_VALIDATION;
+		}
+		return NB_OK;
+	}
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_ERR_NOT_FOUND;
+
+	rd_str = yang_dnode_get_string(args->dnode, NULL);
+	if (!str2prefix_rd(rd_str, &prd))
+		return NB_ERR_VALIDATION;
+	if (bgp_evpn_rd_matches_existing(vpn, &prd))
+		return NB_OK;
+
+	evpn_configure_rd(bgp, vpn, &prd, rd_str);
+	return NB_OK;
+}
+
+int bgp_nb_evpn_vni_rd_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp || !is_rd_configured(vpn))
+		return NB_OK;
+
+	evpn_unconfigure_rd(bgp, vpn);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_evpn_vni_rd(struct vty *vty, const struct lyd_node *dnode,
+				 bool show_defaults)
+{
+	vty_out(vty, "   rd %s\n", yang_dnode_get_string(dnode, NULL));
+}
+
+static bool bgp_nb_evpn_vni_rt_is_import(const struct lyd_node *dnode)
+{
+	return strmatch(dnode->schema->name, "import-route-target");
+}
+
+int bgp_nb_evpn_vni_rt_create(struct nb_cb_create_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+	struct ecommunity *ecom;
+	bool is_import;
+
+	switch (args->event) {
+	case NB_EV_VALIDATE:
+		ecom = ecommunity_str2com(
+			yang_dnode_get_string(args->dnode, NULL),
+			ECOMMUNITY_ROUTE_TARGET, 0);
+		if (!ecom) {
+			snprintf(args->errmsg, args->errmsg_len,
+				 "Malformed Route Target list");
+			return NB_ERR_VALIDATION;
+		}
+		ecommunity_free(&ecom);
+		return NB_OK;
+	case NB_EV_PREPARE:
+	case NB_EV_ABORT:
+		return NB_OK;
+	case NB_EV_APPLY:
+		break;
+	}
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_ERR_NOT_FOUND;
+
+	is_import = bgp_nb_evpn_vni_rt_is_import(args->dnode);
+	ecom = ecommunity_str2com(yang_dnode_get_string(args->dnode, NULL),
+				  ECOMMUNITY_ROUTE_TARGET, 0);
+	if (!ecom)
+		return NB_ERR_VALIDATION;
+	ecommunity_str(ecom);
+
+	if (is_import) {
+		if (CHECK_FLAG(vpn->flags, VNI_FLAG_IMPRT_CFGD) &&
+		    bgp_evpn_rt_matches_existing(vpn->import_rtl, ecom)) {
+			ecommunity_free(&ecom);
+			return NB_OK;
+		}
+		evpn_configure_import_rt(bgp, vpn, ecom);
+	} else {
+		if (CHECK_FLAG(vpn->flags, VNI_FLAG_EXPRT_CFGD) &&
+		    bgp_evpn_rt_matches_existing(vpn->export_rtl, ecom)) {
+			ecommunity_free(&ecom);
+			return NB_OK;
+		}
+		evpn_configure_export_rt(bgp, vpn, ecom);
+	}
+	return NB_OK;
+}
+
+int bgp_nb_evpn_vni_rt_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+	struct ecommunity *ecom;
+	bool is_import;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_OK;
+
+	is_import = bgp_nb_evpn_vni_rt_is_import(args->dnode);
+	ecom = ecommunity_str2com(yang_dnode_get_string(args->dnode, NULL),
+				  ECOMMUNITY_ROUTE_TARGET, 0);
+	if (!ecom)
+		return NB_OK;
+	ecommunity_str(ecom);
+
+	if (is_import)
+		evpn_unconfigure_import_rt(bgp, vpn, ecom);
+	else
+		evpn_unconfigure_export_rt(bgp, vpn, ecom);
+	ecommunity_free(&ecom);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_evpn_vni_rt_import(struct vty *vty,
+					const struct lyd_node *dnode,
+					bool show_defaults)
+{
+	vty_out(vty, "   route-target import %s\n",
+		yang_dnode_get_string(dnode, NULL));
+}
+
+void bgp_nb_cli_show_evpn_vni_rt_export(struct vty *vty,
+					const struct lyd_node *dnode,
+					bool show_defaults)
+{
+	vty_out(vty, "   route-target export %s\n",
+		yang_dnode_get_string(dnode, NULL));
+}
+
+int bgp_nb_evpn_vni_advertise_default_gw_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_ERR_NOT_FOUND;
+
+	if (yang_dnode_get_bool(args->dnode, NULL))
+		evpn_set_advertise_default_gw(bgp, vpn);
+	else
+		evpn_unset_advertise_default_gw(bgp, vpn);
+	return NB_OK;
+}
+
+int bgp_nb_evpn_vni_advertise_default_gw_destroy(
+	struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_OK;
+
+	evpn_unset_advertise_default_gw(bgp, vpn);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_evpn_vni_advertise_default_gw(
+	struct vty *vty, const struct lyd_node *dnode, bool show_defaults)
+{
+	if (yang_dnode_get_bool(dnode, NULL))
+		vty_out(vty, "   advertise-default-gw\n");
+}
+
+int bgp_nb_evpn_vni_advertise_svi_ip_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_ERR_NOT_FOUND;
+
+	evpn_set_advertise_svi_macip(bgp, vpn,
+				     yang_dnode_get_bool(args->dnode, NULL)
+					     ? 1
+					     : 0);
+	return NB_OK;
+}
+
+int bgp_nb_evpn_vni_advertise_svi_ip_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_OK;
+
+	evpn_set_advertise_svi_macip(bgp, vpn, 0);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_evpn_vni_advertise_svi_ip(struct vty *vty,
+					       const struct lyd_node *dnode,
+					       bool show_defaults)
+{
+	if (yang_dnode_get_bool(dnode, NULL))
+		vty_out(vty, "   advertise-svi-ip\n");
+}
+
+int bgp_nb_evpn_vni_advertise_subnet_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_ERR_NOT_FOUND;
+
+	if (yang_dnode_get_bool(args->dnode, NULL))
+		evpn_set_advertise_subnet(bgp, vpn);
+	else
+		evpn_unset_advertise_subnet(bgp, vpn);
+	return NB_OK;
+}
+
+int bgp_nb_evpn_vni_advertise_subnet_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_OK;
+
+	evpn_unset_advertise_subnet(bgp, vpn);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_evpn_vni_advertise_subnet(struct vty *vty,
+					       const struct lyd_node *dnode,
+					       bool show_defaults)
+{
+	if (yang_dnode_get_bool(dnode, NULL))
+		vty_out(vty, "   advertise-subnet\n");
+}
+
+int bgp_nb_evpn_vni_flooding_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+	const char *val;
+	enum vxlan_flood_control flood_ctrl;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_ERR_NOT_FOUND;
+
+	val = yang_dnode_get_string(args->dnode, NULL);
+	if (strmatch(val, "disable"))
+		flood_ctrl = VXLAN_FLOOD_DISABLED;
+	else if (strmatch(val, "head-end-replication"))
+		flood_ctrl = VXLAN_FLOOD_HEAD_END_REPL;
+	else
+		flood_ctrl = VXLAN_FLOOD_INHERIT_GLOBAL;
+
+	if (vpn->vxlan_flood_ctrl == flood_ctrl)
+		return NB_OK;
+
+	vpn->vxlan_flood_ctrl = flood_ctrl;
+	bgp_evpn_flood_control_change(bgp);
+	return NB_OK;
+}
+
+int bgp_nb_evpn_vni_flooding_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	struct bgpevpn *vpn;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	vpn = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_evpn_vni_underlay(args->dnode);
+	if (!vpn || !bgp)
+		return NB_OK;
+
+	if (vpn->vxlan_flood_ctrl == VXLAN_FLOOD_INHERIT_GLOBAL)
+		return NB_OK;
+
+	vpn->vxlan_flood_ctrl = VXLAN_FLOOD_INHERIT_GLOBAL;
+	bgp_evpn_flood_control_change(bgp);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_evpn_vni_flooding(struct vty *vty,
+				       const struct lyd_node *dnode,
+				       bool show_defaults)
+{
+	const char *val = yang_dnode_get_string(dnode, NULL);
+
+	if (strmatch(val, "inherit-global") && !show_defaults)
+		return;
+	if (strmatch(val, "disable"))
+		vty_out(vty, "   flooding disable\n");
+	else if (strmatch(val, "head-end-replication"))
+		vty_out(vty, "   flooding head-end-replication\n");
+}
+
+/*
  * AF-level import|export vpn
  */
 static int bgp_nb_vpn_imexport_validate(struct bgp *bgp, afi_t afi, safi_t safi,
