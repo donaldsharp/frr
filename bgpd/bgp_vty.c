@@ -151,8 +151,7 @@ FRR_CFG_DEFAULT_BOOL(BGP_IPV6_NEXTHOP_PREFER_GLOBAL,
 DEFINE_HOOK(bgp_inst_config_write,
 		(struct bgp *bgp, struct vty *vty),
 		(bgp, vty));
-DEFINE_HOOK(bgp_snmp_update_last_changed, (struct bgp *bgp), (bgp));
-DEFINE_HOOK(bgp_snmp_init_stats, (struct bgp *bgp), (bgp));
+DEFINE_HOOK(bgp_snmp_update_last_changed, (struct bgp * bgp), (bgp));
 DEFINE_HOOK(bgp_snmp_traps_config_write, (struct vty * vty), (vty));
 DEFINE_HOOK(bgp_route_distinguisher_update, (struct bgp *bgp, afi_t afi, bool preconfig),
 	    (bgp, afi, preconfig));
@@ -11721,7 +11720,7 @@ DEFPY (bgp_imexport_vpn,
 			vpn_leak_no_retain(bgp, bgp_default, afi);
 	}
 
-	hook_call(bgp_snmp_init_stats, bgp);
+	//hook_call(bgp_snmp_init_stats, bgp);
 
 	return CMD_SUCCESS;
 }
@@ -24019,9 +24018,7 @@ void bgp_vty_init(void)
 	/* redistribute show commands */
 	install_element(VIEW_NODE, &show_bgp_redistribute_cmd);
 
-	/* import|export vpn [route-map RMAP_NAME] */
-	install_element(BGP_IPV4_NODE, &bgp_imexport_vpn_cmd);
-	install_element(BGP_IPV6_NODE, &bgp_imexport_vpn_cmd);
+	/* import|export vpn — YANG: bgp_cli_init() */
 
 	install_element(BGP_IPV4_NODE, &bgp_imexport_vrf_cmd);
 	install_element(BGP_IPV6_NODE, &bgp_imexport_vrf_cmd);
@@ -24116,18 +24113,7 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &no_neighbor_ls_remote_link_id_cmd);
 
 	/* UPA global origination commands - for all prefixes, not just aggregates */
-	install_element(BGP_IPV4_NODE, &upa_originate_all_cmd);
-	install_element(BGP_IPV4_NODE, &no_upa_originate_all_cmd);
-	install_element(BGP_IPV4_NODE, &upa_max_routes_global_cmd);
-	install_element(BGP_IPV4_NODE, &no_upa_max_routes_global_cmd);
-	install_element(BGP_IPV4_NODE, &upa_drop_global_cmd);
-	install_element(BGP_IPV4_NODE, &no_upa_drop_global_cmd);
-	install_element(BGP_IPV6_NODE, &upa_originate_all_cmd);
-	install_element(BGP_IPV6_NODE, &no_upa_originate_all_cmd);
-	install_element(BGP_IPV6_NODE, &upa_max_routes_global_cmd);
-	install_element(BGP_IPV6_NODE, &no_upa_max_routes_global_cmd);
-	install_element(BGP_IPV6_NODE, &upa_drop_global_cmd);
-	install_element(BGP_IPV6_NODE, &no_upa_drop_global_cmd);
+	/* AF-level UPA — YANG: bgp_cli_init() */
 
 	bgp_vty_if_init();
 
