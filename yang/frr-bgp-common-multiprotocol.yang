@@ -229,5 +229,25 @@ submodule frr-bgp-common-multiprotocol {
       description
         "IPv6 flowspec configuration options.";
     }
+
+    container ipv4-unreachability {
+      when "derived-from-or-self(../afi-safi-name, 'frr-rt:ipv4-unreachability')" {
+        description
+          "Include this container for IPv4 unreachability SAFI
+           specific configuration.";
+      }
+      description
+        "IPv4 unreachability (SAFI_UNREACH) configuration options.";
+    }
+
+    container ipv6-unreachability {
+      when "derived-from-or-self(../afi-safi-name, 'frr-rt:ipv6-unreachability')" {
+        description
+          "Include this container for IPv6 unreachability SAFI
+           specific configuration.";
+      }
+      description
+        "IPv6 unreachability (SAFI_UNREACH) configuration options.";
+    }
   }
 }

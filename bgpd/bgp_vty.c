@@ -23706,13 +23706,9 @@ void bgp_vty_init(void)
 
 	/* "neighbor password" — YANG: bgp_cli_init() */
 
-	/* "neighbor activate" — UPA remains classic; LS → YANG bgp_cli_init() */
-	install_element(BGP_IPV4U_NODE, &neighbor_activate_cmd);
-	install_element(BGP_IPV6U_NODE, &neighbor_activate_cmd);
+	/* "neighbor activate" — YANG: bgp_cli_init() */
 
-	/* "no neighbor activate" — UPA remains classic */
-	install_element(BGP_IPV4U_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_IPV6U_NODE, &no_neighbor_activate_cmd);
+	/* "no neighbor activate" — YANG: bgp_cli_init() */
 
 	/* "neighbor peer-group" set on AF nodes — YANG: bgp_cli_init() */
 
@@ -23823,11 +23819,7 @@ void bgp_vty_init(void)
 
 	/* "neighbor filter-list" commands. */
 
-	/* "neighbor route-map" — UPA remains classic; LS → YANG bgp_cli_init() */
-	install_element(BGP_IPV4U_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV4U_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV6U_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV6U_NODE, &no_neighbor_route_map_cmd);
+	/* "neighbor route-map" — YANG: bgp_cli_init() */
 
 	/* "neighbor unsuppress-map" commands. */
 
@@ -23835,36 +23827,7 @@ void bgp_vty_init(void)
 
 	/* bgp default-originate timer */
 
-	/* neighbor maximum-prefix-out commands. */
-	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4U_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6U_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6U_NODE, &no_neighbor_maximum_prefix_out_cmd);
-
-	/* "neighbor maximum-prefix" commands. */
-
-	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV4U_NODE, &no_neighbor_maximum_prefix_cmd);
-
-	install_element(BGP_IPV6U_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6U_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV6U_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV6U_NODE, &neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV6U_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV6U_NODE, &neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV6U_NODE, &no_neighbor_maximum_prefix_cmd);
-
-
-	/* "neighbor allowas-in" */
-	install_element(BGP_IPV4U_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4U_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6U_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6U_NODE, &no_neighbor_allowas_in_cmd);
+	/* neighbor maximum-prefix / allowas-in on UPA — YANG: bgp_cli_init() */
 
 	/* neighbor accept-own */
 

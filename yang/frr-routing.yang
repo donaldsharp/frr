@@ -176,6 +176,20 @@ module frr-routing {
       "This identity represents the IPv6 flowspec address family.";
   }
 
+  identity ipv4-unreachability {
+    base afi-safi-type;
+    description
+      "This identity represents the IPv4 unreachability (SAFI_UNREACH)
+       address family.";
+  }
+
+  identity ipv6-unreachability {
+    base afi-safi-type;
+    description
+      "This identity represents the IPv6 unreachability (SAFI_UNREACH)
+       address family.";
+  }
+
 
   identity control-plane-protocol {
     description
