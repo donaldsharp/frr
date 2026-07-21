@@ -14,6 +14,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "prefix.h"
+
 struct bgp;
 
 /*
@@ -34,6 +36,19 @@ struct bmp_nb_ops {
 
 	int (*listener_set)(void *bt, const char *addr, uint16_t port);
 	int (*listener_unset)(void *bt, const char *addr, uint16_t port);
+
+	int (*connect_set)(void *bt, const char *hostname, uint16_t port,
+			   uint32_t minretry, uint32_t maxretry,
+			   const char *srcif);
+	int (*connect_unset)(void *bt, const char *hostname, uint16_t port,
+			     const char *srcif);
+
+	int (*import_vrf_set)(void *bt, const char *vrfname);
+	int (*import_vrf_unset)(void *bt, const char *vrfname);
+
+	/* policy is YANG leaf name: pre-policy | post-policy | loc-rib */
+	void (*monitor_set)(void *bt, afi_t afi, safi_t safi, const char *policy,
+			    bool enable);
 };
 
 extern struct bmp_nb_ops *bmp_nb_cb;

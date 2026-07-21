@@ -53,7 +53,8 @@ submodule frr-bgp-bmp {
     description
       "Add BMP import-vrf and experimental stats knobs to match CLI.
        Default stats-send-experimental to true to match classic.
-       Constrain max-retry-time >= min-retry-time via YANG must.";
+       Constrain max-retry-time >= min-retry-time via YANG must.
+       Add source-interface on outbound sessions and loc-rib monitor.";
     reference
       "FRRouting.";
   }
@@ -135,6 +136,13 @@ submodule frr-bgp-bmp {
           description
             "Maximum connection retry interval.";
         }
+
+        leaf source-interface {
+          type string;
+          description
+            "Source interface for the outbound BMP connection.
+             Maps to: bmp connect ... source-interface IFNAME.";
+        }
       }
     }
   }
@@ -176,6 +184,14 @@ submodule frr-bgp-bmp {
         default "false";
         description
           "Send state after policy and filter processing.";
+      }
+
+      leaf loc-rib {
+        type boolean;
+        default "false";
+        description
+          "Send Loc-RIB state after the decision process.
+           Maps to: bmp monitor ... loc-rib.";
       }
     }
   }
