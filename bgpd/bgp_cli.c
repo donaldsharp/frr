@@ -1590,6 +1590,45 @@ DEFPY_YANG(bgp_daemon_community_alias_yang,
 	return nb_cli_apply_changes(vty, "%s", xpath);
 }
 
+DEFPY_YANG(bgp_daemon_send_extra_data_yang,
+	   bgp_daemon_send_extra_data_yang_cmd,
+	   "[no] bgp send-extra-data zebra",
+	   NO_STR BGP_STR
+	   "Extra data to Zebra for display/use\n"
+	   "To zebra\n")
+{
+	nb_cli_enqueue_change(vty, "/frr-bgp:bgp-daemon/send-extra-data",
+			      NB_OP_MODIFY, no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(bgp_daemon_rmap_delay_timer_yang,
+	   bgp_daemon_rmap_delay_timer_yang_cmd,
+	   "[no] bgp route-map delay-timer [(0-600)$timer]",
+	   NO_STR BGP_STR
+	   "BGP route-map delay timer\n"
+	   "Time in secs to wait before processing route-map changes\n"
+	   "0 disables the timer, no route updates happen when route-maps change\n")
+{
+	char buf[16];
+
+	if (no) {
+		nb_cli_enqueue_change(vty, "/frr-bgp:bgp-daemon/rmap-delay-time",
+				      NB_OP_DESTROY, NULL);
+		return nb_cli_apply_changes(vty, NULL);
+	}
+
+	if (!timer_str) {
+		vty_out(vty, "%% Incomplete command\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	snprintf(buf, sizeof(buf), "%" PRIi64, timer);
+	nb_cli_enqueue_change(vty, "/frr-bgp:bgp-daemon/rmap-delay-time",
+			      NB_OP_MODIFY, buf);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
 DEFPY_YANG(bgp_condadv_period_yang, bgp_condadv_period_yang_cmd,
 	   "[no$no] bgp conditional-advertisement timer (5-240)$period",
 	   NO_STR BGP_STR
@@ -8877,6 +8916,8 @@ void bgp_cli_init(void)
 	install_element(CONFIG_NODE,
 			&no_bgp_daemon_advertisement_delay_yang_cmd);
 	install_element(CONFIG_NODE, &bgp_daemon_community_alias_yang_cmd);
+	install_element(CONFIG_NODE, &bgp_daemon_send_extra_data_yang_cmd);
+	install_element(CONFIG_NODE, &bgp_daemon_rmap_delay_timer_yang_cmd);
 
 	/* AF-level import|export vpn */
 	install_element(BGP_IPV4_NODE, &bgp_imexport_vpn_yang_cmd);

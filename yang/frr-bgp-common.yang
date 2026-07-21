@@ -779,6 +779,26 @@ submodule frr-bgp-common {
         "Maps to: bgp output-queue-limit (1-4294967295).";
     }
 
+    leaf send-extra-data {
+      type boolean;
+      default "false";
+      description
+        "Send extra data to Zebra for display/use.
+         Maps to: [no] bgp send-extra-data zebra.";
+    }
+
+    leaf rmap-delay-time {
+      type uint16 {
+        range "0..600";
+      }
+      units "seconds";
+      default "5";
+      description
+        "Daemon-wide route-map delay timer (bm->rmap_update_timer).
+         Maps to: bgp route-map delay-timer (0-600) at CONFIG_NODE.
+         Zero disables delayed processing.";
+    }
+
     list community-alias {
       key "community";
       unique "alias";

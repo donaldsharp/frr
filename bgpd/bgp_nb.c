@@ -106,6 +106,21 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-bgp:bgp-daemon/send-extra-data",
+			.cbs = {
+				.modify = bgp_nb_daemon_send_extra_data_modify,
+				.cli_show = bgp_nb_cli_show_daemon_send_extra_data,
+			},
+		},
+		{
+			.xpath = "/frr-bgp:bgp-daemon/rmap-delay-time",
+			.cbs = {
+				.modify = bgp_nb_daemon_rmap_delay_time_modify,
+				.destroy = bgp_nb_daemon_rmap_delay_time_destroy,
+				.cli_show = bgp_nb_cli_show_daemon_rmap_delay_time,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp",
 			.cbs = {
 				.create = bgp_nb_bgp_create,

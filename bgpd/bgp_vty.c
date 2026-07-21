@@ -23513,9 +23513,7 @@ void bgp_vty_init(void)
 
 	/* "bgp suppress-fib-pending" global — YANG: bgp_cli_init() */
 
-	/* bgp route-map delay-timer commands. */
-	install_element(CONFIG_NODE, &bgp_set_route_map_delay_timer_cmd);
-	install_element(CONFIG_NODE, &no_bgp_set_route_map_delay_timer_cmd);
+	/* bgp route-map delay-timer — YANG: bgp_cli_init() */
 
 	/* bgp allow-martian-nexthop — YANG: bgp_cli_init() */
 
@@ -23565,7 +23563,7 @@ void bgp_vty_init(void)
 
 	/* "bgp no-rib" — YANG: bgp_cli_init() */
 
-	install_element(CONFIG_NODE, &no_bgp_send_extra_data_cmd);
+	/* bgp send-extra-data zebra — YANG: bgp_cli_init() */
 
 	/* "bgp confederation" — YANG: bgp_cli_init() */
 
@@ -23594,9 +23592,7 @@ void bgp_vty_init(void)
 
 	/* "timers bgp" / minimum-holdtime — YANG: bgp_cli_init() */
 
-	/* route-map delay-timer — BGP_NODE YANG: bgp_cli_init();
-	 * CONFIG_NODE remains classic (process-global, no BGP xpath).
-	 */
+	/* route-map delay-timer — BGP_NODE + CONFIG_NODE YANG: bgp_cli_init() */
 
 	/* "bgp client-to-client reflection" — YANG: bgp_cli_init() */
 

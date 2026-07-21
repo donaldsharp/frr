@@ -15918,3 +15918,65 @@ int bgp_nb_daemon_community_alias_name_modify(struct nb_cb_modify_args *args)
 	bgp_ca_community_insert(&ca);
 	return NB_OK;
 }
+
+int bgp_nb_daemon_send_extra_data_modify(struct nb_cb_modify_args *args)
+{
+	bool set;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	set = yang_dnode_get_bool(args->dnode, NULL);
+	if (set)
+		SET_FLAG(bm->flags, BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA);
+	else
+		UNSET_FLAG(bm->flags, BM_FLAG_SEND_EXTRA_DATA_TO_ZEBRA);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_daemon_send_extra_data(struct vty *vty,
+					    const struct lyd_node *dnode,
+					    bool show_defaults)
+{
+	if (yang_dnode_get_bool(dnode, NULL))
+		vty_out(vty, "bgp send-extra-data zebra\n");
+	else if (show_defaults)
+		vty_out(vty, "no bgp send-extra-data zebra\n");
+}
+
+int bgp_nb_daemon_rmap_delay_time_modify(struct nb_cb_modify_args *args)
+{
+	uint16_t timer;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	timer = yang_dnode_get_uint16(args->dnode, NULL);
+	bm->rmap_update_timer = timer;
+
+	if (!timer && event_is_scheduled(bm->t_rmap_update)) {
+		event_cancel(&bm->t_rmap_update);
+		event_execute(bm->master, bgp_route_map_update_timer, NULL, 0,
+			      NULL);
+	}
+	return NB_OK;
+}
+
+int bgp_nb_daemon_rmap_delay_time_destroy(struct nb_cb_destroy_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bm->rmap_update_timer = RMAP_DEFAULT_UPDATE_TIMER;
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_daemon_rmap_delay_time(struct vty *vty,
+					    const struct lyd_node *dnode,
+					    bool show_defaults)
+{
+	uint16_t timer = yang_dnode_get_uint16(dnode, NULL);
+
+	if (timer != RMAP_DEFAULT_UPDATE_TIMER || show_defaults)
+		vty_out(vty, "bgp route-map delay-timer %u\n", timer);
+}
