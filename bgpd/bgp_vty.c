@@ -3443,8 +3443,7 @@ DEFUN (no_bgp_deterministic_med,
 	return CMD_SUCCESS;
 }
 
-static int bgp_inst_gr_config_vty(struct vty *vty, struct bgp *bgp, bool on,
-				  bool disable)
+int bgp_inst_gr_config(struct bgp *bgp, bool on, bool disable)
 {
 	int ret = BGP_GR_FAILURE;
 
@@ -3470,6 +3469,12 @@ static int bgp_inst_gr_config_vty(struct vty *vty, struct bgp *bgp, bool on,
 	VTY_BGP_GR_ROUTER_DETECT_AND_SEND_CAPABILITY_TO_ZEBRA(bgp, bgp->peer,
 							      ret);
 	return ret;
+}
+
+static int bgp_inst_gr_config_vty(struct vty *vty, struct bgp *bgp, bool on,
+				  bool disable)
+{
+	return bgp_inst_gr_config(bgp, on, disable);
 }
 
 static int bgp_global_gr_config_vty(struct vty *vty, bool on, bool disable)
@@ -23534,7 +23539,7 @@ void bgp_vty_init(void)
 	install_element(CONFIG_NODE, &bgp_set_route_map_delay_timer_cmd);
 	install_element(CONFIG_NODE, &no_bgp_set_route_map_delay_timer_cmd);
 
-	install_element(BGP_NODE, &bgp_allow_martian_cmd);
+	/* bgp allow-martian-nexthop — YANG: bgp_cli_init() */
 
 	/* bgp fast-convergence command */
 	install_element(BGP_NODE, &bgp_fast_convergence_cmd);
@@ -23621,13 +23626,7 @@ void bgp_vty_init(void)
 
 	/* update-delay / advertisement-delay — YANG: bgp_cli_init() */
 
-	install_element(BGP_NODE, &bgp_wpkt_quanta_cmd);
-	install_element(BGP_NODE, &bgp_rpkt_quanta_cmd);
-
-	install_element(BGP_NODE, &bgp_coalesce_time_cmd);
-	install_element(BGP_NODE, &no_bgp_coalesce_time_cmd);
-
-	install_element(BGP_NODE, &bgp_use_underlying_nexthop_weight_cmd);
+	/* write/read-quanta, coalesce-time, use-underlays — YANG: bgp_cli_init() */
 
 	/* "nexthop prefer-global" commands */
 	install_element(BGP_IPV6_NODE, &bgp_af_nexthop_prefer_global_cmd);
@@ -23686,7 +23685,9 @@ void bgp_vty_init(void)
 
 	/* "bgp deterministic-med" — YANG: bgp_cli_init() */
 
-	/* GR mode enable/disable remain classic (CONFIG+BGP shared). */
+	/* GR mode enable/disable — YANG: bgp_cli_init();
+	 * CONFIG_NODE remains classic.
+	 */
 
 	/* "neighbor a:b:c:d graceful-restart" command */
 	install_element(BGP_NODE, &bgp_neighbor_graceful_restart_set_cmd);
@@ -23708,21 +23709,13 @@ void bgp_vty_init(void)
 	 * CONFIG_NODE remains classic where installed.
 	 */
 
-	/* Keep classic BGP_NODE installs for GR enable/disable */
-	install_element(BGP_NODE, &bgp_graceful_restart_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_restart_cmd);
-	install_element(BGP_NODE, &bgp_graceful_restart_disable_cmd);
-	install_element(BGP_NODE, &no_bgp_graceful_restart_disable_cmd);
-
 	/* "bgp graceful-shutdown" — BGP_NODE YANG: bgp_cli_init();
 	 * CONFIG_NODE remains classic (daemon-wide).
 	 */
 
 	/* "bgp hard-administrative-reset" — YANG: bgp_cli_init() */
 
-	/* "bgp long-lived-graceful-restart" commands */
-	install_element(BGP_NODE, &bgp_llgr_stalepath_time_cmd);
-	install_element(BGP_NODE, &no_bgp_llgr_stalepath_time_cmd);
+	/* "bgp long-lived-graceful-restart" — YANG: bgp_cli_init() */
 
 	/* "bgp fast-external-failover" — YANG: bgp_cli_init() */
 
@@ -23746,8 +23739,7 @@ void bgp_vty_init(void)
 
 	/* "bgp bestpath bandwidth" — YANG: bgp_cli_init() */
 
-	/* "no bgp default <afi>-<safi>" commands. */
-	install_element(BGP_NODE, &bgp_default_afi_safi_cmd);
+	/* "bgp default <afi>-<safi>" — YANG: bgp_cli_init() */
 
 	/* "bgp network import-check" — YANG: bgp_cli_init() */
 
@@ -23766,28 +23758,17 @@ void bgp_vty_init(void)
 	/* bgp default dynamic-capability */
 	install_element(BGP_NODE, &bgp_default_dynamic_capability_cmd);
 
-	/* "bgp default subgroup-pkt-queue-max" commands. */
-	install_element(BGP_NODE, &bgp_default_subgroup_pkt_queue_max_cmd);
-	install_element(BGP_NODE, &no_bgp_default_subgroup_pkt_queue_max_cmd);
+	/* "bgp default subgroup-pkt-queue-max" — YANG: bgp_cli_init() */
 
 	/* bgp route-reflector allow-outbound-policy — YANG: bgp_cli_init() */
 
-	/* "bgp listen limit" commands. */
-	install_element(BGP_NODE, &bgp_listen_limit_cmd);
-	install_element(BGP_NODE, &no_bgp_listen_limit_cmd);
+	/* "bgp listen limit" — YANG: bgp_cli_init() */
 
 	/* "bgp listen range" commands. */
 	install_element(BGP_NODE, &bgp_listen_range_cmd);
 	install_element(BGP_NODE, &no_bgp_listen_range_cmd);
 
-	/* "bgp default shutdown" command */
-	install_element(BGP_NODE, &bgp_default_shutdown_cmd);
-
-	/* "bgp shutdown" commands */
-	install_element(BGP_NODE, &bgp_shutdown_cmd);
-	install_element(BGP_NODE, &bgp_shutdown_msg_cmd);
-	install_element(BGP_NODE, &no_bgp_shutdown_cmd);
-	install_element(BGP_NODE, &no_bgp_shutdown_msg_cmd);
+	/* "bgp default shutdown" / "bgp shutdown" — YANG: bgp_cli_init() */
 
 	/* "neighbor remote-as" commands. */
 	install_element(BGP_NODE, &neighbor_remote_as_cmd);
@@ -25055,9 +25036,7 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &neighbor_ttl_security_cmd);
 	install_element(BGP_NODE, &no_neighbor_ttl_security_cmd);
 
-	/* "bgp tcp-keepalive" commands */
-	install_element(BGP_NODE, &bgp_tcp_keepalive_cmd);
-	install_element(BGP_NODE, &no_bgp_tcp_keepalive_cmd);
+	/* "bgp tcp-keepalive" — YANG: bgp_cli_init() */
 
 	/* "show [ip] bgp memory" commands. */
 	install_element(VIEW_NODE, &show_bgp_memory_cmd);
