@@ -23938,10 +23938,8 @@ void bgp_vty_init(void)
 	/* "neighbor unsuppress-map" commands. */
 
 	/* "neighbor advertise-map" commands. */
-	install_element(BGP_NODE, &bgp_condadv_period_cmd);
 
 	/* bgp default-originate timer */
-	install_element(BGP_NODE, &bgp_def_originate_eval_cmd);
 
 	/* neighbor maximum-prefix-out commands. */
 	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_out_cmd);
