@@ -23772,13 +23772,7 @@ void bgp_vty_init(void)
 
 	/* "bgp default shutdown" / "bgp shutdown" — YANG: bgp_cli_init() */
 
-	/* "neighbor remote-as" / "no neighbor" — YANG: bgp_cli_init() */
-	install_element(BGP_NODE, &neighbor_interface_config_cmd);
-	install_element(BGP_NODE, &neighbor_interface_config_v6only_cmd);
-	install_element(BGP_NODE, &neighbor_interface_config_remote_as_cmd);
-	install_element(BGP_NODE,
-			&neighbor_interface_v6only_config_remote_as_cmd);
-	install_element(BGP_NODE, &no_neighbor_interface_config_cmd);
+	/* "neighbor remote-as" / "no neighbor" / interface — YANG: bgp_cli_init() */
 
 	/* "neighbor peer-group" — YANG: bgp_cli_init() */
 
@@ -23788,13 +23782,9 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &neighbor_local_as_no_prepend_replace_as_cmd);
 	install_element(BGP_NODE, &no_neighbor_local_as_cmd);
 
-	/* "neighbor solo" commands. */
-	install_element(BGP_NODE, &neighbor_solo_cmd);
-	install_element(BGP_NODE, &no_neighbor_solo_cmd);
+	/* "neighbor solo" — YANG: bgp_cli_init() */
 
-	/* "neighbor password" commands. */
-	install_element(BGP_NODE, &neighbor_password_cmd);
-	install_element(BGP_NODE, &no_neighbor_password_cmd);
+	/* "neighbor password" — YANG: bgp_cli_init() */
 
 	/* "neighbor activate" commands. */
 	install_element(BGP_NODE, &neighbor_activate_hidden_cmd);
@@ -24389,9 +24379,7 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE,
 			&no_neighbor_path_attribute_treat_as_withdraw_cmd);
 
-	/* "neighbor passive" commands. */
-	install_element(BGP_NODE, &neighbor_passive_cmd);
-	install_element(BGP_NODE, &no_neighbor_passive_cmd);
+	/* "neighbor passive" — YANG: bgp_cli_init() */
 
 	/* "neighbor upa" commands. */
 	install_element(BGP_IPV4_NODE, &neighbor_upa_cmd);
@@ -24404,11 +24392,9 @@ void bgp_vty_init(void)
 
 	install_element(VIEW_NODE, &show_bgp_neighbor_upa_cmd);
 
-	/* "neighbor shutdown" commands. */
-	install_element(BGP_NODE, &neighbor_shutdown_cmd);
-	install_element(BGP_NODE, &no_neighbor_shutdown_cmd);
-	install_element(BGP_NODE, &neighbor_shutdown_msg_cmd);
-	install_element(BGP_NODE, &no_neighbor_shutdown_msg_cmd);
+	/* "neighbor shutdown" — YANG: bgp_cli_init();
+	 * shutdown rtt remains classic for now.
+	 */
 	install_element(BGP_NODE, &neighbor_shutdown_rtt_cmd);
 	install_element(BGP_NODE, &no_neighbor_shutdown_rtt_cmd);
 
@@ -24481,10 +24467,7 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &neighbor_enforce_first_as_cmd);
 	install_element(BGP_NODE, &no_neighbor_enforce_first_as_cmd);
 
-	/* "neighbor description" commands. */
-	install_element(BGP_NODE, &neighbor_description_cmd);
-	install_element(BGP_NODE, &no_neighbor_description_cmd);
-	install_element(BGP_NODE, &no_neighbor_description_comment_cmd);
+	/* "neighbor description" — YANG: bgp_cli_init() */
 
 	/* "neighbor update-source" commands. "*/
 	install_element(BGP_NODE, &neighbor_update_source_cmd);

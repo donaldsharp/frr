@@ -1814,12 +1814,6 @@ static int bgp_cli_neighbor_base_xpath(struct vty *vty, const char *neighbor,
 		 "%s/peer-groups/peer-group[peer-group-name='%s']",
 		 VTY_CURR_XPATH, neighbor);
 	if (!yang_dnode_exists(vty->candidate_config->dnode, check)) {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-
-		/* Interface peers still classic — fall back for remote-as. */
-		if (peer_lookup_by_conf_if(bgp, neighbor))
-			return 1;
-
 		vty_out(vty, "%% Create the peer-group or interface first\n");
 		return -1;
 	}
@@ -1902,34 +1896,8 @@ DEFPY_YANG(neighbor_remote_as_yang, neighbor_remote_as_yang_cmd,
 
 	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
 					  &is_pg);
-	if (ret < 0)
+	if (ret != 0)
 		return CMD_WARNING_CONFIG_FAILED;
-	if (ret > 0) {
-		/* Classic interface peer path until unnumbered is converted. */
-		const char *as_arg = as_str ? as_str
-					    : internal ? "internal"
-					    : as_auto  ? "auto"
-						       : "external";
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		as_t as1 = 0;
-		enum peer_asn_type as_type = AS_SPECIFIED;
-		int pret;
-
-		if (as_arg[0] == 'i')
-			as_type = AS_INTERNAL;
-		else if (as_arg[0] == 'e')
-			as_type = AS_EXTERNAL;
-		else if (as_arg[0] == 'a')
-			as_type = AS_AUTO;
-		else if (!asn_str2asn(as_arg, &as)) {
-			vty_out(vty, "%% Invalid peer AS: %s\n", as_arg);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-
-		pret = peer_remote_as(bgp, NULL, neighbor, &as1, as_type,
-				      as_arg);
-		return bgp_vty_return(vty, pret);
-	}
 
 	/* Numbered neighbors are created by remote-as; peer-groups must exist. */
 	if (!is_pg)
@@ -1958,24 +1926,8 @@ DEFUN_YANG(no_neighbor_yang, no_neighbor_yang_cmd,
 
 	ret = bgp_cli_neighbor_base_xpath(vty, peer_str, xpath, sizeof(xpath),
 					  &is_pg);
-	if (ret < 0)
+	if (ret != 0)
 		return CMD_WARNING_CONFIG_FAILED;
-	if (ret > 0) {
-		/* Interface peer still classic. */
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		struct peer *peer = peer_lookup_by_conf_if(bgp, peer_str);
-
-		if (peer) {
-			if (peer->ifp)
-				bgp_zebra_terminate_radv(peer->bgp, peer);
-			peer_notify_unconfig(peer->connection);
-			peer_delete(peer);
-			bgp_nb_may_stop_listening(bgp);
-			return CMD_SUCCESS;
-		}
-		vty_out(vty, "%% Create the peer-group or interface first\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
 
 	nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
 	return nb_cli_apply_changes(vty, NULL);
@@ -2001,13 +1953,6 @@ DEFPY_YANG(no_neighbor_remote_as_yang, no_neighbor_remote_as_yang_cmd,
 	if (ret < 0)
 		return CMD_WARNING_CONFIG_FAILED;
 	if (ret > 0) {
-		VTY_DECLVAR_CONTEXT(bgp, bgp);
-		struct peer *peer = peer_lookup_by_conf_if(bgp, neighbor);
-
-		if (peer) {
-			peer_as_change(peer, 0, AS_UNSPECIFIED, NULL);
-			return CMD_SUCCESS;
-		}
 		vty_out(vty, "%% Create the peer-group or interface first\n");
 		return CMD_WARNING_CONFIG_FAILED;
 	}
@@ -2017,6 +1962,242 @@ DEFPY_YANG(no_neighbor_remote_as_yang, no_neighbor_remote_as_yang_cmd,
 	snprintf(leaf, sizeof(leaf), "%s/neighbor-remote-as/remote-as-type",
 		 xpath);
 	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_interface_config_yang, neighbor_interface_config_yang_cmd,
+	   "[no] neighbor WORD$ifname interface [v6only$v6only] [peer-group WORD$peergroup] [remote-as <ASNUM$as|internal$internal|external$external|auto$as_auto>]",
+	   NO_STR NEIGHBOR_STR
+	   "Interface name\n"
+	   "Enable BGP on interface\n"
+	   "Enable BGP with v6 link-local only\n"
+	   "Member of the peer-group\n"
+	   "Peer-group name\n"
+	   "Specify a BGP neighbor\n"
+	   AS_STR
+	   "Internal BGP peer\n"
+	   "External BGP peer\n"
+	   "Automatically detect remote ASN\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+
+	snprintf(xpath, sizeof(xpath),
+		 "./neighbors/unnumbered-neighbor[interface='%s']", ifname);
+
+	if (no) {
+		nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
+		return nb_cli_apply_changes(vty, NULL);
+	}
+
+	nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+
+	if (v6only) {
+		snprintf(leaf, sizeof(leaf), "%s/v6only", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "true");
+	}
+
+	if (peergroup) {
+		snprintf(leaf, sizeof(leaf), "%s/peer-group", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, peergroup);
+	}
+
+	if (as_str || internal || external || as_auto) {
+		int ret = bgp_cli_enqueue_remote_as(vty, xpath, as_str,
+						    !!internal, !!external,
+						    !!as_auto);
+		if (ret != CMD_SUCCESS)
+			return ret;
+	}
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_password_yang, neighbor_password_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor password [LINE$password]",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Set a password\n"
+	   "The password\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	if (!no && !password) {
+		vty_out(vty, "%% Password required\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/password", xpath);
+	if (no)
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	else
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, password);
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_description_yang, neighbor_description_yang_cmd,
+	   "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor description LINE...",
+	   NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Neighbor specific description\n"
+	   "Up to 80 characters describing this neighbor\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	char *str;
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	str = argv_concat(argv, argc, 3);
+	snprintf(leaf, sizeof(leaf), "%s/description", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, str);
+	XFREE(MTYPE_TMP, str);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(no_neighbor_description_yang, no_neighbor_description_yang_cmd,
+	   "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor description [LINE...]",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Neighbor specific description\n"
+	   "Up to 80 characters describing this neighbor\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/description", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_passive_yang, neighbor_passive_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor passive",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Don't send open messages to this neighbor\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/passive-mode", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_solo_yang, neighbor_solo_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor solo",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Solo peer - part of its own update group\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/solo", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_shutdown_yang, neighbor_shutdown_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor shutdown",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Administratively shut down this neighbor\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/admin-shutdown/message", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	snprintf(leaf, sizeof(leaf), "%s/admin-shutdown/enable", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_shutdown_msg_yang, neighbor_shutdown_msg_yang_cmd,
+	   "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor shutdown message MSG...",
+	   NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Administratively shut down this neighbor\n"
+	   "Add a shutdown message (RFC 8203)\n"
+	   "Shutdown message\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	char *msgstr;
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	msgstr = argv_concat(argv, argc, 4);
+	snprintf(leaf, sizeof(leaf), "%s/admin-shutdown/enable", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "true");
+	snprintf(leaf, sizeof(leaf), "%s/admin-shutdown/message", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, msgstr);
+	XFREE(MTYPE_TMP, msgstr);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(no_neighbor_shutdown_msg_yang, no_neighbor_shutdown_msg_yang_cmd,
+	   "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor shutdown message MSG...",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Administratively shut down this neighbor\n"
+	   "Remove a shutdown message (RFC 8203)\n"
+	   "Shutdown message\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/admin-shutdown/message", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	snprintf(leaf, sizeof(leaf), "%s/admin-shutdown/enable", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "false");
 	return nb_cli_apply_changes(vty, NULL);
 }
 
@@ -2163,4 +2344,13 @@ void bgp_cli_init(void)
 	install_element(BGP_NODE, &neighbor_remote_as_yang_cmd);
 	install_element(BGP_NODE, &no_neighbor_yang_cmd);
 	install_element(BGP_NODE, &no_neighbor_remote_as_yang_cmd);
+	install_element(BGP_NODE, &neighbor_interface_config_yang_cmd);
+	install_element(BGP_NODE, &neighbor_password_yang_cmd);
+	install_element(BGP_NODE, &neighbor_description_yang_cmd);
+	install_element(BGP_NODE, &no_neighbor_description_yang_cmd);
+	install_element(BGP_NODE, &neighbor_passive_yang_cmd);
+	install_element(BGP_NODE, &neighbor_solo_yang_cmd);
+	install_element(BGP_NODE, &neighbor_shutdown_yang_cmd);
+	install_element(BGP_NODE, &neighbor_shutdown_msg_yang_cmd);
+	install_element(BGP_NODE, &no_neighbor_shutdown_msg_yang_cmd);
 }
