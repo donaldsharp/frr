@@ -781,6 +781,7 @@ submodule frr-bgp-common {
 
     list community-alias {
       key "community";
+      unique "alias";
       description
         "Maps to: bgp community alias WORD ALIAS_NAME.";
       leaf community {
