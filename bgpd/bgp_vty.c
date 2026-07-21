@@ -23619,13 +23619,10 @@ void bgp_vty_init(void)
 	/* "neighbor role" commands. */
 
 	/* "neighbor oad" commands. */
-	install_element(BGP_NODE, &neighbor_oad_cmd);
 
 	/* "neighbor aigp" commands. */
-	install_element(BGP_NODE, &neighbor_aigp_cmd);
 
 	/* "neighbor graceful-shutdown" command */
-	install_element(BGP_NODE, &neighbor_graceful_shutdown_cmd);
 
 	/* bgp disable-ebgp-connected-nh-check — YANG: bgp_cli_init() */
 
@@ -23694,20 +23691,10 @@ void bgp_vty_init(void)
 	 */
 
 	/* "neighbor a:b:c:d graceful-restart" command */
-	install_element(BGP_NODE, &bgp_neighbor_graceful_restart_set_cmd);
-	install_element(BGP_NODE, &no_bgp_neighbor_graceful_restart_set_cmd);
 
 	/* "neighbor a:b:c:d graceful-restart-disable" command */
-	install_element(BGP_NODE,
-			&bgp_neighbor_graceful_restart_disable_set_cmd);
-	install_element(BGP_NODE,
-			&no_bgp_neighbor_graceful_restart_disable_set_cmd);
 
 	/* "neighbor a:b:c:d graceful-restart-helper" command */
-	install_element(BGP_NODE,
-			&bgp_neighbor_graceful_restart_helper_set_cmd);
-	install_element(BGP_NODE,
-			&no_bgp_neighbor_graceful_restart_helper_set_cmd);
 
 	/* GR timer/flag knobs — BGP_NODE YANG: bgp_cli_init();
 	 * CONFIG_NODE remains classic where installed.
@@ -24363,14 +24350,8 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &no_neighbor_aspath_loop_detection_cmd);
 
 	/* "neighbor path-attribute discard" commands. */
-	install_element(BGP_NODE, &neighbor_path_attribute_discard_cmd);
-	install_element(BGP_NODE, &no_neighbor_path_attribute_discard_cmd);
 
 	/* "neighbor path-attribute treat-as-withdraw" commands. */
-	install_element(BGP_NODE,
-			&neighbor_path_attribute_treat_as_withdraw_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_path_attribute_treat_as_withdraw_cmd);
 
 	/* "neighbor passive" — YANG: bgp_cli_init() */
 
