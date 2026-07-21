@@ -23808,9 +23808,6 @@ void bgp_vty_init(void)
 
 
 	/* "nexthop-local unchanged" commands */
-	install_element(BGP_IPV6_NODE, &neighbor_nexthop_local_unchanged_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_neighbor_nexthop_local_unchanged_cmd);
 
 	/* "neighbor next-hop-self" commands. */
 

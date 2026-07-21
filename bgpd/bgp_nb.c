@@ -11513,6 +11513,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/nexthop-local-unchanged",
+			.cbs = {
+				.modify = bgp_nb_peer_af_nexthop_local_unchanged_modify,
+				.cli_show = bgp_nb_cli_show_peer_af_nexthop_local_unchanged,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-multicast/conditional-advertisement/advertise-map",
 			.cbs = {
 				.modify = bgp_nb_peer_af_advertise_map_modify,
@@ -12163,6 +12170,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/nexthop-local-unchanged",
+			.cbs = {
+				.modify = bgp_nb_peer_af_nexthop_local_unchanged_modify,
+				.cli_show = bgp_nb_cli_show_peer_af_nexthop_local_unchanged,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-multicast/conditional-advertisement/advertise-map",
 			.cbs = {
 				.modify = bgp_nb_peer_af_advertise_map_modify,
@@ -12810,6 +12824,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 			.cbs = {
 				.modify = bgp_nb_peer_af_upa_modify,
 				.cli_show = bgp_nb_cli_show_peer_af_upa,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/nexthop-local-unchanged",
+			.cbs = {
+				.modify = bgp_nb_peer_af_nexthop_local_unchanged_modify,
+				.cli_show = bgp_nb_cli_show_peer_af_nexthop_local_unchanged,
 			},
 		},
 		{
