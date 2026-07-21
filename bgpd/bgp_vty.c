@@ -5192,28 +5192,7 @@ DEFUN (no_bgp_listen_limit,
 static struct peer_group *listen_range_exists(struct bgp *bgp,
 					      struct prefix *range, int exact)
 {
-	struct listnode *node, *nnode;
-	struct listnode *node1, *nnode1;
-	struct peer_group *group;
-	struct prefix *lr;
-	afi_t afi;
-	int match;
-
-	afi = family2afi(range->family);
-	for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group)) {
-		for (ALL_LIST_ELEMENTS(group->listen_range[afi], node1, nnode1,
-				       lr)) {
-			if (exact)
-				match = prefix_same(range, lr);
-			else
-				match = (prefix_match(range, lr)
-					 || prefix_match(lr, range));
-			if (match)
-				return group;
-		}
-	}
-
-	return NULL;
+	return bgp_listen_range_lookup(bgp, range, !!exact);
 }
 
 /*
@@ -23723,11 +23702,7 @@ void bgp_vty_init(void)
 
 	/* bgp route-reflector allow-outbound-policy — YANG: bgp_cli_init() */
 
-	/* "bgp listen limit" — YANG: bgp_cli_init() */
-
-	/* "bgp listen range" commands. */
-	install_element(BGP_NODE, &bgp_listen_range_cmd);
-	install_element(BGP_NODE, &no_bgp_listen_range_cmd);
+	/* "bgp listen limit" / "bgp listen range" — YANG: bgp_cli_init() */
 
 	/* "bgp default shutdown" / "bgp shutdown" — YANG: bgp_cli_init() */
 
