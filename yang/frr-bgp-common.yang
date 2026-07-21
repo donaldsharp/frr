@@ -1766,7 +1766,8 @@ submodule frr-bgp-common {
     list import-vrf-list {
       key "vrf";
       description
-        "List of VRFs to import routes from.";
+        "List of VRFs to import routes from.
+         Maps to: import vrf NAME.";
       leaf vrf {
         type frr-vrf:vrf-ref {
           require-instance false;
