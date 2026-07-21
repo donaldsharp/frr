@@ -23774,9 +23774,7 @@ void bgp_vty_init(void)
 
 	/* "neighbor addpath-rx-paths-limit" commands.*/
 
-	/* "neighbor sender-as-path-loop-detection" commands. */
-	install_element(BGP_NODE, &neighbor_aspath_loop_detection_cmd);
-	install_element(BGP_NODE, &no_neighbor_aspath_loop_detection_cmd);
+	/* "neighbor sender-as-path-loop-detection" — YANG: bgp_cli_init() */
 
 	/* "neighbor path-attribute discard" commands. */
 
@@ -23814,20 +23812,10 @@ void bgp_vty_init(void)
 
 	/* "neighbor disable-connected-check" commands.  */
 
-	/* "neighbor disable-link-bw-encoding-ieee" commands.  */
-	install_element(BGP_NODE, &neighbor_disable_link_bw_encoding_ieee_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_disable_link_bw_encoding_ieee_cmd);
-
-
-	install_element(BGP_NODE, &neighbor_extended_link_bw_cmd);
-
-	install_element(BGP_NODE, &neighbor_nhc_attribute_cmd);
-
-	/* "neighbor extended-optional-parameters" commands.  */
-	install_element(BGP_NODE, &neighbor_extended_optional_parameters_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_extended_optional_parameters_cmd);
+	/* neighbor disable-link-bw-encoding-ieee / extended-link-bandwidth /
+	 * send-nexthop-characteristics / extended-optional-parameters —
+	 * YANG: bgp_cli_init()
+	 */
 
 	/* "neighbor enforce-first-as" commands. */
 
