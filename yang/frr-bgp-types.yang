@@ -109,6 +109,12 @@ module frr-bgp-types {
         description
           "External BGP peer.";
       }
+      enum "auto" {
+        value 4;
+        description
+          "Auto-detect remote AS from peer's OPEN message.
+           Maps to: neighbor <peer> remote-as auto.";
+      }
     }
     description
       "AS type, which specifies the type of AS or BGP peer.";

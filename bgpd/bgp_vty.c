@@ -929,7 +929,7 @@ int bgp_vty_find_and_parse_afi_safi_bgp(struct vty *vty,
 	return *idx;
 }
 
-static bool peer_address_self_check(struct bgp *bgp, union sockunion *su)
+bool peer_address_self_check(struct bgp *bgp, union sockunion *su)
 {
 	struct interface *ifp = NULL;
 	struct listnode *node;
@@ -1631,6 +1631,11 @@ static void bgp_need_listening(struct bgp *bgp, struct vty *vty)
 		vrf = bgp_vrf_lookup_by_instance_type(bgp);
 		bgp_handle_socket(bgp, vrf, VRF_UNKNOWN, true);
 	}
+}
+
+void bgp_nb_need_listening(struct bgp *bgp)
+{
+	bgp_need_listening(bgp, NULL);
 }
 
 #include "bgpd/bgp_vty_clippy.c"
@@ -5237,6 +5242,11 @@ static void bgp_may_stop_listening(struct bgp *bgp, struct vty *vty)
 	vrf = bgp_vrf_lookup_by_instance_type(bgp);
 	bgp_handle_socket(bgp, vrf, VRF_UNKNOWN, false);
 	UNSET_FLAG(bgp->flags, BGP_FLAG_VRF_MAY_LISTEN);
+}
+
+void bgp_nb_may_stop_listening(struct bgp *bgp)
+{
+	bgp_may_stop_listening(bgp, NULL);
 }
 
 DEFUN (bgp_listen_range,
@@ -23762,21 +23772,15 @@ void bgp_vty_init(void)
 
 	/* "bgp default shutdown" / "bgp shutdown" — YANG: bgp_cli_init() */
 
-	/* "neighbor remote-as" commands. */
-	install_element(BGP_NODE, &neighbor_remote_as_cmd);
+	/* "neighbor remote-as" / "no neighbor" — YANG: bgp_cli_init() */
 	install_element(BGP_NODE, &neighbor_interface_config_cmd);
 	install_element(BGP_NODE, &neighbor_interface_config_v6only_cmd);
 	install_element(BGP_NODE, &neighbor_interface_config_remote_as_cmd);
 	install_element(BGP_NODE,
 			&neighbor_interface_v6only_config_remote_as_cmd);
-	install_element(BGP_NODE, &no_neighbor_cmd);
 	install_element(BGP_NODE, &no_neighbor_interface_config_cmd);
 
-	/* "neighbor peer-group" commands. */
-	install_element(BGP_NODE, &neighbor_peer_group_cmd);
-	install_element(BGP_NODE, &no_neighbor_peer_group_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_interface_peer_group_remote_as_cmd);
+	/* "neighbor peer-group" — YANG: bgp_cli_init() */
 
 	/* "neighbor local-as" commands. */
 	install_element(BGP_NODE, &neighbor_local_as_cmd);

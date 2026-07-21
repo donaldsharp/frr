@@ -18,6 +18,7 @@
 #include "bgpd/bgp_nb.h"
 #include "bgpd/bgp_io.h"
 #include "bgpd/bgp_updgrp.h"
+#include "bgpd/bgp_zebra.h"
 
 #include "bgpd/bgp_cli_clippy.c"
 
@@ -1778,6 +1779,247 @@ DEFPY_YANG(bgp_default_software_version_capability_yang,
 	return nb_cli_apply_changes(vty, NULL);
 }
 
+/*
+ * Neighbor / peer-group xpath helper.
+ * Returns 0 on success. For WORD, prefers an existing unnumbered neighbor
+ * in the candidate, otherwise peer-group (which must already exist for
+ * remote-as — matching classic "create the peer-group first").
+ */
+static int bgp_cli_neighbor_base_xpath(struct vty *vty, const char *neighbor,
+				       char *xpath, size_t xpath_len,
+				       bool *is_peer_group)
+{
+	char check[XPATH_MAXLEN + 256];
+	union sockunion su;
+
+	*is_peer_group = false;
+
+	if (str2sockunion(neighbor, &su) >= 0) {
+		snprintf(xpath, xpath_len,
+			 "./neighbors/neighbor[remote-address='%s']", neighbor);
+		return 0;
+	}
+
+	snprintf(check, sizeof(check),
+		 "%s/neighbors/unnumbered-neighbor[interface='%s']",
+		 VTY_CURR_XPATH, neighbor);
+	if (yang_dnode_exists(vty->candidate_config->dnode, check)) {
+		snprintf(xpath, xpath_len,
+			 "./neighbors/unnumbered-neighbor[interface='%s']",
+			 neighbor);
+		return 0;
+	}
+
+	snprintf(check, sizeof(check),
+		 "%s/peer-groups/peer-group[peer-group-name='%s']",
+		 VTY_CURR_XPATH, neighbor);
+	if (!yang_dnode_exists(vty->candidate_config->dnode, check)) {
+		VTY_DECLVAR_CONTEXT(bgp, bgp);
+
+		/* Interface peers still classic — fall back for remote-as. */
+		if (peer_lookup_by_conf_if(bgp, neighbor))
+			return 1;
+
+		vty_out(vty, "%% Create the peer-group or interface first\n");
+		return -1;
+	}
+
+	snprintf(xpath, xpath_len,
+		 "./peer-groups/peer-group[peer-group-name='%s']", neighbor);
+	*is_peer_group = true;
+	return 0;
+}
+
+static int bgp_cli_enqueue_remote_as(struct vty *vty, const char *base_xpath,
+				     const char *as_str, bool internal,
+				     bool external, bool as_auto)
+{
+	char leaf[XPATH_MAXLEN + 256];
+	const char *as_type;
+
+	if (as_str) {
+		as_t as_num;
+
+		if (!asn_str2asn(as_str, &as_num)) {
+			vty_out(vty, "%% Invalid AS number: %s\n", as_str);
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		as_type = "as-specified";
+		snprintf(leaf, sizeof(leaf),
+			 "%s/neighbor-remote-as/remote-as-type", base_xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, as_type);
+		snprintf(leaf, sizeof(leaf), "%s/neighbor-remote-as/remote-as",
+			 base_xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
+				      asn_asn2asplain(as_num));
+	} else if (internal) {
+		snprintf(leaf, sizeof(leaf),
+			 "%s/neighbor-remote-as/remote-as-type", base_xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "internal");
+	} else if (as_auto) {
+		snprintf(leaf, sizeof(leaf),
+			 "%s/neighbor-remote-as/remote-as-type", base_xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "auto");
+	} else {
+		snprintf(leaf, sizeof(leaf),
+			 "%s/neighbor-remote-as/remote-as-type", base_xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "external");
+	}
+	return CMD_SUCCESS;
+}
+
+DEFPY_YANG(neighbor_peer_group_yang, neighbor_peer_group_yang_cmd,
+	   "[no] neighbor WORD$pg peer-group",
+	   NO_STR NEIGHBOR_STR
+	   "Neighbor tag\n"
+	   "Configure peer-group\n")
+{
+	char xpath[XPATH_MAXLEN];
+
+	snprintf(xpath, sizeof(xpath),
+		 "./peer-groups/peer-group[peer-group-name='%s']", pg);
+
+	if (no)
+		nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
+	else
+		nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_remote_as_yang, neighbor_remote_as_yang_cmd,
+	   "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor remote-as <ASNUM$as|internal$internal|external$external|auto$as_auto>",
+	   NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Specify a BGP neighbor\n"
+	   AS_STR
+	   "Internal BGP peer\n"
+	   "External BGP peer\n"
+	   "Automatically detect remote ASN\n")
+{
+	char xpath[XPATH_MAXLEN];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret < 0)
+		return CMD_WARNING_CONFIG_FAILED;
+	if (ret > 0) {
+		/* Classic interface peer path until unnumbered is converted. */
+		const char *as_arg = as_str ? as_str
+					    : internal ? "internal"
+					    : as_auto  ? "auto"
+						       : "external";
+		VTY_DECLVAR_CONTEXT(bgp, bgp);
+		as_t as1 = 0;
+		enum peer_asn_type as_type = AS_SPECIFIED;
+		int pret;
+
+		if (as_arg[0] == 'i')
+			as_type = AS_INTERNAL;
+		else if (as_arg[0] == 'e')
+			as_type = AS_EXTERNAL;
+		else if (as_arg[0] == 'a')
+			as_type = AS_AUTO;
+		else if (!asn_str2asn(as_arg, &as)) {
+			vty_out(vty, "%% Invalid peer AS: %s\n", as_arg);
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+
+		pret = peer_remote_as(bgp, NULL, neighbor, &as1, as_type,
+				      as_arg);
+		return bgp_vty_return(vty, pret);
+	}
+
+	/* Numbered neighbors are created by remote-as; peer-groups must exist. */
+	if (!is_pg)
+		nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+
+	ret = bgp_cli_enqueue_remote_as(vty, xpath, as_str, !!internal,
+					!!external, !!as_auto);
+	if (ret != CMD_SUCCESS)
+		return ret;
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFUN_YANG(no_neighbor_yang, no_neighbor_yang_cmd,
+	   "no neighbor <WORD|<A.B.C.D|X:X::X:X> [remote-as <ASNUM|internal|external|auto>]>",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Specify a BGP neighbor\n"
+	   AS_STR
+	   "Internal BGP peer\n"
+	   "External BGP peer\n"
+	   "Automatically detect remote ASN\n")
+{
+	char xpath[XPATH_MAXLEN];
+	bool is_pg = false;
+	int ret;
+	const char *peer_str = argv[2]->arg;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, peer_str, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret < 0)
+		return CMD_WARNING_CONFIG_FAILED;
+	if (ret > 0) {
+		/* Interface peer still classic. */
+		VTY_DECLVAR_CONTEXT(bgp, bgp);
+		struct peer *peer = peer_lookup_by_conf_if(bgp, peer_str);
+
+		if (peer) {
+			if (peer->ifp)
+				bgp_zebra_terminate_radv(peer->bgp, peer);
+			peer_notify_unconfig(peer->connection);
+			peer_delete(peer);
+			bgp_nb_may_stop_listening(bgp);
+			return CMD_SUCCESS;
+		}
+		vty_out(vty, "%% Create the peer-group or interface first\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(no_neighbor_remote_as_yang, no_neighbor_remote_as_yang_cmd,
+	   "no neighbor WORD$neighbor remote-as <ASNUM|internal|external|auto>",
+	   NO_STR NEIGHBOR_STR
+	   "Interface name or neighbor tag\n"
+	   "Specify a BGP neighbor\n"
+	   AS_STR
+	   "Internal BGP peer\n"
+	   "External BGP peer\n"
+	   "Automatically detect remote ASN\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret < 0)
+		return CMD_WARNING_CONFIG_FAILED;
+	if (ret > 0) {
+		VTY_DECLVAR_CONTEXT(bgp, bgp);
+		struct peer *peer = peer_lookup_by_conf_if(bgp, neighbor);
+
+		if (peer) {
+			peer_as_change(peer, 0, AS_UNSPECIFIED, NULL);
+			return CMD_SUCCESS;
+		}
+		vty_out(vty, "%% Create the peer-group or interface first\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	snprintf(leaf, sizeof(leaf), "%s/neighbor-remote-as/remote-as", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	snprintf(leaf, sizeof(leaf), "%s/neighbor-remote-as/remote-as-type",
+		 xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
 void bgp_cli_init(void)
 {
 	install_element(CONFIG_NODE, &router_bgp_yang_cmd);
@@ -1916,4 +2158,9 @@ void bgp_cli_init(void)
 	install_element(BGP_NODE, &bgp_default_link_local_capability_yang_cmd);
 	install_element(BGP_NODE,
 			&bgp_default_software_version_capability_yang_cmd);
+
+	install_element(BGP_NODE, &neighbor_peer_group_yang_cmd);
+	install_element(BGP_NODE, &neighbor_remote_as_yang_cmd);
+	install_element(BGP_NODE, &no_neighbor_yang_cmd);
+	install_element(BGP_NODE, &no_neighbor_remote_as_yang_cmd);
 }
