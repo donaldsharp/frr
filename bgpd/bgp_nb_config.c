@@ -7709,6 +7709,277 @@ void bgp_nb_cli_show_evpn_ead_es_frag(struct vty *vty,
 }
 
 /*
+ * EVPN default-originate ipv4|ipv6
+ */
+static afi_t bgp_nb_evpn_default_orig_afi(const struct lyd_node *dnode)
+{
+	if (strmatch(dnode->schema->name, "ipv4"))
+		return AFI_IP;
+	if (strmatch(dnode->schema->name, "ipv6"))
+		return AFI_IP6;
+	return AFI_UNSPEC;
+}
+
+int bgp_nb_evpn_default_originate_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	afi_t afi;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	afi = bgp_nb_evpn_default_orig_afi(args->dnode);
+	if (!bgp || afi == AFI_UNSPEC)
+		return NB_ERR_NOT_FOUND;
+
+	evpn_process_default_originate_cmd(bgp, afi,
+					   yang_dnode_get_bool(args->dnode,
+							       NULL));
+	return NB_OK;
+}
+
+int bgp_nb_evpn_default_originate_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	afi_t afi;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	afi = bgp_nb_evpn_default_orig_afi(args->dnode);
+	if (!bgp || afi == AFI_UNSPEC)
+		return NB_OK;
+
+	evpn_process_default_originate_cmd(bgp, afi, false);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_evpn_default_originate(struct vty *vty,
+					    const struct lyd_node *dnode,
+					    bool show_defaults)
+{
+	if (!yang_dnode_get_bool(dnode, NULL))
+		return;
+	vty_out(vty, "  default-originate %s\n", dnode->schema->name);
+}
+
+/*
+ * EVPN type-5 advertise ipv4|ipv6 unicast [gateway-ip] [route-map]
+ */
+static afi_t bgp_nb_evpn_type5_afi(const struct lyd_node *dnode)
+{
+	const struct lyd_node *n;
+
+	for (n = dnode; n; n = lyd_parent(n)) {
+		if (strmatch(n->schema->name, "ipv4-unicast"))
+			return AFI_IP;
+		if (strmatch(n->schema->name, "ipv6-unicast"))
+			return AFI_IP6;
+	}
+	return AFI_UNSPEC;
+}
+
+static const struct lyd_node *
+bgp_nb_evpn_type5_container(const struct lyd_node *dnode, afi_t afi)
+{
+	return yang_dnode_get_parent(dnode,
+				     afi == AFI_IP ? "ipv4-unicast"
+						   : "ipv6-unicast");
+}
+
+static int bgp_nb_evpn_type5_apply(const struct lyd_node *dnode)
+{
+	struct bgp *bgp;
+	const struct lyd_node *cont;
+	afi_t afi;
+	safi_t safi = SAFI_UNICAST;
+	bool enable, gw_ip;
+	const char *rmap = NULL;
+	uint16_t flag_oi_none, flag_oi_gw_ip;
+	bool has_none, has_gw, currently_enabled, flag_changed, rmap_changed;
+	const char *cur_rmap;
+
+	afi = bgp_nb_evpn_type5_afi(dnode);
+	if (afi == AFI_UNSPEC)
+		return NB_ERR_NOT_FOUND;
+
+	cont = bgp_nb_evpn_type5_container(dnode, afi);
+	if (!cont)
+		return NB_ERR_NOT_FOUND;
+
+	bgp = nb_running_get_entry(cont, NULL, true);
+	if (!bgp)
+		return NB_ERR_NOT_FOUND;
+
+	enable = yang_dnode_exists(cont, "./enable") &&
+		 yang_dnode_get_bool(cont, "./enable");
+	gw_ip = enable && yang_dnode_exists(cont, "./gateway-ip") &&
+		yang_dnode_get_bool(cont, "./gateway-ip");
+	if (enable && yang_dnode_exists(cont, "./route-map"))
+		rmap = yang_dnode_get_string(cont, "./route-map");
+
+	if (afi == AFI_IP) {
+		flag_oi_none = BGP_L2VPN_EVPN_ADV_IPV4_UNICAST;
+		flag_oi_gw_ip = BGP_L2VPN_EVPN_ADV_IPV4_UNICAST_GW_IP;
+	} else {
+		flag_oi_none = BGP_L2VPN_EVPN_ADV_IPV6_UNICAST;
+		flag_oi_gw_ip = BGP_L2VPN_EVPN_ADV_IPV6_UNICAST_GW_IP;
+	}
+
+	has_none = CHECK_FLAG(bgp->af_flags[AFI_L2VPN][SAFI_EVPN],
+			      flag_oi_none);
+	has_gw = CHECK_FLAG(bgp->af_flags[AFI_L2VPN][SAFI_EVPN], flag_oi_gw_ip);
+	currently_enabled = has_none || has_gw;
+
+	cur_rmap = bgp->adv_cmd_rmap[afi][safi].name;
+	if (rmap && cur_rmap)
+		rmap_changed = strcmp(rmap, cur_rmap) != 0;
+	else
+		rmap_changed = (rmap != NULL) != (cur_rmap != NULL);
+
+	flag_changed = (enable != currently_enabled) ||
+		       (enable && gw_ip != has_gw);
+
+	if (!enable) {
+		if (currently_enabled)
+			bgp_evpn_withdraw_type5_routes(bgp, afi, safi);
+		UNSET_FLAG(bgp->af_flags[AFI_L2VPN][SAFI_EVPN], flag_oi_none);
+		UNSET_FLAG(bgp->af_flags[AFI_L2VPN][SAFI_EVPN], flag_oi_gw_ip);
+		if (has_gw)
+			bgp_addpath_type_changed(bgp);
+		if (bgp->adv_cmd_rmap[afi][safi].name) {
+			XFREE(MTYPE_ROUTE_MAP_NAME,
+			      bgp->adv_cmd_rmap[afi][safi].name);
+			route_map_counter_decrement(
+				bgp->adv_cmd_rmap[afi][safi].map);
+			bgp->adv_cmd_rmap[afi][safi].name = NULL;
+			bgp->adv_cmd_rmap[afi][safi].map = NULL;
+		}
+		return NB_OK;
+	}
+
+	if (flag_changed || rmap_changed) {
+		if (currently_enabled)
+			bgp_evpn_withdraw_type5_routes(bgp, afi, safi);
+		if (rmap_changed && bgp->adv_cmd_rmap[afi][safi].name) {
+			XFREE(MTYPE_ROUTE_MAP_NAME,
+			      bgp->adv_cmd_rmap[afi][safi].name);
+			route_map_counter_decrement(
+				bgp->adv_cmd_rmap[afi][safi].map);
+			bgp->adv_cmd_rmap[afi][safi].name = NULL;
+			bgp->adv_cmd_rmap[afi][safi].map = NULL;
+		}
+	}
+
+	UNSET_FLAG(bgp->af_flags[AFI_L2VPN][SAFI_EVPN], flag_oi_none);
+	UNSET_FLAG(bgp->af_flags[AFI_L2VPN][SAFI_EVPN], flag_oi_gw_ip);
+	if (gw_ip)
+		SET_FLAG(bgp->af_flags[AFI_L2VPN][SAFI_EVPN], flag_oi_gw_ip);
+	else
+		SET_FLAG(bgp->af_flags[AFI_L2VPN][SAFI_EVPN], flag_oi_none);
+
+	if (flag_changed)
+		bgp_addpath_type_changed(bgp);
+
+	if (rmap && (!bgp->adv_cmd_rmap[afi][safi].name ||
+		     strcmp(bgp->adv_cmd_rmap[afi][safi].name, rmap) != 0)) {
+		if (bgp->adv_cmd_rmap[afi][safi].name) {
+			XFREE(MTYPE_ROUTE_MAP_NAME,
+			      bgp->adv_cmd_rmap[afi][safi].name);
+			route_map_counter_decrement(
+				bgp->adv_cmd_rmap[afi][safi].map);
+		}
+		bgp->adv_cmd_rmap[afi][safi].name =
+			XSTRDUP(MTYPE_ROUTE_MAP_NAME, rmap);
+		bgp->adv_cmd_rmap[afi][safi].map =
+			route_map_lookup_by_name(rmap);
+		route_map_counter_increment(bgp->adv_cmd_rmap[afi][safi].map);
+	}
+
+	if (advertise_type5_routes_bestpath(bgp, afi) ||
+	    advertise_type5_routes_multipath(bgp, afi))
+		bgp_evpn_advertise_type5_routes(bgp, afi, safi);
+
+	return NB_OK;
+}
+
+int bgp_nb_evpn_type5_enable_modify(struct nb_cb_modify_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_evpn_type5_apply(args->dnode);
+}
+
+int bgp_nb_evpn_type5_enable_destroy(struct nb_cb_destroy_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_evpn_type5_apply(args->dnode);
+}
+
+int bgp_nb_evpn_type5_gateway_ip_modify(struct nb_cb_modify_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_evpn_type5_apply(args->dnode);
+}
+
+int bgp_nb_evpn_type5_gateway_ip_destroy(struct nb_cb_destroy_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_evpn_type5_apply(args->dnode);
+}
+
+int bgp_nb_evpn_type5_route_map_modify(struct nb_cb_modify_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_evpn_type5_apply(args->dnode);
+}
+
+int bgp_nb_evpn_type5_route_map_destroy(struct nb_cb_destroy_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+	return bgp_nb_evpn_type5_apply(args->dnode);
+}
+
+void bgp_nb_cli_show_evpn_type5_enable(struct vty *vty,
+				       const struct lyd_node *dnode,
+				       bool show_defaults)
+{
+	const struct lyd_node *cont;
+	afi_t afi;
+	bool gw_ip;
+	const char *rmap = NULL;
+	const char *afname;
+
+	if (!yang_dnode_get_bool(dnode, NULL))
+		return;
+
+	afi = bgp_nb_evpn_type5_afi(dnode);
+	cont = bgp_nb_evpn_type5_container(dnode, afi);
+	if (!cont)
+		return;
+
+	afname = (afi == AFI_IP) ? "ipv4" : "ipv6";
+	gw_ip = yang_dnode_exists(cont, "./gateway-ip") &&
+		yang_dnode_get_bool(cont, "./gateway-ip");
+	if (yang_dnode_exists(cont, "./route-map"))
+		rmap = yang_dnode_get_string(cont, "./route-map");
+
+	vty_out(vty, "  advertise %s unicast", afname);
+	if (gw_ip)
+		vty_out(vty, " gateway-ip");
+	if (rmap)
+		vty_out(vty, " route-map %s", rmap);
+	vty_out(vty, "\n");
+}
+
+/*
  * AF-level import|export vpn
  */
 static int bgp_nb_vpn_imexport_validate(struct bgp *bgp, afi_t afi, safi_t safi,

@@ -192,6 +192,8 @@ extern void evpn_set_advertise_svi_macip(struct bgp *bgp, struct bgpevpn *vpn,
 					 uint32_t set);
 extern void bgp_evpn_set_unset_resolve_overlay_index(struct bgp *bgp,
 						     bool set);
+extern void evpn_process_default_originate_cmd(struct bgp *bgp_vrf, afi_t afi,
+					       bool add);
 extern void bgp_evpn_handle_global_macvrf_soo_change(struct bgp *bgp,
 						    struct ecommunity *new_soo);
 extern void bgp_evpn_cleanup_per_vni_routes(struct bgp *bgp);
