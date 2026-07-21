@@ -32,6 +32,7 @@
 #include "frregex_real.h"
 
 #include "bgpd/bgpd.h"
+#include "bgpd/bgp_nb.h"
 #include "bgpd/bgp_attr_evpn.h"
 #include "bgpd/bgp_advertise.h"
 #include "bgpd/bgp_attr.h"
@@ -159,7 +160,7 @@ DEFINE_HOOK(bgp_inst_config_write,
 		(bgp, vty));
 DEFINE_HOOK(bgp_snmp_update_last_changed, (struct bgp *bgp), (bgp));
 DEFINE_HOOK(bgp_snmp_init_stats, (struct bgp *bgp), (bgp));
-DEFINE_HOOK(bgp_snmp_traps_config_write, (struct vty * vty), (vty));
+DEFINE_HOOK(bgp_snmp_traps_config_write, (struct vty *vty), (vty));
 DEFINE_HOOK(bgp_route_distinguisher_update, (struct bgp *bgp, afi_t afi, bool preconfig),
 	    (bgp, afi, preconfig));
 
@@ -23306,7 +23307,8 @@ static void bgp_ac_peer(vector comps, struct cmd_token *token)
 		for (ALL_LIST_ELEMENTS_RO(bgp->peer, lnpeer, peer)) {
 			/* only provide suggestions on the appropriate input
 			 * token type,
-			 * they'll otherwise show up multiple times */
+			 * they'll otherwise show up multiple times
+			 */
 			enum cmd_token_type match_type;
 			char *name = peer->host;
 
@@ -23814,19 +23816,13 @@ void bgp_vty_init(void)
 	install_element(CONFIG_NODE,
 			&no_bgp_graceful_restart_rib_stale_time_cmd);
 
-	/* "router bgp" commands. */
-	install_element(CONFIG_NODE, &router_bgp_cmd);
-
-	/* "no router bgp" commands. */
-	install_element(CONFIG_NODE, &no_router_bgp_cmd);
+	/* "router bgp" / globals converted to YANG — see bgp_cli_init(). */
 
 	/* "bgp session-dscp command */
 	install_element(CONFIG_NODE, &bgp_session_dscp_cmd);
 	install_element(CONFIG_NODE, &no_bgp_session_dscp_cmd);
 
-	/* "bgp router-id" commands. */
-	install_element(BGP_NODE, &bgp_router_id_cmd);
-	install_element(BGP_NODE, &no_bgp_router_id_cmd);
+	/* "bgp router-id" — YANG: bgp_cli_init() */
 
 	/* "bgp suppress-fib-pending" command */
 	install_element(BGP_NODE, &bgp_suppress_fib_pending_cmd);
@@ -23944,9 +23940,7 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &bgp_always_compare_med_cmd);
 	install_element(BGP_NODE, &no_bgp_always_compare_med_cmd);
 
-	/* bgp ebgp-requires-policy */
-	install_element(BGP_NODE, &bgp_ebgp_requires_policy_cmd);
-	install_element(BGP_NODE, &no_bgp_ebgp_requires_policy_cmd);
+	/* bgp ebgp-requires-policy — YANG: bgp_cli_init() */
 
 	/* bgp enforce-first-as */
 	install_element(BGP_NODE, &bgp_enforce_first_as_cmd);
@@ -24051,9 +24045,7 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE,
 			&no_bgp_bestpath_peer_type_multipath_relax_cmd);
 
-	/* "bgp log-neighbor-changes" commands */
-	install_element(BGP_NODE, &bgp_log_neighbor_changes_cmd);
-	install_element(BGP_NODE, &no_bgp_log_neighbor_changes_cmd);
+	/* "bgp log-neighbor-changes" — YANG: bgp_cli_init() */
 
 	/* "bgp bestpath med" commands */
 	install_element(BGP_NODE, &bgp_bestpath_med_cmd);
@@ -24066,9 +24058,7 @@ void bgp_vty_init(void)
 	/* "no bgp default <afi>-<safi>" commands. */
 	install_element(BGP_NODE, &bgp_default_afi_safi_cmd);
 
-	/* "bgp network import-check" commands. */
-	install_element(BGP_NODE, &bgp_network_import_check_cmd);
-	install_element(BGP_NODE, &no_bgp_network_import_check_cmd);
+	/* "bgp network import-check" — YANG: bgp_cli_init() */
 
 	/* "bgp default local-preference" commands. */
 	install_element(BGP_NODE, &bgp_default_local_preference_cmd);
@@ -25499,6 +25489,9 @@ void bgp_vty_init(void)
 	bgp_vty_if_init();
 
 	bgp_unreach_vty_init();
+
+	/* YANG-backed CLI for converted BGP commands */
+	bgp_cli_init();
 }
 
 /* Show UPA information for a specific neighbor */
