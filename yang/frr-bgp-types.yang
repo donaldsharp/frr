@@ -137,6 +137,12 @@ module frr-bgp-types {
         description
           "Add path feature is disabled.";
       }
+      enum "best-selected" {
+        value 4;
+        description
+          "Advertise a configured number of best selected paths.
+           Maps to: neighbor <peer> addpath-tx-best-selected <1-6>.";
+      }
     }
     description
       "Add path type, which specifies how paths are advertised to a neighbor.";

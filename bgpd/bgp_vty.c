@@ -23827,144 +23827,14 @@ void bgp_vty_init(void)
 	/* "neighbor route-server" commands.*/
 
 	/* "neighbor disable-addpath-rx" commands. */
-	install_element(BGP_IPV4_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_disable_addpath_rx_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_disable_addpath_rx_cmd);
 
 	/* "neighbor addpath-tx-all-paths" commands.*/
-	install_element(BGP_NODE, &neighbor_addpath_tx_all_paths_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_addpath_tx_all_paths_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_addpath_tx_all_paths_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_addpath_tx_all_paths_cmd);
 
 	/* "neighbor addpath-tx-best-selected" commands.*/
-	install_element(BGP_IPV4_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&no_neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_addpath_tx_best_selected_paths_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_addpath_tx_best_selected_paths_cmd);
 
 	/* "neighbor addpath-tx-bestpath-per-AS" commands.*/
-	install_element(BGP_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_hidden_cmd);
-	install_element(BGP_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_hidden_cmd);
-	install_element(BGP_IPV4_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&no_neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_addpath_tx_bestpath_per_as_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_addpath_tx_bestpath_per_as_cmd);
 
 	/* "neighbor addpath-rx-paths-limit" commands.*/
-	install_element(BGP_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_addpath_paths_limit_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_addpath_paths_limit_cmd);
 
 	/* "neighbor sender-as-path-loop-detection" commands. */
 	install_element(BGP_NODE, &neighbor_aspath_loop_detection_cmd);
@@ -24108,112 +23978,12 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &bgp_def_originate_eval_cmd);
 
 	/* neighbor maximum-prefix-out commands. */
-	install_element(BGP_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_out_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_maximum_prefix_out_cmd);
 	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_out_cmd);
 	install_element(BGP_IPV4U_NODE, &no_neighbor_maximum_prefix_out_cmd);
 	install_element(BGP_IPV6U_NODE, &neighbor_maximum_prefix_out_cmd);
 	install_element(BGP_IPV6U_NODE, &no_neighbor_maximum_prefix_out_cmd);
 
 	/* "neighbor maximum-prefix" commands. */
-	install_element(BGP_NODE, &neighbor_maximum_prefix_hidden_cmd);
-	install_element(BGP_NODE,
-			&neighbor_maximum_prefix_threshold_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_maximum_prefix_warning_hidden_cmd);
-	install_element(BGP_NODE,
-			&neighbor_maximum_prefix_threshold_warning_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_maximum_prefix_restart_hidden_cmd);
-	install_element(BGP_NODE,
-			&neighbor_maximum_prefix_threshold_restart_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_maximum_prefix_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV4_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV4_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV4M_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV4L_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV6_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV6M_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_IPV6L_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_VPNV4_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_VPNV6_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_maximum_prefix_cmd);
 
 	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_cmd);
 	install_element(BGP_IPV4U_NODE, &neighbor_maximum_prefix_threshold_cmd);
@@ -24231,15 +24001,6 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6U_NODE, &neighbor_maximum_prefix_threshold_restart_cmd);
 	install_element(BGP_IPV6U_NODE, &no_neighbor_maximum_prefix_cmd);
 
-	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_threshold_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_warning_cmd);
-	install_element(BGP_EVPN_NODE,
-			&neighbor_maximum_prefix_threshold_warning_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_maximum_prefix_restart_cmd);
-	install_element(BGP_EVPN_NODE,
-			&neighbor_maximum_prefix_threshold_restart_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_maximum_prefix_cmd);
 
 	/* "neighbor allowas-in" */
 	install_element(BGP_IPV4U_NODE, &neighbor_allowas_in_cmd);
