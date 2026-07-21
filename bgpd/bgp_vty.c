@@ -23759,38 +23759,25 @@ void bgp_vty_init(void)
 
 	/* "bgp fast-external-failover" — YANG: bgp_cli_init() */
 
-	/* "bgp bestpath aigp" commands */
-	install_element(BGP_NODE, &bgp_bestpath_aigp_cmd);
+	/* "bgp bestpath aigp" — YANG: bgp_cli_init() */
 
 	/* "bgp bestpath compare-routerid" — YANG: bgp_cli_init() */
 
 	/* "bgp bestpath as-path ignore" — YANG: bgp_cli_init() */
 
-	/* "bgp bestpath use-imported-attributes" commands */
-	install_element(BGP_NODE, &bgp_bestpath_use_imported_attrs_cmd);
+	/* "bgp bestpath use-imported-attributes" — YANG: bgp_cli_init() */
 
-	/* "bgp bestpath as-path confed" commands */
-	install_element(BGP_NODE, &bgp_bestpath_aspath_confed_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_aspath_confed_cmd);
+	/* "bgp bestpath as-path confed" — YANG: bgp_cli_init() */
 
-	/* "bgp bestpath as-path multipath-relax" commands */
-	install_element(BGP_NODE, &bgp_bestpath_aspath_multipath_relax_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_aspath_multipath_relax_cmd);
+	/* "bgp bestpath as-path multipath-relax" — YANG: bgp_cli_init() */
 
-	/* "bgp bestpath peer-type multipath-relax" commands */
-	install_element(BGP_NODE, &bgp_bestpath_peer_type_multipath_relax_cmd);
-	install_element(BGP_NODE,
-			&no_bgp_bestpath_peer_type_multipath_relax_cmd);
+	/* "bgp bestpath peer-type multipath-relax" — YANG: bgp_cli_init() */
 
 	/* "bgp log-neighbor-changes" — YANG: bgp_cli_init() */
 
-	/* "bgp bestpath med" commands */
-	install_element(BGP_NODE, &bgp_bestpath_med_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_med_cmd);
+	/* "bgp bestpath med" — YANG: bgp_cli_init() */
 
-	/* "bgp bestpath bandwidth" commands */
-	install_element(BGP_NODE, &bgp_bestpath_bw_cmd);
-	install_element(BGP_NODE, &no_bgp_bestpath_bw_cmd);
+	/* "bgp bestpath bandwidth" — YANG: bgp_cli_init() */
 
 	/* "no bgp default <afi>-<safi>" commands. */
 	install_element(BGP_NODE, &bgp_default_afi_safi_cmd);
@@ -23799,13 +23786,9 @@ void bgp_vty_init(void)
 
 	/* "bgp default local-preference" — YANG: bgp_cli_init() */
 
-	/* bgp default show-hostname */
-	install_element(BGP_NODE, &bgp_default_show_hostname_cmd);
-	install_element(BGP_NODE, &no_bgp_default_show_hostname_cmd);
+	/* bgp default show-hostname — YANG: bgp_cli_init() */
 
-	/* bgp default show-nexthop-hostname */
-	install_element(BGP_NODE, &bgp_default_show_nexthop_hostname_cmd);
-	install_element(BGP_NODE, &no_bgp_default_show_nexthop_hostname_cmd);
+	/* bgp default show-nexthop-hostname — YANG: bgp_cli_init() */
 
 	/* bgp default software-version-capability */
 	install_element(BGP_NODE, &bgp_default_software_version_capability_cmd);
@@ -23820,9 +23803,7 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &bgp_default_subgroup_pkt_queue_max_cmd);
 	install_element(BGP_NODE, &no_bgp_default_subgroup_pkt_queue_max_cmd);
 
-	/* bgp ibgp-allow-policy-mods command */
-	install_element(BGP_NODE, &bgp_rr_allow_outbound_policy_cmd);
-	install_element(BGP_NODE, &no_bgp_rr_allow_outbound_policy_cmd);
+	/* bgp route-reflector allow-outbound-policy — YANG: bgp_cli_init() */
 
 	/* "bgp listen limit" commands. */
 	install_element(BGP_NODE, &bgp_listen_limit_cmd);

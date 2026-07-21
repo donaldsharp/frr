@@ -19,6 +19,8 @@
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_addpath.h"
 #include "bgpd/bgp_updgrp.h"
+#include "bgpd/bgp_route.h"
+#include "bgpd/bgp_zebra.h"
 
 /*
  * XPath: .../frr-bgp:bgp
@@ -872,4 +874,282 @@ void bgp_nb_cli_show_ignore_as_path_length(struct vty *vty,
 		vty_out(vty, " bgp bestpath as-path ignore\n");
 	else if (show_defaults)
 		vty_out(vty, " no bgp bestpath as-path ignore\n");
+}
+
+int bgp_nb_compare_aigp_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (yang_dnode_get_bool(args->dnode, NULL))
+		SET_FLAG(bgp->flags, BGP_FLAG_COMPARE_AIGP);
+	else
+		UNSET_FLAG(bgp->flags, BGP_FLAG_COMPARE_AIGP);
+	bgp_recalculate_all_bestpaths(bgp);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_compare_aigp(struct vty *vty, const struct lyd_node *dnode,
+				  bool show_defaults)
+{
+	if (yang_dnode_get_bool(dnode, NULL))
+		vty_out(vty, " bgp bestpath aigp\n");
+	else if (show_defaults)
+		vty_out(vty, " no bgp bestpath aigp\n");
+}
+
+int bgp_nb_use_imported_attributes_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	bool enable;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	enable = yang_dnode_get_bool(args->dnode, NULL);
+	if (enable ==
+	    !!CHECK_FLAG(bgp->flags, BGP_FLAG_BESTPATH_USE_IMPORTED_ATTRS))
+		return NB_OK;
+	if (enable)
+		SET_FLAG(bgp->flags, BGP_FLAG_BESTPATH_USE_IMPORTED_ATTRS);
+	else
+		UNSET_FLAG(bgp->flags, BGP_FLAG_BESTPATH_USE_IMPORTED_ATTRS);
+	bgp_recalculate_all_bestpaths(bgp);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_use_imported_attributes(struct vty *vty,
+					     const struct lyd_node *dnode,
+					     bool show_defaults)
+{
+	if (yang_dnode_get_bool(dnode, NULL))
+		vty_out(vty, " bgp bestpath use-imported-attributes\n");
+	else if (show_defaults)
+		vty_out(vty, " no bgp bestpath use-imported-attributes\n");
+}
+
+int bgp_nb_aspath_confed_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (yang_dnode_get_bool(args->dnode, NULL))
+		SET_FLAG(bgp->flags, BGP_FLAG_ASPATH_CONFED);
+	else
+		UNSET_FLAG(bgp->flags, BGP_FLAG_ASPATH_CONFED);
+	bgp_recalculate_all_bestpaths(bgp);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_aspath_confed(struct vty *vty,
+				   const struct lyd_node *dnode,
+				   bool show_defaults)
+{
+	if (yang_dnode_get_bool(dnode, NULL))
+		vty_out(vty, " bgp bestpath as-path confed\n");
+	else if (show_defaults)
+		vty_out(vty, " no bgp bestpath as-path confed\n");
+}
+
+int bgp_nb_allow_multiple_as_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (yang_dnode_get_bool(args->dnode, NULL))
+		SET_FLAG(bgp->flags, BGP_FLAG_ASPATH_MULTIPATH_RELAX);
+	else {
+		UNSET_FLAG(bgp->flags, BGP_FLAG_ASPATH_MULTIPATH_RELAX);
+		UNSET_FLAG(bgp->flags, BGP_FLAG_MULTIPATH_RELAX_AS_SET);
+	}
+	bgp_recalculate_all_bestpaths(bgp);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_allow_multiple_as(struct vty *vty,
+				       const struct lyd_node *dnode,
+				       bool show_defaults)
+{
+	/* Combined show handled with multi-path-as-set */
+	if (!yang_dnode_get_bool(dnode, NULL) && show_defaults)
+		vty_out(vty, " no bgp bestpath as-path multipath-relax\n");
+}
+
+int bgp_nb_multi_path_as_set_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (yang_dnode_get_bool(args->dnode, NULL))
+		SET_FLAG(bgp->flags, BGP_FLAG_MULTIPATH_RELAX_AS_SET);
+	else
+		UNSET_FLAG(bgp->flags, BGP_FLAG_MULTIPATH_RELAX_AS_SET);
+	bgp_recalculate_all_bestpaths(bgp);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_multi_path_as_set(struct vty *vty,
+				       const struct lyd_node *dnode,
+				       bool show_defaults)
+{
+	const struct lyd_node *parent =
+		yang_dnode_get_parent(dnode, "route-selection-options");
+	bool relax;
+	bool as_set;
+
+	if (!parent)
+		return;
+	relax = yang_dnode_get_bool(parent, "allow-multiple-as");
+	as_set = yang_dnode_get_bool(dnode, NULL);
+
+	if (!relax)
+		return;
+	if (as_set)
+		vty_out(vty, " bgp bestpath as-path multipath-relax as-set\n");
+	else
+		vty_out(vty, " bgp bestpath as-path multipath-relax\n");
+}
+
+int bgp_nb_peer_type_multipath_relax_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (yang_dnode_get_bool(args->dnode, NULL))
+		SET_FLAG(bgp->flags, BGP_FLAG_PEERTYPE_MULTIPATH_RELAX);
+	else
+		UNSET_FLAG(bgp->flags, BGP_FLAG_PEERTYPE_MULTIPATH_RELAX);
+	bgp_recalculate_all_bestpaths(bgp);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_peer_type_multipath_relax(struct vty *vty,
+					       const struct lyd_node *dnode,
+					       bool show_defaults)
+{
+	if (yang_dnode_get_bool(dnode, NULL))
+		vty_out(vty, " bgp bestpath peer-type multipath-relax\n");
+	else if (show_defaults)
+		vty_out(vty, " no bgp bestpath peer-type multipath-relax\n");
+}
+
+int bgp_nb_confed_med_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (yang_dnode_get_bool(args->dnode, NULL))
+		SET_FLAG(bgp->flags, BGP_FLAG_MED_CONFED);
+	else
+		UNSET_FLAG(bgp->flags, BGP_FLAG_MED_CONFED);
+	bgp_recalculate_all_bestpaths(bgp);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_confed_med(struct vty *vty, const struct lyd_node *dnode,
+				bool show_defaults)
+{
+	/* Combined show with missing-as-worst-med */
+}
+
+int bgp_nb_missing_as_worst_med_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (yang_dnode_get_bool(args->dnode, NULL))
+		SET_FLAG(bgp->flags, BGP_FLAG_MED_MISSING_AS_WORST);
+	else
+		UNSET_FLAG(bgp->flags, BGP_FLAG_MED_MISSING_AS_WORST);
+	bgp_recalculate_all_bestpaths(bgp);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_missing_as_worst_med(struct vty *vty,
+					  const struct lyd_node *dnode,
+					  bool show_defaults)
+{
+	const struct lyd_node *parent =
+		yang_dnode_get_parent(dnode, "route-selection-options");
+	bool confed;
+	bool missing;
+
+	if (!parent)
+		return;
+	confed = yang_dnode_get_bool(parent, "confed-med");
+	missing = yang_dnode_get_bool(dnode, NULL);
+
+	if (!confed && !missing)
+		return;
+	if (confed && missing)
+		vty_out(vty, " bgp bestpath med confed missing-as-worst\n");
+	else if (confed)
+		vty_out(vty, " bgp bestpath med confed\n");
+	else
+		vty_out(vty, " bgp bestpath med missing-as-worst\n");
+}
+
+int bgp_nb_bandwidth_handling_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	const char *val;
+	afi_t afi;
+	safi_t safi;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	val = yang_dnode_get_string(args->dnode, NULL);
+	if (strmatch(val, "ignore"))
+		bgp->lb_handling = BGP_LINK_BW_IGNORE_BW;
+	else if (strmatch(val, "skip-missing"))
+		bgp->lb_handling = BGP_LINK_BW_SKIP_MISSING;
+	else if (strmatch(val, "default-weight-for-missing"))
+		bgp->lb_handling = BGP_LINK_BW_DEFWT_4_MISSING;
+	else
+		bgp->lb_handling = BGP_LINK_BW_ECMP;
+
+	FOREACH_AFI_SAFI (afi, safi) {
+		if (!bgp_fibupd_safi(safi))
+			continue;
+		bgp_zebra_announce_table(bgp, afi, safi);
+	}
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_bandwidth_handling(struct vty *vty,
+					const struct lyd_node *dnode,
+					bool show_defaults)
+{
+	const char *val = yang_dnode_get_string(dnode, NULL);
+
+	if (strmatch(val, "ecmp")) {
+		if (show_defaults)
+			vty_out(vty, " no bgp bestpath bandwidth\n");
+		return;
+	}
+	vty_out(vty, " bgp bestpath bandwidth %s\n", val);
 }
