@@ -799,6 +799,15 @@ submodule frr-bgp-common {
          Zero disables delayed processing.";
     }
 
+    container graceful-restart {
+      description
+        "Daemon-wide graceful-restart configuration (CONFIG_NODE / bm).
+         Maps to: bgp graceful-restart* at CONFIG_NODE.";
+      uses graceful-restart-config;
+    }
+
+    uses global-graceful-shutdown;
+
     list community-alias {
       key "community";
       unique "alias";

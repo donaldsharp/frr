@@ -3476,44 +3476,29 @@ static int bgp_inst_gr_config_vty(struct vty *vty, struct bgp *bgp, bool on,
 	return bgp_inst_gr_config(bgp, on, disable);
 }
 
-static int bgp_global_gr_config_vty(struct vty *vty, bool on, bool disable)
+/*
+ * Apply daemon-wide (CONFIG_NODE / bm) graceful-restart mode.
+ * Returns BGP_GR_SUCCESS or BGP_GR_FAILURE.
+ */
+int bgp_global_gr_config(bool on, bool disable, char *errmsg, size_t errmsg_len)
 {
 	struct listnode *node, *nnode;
 	struct bgp *bgp;
-	bool vrf_cfg = false;
-	int ret = BGP_GR_FAILURE;
+	int ret = BGP_GR_SUCCESS;
 
+	/* Idempotent already-on / already-off checks */
 	if (disable) {
 		if ((on && CHECK_FLAG(bm->flags, BM_FLAG_GR_DISABLED)) ||
 		    (!on && !CHECK_FLAG(bm->flags, BM_FLAG_GR_DISABLED)))
-			return CMD_SUCCESS;
+			return BGP_GR_SUCCESS;
 	} else {
 		if ((on && CHECK_FLAG(bm->flags, BM_FLAG_GR_RESTARTER)) ||
 		    (!on && !CHECK_FLAG(bm->flags, BM_FLAG_GR_RESTARTER)))
-			return CMD_SUCCESS;
+			return BGP_GR_SUCCESS;
 	}
 
-	/* See if GR is set per-vrf and warn user to delete */
-	if (!CHECK_FLAG(bm->flags, BM_FLAG_GR_CONFIGURED)) {
-		for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-			enum global_mode gr_mode = bgp_global_gr_mode_get(bgp);
+	/* Per-vrf mutual exclusion is NB_EV_VALIDATE / YANG candidate only. */
 
-			if (gr_mode != GLOBAL_HELPER) {
-				vty_out(vty,
-					"%% graceful-restart configuration found in %s, mode %d\n",
-					bgp->name_pretty, gr_mode);
-				vrf_cfg = true;
-			}
-		}
-	}
-
-	if (vrf_cfg) {
-		vty_out(vty,
-			"%%Failed: global graceful-restart not permitted with per-vrf configuration\n");
-		return CMD_WARNING;
-	}
-
-	/* Set flag globally */
 	if (on) {
 		if (disable) {
 			UNSET_FLAG(bm->flags, BM_FLAG_GR_RESTARTER);
@@ -3529,22 +3514,80 @@ static int bgp_global_gr_config_vty(struct vty *vty, bool on, bool disable)
 			UNSET_FLAG(bm->flags, BM_FLAG_GR_RESTARTER);
 	}
 
-	/* Initiate processing for all BGP instances. */
 	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-		ret = bgp_inst_gr_config_vty(vty, bgp, on, disable);
-		if (ret != BGP_GR_SUCCESS)
+		ret = bgp_inst_gr_config(bgp, on, disable);
+		if (ret != BGP_GR_SUCCESS && errmsg && errmsg_len)
+			snprintfrr(errmsg, errmsg_len,
+				   "Applying global graceful-restart %s config to %s failed, error %d",
+				   disable ? "disable" : "", bgp->name_pretty,
+				   ret);
+	}
+
+	return ret;
+}
+
+static int bgp_global_gr_config_vty(struct vty *vty, bool on, bool disable)
+{
+	char errmsg[256] = {};
+	int ret;
+
+	ret = bgp_global_gr_config(on, disable, errmsg, sizeof(errmsg));
+	if (ret != BGP_GR_SUCCESS) {
+		if (errmsg[0])
+			vty_out(vty, "%%%s\n", errmsg);
+		else
 			vty_out(vty,
-				"%% Applying global graceful-restart %s config to vrf %s failed, error %d\n",
-				(disable) ? "disable" : "",
-				bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT
-					? "Default"
-					: bgp->name,
-				ret);
+				"%%Failed: global graceful-restart not permitted with per-vrf configuration\n");
+		return CMD_WARNING;
 	}
 
 	vty_out(vty,
 		"Graceful restart configuration changed, reset all peers to take effect\n");
-	return bgp_vty_return(vty, ret);
+	return CMD_SUCCESS;
+}
+
+int bgp_global_graceful_shutdown_set(bool enable, char *errmsg,
+				     size_t errmsg_len)
+{
+	struct listnode *node, *nnode;
+	struct bgp *bgp;
+
+	if (enable) {
+		if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN))
+			return BGP_GR_SUCCESS;
+		/* Per-vrf mutual exclusion is NB_EV_VALIDATE / YANG only. */
+		SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN);
+	} else {
+		if (!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN))
+			return BGP_GR_SUCCESS;
+		UNSET_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN);
+	}
+
+	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
+		bgp_initiate_graceful_shut_unshut(bgp);
+
+	return BGP_GR_SUCCESS;
+}
+
+static int bgp_global_graceful_shutdown_config_vty(struct vty *vty)
+{
+	char errmsg[256] = {};
+
+	if (bgp_global_graceful_shutdown_set(true, errmsg, sizeof(errmsg)) !=
+	    BGP_GR_SUCCESS) {
+		if (errmsg[0])
+			vty_out(vty, "%%%s\n", errmsg);
+		vty_out(vty,
+			"%%Failed: global graceful-shutdown not permitted\n");
+		return CMD_WARNING;
+	}
+	return CMD_SUCCESS;
+}
+
+static int bgp_global_graceful_shutdown_deconfig_vty(struct vty *vty)
+{
+	bgp_global_graceful_shutdown_set(false, NULL, 0);
+	return CMD_SUCCESS;
 }
 
 /* "bgp graceful-restart mode" configuration. */
@@ -4339,60 +4382,6 @@ void bgp_initiate_graceful_shut_unshut(struct bgp *bgp)
 	bgp_redistribute_redo(bgp);
 	bgp_clear_all_soft_out(bgp);
 	bgp_clear_all_soft_in(bgp);
-}
-
-static int bgp_global_graceful_shutdown_config_vty(struct vty *vty)
-{
-	struct listnode *node, *nnode;
-	struct bgp *bgp;
-	bool vrf_cfg = false;
-
-	if (CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN))
-		return CMD_SUCCESS;
-
-	/* See if graceful-shutdown is set per-vrf and warn user to delete */
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp)) {
-		if (CHECK_FLAG(bgp->flags, BGP_FLAG_GRACEFUL_SHUTDOWN)) {
-			vty_out(vty,
-				"%% graceful-shutdown configuration found in vrf %s\n",
-				bgp->inst_type == BGP_INSTANCE_TYPE_DEFAULT ?
-					VRF_DEFAULT_NAME : bgp->name);
-			vrf_cfg = true;
-		}
-	}
-
-	if (vrf_cfg) {
-		vty_out(vty,
-			"%%Failed: global graceful-shutdown not permitted\n");
-		return CMD_WARNING;
-	}
-
-	/* Set flag globally */
-	SET_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN);
-
-	/* Initiate processing for all BGP instances. */
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-		bgp_initiate_graceful_shut_unshut(bgp);
-
-	return CMD_SUCCESS;
-}
-
-static int bgp_global_graceful_shutdown_deconfig_vty(struct vty *vty)
-{
-	struct listnode *node, *nnode;
-	struct bgp *bgp;
-
-	if (!CHECK_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN))
-		return CMD_SUCCESS;
-
-	/* Unset flag globally */
-	UNSET_FLAG(bm->flags, BM_FLAG_GRACEFUL_SHUTDOWN);
-
-	/* Initiate processing for all BGP instances. */
-	for (ALL_LIST_ELEMENTS(bm->bgp, node, nnode, bgp))
-		bgp_initiate_graceful_shut_unshut(bgp);
-
-	return CMD_SUCCESS;
 }
 
 /* "bgp graceful-shutdown" configuration */
@@ -23527,29 +23516,7 @@ void bgp_vty_init(void)
 
 	/* global bgp advertisement-delay — YANG: bgp_cli_init() */
 
-	/* global bgp graceful-shutdown command */
-	install_element(CONFIG_NODE, &bgp_graceful_shutdown_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_shutdown_cmd);
-
-	/* BGP-wide graceful-restart commands. */
-	install_element(CONFIG_NODE, &bgp_graceful_restart_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_restart_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_disable_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_restart_disable_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_stalepath_time_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_graceful_restart_stalepath_time_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_restart_time_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_restart_restart_time_cmd);
-	install_element(CONFIG_NODE,
-			&bgp_graceful_restart_select_defer_time_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_graceful_restart_select_defer_time_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_preserve_fw_cmd);
-	install_element(CONFIG_NODE, &no_bgp_graceful_restart_preserve_fw_cmd);
-	install_element(CONFIG_NODE, &bgp_graceful_restart_rib_stale_time_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_graceful_restart_rib_stale_time_cmd);
+	/* global bgp graceful-shutdown / graceful-restart — YANG: bgp_cli_init() */
 
 	/* "router bgp" / globals converted to YANG — see bgp_cli_init(). */
 
@@ -23610,9 +23577,7 @@ void bgp_vty_init(void)
 
 	/* "bgp deterministic-med" — YANG: bgp_cli_init() */
 
-	/* GR mode enable/disable — YANG: bgp_cli_init();
-	 * CONFIG_NODE remains classic.
-	 */
+	/* GR mode enable/disable — BGP_NODE + CONFIG_NODE YANG: bgp_cli_init() */
 
 	/* "neighbor a:b:c:d graceful-restart" command */
 
@@ -23620,13 +23585,9 @@ void bgp_vty_init(void)
 
 	/* "neighbor a:b:c:d graceful-restart-helper" command */
 
-	/* GR timer/flag knobs — BGP_NODE YANG: bgp_cli_init();
-	 * CONFIG_NODE remains classic where installed.
-	 */
+	/* GR timer/flag knobs — BGP_NODE + CONFIG_NODE YANG: bgp_cli_init() */
 
-	/* "bgp graceful-shutdown" — BGP_NODE YANG: bgp_cli_init();
-	 * CONFIG_NODE remains classic (daemon-wide).
-	 */
+	/* "bgp graceful-shutdown" — BGP_NODE + CONFIG_NODE YANG: bgp_cli_init() */
 
 	/* "bgp hard-administrative-reset" — YANG: bgp_cli_init() */
 

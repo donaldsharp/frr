@@ -1491,4 +1491,39 @@ void bgp_nb_cli_show_daemon_rmap_delay_time(struct vty *vty,
 					    const struct lyd_node *dnode,
 					    bool show_defaults);
 
+int bgp_nb_daemon_gr_enabled_modify(struct nb_cb_modify_args *args);
+int bgp_nb_daemon_gr_enabled_destroy(struct nb_cb_destroy_args *args);
+void bgp_nb_cli_show_daemon_gr_enabled(struct vty *vty,
+				       const struct lyd_node *dnode,
+				       bool show_defaults);
+int bgp_nb_daemon_gr_disable_modify(struct nb_cb_modify_args *args);
+int bgp_nb_daemon_gr_disable_destroy(struct nb_cb_destroy_args *args);
+void bgp_nb_cli_show_daemon_gr_disable(struct vty *vty,
+				       const struct lyd_node *dnode,
+				       bool show_defaults);
+int bgp_nb_daemon_gr_stale_routes_time_modify(struct nb_cb_modify_args *args);
+void bgp_nb_cli_show_daemon_gr_stale_routes_time(struct vty *vty,
+						 const struct lyd_node *dnode,
+						 bool show_defaults);
+int bgp_nb_daemon_gr_restart_time_modify(struct nb_cb_modify_args *args);
+void bgp_nb_cli_show_daemon_gr_restart_time(struct vty *vty,
+					    const struct lyd_node *dnode,
+					    bool show_defaults);
+int bgp_nb_daemon_gr_select_defer_time_modify(struct nb_cb_modify_args *args);
+void bgp_nb_cli_show_daemon_gr_select_defer_time(struct vty *vty,
+						 const struct lyd_node *dnode,
+						 bool show_defaults);
+int bgp_nb_daemon_gr_rib_stale_time_modify(struct nb_cb_modify_args *args);
+void bgp_nb_cli_show_daemon_gr_rib_stale_time(struct vty *vty,
+					      const struct lyd_node *dnode,
+					      bool show_defaults);
+int bgp_nb_daemon_gr_preserve_fw_modify(struct nb_cb_modify_args *args);
+void bgp_nb_cli_show_daemon_gr_preserve_fw(struct vty *vty,
+					   const struct lyd_node *dnode,
+					   bool show_defaults);
+int bgp_nb_daemon_graceful_shutdown_modify(struct nb_cb_modify_args *args);
+void bgp_nb_cli_show_daemon_graceful_shutdown(struct vty *vty,
+					      const struct lyd_node *dnode,
+					      bool show_defaults);
+
 #endif /* _FRR_BGP_NB_H_ */
