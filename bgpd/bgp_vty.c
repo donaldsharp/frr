@@ -24077,124 +24077,20 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &no_neighbor_interface_cmd);
 
 	/* "neighbor distribute" commands. */
-	install_element(BGP_NODE, &neighbor_distribute_list_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_distribute_list_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_distribute_list_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_distribute_list_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_distribute_list_cmd);
 
 	/* "neighbor prefix-list" commands. */
-	install_element(BGP_NODE, &neighbor_prefix_list_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_prefix_list_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &no_neighbor_prefix_list_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &neighbor_prefix_list_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &no_neighbor_prefix_list_cmd);
 
 	/* "neighbor filter-list" commands. */
-	install_element(BGP_NODE, &neighbor_filter_list_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_filter_list_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &no_neighbor_filter_list_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &neighbor_filter_list_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &no_neighbor_filter_list_cmd);
 
 	/* "neighbor route-map" commands. */
-	install_element(BGP_NODE, &neighbor_route_map_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_route_map_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_FLOWSPECV4_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_FLOWSPECV6_NODE, &no_neighbor_route_map_cmd);
 	install_element(BGP_IPV4U_NODE, &neighbor_route_map_cmd);
 	install_element(BGP_IPV4U_NODE, &no_neighbor_route_map_cmd);
 	install_element(BGP_IPV6U_NODE, &neighbor_route_map_cmd);
 	install_element(BGP_IPV6U_NODE, &no_neighbor_route_map_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_route_map_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_route_map_cmd);
 	install_element(BGP_LS_NODE, &neighbor_route_map_cmd);
 	install_element(BGP_LS_NODE, &no_neighbor_route_map_cmd);
 
 	/* "neighbor unsuppress-map" commands. */
-	install_element(BGP_NODE, &neighbor_unsuppress_map_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_unsuppress_map_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_unsuppress_map_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_unsuppress_map_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_unsuppress_map_cmd);
 
 	/* "neighbor advertise-map" commands. */
 	install_element(BGP_NODE, &bgp_condadv_period_cmd);
