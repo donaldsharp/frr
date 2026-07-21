@@ -1526,4 +1526,14 @@ void bgp_nb_cli_show_daemon_graceful_shutdown(struct vty *vty,
 					      const struct lyd_node *dnode,
 					      bool show_defaults);
 
+/* Interface MPLS BGP knobs */
+int lib_interface_mpls_bgp_forwarding_modify(struct nb_cb_modify_args *args);
+void bgp_nb_cli_show_mpls_bgp_forwarding(struct vty *vty,
+					 const struct lyd_node *dnode,
+					 bool show_defaults);
+int lib_interface_mpls_l3vpn_multi_domain_switching_modify(
+	struct nb_cb_modify_args *args);
+void bgp_nb_cli_show_mpls_l3vpn_multi_domain_switching(
+	struct vty *vty, const struct lyd_node *dnode, bool show_defaults);
+
 #endif /* _FRR_BGP_NB_H_ */

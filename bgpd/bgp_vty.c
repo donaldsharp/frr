@@ -23313,10 +23313,7 @@ static void bgp_vty_if_init(void)
 	/* Install interface node. */
 	if_cmd_init(config_write_interface);
 
-	/* "mpls bgp forwarding" commands. */
-	install_element(INTERFACE_NODE, &mpls_bgp_forwarding_cmd);
-	install_element(INTERFACE_NODE,
-			&mpls_bgp_l3vpn_multi_domain_switching_cmd);
+	/* mpls bgp forwarding / l3vpn-multi-domain-switching — YANG: bgp_cli_init() */
 }
 
 /* Forward declaration for show_bgp_neighbor_upa_cmd defined after bgp_vty_init */
