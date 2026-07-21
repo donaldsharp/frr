@@ -23778,16 +23778,7 @@ void bgp_vty_init(void)
 	/* neighbor dampening: YANG in bgp_cli.c */
 	install_element(VIEW_NODE, &show_ip_bgp_neighbor_damp_param_cmd);
 
-	/* address-family commands. */
-	install_element(BGP_NODE, &address_family_ipv4_safi_cmd);
-	install_element(BGP_NODE, &address_family_ipv6_safi_cmd);
-#ifdef KEEP_OLD_VPN_COMMANDS
-	install_element(BGP_NODE, &address_family_vpnv4_cmd);
-	install_element(BGP_NODE, &address_family_vpnv6_cmd);
-#endif /* KEEP_OLD_VPN_COMMANDS */
-
-	install_element(BGP_NODE, &address_family_evpn_cmd);
-	install_element(BGP_NODE, &address_family_link_state_cmd);
+	/* address-family enter — YANG: bgp_cli_init() */
 
 	/* "exit-address-family" command. */
 	install_element(BGP_IPV4_NODE, &exit_address_family_cmd);
