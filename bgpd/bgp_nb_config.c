@@ -8153,6 +8153,103 @@ void bgp_nb_cli_show_evpn_advertise_pip_enable(struct vty *vty,
 }
 
 /*
+ * EVPN ead-es-route-target export (leaf-list)
+ */
+int bgp_nb_evpn_ead_es_rt_create(struct nb_cb_create_args *args)
+{
+	struct bgp *bgp;
+	struct ecommunity *ecom;
+
+	switch (args->event) {
+	case NB_EV_VALIDATE:
+		bgp = nb_running_get_entry(args->dnode, NULL, true);
+		if (!bgp || !EVPN_ENABLED(bgp)) {
+			snprintf(args->errmsg, args->errmsg_len,
+				 "This command is only supported under EVPN VRF");
+			return NB_ERR_VALIDATION;
+		}
+		ecom = ecommunity_str2com(
+			yang_dnode_get_string(args->dnode, NULL),
+			ECOMMUNITY_ROUTE_TARGET, 0);
+		if (!ecom) {
+			snprintf(args->errmsg, args->errmsg_len,
+				 "Malformed Route Target list");
+			return NB_ERR_VALIDATION;
+		}
+		ecommunity_free(&ecom);
+		return NB_OK;
+	case NB_EV_PREPARE:
+	case NB_EV_ABORT:
+		return NB_OK;
+	case NB_EV_APPLY:
+		break;
+	}
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (!bgp)
+		return NB_ERR_NOT_FOUND;
+
+	ecom = ecommunity_str2com(yang_dnode_get_string(args->dnode, NULL),
+				  ECOMMUNITY_ROUTE_TARGET, 0);
+	if (!ecom)
+		return NB_ERR_VALIDATION;
+	ecommunity_str(ecom);
+
+	/* Skip if already present (leaf-list recreate / duplicate). */
+	{
+		struct listnode *node;
+		struct ecommunity *exist;
+		bool found = false;
+
+		for (ALL_LIST_ELEMENTS_RO(bgp_mh_info->ead_es_export_rtl, node,
+					  exist)) {
+			if (ecommunity_match(exist, ecom)) {
+				found = true;
+				break;
+			}
+		}
+		if (found) {
+			ecommunity_free(&ecom);
+			return NB_OK;
+		}
+	}
+
+	bgp_evpn_mh_config_ead_export_rt(bgp, ecom, false);
+	return NB_OK;
+}
+
+int bgp_nb_evpn_ead_es_rt_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	struct ecommunity *ecom;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (!bgp)
+		return NB_OK;
+
+	ecom = ecommunity_str2com(yang_dnode_get_string(args->dnode, NULL),
+				  ECOMMUNITY_ROUTE_TARGET, 0);
+	if (!ecom)
+		return NB_OK;
+	ecommunity_str(ecom);
+
+	bgp_evpn_mh_config_ead_export_rt(bgp, ecom, true);
+	ecommunity_free(&ecom);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_evpn_ead_es_rt(struct vty *vty,
+				    const struct lyd_node *dnode,
+				    bool show_defaults)
+{
+	vty_out(vty, "  ead-es-route-target export %s\n",
+		yang_dnode_get_string(dnode, NULL));
+}
+
+/*
  * AF-level import|export vpn
  */
 static int bgp_nb_vpn_imexport_validate(struct bgp *bgp, afi_t afi, safi_t safi,
