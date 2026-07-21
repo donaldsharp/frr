@@ -23777,10 +23777,6 @@ void bgp_vty_init(void)
 	/* "neighbor peer-group" — YANG: bgp_cli_init() */
 
 	/* "neighbor local-as" commands. */
-	install_element(BGP_NODE, &neighbor_local_as_cmd);
-	install_element(BGP_NODE, &neighbor_local_as_no_prepend_cmd);
-	install_element(BGP_NODE, &neighbor_local_as_no_prepend_replace_as_cmd);
-	install_element(BGP_NODE, &no_neighbor_local_as_cmd);
 
 	/* "neighbor solo" — YANG: bgp_cli_init() */
 
@@ -24399,8 +24395,6 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &no_neighbor_shutdown_rtt_cmd);
 
 	/* "neighbor capability extended-nexthop" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_enhe_cmd);
-	install_element(BGP_NODE, &no_neighbor_capability_enhe_cmd);
 
 	/* "neighbor capability software-version" commands.*/
 	install_element(BGP_NODE, &neighbor_capability_software_version_cmd);
@@ -24429,24 +24423,14 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6L_NODE, &no_neighbor_capability_orf_prefix_cmd);
 
 	/* "neighbor capability dynamic" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_dynamic_cmd);
-	install_element(BGP_NODE, &no_neighbor_capability_dynamic_cmd);
 
 	/* "neighbor dont-capability-negotiate" commands. */
-	install_element(BGP_NODE, &neighbor_dont_capability_negotiate_cmd);
-	install_element(BGP_NODE, &no_neighbor_dont_capability_negotiate_cmd);
 
 	/* "neighbor capability fqdn" command. */
-	install_element(BGP_NODE, &neighbor_capability_fqdn_cmd);
 
 	/* "neighbor ebgp-multihop" commands. */
-	install_element(BGP_NODE, &neighbor_ebgp_multihop_cmd);
-	install_element(BGP_NODE, &neighbor_ebgp_multihop_ttl_cmd);
-	install_element(BGP_NODE, &no_neighbor_ebgp_multihop_cmd);
 
 	/* "neighbor disable-connected-check" commands.  */
-	install_element(BGP_NODE, &neighbor_disable_connected_check_cmd);
-	install_element(BGP_NODE, &no_neighbor_disable_connected_check_cmd);
 
 	/* "neighbor disable-link-bw-encoding-ieee" commands.  */
 	install_element(BGP_NODE, &neighbor_disable_link_bw_encoding_ieee_cmd);
@@ -24464,14 +24448,10 @@ void bgp_vty_init(void)
 			&no_neighbor_extended_optional_parameters_cmd);
 
 	/* "neighbor enforce-first-as" commands. */
-	install_element(BGP_NODE, &neighbor_enforce_first_as_cmd);
-	install_element(BGP_NODE, &no_neighbor_enforce_first_as_cmd);
 
 	/* "neighbor description" — YANG: bgp_cli_init() */
 
 	/* "neighbor update-source" commands. "*/
-	install_element(BGP_NODE, &neighbor_update_source_cmd);
-	install_element(BGP_NODE, &no_neighbor_update_source_cmd);
 
 	/* "neighbor default-originate" commands. */
 	install_element(BGP_NODE, &neighbor_default_originate_hidden_cmd);
@@ -24534,20 +24514,12 @@ void bgp_vty_init(void)
 	install_element(BGP_NODE, &no_neighbor_strict_capability_cmd);
 
 	/* "neighbor timers" commands. */
-	install_element(BGP_NODE, &neighbor_timers_cmd);
-	install_element(BGP_NODE, &no_neighbor_timers_cmd);
 
 	/* "neighbor timers connect" commands. */
-	install_element(BGP_NODE, &neighbor_timers_connect_cmd);
-	install_element(BGP_NODE, &no_neighbor_timers_connect_cmd);
 
 	/* "neighbor timers delayopen" commands. */
-	install_element(BGP_NODE, &neighbor_timers_delayopen_cmd);
-	install_element(BGP_NODE, &no_neighbor_timers_delayopen_cmd);
 
 	/* "neighbor advertisement-interval" commands. */
-	install_element(BGP_NODE, &neighbor_advertise_interval_cmd);
-	install_element(BGP_NODE, &no_neighbor_advertise_interval_cmd);
 
 	/* "neighbor interface" commands. */
 	install_element(BGP_NODE, &neighbor_interface_cmd);
@@ -25012,8 +24984,6 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6_NODE, &bgp_imexport_vrf_cmd);
 
 	/* ttl_security commands */
-	install_element(BGP_NODE, &neighbor_ttl_security_cmd);
-	install_element(BGP_NODE, &no_neighbor_ttl_security_cmd);
 
 	/* "bgp tcp-keepalive" — YANG: bgp_cli_init() */
 

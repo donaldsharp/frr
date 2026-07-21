@@ -2068,7 +2068,7 @@ DEFPY_YANG(neighbor_description_yang, neighbor_description_yang_cmd,
 }
 
 DEFPY_YANG(no_neighbor_description_yang, no_neighbor_description_yang_cmd,
-	   "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor description [LINE...]",
+	   "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor description [LINE]",
 	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
 	   "Neighbor specific description\n"
 	   "Up to 80 characters describing this neighbor\n")
@@ -2198,6 +2198,473 @@ DEFPY_YANG(no_neighbor_shutdown_msg_yang, no_neighbor_shutdown_msg_yang_cmd,
 	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
 	snprintf(leaf, sizeof(leaf), "%s/admin-shutdown/enable", xpath);
 	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "false");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+
+DEFPY_YANG(neighbor_update_source_yang, neighbor_update_source_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor update-source <A.B.C.D|X:X::X:X|WORD>$source",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Source of routing updates\n"
+	   "IPv4 address\n"
+	   "IPv6 address\n"
+	   "Interface name (requires zebra to be running)\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	union sockunion su;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/update-source/ip", xpath);
+	if (no) {
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		snprintf(leaf, sizeof(leaf), "%s/update-source/interface",
+			 xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	} else if (str2sockunion(source, &su) >= 0) {
+		snprintf(leaf, sizeof(leaf), "%s/update-source/interface",
+			 xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		snprintf(leaf, sizeof(leaf), "%s/update-source/ip", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, source);
+	} else {
+		snprintf(leaf, sizeof(leaf), "%s/update-source/ip", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		snprintf(leaf, sizeof(leaf), "%s/update-source/interface",
+			 xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, source);
+	}
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(no_neighbor_update_source_yang, no_neighbor_update_source_yang_cmd,
+	   "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor update-source",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Source of routing updates\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/update-source/ip", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	snprintf(leaf, sizeof(leaf), "%s/update-source/interface", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_ebgp_multihop_yang, neighbor_ebgp_multihop_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor ebgp-multihop [(1-255)$ttl]",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Allow EBGP neighbors not on directly connected networks\n"
+	   "maximum hop count\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	char buf[16];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/ebgp-multihop/enabled", xpath);
+	if (no) {
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		snprintf(leaf, sizeof(leaf), "%s/ebgp-multihop/multihop-ttl",
+			 xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	} else if (ttl_str) {
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		snprintf(buf, sizeof(buf), "%" PRIi64, ttl);
+		snprintf(leaf, sizeof(leaf), "%s/ebgp-multihop/multihop-ttl",
+			 xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	} else {
+		snprintf(leaf, sizeof(leaf), "%s/ebgp-multihop/multihop-ttl",
+			 xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		snprintf(leaf, sizeof(leaf), "%s/ebgp-multihop/enabled", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "true");
+	}
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_disable_connected_check_yang,
+	   neighbor_disable_connected_check_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor <disable-connected-check|enforce-multihop>",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "one-hop away EBGP peer using loopback address\n"
+	   "Enforce EBGP neighbors perform multihop\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf),
+		 "%s/ebgp-multihop/disable-connected-check", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_ttl_security_yang, neighbor_ttl_security_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor ttl-security hops [(1-254)$hops]",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "BGP ttl-security parameters\n"
+	   "Specify the maximum number of hops to the BGP peer\n"
+	   "Number of hops to BGP peer\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	char buf[16];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/ttl-security", xpath);
+	if (no)
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	else {
+		if (!hops_str) {
+			vty_out(vty, "%% Incomplete command\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		snprintf(buf, sizeof(buf), "%" PRIi64, hops);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	}
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_local_as_yang, neighbor_local_as_yang_cmd,
+	   "neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor local-as ASNUM$as_str [no-prepend$noprepend [replace-as$replaceas [dual-as$dualas]]]",
+	   NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Specify a local-as number\n"
+	   "AS number expressed in dotted or plain format used as local AS\n"
+	   "Do not prepend local-as to updates from ebgp peers\n"
+	   "Do not prepend local-as to updates from ibgp peers\n"
+	   "Allow peering with either global AS or local-as\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/local-as/local-as", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, as_str_str);
+	snprintf(leaf, sizeof(leaf), "%s/local-as/no-prepend", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
+			      noprepend ? "true" : "false");
+	snprintf(leaf, sizeof(leaf), "%s/local-as/replace-as", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
+			      replaceas ? "true" : "false");
+	snprintf(leaf, sizeof(leaf), "%s/local-as/dual-as", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
+			      dualas ? "true" : "false");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(no_neighbor_local_as_yang, no_neighbor_local_as_yang_cmd,
+	   "no neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor local-as [ASNUM [no-prepend [replace-as] [dual-as]]]",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Specify a local-as number\n"
+	   "AS number expressed in dotted or plain format used as local AS\n"
+	   "Do not prepend local-as to updates from ebgp peers\n"
+	   "Do not prepend local-as to updates from ibgp peers\n"
+	   "Allow peering with either global AS or local-as\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/local-as/dual-as", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	snprintf(leaf, sizeof(leaf), "%s/local-as/replace-as", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	snprintf(leaf, sizeof(leaf), "%s/local-as/no-prepend", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	snprintf(leaf, sizeof(leaf), "%s/local-as/local-as", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_timers_yang, neighbor_timers_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor timers [(0-65535)$keepalive (0-65535)$holdtime]",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "BGP per neighbor timers\n"
+	   "Keepalive interval\n"
+	   "Holdtime\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	char buf[16];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	if (no) {
+		snprintf(leaf, sizeof(leaf), "%s/timers/keepalive", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		snprintf(leaf, sizeof(leaf), "%s/timers/hold-time", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	} else {
+		if (!keepalive_str || !holdtime_str) {
+			vty_out(vty, "%% Incomplete command\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		snprintf(buf, sizeof(buf), "%" PRIi64, keepalive);
+		snprintf(leaf, sizeof(leaf), "%s/timers/keepalive", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+		snprintf(buf, sizeof(buf), "%" PRIi64, holdtime);
+		snprintf(leaf, sizeof(leaf), "%s/timers/hold-time", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	}
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_timers_connect_yang, neighbor_timers_connect_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor timers connect [(1-65535)$connect]",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "BGP per neighbor timers\n"
+	   "BGP connect timer\n"
+	   "Connect timer\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	char buf[16];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/timers/connect-time", xpath);
+	if (no)
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	else {
+		if (!connect_str) {
+			vty_out(vty, "%% Incomplete command\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		snprintf(buf, sizeof(buf), "%" PRIi64, connect);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	}
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_timers_delayopen_yang, neighbor_timers_delayopen_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor timers delayopen [(1-240)$delayopen]",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "BGP per neighbor timers\n"
+	   "BGP DelayOpenTimer\n"
+	   "DelayOpenTimer interval in seconds\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	char buf[16];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/timers/delayopen", xpath);
+	if (no)
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	else {
+		if (!delayopen_str) {
+			vty_out(vty, "%% Incomplete command\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		snprintf(buf, sizeof(buf), "%" PRIi64, delayopen);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	}
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_advertise_interval_yang,
+	   neighbor_advertise_interval_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor advertisement-interval [(0-600)$interval]",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Minimum interval between sending BGP routing updates\n"
+	   "time in seconds\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	char buf[16];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/timers/advertise-interval", xpath);
+	if (no)
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	else {
+		if (!interval_str) {
+			vty_out(vty, "%% Incomplete command\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		snprintf(buf, sizeof(buf), "%" PRIi64, interval);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	}
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_capability_dynamic_yang,
+	   neighbor_capability_dynamic_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor capability dynamic",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Advertise capability to the peer\n"
+	   "Advertise dynamic capability to this neighbor\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf),
+		 "%s/capability-options/dynamic-capability", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_capability_enhe_yang, neighbor_capability_enhe_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor capability extended-nexthop",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Advertise capability to the peer\n"
+	   "Advertise extended next-hop capability to the peer\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf),
+		 "%s/capability-options/extended-nexthop-capability", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_dont_capability_negotiate_yang,
+	   neighbor_dont_capability_negotiate_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor dont-capability-negotiate",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Do not perform capability negotiation\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	/* YANG capability-negotiate true => negotiate (clear DONT_CAPABILITY) */
+	snprintf(leaf, sizeof(leaf),
+		 "%s/capability-options/capability-negotiate", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "true" : "false");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_capability_fqdn_yang, neighbor_capability_fqdn_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor capability fqdn",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Advertise capability to the peer\n"
+	   "Advertise fqdn capability to the peer\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/capability-options/fqdn-capability",
+		 xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(neighbor_enforce_first_as_yang, neighbor_enforce_first_as_yang_cmd,
+	   "[no] neighbor <A.B.C.D|X:X::X:X|WORD>$neighbor enforce-first-as",
+	   NO_STR NEIGHBOR_STR NEIGHBOR_ADDR_STR2
+	   "Enforce the first AS for EBGP routes\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool is_pg = false;
+	int ret;
+
+	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, xpath, sizeof(xpath),
+					  &is_pg);
+	if (ret != 0)
+		return CMD_WARNING_CONFIG_FAILED;
+
+	snprintf(leaf, sizeof(leaf), "%s/enforce-first-as", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
 	return nb_cli_apply_changes(vty, NULL);
 }
 
@@ -2353,4 +2820,21 @@ void bgp_cli_init(void)
 	install_element(BGP_NODE, &neighbor_shutdown_yang_cmd);
 	install_element(BGP_NODE, &neighbor_shutdown_msg_yang_cmd);
 	install_element(BGP_NODE, &no_neighbor_shutdown_msg_yang_cmd);
+	install_element(BGP_NODE, &neighbor_update_source_yang_cmd);
+	install_element(BGP_NODE, &no_neighbor_update_source_yang_cmd);
+	install_element(BGP_NODE, &neighbor_ebgp_multihop_yang_cmd);
+	install_element(BGP_NODE, &neighbor_disable_connected_check_yang_cmd);
+	install_element(BGP_NODE, &neighbor_ttl_security_yang_cmd);
+	install_element(BGP_NODE, &neighbor_local_as_yang_cmd);
+	install_element(BGP_NODE, &no_neighbor_local_as_yang_cmd);
+	install_element(BGP_NODE, &neighbor_timers_yang_cmd);
+	install_element(BGP_NODE, &neighbor_timers_connect_yang_cmd);
+	install_element(BGP_NODE, &neighbor_timers_delayopen_yang_cmd);
+	install_element(BGP_NODE, &neighbor_advertise_interval_yang_cmd);
+	install_element(BGP_NODE, &neighbor_capability_dynamic_yang_cmd);
+	install_element(BGP_NODE, &neighbor_capability_enhe_yang_cmd);
+	install_element(BGP_NODE, &neighbor_dont_capability_negotiate_yang_cmd);
+	install_element(BGP_NODE, &neighbor_capability_fqdn_yang_cmd);
+	install_element(BGP_NODE, &neighbor_enforce_first_as_yang_cmd);
 }
+
