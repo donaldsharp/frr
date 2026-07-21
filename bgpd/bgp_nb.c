@@ -1153,6 +1153,54 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/global/afi-safis/afi-safi/ipv4-unicast/upa/originate-all",
+			.cbs = {
+				.modify = bgp_nb_upa_originate_modify,
+				.destroy = bgp_nb_upa_originate_destroy,
+				.cli_show = bgp_nb_cli_show_upa_originate,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/global/afi-safis/afi-safi/ipv4-unicast/upa/max-routes",
+			.cbs = {
+				.modify = bgp_nb_upa_max_routes_modify,
+				.destroy = bgp_nb_upa_max_routes_destroy,
+				.cli_show = bgp_nb_cli_show_upa_max_routes,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/global/afi-safis/afi-safi/ipv4-unicast/upa/drop",
+			.cbs = {
+				.modify = bgp_nb_upa_drop_modify,
+				.destroy = bgp_nb_upa_drop_destroy,
+				.cli_show = bgp_nb_cli_show_upa_drop,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/global/afi-safis/afi-safi/ipv6-unicast/upa/originate-all",
+			.cbs = {
+				.modify = bgp_nb_upa_originate_modify,
+				.destroy = bgp_nb_upa_originate_destroy,
+				.cli_show = bgp_nb_cli_show_upa_originate,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/global/afi-safis/afi-safi/ipv6-unicast/upa/max-routes",
+			.cbs = {
+				.modify = bgp_nb_upa_max_routes_modify,
+				.destroy = bgp_nb_upa_max_routes_destroy,
+				.cli_show = bgp_nb_cli_show_upa_max_routes,
+			},
+		},
+		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/global/afi-safis/afi-safi/ipv6-unicast/upa/drop",
+			.cbs = {
+				.modify = bgp_nb_upa_drop_modify,
+				.destroy = bgp_nb_upa_drop_destroy,
+				.cli_show = bgp_nb_cli_show_upa_drop,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/global/confederation/identifier",
 			.cbs = {
 				.modify = bgp_nb_confederation_identifier_modify,
