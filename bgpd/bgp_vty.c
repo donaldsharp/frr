@@ -326,7 +326,7 @@ static const char *get_afi_safi_json_str(afi_t afi, safi_t safi)
 	return "Unknown";
 }
 
-static void bgp_srv6_sids_unset(struct bgp *bgp)
+void bgp_srv6_sids_unset(struct bgp *bgp)
 {
 	struct listnode *node, *nnode;
 	struct srv6_locator_chunk *chunk;
@@ -449,7 +449,7 @@ static void bgp_srv6_sids_unset(struct bgp *bgp)
 }
 
 /* unset srv6 locator */
-static int bgp_srv6_locator_unset(struct bgp *bgp)
+int bgp_srv6_locator_unset(struct bgp *bgp)
 {
 	/* clear function, sids */
 	bgp_srv6_sids_unset(bgp);
@@ -11960,7 +11960,7 @@ DEFUN_NOSH (bgp_segment_routing_srv6,
 	return CMD_SUCCESS;
 }
 
-static void bgp_segment_routing_srv6_hencaps_refresh(struct bgp *bgp)
+void bgp_segment_routing_srv6_hencaps_refresh(struct bgp *bgp)
 {
 	struct bgp *bgp_inst;
 	struct listnode *node;
@@ -11974,7 +11974,7 @@ static void bgp_segment_routing_srv6_hencaps_refresh(struct bgp *bgp)
 	}
 }
 
-static void bgp_srv6_only_change(struct bgp *bgp, bool enable)
+void bgp_srv6_only_change(struct bgp *bgp, bool enable)
 {
 	struct bgp *bgp_inst;
 	struct listnode *node;
@@ -24326,13 +24326,8 @@ void bgp_vty_init(void)
 
 
 	/* srv6 commands */
+	/* segment-routing srv6 — YANG: bgp_cli_init() */
 	install_element(VIEW_NODE, &show_bgp_srv6_cmd);
-	install_element(BGP_NODE, &bgp_segment_routing_srv6_cmd);
-	install_element(BGP_NODE, &no_bgp_segment_routing_srv6_cmd);
-	install_element(BGP_SRV6_NODE, &bgp_srv6_locator_cmd);
-	install_element(BGP_SRV6_NODE, &no_bgp_srv6_locator_cmd);
-	install_element(BGP_SRV6_NODE, &bgp_srv6_only_cmd);
-	install_element(BGP_SRV6_NODE, &bgp_srv6_encap_behavior_cmd);
 	install_element(BGP_IPV4_NODE, &af_sid_vpn_export_cmd);
 	install_element(BGP_IPV6_NODE, &af_sid_vpn_export_cmd);
 	install_element(BGP_NODE, &bgp_sid_vpn_export_cmd);
