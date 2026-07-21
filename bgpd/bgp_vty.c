@@ -24063,8 +24063,7 @@ void bgp_vty_init(void)
 	/* neighbor encapsulation-srv6 — YANG: bgp_cli_init() */
 
 	/* BGP-LS commands */
-	install_element(BGP_LS_NODE, &bgp_ls_distribute_bgp_fabric_cmd);
-	install_element(BGP_LS_NODE, &no_bgp_ls_distribute_bgp_fabric_cmd);
+	/* distribute bgp-fabric-link-state — YANG: bgp_cli_init() */
 	install_element(BGP_NODE, &neighbor_ls_local_link_id_cmd);
 	install_element(BGP_NODE, &no_neighbor_ls_local_link_id_cmd);
 	install_element(BGP_NODE, &neighbor_ls_remote_link_id_cmd);
