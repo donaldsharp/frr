@@ -1643,8 +1643,14 @@ submodule frr-bgp-common {
        configuration for BGP RIB table.";
     container filter-config {
       description
-        "BGP table to RIB route download filter.";
-      uses rmap-policy-export;
+        "BGP table to RIB route download filter.
+         Maps to: table-map WORD.";
+      leaf rmap-export {
+        type frr-route-map:route-map-ref;
+        description
+          "Route-map used to filter BGP routes downloaded into the RIB.
+           Maps to: table-map WORD.";
+      }
     }
   }
 
