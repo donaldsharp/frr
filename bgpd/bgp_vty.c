@@ -23801,7 +23801,6 @@ void bgp_vty_init(void)
 	install_element(BGP_LS_NODE, &no_neighbor_activate_cmd);
 
 	/* "neighbor peer-group" set commands. */
-	install_element(BGP_NODE, &neighbor_set_peer_group_cmd);
 	install_element(BGP_IPV4_NODE, &neighbor_set_peer_group_hidden_cmd);
 	install_element(BGP_IPV4M_NODE, &neighbor_set_peer_group_hidden_cmd);
 	install_element(BGP_IPV6_NODE, &neighbor_set_peer_group_hidden_cmd);
@@ -23815,7 +23814,6 @@ void bgp_vty_init(void)
 			&neighbor_set_peer_group_hidden_cmd);
 
 	/* "no neighbor peer-group unset" commands. */
-	install_element(BGP_NODE, &no_neighbor_set_peer_group_cmd);
 	install_element(BGP_IPV4_NODE, &no_neighbor_set_peer_group_hidden_cmd);
 	install_element(BGP_IPV4M_NODE, &no_neighbor_set_peer_group_hidden_cmd);
 	install_element(BGP_IPV6_NODE, &no_neighbor_set_peer_group_hidden_cmd);
@@ -24452,8 +24450,6 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6L_NODE, &no_neighbor_default_originate_cmd);
 
 	/* "neighbor port" commands. */
-	install_element(BGP_NODE, &neighbor_port_cmd);
-	install_element(BGP_NODE, &no_neighbor_port_cmd);
 
 	/* "neighbor weight" commands. */
 	install_element(BGP_NODE, &neighbor_weight_hidden_cmd);

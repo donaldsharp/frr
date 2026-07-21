@@ -5054,8 +5054,123 @@ void bgp_nb_cli_show_peer_bfd_strict_hold(struct vty *vty,
 		yang_dnode_get_uint32(dnode, NULL));
 }
 
-static bool bgp_nb_path_attr_forbidden(uint8_t attr_num, struct peer *peer, char *errmsg,
-				       size_t errmsg_len)
+int bgp_nb_neighbor_peer_group_modify(struct nb_cb_modify_args *args)
+{
+	struct peer *peer;
+	struct peer_group *group;
+	const char *group_name;
+	as_t as;
+	int ret;
+
+	switch (args->event) {
+	case NB_EV_VALIDATE:
+		peer = bgp_nb_config_peer(args->dnode);
+		if (!peer)
+			return NB_ERR_VALIDATION;
+		if (peer_dynamic_neighbor(peer)) {
+			snprintf(args->errmsg, args->errmsg_len,
+				 "operation not allowed on a dynamic neighbor");
+			return NB_ERR_VALIDATION;
+		}
+		group_name = yang_dnode_get_string(args->dnode, NULL);
+		if (!peer_group_lookup(peer->bgp, group_name)) {
+			snprintf(args->errmsg, args->errmsg_len,
+				 "Configure the peer-group first");
+			return NB_ERR_VALIDATION;
+		}
+		return NB_OK;
+	case NB_EV_PREPARE:
+	case NB_EV_ABORT:
+		return NB_OK;
+	case NB_EV_APPLY:
+		break;
+	}
+
+	peer = bgp_nb_config_peer(args->dnode);
+	if (!peer)
+		return NB_ERR_NOT_FOUND;
+
+	group_name = yang_dnode_get_string(args->dnode, NULL);
+	group = peer_group_lookup(peer->bgp, group_name);
+	if (!group)
+		return NB_ERR_NOT_FOUND;
+
+	as = peer->as;
+	ret = peer_group_bind(peer->bgp, &peer->connection->su, peer, group,
+			      &as);
+	if (ret != 0)
+		return NB_ERR_RESOURCE;
+	return NB_OK;
+}
+
+int bgp_nb_neighbor_peer_group_destroy(struct nb_cb_destroy_args *args)
+{
+	struct peer *peer;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	peer = bgp_nb_config_peer(args->dnode);
+	if (!peer || !peer->group)
+		return NB_OK;
+
+	if (peer_group_unbind(peer->bgp, peer, peer->group) != 0)
+		return NB_ERR_RESOURCE;
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_neighbor_peer_group(struct vty *vty,
+					 const struct lyd_node *dnode,
+					 bool show_defaults)
+{
+	vty_out(vty, " neighbor %s peer-group %s\n",
+		bgp_nb_config_peer_name(dnode),
+		yang_dnode_get_string(dnode, NULL));
+}
+
+int bgp_nb_neighbor_local_port_modify(struct nb_cb_modify_args *args)
+{
+	struct peer *peer;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	peer = bgp_nb_config_peer(args->dnode);
+	if (!peer)
+		return NB_ERR_NOT_FOUND;
+
+	peer_port_set(peer, yang_dnode_get_uint16(args->dnode, NULL));
+	return NB_OK;
+}
+
+int bgp_nb_neighbor_local_port_destroy(struct nb_cb_destroy_args *args)
+{
+	struct peer *peer;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	peer = bgp_nb_config_peer(args->dnode);
+	if (peer)
+		peer_port_unset(peer);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_neighbor_local_port(struct vty *vty,
+					 const struct lyd_node *dnode,
+					 bool show_defaults)
+{
+	uint16_t port = yang_dnode_get_uint16(dnode, NULL);
+
+	if (port == BGP_PORT_DEFAULT && !show_defaults)
+		return;
+
+	vty_out(vty, " neighbor %s port %u\n",
+		bgp_nb_config_peer_name(dnode), port);
+}
+
+static bool bgp_nb_path_attr_forbidden(uint8_t attr_num, struct peer *peer,
+				       char *errmsg, size_t errmsg_len)
 {
 	if (attr_num == BGP_ATTR_ORIGIN || attr_num == BGP_ATTR_AS_PATH ||
 	    attr_num == BGP_ATTR_NEXT_HOP || attr_num == BGP_ATTR_MULTI_EXIT_DISC ||
