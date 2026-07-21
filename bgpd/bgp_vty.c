@@ -24050,27 +24050,6 @@ void bgp_vty_init(void)
 	/* "neighbor update-source" commands. "*/
 
 	/* "neighbor default-originate" commands. */
-	install_element(BGP_NODE, &neighbor_default_originate_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_default_originate_rmap_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_default_originate_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_default_originate_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_default_originate_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_default_originate_rmap_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_default_originate_cmd);
 
 	/* "neighbor port" commands. */
 
@@ -24367,26 +24346,6 @@ void bgp_vty_init(void)
 	install_element(BGP_EVPN_NODE, &no_neighbor_maximum_prefix_cmd);
 
 	/* "neighbor allowas-in" */
-	install_element(BGP_NODE, &neighbor_allowas_in_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_allowas_in_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_allowas_in_cmd);
-	install_element(BGP_EVPN_NODE, &neighbor_allowas_in_cmd);
-	install_element(BGP_EVPN_NODE, &no_neighbor_allowas_in_cmd);
 	install_element(BGP_IPV4U_NODE, &neighbor_allowas_in_cmd);
 	install_element(BGP_IPV4U_NODE, &no_neighbor_allowas_in_cmd);
 	install_element(BGP_IPV6U_NODE, &neighbor_allowas_in_cmd);
