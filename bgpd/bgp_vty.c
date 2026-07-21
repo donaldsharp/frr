@@ -23821,51 +23821,6 @@ void bgp_vty_init(void)
 	/* "neighbor remove-private-AS" commands. */
 
 	/* "neighbor send-community" commands.*/
-	install_element(BGP_NODE, &neighbor_send_community_hidden_cmd);
-	install_element(BGP_NODE, &neighbor_send_community_type_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_send_community_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_send_community_type_hidden_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_send_community_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_send_community_type_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_send_community_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_send_community_type_cmd);
-	install_element(BGP_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV4_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_ecommunity_rpki_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_ecommunity_rpki_cmd);
 
 	/* "neighbor route-reflector" commands.*/
 
@@ -24120,25 +24075,7 @@ void bgp_vty_init(void)
 	/* "neighbor port" commands. */
 
 	/* "neighbor weight" commands. */
-	install_element(BGP_NODE, &neighbor_weight_hidden_cmd);
-	install_element(BGP_NODE, &no_neighbor_weight_hidden_cmd);
 
-	install_element(BGP_IPV4_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV4_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV4L_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV4L_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_weight_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_weight_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_weight_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_weight_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_weight_cmd);
 
 	/* "neighbor encapsulation-srv6|encapsulation-mpls" commands. */
 	install_element(BGP_VPNV4_NODE, &neighbor_encapsulation_srv6_or_mpls_cmd);
