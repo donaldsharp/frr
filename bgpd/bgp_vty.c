@@ -24228,8 +24228,7 @@ void bgp_vty_init(void)
 	install_element(BGP_LS_NODE, &exit_address_family_cmd);
 
 	/* BGP retain all route-target */
-	install_element(BGP_VPNV4_NODE, &bgp_retain_route_target_cmd);
-	install_element(BGP_VPNV6_NODE, &bgp_retain_route_target_cmd);
+	/* bgp retain route-target — YANG: bgp_cli_init() */
 
 #ifdef DEV_BUILD
 	/* "bgp test" commands */
@@ -24318,8 +24317,7 @@ void bgp_vty_init(void)
 	/* rd / label / nexthop / rt vpn — YANG: bgp_cli_init() */
 	/* route-map vpn / import vrf route-map — YANG: bgp_cli_init() */
 
-	install_element(BGP_IPV4_NODE, &af_routetarget_import_cmd);
-	install_element(BGP_IPV6_NODE, &af_routetarget_import_cmd);
+	/* rt redirect import — YANG: bgp_cli_init() */
 
 	/* no rd / label / rt vpn — YANG: bgp_cli_init() */
 	/* no route-map vpn / import vrf route-map — YANG: bgp_cli_init() */
