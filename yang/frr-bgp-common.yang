@@ -1517,7 +1517,8 @@ submodule frr-bgp-common {
 
   grouping route-flap-dampening {
     description
-      "Grouping for route flap dampening configuration.";
+      "Grouping for route flap dampening configuration.
+       Maps to: bgp dampening [HALF [REUSE SUPPRESS MAX]].";
 
     container route-flap-dampening {
       description
@@ -1526,7 +1527,8 @@ submodule frr-bgp-common {
         type boolean;
         default "false";
         description
-          "Enable route flap dampening.";
+          "Enable route flap dampening.
+           Maps to: bgp dampening.";
       }
 
       leaf reach-decay {
@@ -1534,16 +1536,11 @@ submodule frr-bgp-common {
         type uint8 {
           range "1..45";
         }
-        units "seconds";
+        units "minutes";
         default "15";
         description
-          "This value specifies the time desired for the instability
-           metric value to reach one-half of its current value when
-           the route is reachable. This half-life value determines
-           the rate at which the metric value is decayed. A smaller
-           half-life value makes a suppressed route reusable sooner
-           than a larger value. The accumulated penalty will be reduced
-           to half after this duration.";
+          "Half-life time for the penalty in minutes.
+           Maps to: bgp dampening <1-45>.";
       }
 
       leaf reuse-above {
@@ -1553,24 +1550,19 @@ submodule frr-bgp-common {
         }
         default "750";
         description
-          "This is the value of the instability metric at which a
-           suppressed route becomes unsuppressed if it is reachable
-           but currently suppressed. The value assigned to
-           reuse-below must be less than suppress-above.";
+          "Value to start reusing a route.
+           Maps to: bgp dampening HALF <1-20000> ...";
       }
 
       leaf suppress-above {
         when "../enable = 'true'";
         type uint16 {
-          range "1..20000";
+          range "1..50000";
         }
         default "2000";
         description
-          "This is the value of the instability metric at which
-           route suppression takes place. A route is not installed
-           in the forwarding information base (FIB), or announced
-           even if it is reachable during the period that it is
-           suppressed.";
+          "Value to start suppressing a route.
+           Maps to: bgp dampening HALF REUSE <1-50000> ...";
       }
 
       leaf unreach-decay {
@@ -1578,13 +1570,12 @@ submodule frr-bgp-common {
         type uint8 {
           range "1..255";
         }
-        units "seconds";
+        units "minutes";
         default "60";
         description
-          "This value acts the same as reach-decay except that it
-           specifies the rate at which the instability metric is
-           decayed when a route is unreachable. It should have a
-           value greater than or equal to reach-decay.";
+          "Maximum duration to suppress a stable route in minutes.
+           Maps to: bgp dampening HALF REUSE SUPPRESS <1-255>.
+           (Leaf name retained from harvested model; value is max-suppress.)";
       }
     }
   }
