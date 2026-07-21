@@ -724,6 +724,10 @@ submodule frr-bgp-common {
         range "0..3600";
       }
       units "seconds";
+      must "not(../establish-wait-time) or . >= ../establish-wait-time" {
+        error-message
+          "BGP update-delay-time must be greater than or equal to establish-wait-time.";
+      }
       description
         "Global update-delay. Maps to: bgp update-delay at CONFIG_NODE.";
     }
@@ -733,6 +737,10 @@ submodule frr-bgp-common {
         range "1..3600";
       }
       units "seconds";
+      must "not(../update-delay-time) or . <= ../update-delay-time" {
+        error-message
+          "BGP establish-wait-time must be less than or equal to update-delay-time.";
+      }
       description
         "Global establish-wait for update-delay.";
     }
@@ -972,6 +980,10 @@ submodule frr-bgp-common {
           range "0..3600";
         }
         units "seconds";
+        must "not(../establish-wait-time) or . >= ../establish-wait-time" {
+          error-message
+            "BGP update-delay-time must be greater than or equal to establish-wait-time.";
+        }
         description
           "Time to force initial delay for best-path and updates.";
       }
@@ -981,6 +993,10 @@ submodule frr-bgp-common {
           range "1..3600";
         }
         units "seconds";
+        must "not(../update-delay-time) or . <= ../update-delay-time" {
+          error-message
+            "BGP establish-wait-time must be less than or equal to update-delay-time.";
+        }
         description
           "Time to force initial delay for updates.";
       }

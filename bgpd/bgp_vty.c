@@ -23505,18 +23505,13 @@ void bgp_vty_init(void)
 	install_default(BGP_SRV6_NODE);
 	install_default(BGP_LS_NODE);
 
-	/* "global bgp inq-limit command */
-	install_element(CONFIG_NODE, &bgp_inq_limit_cmd);
-	install_element(CONFIG_NODE, &no_bgp_inq_limit_cmd);
-	install_element(CONFIG_NODE, &bgp_outq_limit_cmd);
-	install_element(CONFIG_NODE, &no_bgp_outq_limit_cmd);
+	/* global bgp inq-limit / outq-limit — YANG: bgp_cli_init() */
 
 	/* "bgp local-mac" hidden commands. */
 	install_element(CONFIG_NODE, &bgp_local_mac_cmd);
 	install_element(CONFIG_NODE, &no_bgp_local_mac_cmd);
 
-	/* "bgp suppress-fib-pending" global */
-	install_element(CONFIG_NODE, &bgp_global_suppress_fib_pending_cmd);
+	/* "bgp suppress-fib-pending" global — YANG: bgp_cli_init() */
 
 	/* bgp route-map delay-timer commands. */
 	install_element(CONFIG_NODE, &bgp_set_route_map_delay_timer_cmd);
@@ -23526,18 +23521,13 @@ void bgp_vty_init(void)
 
 	/* bgp fast-convergence — YANG: bgp_cli_init() */
 
-	/* global bgp ipv6-auto-ra command */
-	install_element(CONFIG_NODE, &bgp_ipv6_auto_ra_cmd);
+	/* global bgp ipv6-auto-ra — YANG: bgp_cli_init() */
 
 	/* bgp ipv6-auto-ra (BGP_NODE) — YANG: bgp_cli_init() */
 
-	/* global bgp update-delay command */
-	install_element(CONFIG_NODE, &bgp_global_update_delay_cmd);
-	install_element(CONFIG_NODE, &no_bgp_global_update_delay_cmd);
+	/* global bgp update-delay — YANG: bgp_cli_init() */
 
-	/* global bgp advertisement-delay command */
-	install_element(CONFIG_NODE, &bgp_global_advertisement_delay_cmd);
-	install_element(CONFIG_NODE, &no_bgp_global_advertisement_delay_cmd);
+	/* global bgp advertisement-delay — YANG: bgp_cli_init() */
 
 	/* global bgp graceful-shutdown command */
 	install_element(CONFIG_NODE, &bgp_graceful_shutdown_cmd);
@@ -23565,21 +23555,15 @@ void bgp_vty_init(void)
 
 	/* "router bgp" / globals converted to YANG — see bgp_cli_init(). */
 
-	/* "bgp session-dscp command */
-	install_element(CONFIG_NODE, &bgp_session_dscp_cmd);
-	install_element(CONFIG_NODE, &no_bgp_session_dscp_cmd);
+	/* bgp session-dscp — YANG: bgp_cli_init() */
 
 	/* "bgp router-id" — YANG: bgp_cli_init() */
 
-	/* "bgp suppress-fib-pending" — YANG: bgp_cli_init();
-	 * CONFIG_NODE remains classic.
-	 */
+	/* "bgp suppress-fib-pending" — YANG: bgp_cli_init() */
 
 	/* "bgp cluster-id" — YANG: bgp_cli_init() */
 
-	/* "bgp no-rib" commands. */
-	install_element(CONFIG_NODE, &bgp_norib_cmd);
-	install_element(CONFIG_NODE, &no_bgp_norib_cmd);
+	/* "bgp no-rib" — YANG: bgp_cli_init() */
 
 	install_element(CONFIG_NODE, &no_bgp_send_extra_data_cmd);
 
