@@ -1719,13 +1719,15 @@ submodule frr-bgp-common {
     leaf-list import-rt-list {
       type rt-types:route-target;
       description
-        "For routes leaked from vpn to current address-family: match any.";
+        "Route targets matched on VPN->VRF import.
+         Maps to: rt vpn import RTLIST.";
     }
 
     leaf-list export-rt-list {
       type rt-types:route-target;
       description
-        "For routes leaked from current address-family to vpn: set.";
+        "Route targets set on VRF->VPN export.
+         Maps to: rt vpn export RTLIST.";
     }
   }
 
@@ -1735,25 +1737,11 @@ submodule frr-bgp-common {
     leaf redirect-rt {
       type rt-types:route-target;
       description
-        "Flow-spec redirect type route target.";
+        "Flow-spec redirect type route target.
+         Maps to: rt redirect import RTLIST.";
     }
 
-    choice rt-direction {
-        description
-          "Choice for route target direction (import, export, or both).";
-
-      case import-export {
-        uses rt-list;
-      }
-
-      case both {
-        leaf-list rt-list {
-          type rt-types:route-target;
-          description
-            "Both import: match any and export: set.";
-        }
-      }
-    }
+    uses rt-list;
   }
 
   grouping vpn-import-params {
