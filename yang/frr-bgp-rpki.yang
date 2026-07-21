@@ -47,7 +47,9 @@ module frr-bgp-rpki {
 
   revision 2026-07-21 {
     description
-      "Fix server-public-key leaf name typo; align with RPKI CLI.";
+      "Add source-address for TCP/SSH caches; align server-public-key
+       with known-hosts CLI; support northbound conversion.
+       Constrain expire-time >= polling-time via YANG must.";
     reference
       "FRRouting.";
   }
@@ -99,6 +101,10 @@ module frr-bgp-rpki {
         }
         units "seconds";
         default "7200";
+        must ". >= ../polling-time" {
+          error-message
+            "RPKI expire-time must be greater than or equal to polling-time.";
+        }
         description
           "Set the expire interval.";
       }
@@ -174,6 +180,13 @@ module frr-bgp-rpki {
               description
                 "TCP port for the RPKI cache server.";
             }
+
+            leaf source-address {
+              type inet:ip-address;
+              description
+                "Source address for the TCP connection to the cache.
+                 Maps to: rpki cache tcp ... source A.B.C.D.";
+            }
           }
 
           container ssh {
@@ -210,8 +223,16 @@ module frr-bgp-rpki {
             leaf server-public-key {
               type string;
               description
-                "Server public key.
-                 Maps to: rpki cache SSH server-public-key path.";
+                "Known-hosts / server hostkey path.
+                 Maps to: optional KNOWN_HOSTS_PATH on
+                 rpki cache ssh ...";
+            }
+
+            leaf source-address {
+              type inet:ip-address;
+              description
+                "Source address for the SSH connection to the cache.
+                 Maps to: rpki cache ssh ... source A.B.C.D.";
             }
           }
         }
