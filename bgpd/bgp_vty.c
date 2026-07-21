@@ -24064,10 +24064,7 @@ void bgp_vty_init(void)
 
 	/* BGP-LS commands */
 	/* distribute bgp-fabric-link-state — YANG: bgp_cli_init() */
-	install_element(BGP_NODE, &neighbor_ls_local_link_id_cmd);
-	install_element(BGP_NODE, &no_neighbor_ls_local_link_id_cmd);
-	install_element(BGP_NODE, &neighbor_ls_remote_link_id_cmd);
-	install_element(BGP_NODE, &no_neighbor_ls_remote_link_id_cmd);
+	/* neighbor local/remote-link-id — YANG: bgp_cli_init() */
 
 	/* UPA global origination commands - for all prefixes, not just aggregates */
 	/* AF-level UPA — YANG: bgp_cli_init() */

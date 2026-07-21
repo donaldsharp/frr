@@ -93,6 +93,24 @@ submodule frr-bgp-neighbor {
          with a peer or group.";
     }
 
+    leaf local-link-id {
+      type uint32 {
+        range "1..max";
+      }
+      description
+        "Local link identifier for BGP-LS fabric topology.
+         Maps to: neighbor ... local-link-id (1-4294967295).";
+    }
+
+    leaf remote-link-id {
+      type uint32 {
+        range "1..max";
+      }
+      description
+        "Remote link identifier for BGP-LS fabric topology.
+         Maps to: neighbor ... remote-link-id (1-4294967295).";
+    }
+
     leaf passive-mode {
       type boolean;
       default "false";
