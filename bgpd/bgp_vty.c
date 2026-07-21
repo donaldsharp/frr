@@ -23603,10 +23603,7 @@ void bgp_vty_init(void)
 
 	/* write/read-quanta, coalesce-time, use-underlays — YANG: bgp_cli_init() */
 
-	/* "nexthop prefer-global" commands */
-	install_element(BGP_IPV6_NODE, &bgp_af_nexthop_prefer_global_cmd);
-	install_element(BGP_IPV6M_NODE, &bgp_af_nexthop_prefer_global_cmd);
-	install_element(BGP_IPV6L_NODE, &bgp_af_nexthop_prefer_global_cmd);
+	/* "nexthop prefer-global" — YANG: bgp_cli_init() */
 
 	/* "maximum-paths" commands. */
 
