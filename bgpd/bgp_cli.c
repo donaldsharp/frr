@@ -5250,6 +5250,62 @@ DEFPY_YANG(bgp_evpn_advertise_type5_yang,
 	return nb_cli_apply_changes(vty, NULL);
 }
 
+DEFPY_YANG(bgp_evpn_advertise_pip_yang, bgp_evpn_advertise_pip_yang_cmd,
+	   "[no] advertise-pip [ip A.B.C.D$ip [mac MAC$mac]]",
+	   NO_STR
+	   "evpn system primary IP\n"
+	   IP_STR
+	   "ip address\n"
+	   MAC_STR
+	   MAC_STR)
+{
+	char af_xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+
+	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
+	nb_cli_enqueue_change(vty, af_xpath, NB_OP_CREATE, NULL);
+
+	if (no) {
+		if (!ip_str) {
+			snprintf(leaf, sizeof(leaf),
+				 "%s/advertise-pip/enable", af_xpath);
+			nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
+					      "false");
+			snprintf(leaf, sizeof(leaf),
+				 "%s/advertise-pip/system-ip", af_xpath);
+			nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+			snprintf(leaf, sizeof(leaf),
+				 "%s/advertise-pip/system-mac", af_xpath);
+			nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		} else {
+			snprintf(leaf, sizeof(leaf),
+				 "%s/advertise-pip/system-ip", af_xpath);
+			nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+			snprintf(leaf, sizeof(leaf),
+				 "%s/advertise-pip/system-mac", af_xpath);
+			nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		}
+		return nb_cli_apply_changes(vty, NULL);
+	}
+
+	snprintf(leaf, sizeof(leaf), "%s/advertise-pip/enable", af_xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "true");
+
+	snprintf(leaf, sizeof(leaf), "%s/advertise-pip/system-ip", af_xpath);
+	if (ip_str)
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, ip_str);
+	else
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+
+	snprintf(leaf, sizeof(leaf), "%s/advertise-pip/system-mac", af_xpath);
+	if (mac)
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, mac);
+	else
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
 DEFPY_YANG(bgp_imexport_vpn_yang, bgp_imexport_vpn_yang_cmd,
 	   "[no] <import|export>$direction_str vpn",
 	   NO_STR
@@ -7908,6 +7964,7 @@ void bgp_cli_init(void)
 	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_es_frag_yang_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_default_originate_yang_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_type5_yang_cmd);
+	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_pip_yang_cmd);
 
 	/* AF-level import|export vpn */
 	install_element(BGP_IPV4_NODE, &bgp_imexport_vpn_yang_cmd);
