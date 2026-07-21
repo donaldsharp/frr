@@ -51,7 +51,9 @@ submodule frr-bgp-bmp {
 
   revision 2026-07-21 {
     description
-      "Add BMP import-vrf and experimental stats knobs to match CLI.";
+      "Add BMP import-vrf and experimental stats knobs to match CLI.
+       Default stats-send-experimental to true to match classic.
+       Constrain max-retry-time >= min-retry-time via YANG must.";
     reference
       "FRRouting.";
   }
@@ -126,6 +128,10 @@ submodule frr-bgp-bmp {
           }
           units "milliseconds";
           default "720000";
+          must ". >= ../min-retry-time" {
+            error-message
+              "BMP max-retry-time must be greater than or equal to min-retry-time.";
+          }
           description
             "Maximum connection retry interval.";
         }
@@ -232,10 +238,11 @@ submodule frr-bgp-bmp {
 
         leaf stats-send-experimental {
           type boolean;
-          default "false";
+          default "true";
           description
             "Include experimental BMP statistics TLVs.
-             Maps to: bmp stats send-experimental.";
+             Maps to: bmp stats send-experimental.
+             Default true matches classic FRR behaviour for new targets.";
         }
 
         uses bmp-afi-safis;
