@@ -53,6 +53,9 @@
 #include "bgpd/bgp_nb.h"
 #include "bgpd/bgp_rpki_nb.h"
 #include "bgpd/bgp_filter_nb.h"
+#ifdef ENABLE_BGP_VNC
+#include "bgpd/bgp_vnc_nb.h"
+#endif
 #include "bgpd/bgp_community_alias.h"
 #include "routing_nb.h"
 
@@ -409,6 +412,9 @@ static const struct frr_yang_module_info *const bgpd_yang_modules[] = {
 	&frr_bgp_route_map_info,
 	&frr_bgp_filter_info,
 	&frr_bgp_rpki_info,
+#ifdef ENABLE_BGP_VNC
+	&frr_bgp_vnc_info,
+#endif
 };
 
 /* clang-format off */
