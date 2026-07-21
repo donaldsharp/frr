@@ -153,8 +153,6 @@ DEFINE_HOOK(bgp_inst_config_write,
 		(bgp, vty));
 DEFINE_HOOK(bgp_snmp_update_last_changed, (struct bgp * bgp), (bgp));
 DEFINE_HOOK(bgp_snmp_traps_config_write, (struct vty * vty), (vty));
-DEFINE_HOOK(bgp_route_distinguisher_update, (struct bgp *bgp, afi_t afi, bool preconfig),
-	    (bgp, afi, preconfig));
 
 static struct peer_group *listen_range_exists(struct bgp *bgp,
 					      struct prefix *range, int exact);
@@ -10832,7 +10830,7 @@ DEFPY (af_rd_vpn_export,
 	    strmatch(rd_str, bgp->vpn_policy[afi].tovpn_rd_pretty))
 		return CMD_SUCCESS;
 
-	hook_call(bgp_route_distinguisher_update, bgp, afi, true);
+	//hook_call(bgp_route_distinguisher_update, bgp, afi, true);
 	if (yes) {
 		if (bgp->vpn_policy[afi].tovpn_rd_pretty)
 			XFREE(MTYPE_BGP_NAME, bgp->vpn_policy[afi].tovpn_rd_pretty);
@@ -10849,7 +10847,7 @@ DEFPY (af_rd_vpn_export,
 			   BGP_VPN_POLICY_TOVPN_RD_SET);
 		UNSET_FLAG(bgp->vpn_policy[afi].flags, BGP_VPN_POLICY_TOVPN_RD_CLI_SET);
 	}
-	hook_call(bgp_route_distinguisher_update, bgp, afi, false);
+	//hook_call(bgp_route_distinguisher_update, bgp, afi, false);
 
 	/* post-change: re-export vpn routes */
 	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, afi,
@@ -24053,8 +24051,7 @@ void bgp_vty_init(void)
 	community_alias_vty();
 
 	/* vpn-policy commands */
-	install_element(BGP_IPV4_NODE, &af_rd_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_rd_vpn_export_cmd);
+	/* rd vpn export — YANG: bgp_cli_init() */
 	install_element(BGP_IPV4_NODE, &af_label_vpn_export_cmd);
 	install_element(BGP_IPV6_NODE, &af_label_vpn_export_cmd);
 	install_element(BGP_IPV4_NODE,
@@ -24072,8 +24069,7 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV4_NODE, &af_routetarget_import_cmd);
 	install_element(BGP_IPV6_NODE, &af_routetarget_import_cmd);
 
-	install_element(BGP_IPV4_NODE, &af_no_rd_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_no_rd_vpn_export_cmd);
+	/* no rd vpn export — YANG: bgp_cli_init() */
 	install_element(BGP_IPV4_NODE, &af_no_label_vpn_export_cmd);
 	install_element(BGP_IPV6_NODE, &af_no_label_vpn_export_cmd);
 	install_element(BGP_IPV4_NODE, &af_no_rt_vpn_imexport_cmd);

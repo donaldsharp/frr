@@ -1823,7 +1823,8 @@ submodule frr-bgp-common {
       leaf rd {
         type string;
         description
-          "Route distinguisher value as per RFC4364.";
+          "Route distinguisher value as per RFC4364.
+           Maps to: rd vpn export ASN:NN_OR_IP-ADDRESS:NN.";
       }
 
       uses vpn-label-params;
