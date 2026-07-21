@@ -7947,7 +7947,7 @@ static bool get_role_by_name(const char *role_str, uint8_t *role)
 }
 
 /* Re-evaluate routes when the role changes */
-static void bgp_vty_role_update(struct peer *peer, int action)
+void bgp_vty_role_update(struct peer *peer, int action)
 {
 	struct listnode *node;
 	struct peer *member;
@@ -23877,9 +23877,6 @@ void bgp_vty_init(void)
 	/* bgp max-med — YANG: bgp_cli_init() */
 
 	/* "neighbor role" commands. */
-	install_element(BGP_NODE, &neighbor_role_cmd);
-	install_element(BGP_NODE, &neighbor_role_strict_cmd);
-	install_element(BGP_NODE, &no_neighbor_role_cmd);
 
 	/* "neighbor oad" commands. */
 	install_element(BGP_NODE, &neighbor_oad_cmd);
@@ -24660,13 +24657,10 @@ void bgp_vty_init(void)
 	/* "neighbor capability extended-nexthop" commands.*/
 
 	/* "neighbor capability software-version" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_software_version_cmd);
 
 	/* "neighbor capability link-local" commands.*/
-	install_element(BGP_NODE, &neighbor_capability_link_local_cmd);
 
 	/* neighbor rpki ... commands. */
-	install_element(BGP_NODE, &neighbor_rpki_strict_cmd);
 
 	/* "neighbor capability orf prefix-list" commands.*/
 	install_element(BGP_NODE, &neighbor_capability_orf_prefix_hidden_cmd);
@@ -24769,12 +24763,8 @@ void bgp_vty_init(void)
 	install_element(BGP_VPNV6_NODE, &neighbor_encapsulation_srv6_or_mpls_cmd);
 
 	/* "neighbor override-capability" commands. */
-	install_element(BGP_NODE, &neighbor_override_capability_cmd);
-	install_element(BGP_NODE, &no_neighbor_override_capability_cmd);
 
 	/* "neighbor strict-capability-match" commands. */
-	install_element(BGP_NODE, &neighbor_strict_capability_cmd);
-	install_element(BGP_NODE, &no_neighbor_strict_capability_cmd);
 
 	/* "neighbor timers" commands. */
 
@@ -25314,10 +25304,7 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6_NODE, &af_no_import_vrf_route_map_cmd);
 
 	/* tcp-mss command */
-	install_element(BGP_NODE, &neighbor_tcp_mss_cmd);
-	install_element(BGP_NODE, &no_neighbor_tcp_mss_cmd);
 
-	install_element(BGP_NODE, &neighbor_ip_transparent_cmd);
 
 	/* srv6 commands */
 	install_element(VIEW_NODE, &show_bgp_srv6_cmd);
