@@ -23597,20 +23597,11 @@ void bgp_vty_init(void)
 
 	install_element(CONFIG_NODE, &no_bgp_send_extra_data_cmd);
 
-	/* "bgp confederation" commands. */
-	install_element(BGP_NODE, &bgp_confederation_identifier_cmd);
-	install_element(BGP_NODE, &no_bgp_confederation_identifier_cmd);
+	/* "bgp confederation" — YANG: bgp_cli_init() */
 
-	/* "bgp confederation peers" commands. */
-	install_element(BGP_NODE, &bgp_confederation_peers_cmd);
-	install_element(BGP_NODE, &no_bgp_confederation_peers_cmd);
+	/* "bgp confederation peers" — YANG: bgp_cli_init() */
 
-	/* bgp max-med command */
-	install_element(BGP_NODE, &bgp_maxmed_admin_cmd);
-	install_element(BGP_NODE, &no_bgp_maxmed_admin_cmd);
-	install_element(BGP_NODE, &bgp_maxmed_admin_medv_cmd);
-	install_element(BGP_NODE, &bgp_maxmed_onstartup_cmd);
-	install_element(BGP_NODE, &no_bgp_maxmed_onstartup_cmd);
+	/* bgp max-med — YANG: bgp_cli_init() */
 
 	/* "neighbor role" commands. */
 	install_element(BGP_NODE, &neighbor_role_cmd);
@@ -23628,13 +23619,7 @@ void bgp_vty_init(void)
 
 	/* bgp disable-ebgp-connected-nh-check — YANG: bgp_cli_init() */
 
-	/* bgp update-delay command */
-	install_element(BGP_NODE, &bgp_update_delay_cmd);
-	install_element(BGP_NODE, &no_bgp_update_delay_cmd);
-
-	/* bgp advertisement-delay command */
-	install_element(BGP_NODE, &bgp_advertisement_delay_cmd);
-	install_element(BGP_NODE, &no_bgp_advertisement_delay_cmd);
+	/* update-delay / advertisement-delay — YANG: bgp_cli_init() */
 
 	install_element(BGP_NODE, &bgp_wpkt_quanta_cmd);
 	install_element(BGP_NODE, &bgp_rpkt_quanta_cmd);
@@ -23677,13 +23662,7 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6L_NODE, &bgp_maxpaths_ibgp_cluster_cmd);
 	install_element(BGP_IPV6L_NODE, &no_bgp_maxpaths_ibgp_cmd);
 
-	/* "timers bgp" commands. */
-	install_element(BGP_NODE, &bgp_timers_cmd);
-	install_element(BGP_NODE, &no_bgp_timers_cmd);
-
-	/* "minimum-holdtime" commands. */
-	install_element(BGP_NODE, &bgp_minimum_holdtime_cmd);
-	install_element(BGP_NODE, &no_bgp_minimum_holdtime_cmd);
+	/* "timers bgp" / minimum-holdtime — YANG: bgp_cli_init() */
 
 	/* route-map delay-timer commands - per instance for backwards compat.
 	 */
