@@ -148,10 +148,7 @@ FRR_CFG_DEFAULT_BOOL(BGP_IPV6_NEXTHOP_PREFER_GLOBAL,
 	{ .val_bool = false },
 );
 
-DEFINE_HOOK(bgp_inst_config_write,
-		(struct bgp *bgp, struct vty *vty),
-		(bgp, vty));
-DEFINE_HOOK(bgp_snmp_update_last_changed, (struct bgp * bgp), (bgp));
+DEFINE_HOOK(bgp_inst_config_write, (struct bgp * bgp, struct vty *vty), (bgp, vty));
 DEFINE_HOOK(bgp_snmp_traps_config_write, (struct vty * vty), (vty));
 
 static struct peer_group *listen_range_exists(struct bgp *bgp,
@@ -10919,7 +10916,7 @@ DEFPY(af_label_vpn_export_allocation_mode,
 	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, afi, bgp_get_default(),
 			    bgp);
 
-	hook_call(bgp_snmp_update_last_changed, bgp);
+	//hook_call(bgp_snmp_update_last_changed, bgp);
 	return CMD_SUCCESS;
 }
 
@@ -11010,7 +11007,7 @@ DEFPY (af_label_vpn_export,
 	vpn_leak_postchange(BGP_VPN_POLICY_DIR_TOVPN, afi,
 			    bgp_get_default(), bgp);
 
-	hook_call(bgp_snmp_update_last_changed, bgp);
+	//hook_call(bgp_snmp_update_last_changed, bgp);
 	return CMD_SUCCESS;
 }
 
@@ -24051,13 +24048,7 @@ void bgp_vty_init(void)
 	community_alias_vty();
 
 	/* vpn-policy commands */
-	/* rd vpn export — YANG: bgp_cli_init() */
-	install_element(BGP_IPV4_NODE, &af_label_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_label_vpn_export_cmd);
-	install_element(BGP_IPV4_NODE,
-			&af_label_vpn_export_allocation_mode_cmd);
-	install_element(BGP_IPV6_NODE,
-			&af_label_vpn_export_allocation_mode_cmd);
+	/* rd / label vpn export — YANG: bgp_cli_init() */
 	install_element(BGP_IPV4_NODE, &af_nexthop_vpn_export_cmd);
 	install_element(BGP_IPV6_NODE, &af_nexthop_vpn_export_cmd);
 	install_element(BGP_IPV4_NODE, &af_rt_vpn_imexport_cmd);
@@ -24069,9 +24060,7 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV4_NODE, &af_routetarget_import_cmd);
 	install_element(BGP_IPV6_NODE, &af_routetarget_import_cmd);
 
-	/* no rd vpn export — YANG: bgp_cli_init() */
-	install_element(BGP_IPV4_NODE, &af_no_label_vpn_export_cmd);
-	install_element(BGP_IPV6_NODE, &af_no_label_vpn_export_cmd);
+	/* no rd / label vpn export — YANG: bgp_cli_init() */
 	install_element(BGP_IPV4_NODE, &af_no_rt_vpn_imexport_cmd);
 	install_element(BGP_IPV6_NODE, &af_no_rt_vpn_imexport_cmd);
 	/* no route-map vpn — YANG: bgp_cli_init() */
