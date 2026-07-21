@@ -23610,10 +23610,9 @@ void bgp_vty_init(void)
 
 	/* "timers bgp" / minimum-holdtime — YANG: bgp_cli_init() */
 
-	/* route-map delay-timer commands - per instance for backwards compat.
+	/* route-map delay-timer — BGP_NODE YANG: bgp_cli_init();
+	 * CONFIG_NODE remains classic (process-global, no BGP xpath).
 	 */
-	install_element(BGP_NODE, &bgp_set_route_map_delay_timer_cmd);
-	install_element(BGP_NODE, &no_bgp_set_route_map_delay_timer_cmd);
 
 	/* "bgp client-to-client reflection" — YANG: bgp_cli_init() */
 
@@ -23786,11 +23785,9 @@ void bgp_vty_init(void)
 
 	install_element(VIEW_NODE, &show_bgp_neighbor_upa_cmd);
 
-	/* "neighbor shutdown" — YANG: bgp_cli_init();
-	 * shutdown rtt remains classic for now.
+	/* "neighbor shutdown" — YANG: bgp_cli_init()
+	 * (including shutdown rtt)
 	 */
-	install_element(BGP_NODE, &neighbor_shutdown_rtt_cmd);
-	install_element(BGP_NODE, &no_neighbor_shutdown_rtt_cmd);
 
 	/* "neighbor capability extended-nexthop" commands.*/
 

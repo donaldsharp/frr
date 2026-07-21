@@ -961,7 +961,10 @@ submodule frr-bgp-common {
         units "seconds";
         default "5";
         description
-          "Time to wait before processing route-map changes.";
+          "Time to wait before processing route-map changes.
+           Maps to: bgp route-map delay-timer (0-600). Zero disables
+           delayed processing (route-map changes apply immediately via
+           an immediate update).";
       }
 
       leaf update-delay-time {
