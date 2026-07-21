@@ -3598,7 +3598,7 @@ static void evpn_show_all_vnis(struct vty *vty, struct bgp *bgp,
 /*
  * evpn - enable advertisement of svi MAC-IP
  */
-static void evpn_set_advertise_svi_macip(struct bgp *bgp, struct bgpevpn *vpn,
+void evpn_set_advertise_svi_macip(struct bgp *bgp, struct bgpevpn *vpn,
 					 uint32_t set)
 {
 	if (!vpn) {
@@ -3625,7 +3625,7 @@ static void evpn_set_advertise_svi_macip(struct bgp *bgp, struct bgpevpn *vpn,
 /*
  * evpn - enable advertisement of default g/w
  */
-static void evpn_set_advertise_default_gw(struct bgp *bgp, struct bgpevpn *vpn)
+void evpn_set_advertise_default_gw(struct bgp *bgp, struct bgpevpn *vpn)
 {
 	if (!vpn) {
 		if (bgp->advertise_gw_macip)
@@ -3647,7 +3647,7 @@ static void evpn_set_advertise_default_gw(struct bgp *bgp, struct bgpevpn *vpn)
 /*
  * evpn - disable advertisement of default g/w
  */
-static void evpn_unset_advertise_default_gw(struct bgp *bgp,
+void evpn_unset_advertise_default_gw(struct bgp *bgp,
 					    struct bgpevpn *vpn)
 {
 	if (!vpn) {
@@ -3730,7 +3730,7 @@ static void evpn_unset_advertise_subnet(struct bgp *bgp, struct bgpevpn *vpn)
 /*
  * EVPN (VNI advertisement) enabled. Register with zebra.
  */
-static void evpn_set_advertise_all_vni(struct bgp *bgp)
+void evpn_set_advertise_all_vni(struct bgp *bgp)
 {
 	bgp->advertise_all_vni = 1;
 	bgp_set_evpn(bgp);
@@ -3741,7 +3741,7 @@ static void evpn_set_advertise_all_vni(struct bgp *bgp)
  * EVPN (VNI advertisement) disabled. De-register with zebra. Cleanup VNI
  * cache, EVPN routes (delete and withdraw from peers).
  */
-static void evpn_unset_advertise_all_vni(struct bgp *bgp)
+void evpn_unset_advertise_all_vni(struct bgp *bgp)
 {
 	bgp->advertise_all_vni = 0;
 	bgp_set_evpn(bgp_get_default());
@@ -3750,7 +3750,7 @@ static void evpn_unset_advertise_all_vni(struct bgp *bgp)
 }
 
 /* Set resolve overlay index flag */
-static void bgp_evpn_set_unset_resolve_overlay_index(struct bgp *bgp, bool set)
+void bgp_evpn_set_unset_resolve_overlay_index(struct bgp *bgp, bool set)
 {
 	if (set == bgp->resolve_overlay_index)
 		return;
@@ -3774,7 +3774,7 @@ static void bgp_evpn_set_unset_resolve_overlay_index(struct bgp *bgp, bool set)
 /*
  * EVPN - use RFC8365 to auto-derive RT
  */
-static void evpn_set_advertise_autort_rfc8365(struct bgp *bgp)
+void evpn_set_advertise_autort_rfc8365(struct bgp *bgp)
 {
 	bgp->advertise_autort_rfc8365 = 1;
 	bgp_evpn_handle_autort_change(bgp);
@@ -3783,7 +3783,7 @@ static void evpn_set_advertise_autort_rfc8365(struct bgp *bgp)
 /*
  * EVPN - don't use RFC8365 to auto-derive RT
  */
-static void evpn_unset_advertise_autort_rfc8365(struct bgp *bgp)
+void evpn_unset_advertise_autort_rfc8365(struct bgp *bgp)
 {
 	bgp->advertise_autort_rfc8365 = 0;
 	bgp_evpn_handle_autort_change(bgp);
@@ -7862,13 +7862,9 @@ void bgp_ethernetvpn_init(void)
 	install_element(VIEW_NODE, &show_ip_bgp_l2vpn_evpn_all_overlay_cmd);
 	install_element(BGP_EVPN_NODE, &no_evpnrt5_network_cmd);
 	install_element(BGP_EVPN_NODE, &evpnrt5_network_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_all_vni_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_advertise_all_vni_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_autort_rfc8365_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_advertise_autort_rfc8365_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_default_gw_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_advertise_default_gw_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_svi_ip_cmd);
+	/* advertise-all-vni / autort / default-gw / svi-ip / flooding /
+	 * resolve-overlay-index — YANG: bgp_cli_init()
+	 */
 	install_element(BGP_EVPN_NODE, &macvrf_soo_global_cmd);
 	install_element(BGP_EVPN_NODE, &no_macvrf_soo_global_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_type5_cmd);
@@ -7878,13 +7874,10 @@ void bgp_ethernetvpn_init(void)
 	install_element(BGP_EVPN_NODE, &dup_addr_detection_cmd);
 	install_element(BGP_EVPN_NODE, &dup_addr_detection_auto_recovery_cmd);
 	install_element(BGP_EVPN_NODE, &no_dup_addr_detection_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_flood_control_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_pip_ip_mac_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_use_es_l3nhg_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_evi_rx_disable_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_evi_tx_disable_cmd);
-	install_element(BGP_EVPN_NODE,
-			&bgp_evpn_enable_resolve_overlay_index_cmd);
 
 	/* test commands */
 	install_element(BGP_EVPN_NODE, &test_es_add_cmd);
