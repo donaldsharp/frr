@@ -24065,8 +24065,7 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6_NODE, &af_nexthop_vpn_export_cmd);
 	install_element(BGP_IPV4_NODE, &af_rt_vpn_imexport_cmd);
 	install_element(BGP_IPV6_NODE, &af_rt_vpn_imexport_cmd);
-	install_element(BGP_IPV4_NODE, &af_route_map_vpn_imexport_cmd);
-	install_element(BGP_IPV6_NODE, &af_route_map_vpn_imexport_cmd);
+	/* route-map vpn — YANG: bgp_cli_init() */
 	install_element(BGP_IPV4_NODE, &af_import_vrf_route_map_cmd);
 	install_element(BGP_IPV6_NODE, &af_import_vrf_route_map_cmd);
 
@@ -24079,8 +24078,7 @@ void bgp_vty_init(void)
 	install_element(BGP_IPV6_NODE, &af_no_label_vpn_export_cmd);
 	install_element(BGP_IPV4_NODE, &af_no_rt_vpn_imexport_cmd);
 	install_element(BGP_IPV6_NODE, &af_no_rt_vpn_imexport_cmd);
-	install_element(BGP_IPV4_NODE, &af_no_route_map_vpn_imexport_cmd);
-	install_element(BGP_IPV6_NODE, &af_no_route_map_vpn_imexport_cmd);
+	/* no route-map vpn — YANG: bgp_cli_init() */
 	install_element(BGP_IPV4_NODE, &af_no_import_vrf_route_map_cmd);
 	install_element(BGP_IPV6_NODE, &af_no_import_vrf_route_map_cmd);
 

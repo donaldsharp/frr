@@ -1795,9 +1795,21 @@ submodule frr-bgp-common {
          Maps to: bgp retain route-target all.";
     }
 
-    uses rmap-policy-import;
+    uses rmap-policy-import {
+      refine "rmap-import" {
+        description
+          "Route-map for routes leaked from VPN into this AF.
+           Maps to: route-map vpn import WORD.";
+      }
+    }
 
-    uses rmap-policy-export;
+    uses rmap-policy-export {
+      refine "rmap-export" {
+        description
+          "Route-map for routes leaked from this AF into VPN.
+           Maps to: route-map vpn export WORD.";
+      }
+    }
   }
 
   grouping global-afi-safi-vpn-config {
