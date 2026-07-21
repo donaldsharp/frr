@@ -1735,10 +1735,18 @@ submodule frr-bgp-common {
     description
       "Route Target value.";
     leaf redirect-rt {
-      type rt-types:route-target;
+      type string;
       description
-        "Flow-spec redirect type route target.
-         Maps to: rt redirect import RTLIST.";
+        "Space-separated flowspec redirect route targets.
+         Maps to: rt redirect import RTLIST (or rt6 redirect import).";
+    }
+
+    leaf redirect-rt-ipv6 {
+      type boolean;
+      default "false";
+      description
+        "When true, redirect-rt values are IPv6 route targets.
+         Maps to: rt6|route-target6 redirect import.";
     }
 
     uses rt-list;
@@ -1777,14 +1785,6 @@ submodule frr-bgp-common {
       }
     }
 
-    leaf retain-route-target-all {
-      type boolean;
-      default "true";
-      description
-        "Retain all VPN routes regardless of route-target membership.
-         Maps to: bgp retain route-target all.";
-    }
-
     uses rmap-policy-import {
       refine "rmap-import" {
         description
@@ -1807,6 +1807,20 @@ submodule frr-bgp-common {
           "Route-map for routes leaked from this AF into VPN.
            Maps to: route-map vpn export WORD.";
       }
+    }
+  }
+
+  grouping vpn-retain-route-target-config {
+    description
+      "VPN AF retain route-target configuration.";
+
+    leaf retain-route-target-all {
+      type boolean;
+      default "true";
+      description
+        "Retain all VPN routes regardless of route-target membership.
+         Maps to: bgp retain route-target all under address-family
+         ipv4/ipv6 vpn.";
     }
   }
 

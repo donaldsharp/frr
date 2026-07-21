@@ -7896,6 +7896,223 @@ void bgp_nb_cli_show_vpn_vrf_rmap_import(struct vty *vty,
 		yang_dnode_get_string(dnode, NULL));
 }
 
+/*
+ * L3VPN bgp retain route-target all
+ */
+int bgp_nb_vpn_retain_rt_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	afi_t afi;
+	safi_t safi;
+	bool retain;
+	bool previous;
+
+	retain = yang_dnode_get_bool(args->dnode, NULL);
+
+	switch (args->event) {
+	case NB_EV_VALIDATE:
+	case NB_EV_PREPARE:
+	case NB_EV_ABORT:
+		return NB_OK;
+	case NB_EV_APPLY:
+		break;
+	}
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (!bgp || !bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
+		return NB_ERR_NOT_FOUND;
+
+	previous = !!CHECK_FLAG(bgp->af_flags[afi][safi],
+				BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL);
+	if (previous == retain)
+		return NB_OK;
+
+	if (retain)
+		SET_FLAG(bgp->af_flags[afi][safi],
+			 BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL);
+	else
+		UNSET_FLAG(bgp->af_flags[afi][safi],
+			   BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL);
+
+	bgp_clear_soft_in(bgp, afi, safi);
+	return NB_OK;
+}
+
+int bgp_nb_vpn_retain_rt_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	afi_t afi;
+	safi_t safi;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (!bgp || !bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
+		return NB_OK;
+
+	/* Default is retain-all (true). */
+	if (CHECK_FLAG(bgp->af_flags[afi][safi],
+		       BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL))
+		return NB_OK;
+
+	SET_FLAG(bgp->af_flags[afi][safi], BGP_VPNVX_RETAIN_ROUTE_TARGET_ALL);
+	bgp_clear_soft_in(bgp, afi, safi);
+	return NB_OK;
+}
+
+void bgp_nb_cli_show_vpn_retain_rt(struct vty *vty,
+				   const struct lyd_node *dnode,
+				   bool show_defaults)
+{
+	if (!yang_dnode_get_bool(dnode, NULL))
+		vty_out(vty, "  no bgp retain route-target all\n");
+	else if (show_defaults)
+		vty_out(vty, "  bgp retain route-target all\n");
+}
+
+/*
+ * AF-level rt[6] redirect import
+ */
+static int bgp_nb_vpn_redirect_rt_parse(const char *rt_str, bool ipv6,
+					struct ecommunity **ecom, char *errmsg,
+					size_t errmsg_len)
+{
+	char *copy, *token, *save;
+	struct ecommunity *add;
+
+	*ecom = NULL;
+	copy = XSTRDUP(MTYPE_TMP, rt_str);
+	for (token = strtok_r(copy, " \t", &save); token;
+	     token = strtok_r(NULL, " \t", &save)) {
+		if (ipv6)
+			add = ecommunity_str2com_ipv6(token,
+						      ECOMMUNITY_ROUTE_TARGET,
+						      0);
+		else
+			add = ecommunity_str2com(token, ECOMMUNITY_ROUTE_TARGET,
+						 0);
+		if (!add) {
+			if (errmsg)
+				snprintfrr(errmsg, errmsg_len,
+					   "Malformed community-list value");
+			if (*ecom)
+				ecommunity_free(ecom);
+			XFREE(MTYPE_TMP, copy);
+			return NB_ERR_VALIDATION;
+		}
+		if (*ecom) {
+			ecommunity_merge(*ecom, add);
+			ecommunity_free(&add);
+		} else
+			*ecom = add;
+	}
+	XFREE(MTYPE_TMP, copy);
+	if (!*ecom) {
+		if (errmsg)
+			snprintfrr(errmsg, errmsg_len, "Missing RTLIST");
+		return NB_ERR_VALIDATION;
+	}
+	return NB_OK;
+}
+
+static int bgp_nb_vpn_redirect_rt_apply(struct bgp *bgp, afi_t afi,
+					struct ecommunity *ecom)
+{
+	if (bgp->vpn_policy[afi].import_redirect_rtlist)
+		ecommunity_free(&bgp->vpn_policy[afi].import_redirect_rtlist);
+	bgp->vpn_policy[afi].import_redirect_rtlist = ecom;
+	return NB_OK;
+}
+
+int bgp_nb_vpn_redirect_rt_modify(struct nb_cb_modify_args *args)
+{
+	struct bgp *bgp;
+	afi_t afi;
+	safi_t safi;
+	struct ecommunity *ecom;
+	bool ipv6 = false;
+
+	if (yang_dnode_exists(args->dnode, "../redirect-rt-ipv6"))
+		ipv6 = yang_dnode_get_bool(args->dnode, "../redirect-rt-ipv6");
+
+	switch (args->event) {
+	case NB_EV_VALIDATE:
+		if (bgp_nb_vpn_redirect_rt_parse(
+			    yang_dnode_get_string(args->dnode, NULL), ipv6,
+			    &ecom, args->errmsg, args->errmsg_len)
+		    != NB_OK)
+			return NB_ERR_VALIDATION;
+		ecommunity_free(&ecom);
+		bgp = nb_running_get_entry(args->dnode, NULL, false);
+		if (!bgp || !bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
+			return NB_OK;
+		if (ipv6 && afi != AFI_IP6) {
+			snprintfrr(args->errmsg, args->errmsg_len,
+				   "rt6 redirect import valid only for ipv6");
+			return NB_ERR_VALIDATION;
+		}
+		return bgp_nb_vpn_rmap_validate(bgp, afi, safi, args->errmsg,
+						args->errmsg_len);
+	case NB_EV_PREPARE:
+	case NB_EV_ABORT:
+		return NB_OK;
+	case NB_EV_APPLY:
+		break;
+	}
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (!bgp || !bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
+		return NB_ERR_NOT_FOUND;
+	if (bgp_nb_vpn_redirect_rt_parse(
+		    yang_dnode_get_string(args->dnode, NULL), ipv6, &ecom, NULL,
+		    0)
+	    != NB_OK)
+		return NB_ERR_VALIDATION;
+
+	return bgp_nb_vpn_redirect_rt_apply(bgp, afi, ecom);
+}
+
+int bgp_nb_vpn_redirect_rt_destroy(struct nb_cb_destroy_args *args)
+{
+	struct bgp *bgp;
+	afi_t afi;
+	safi_t safi;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	if (!bgp || !bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
+		return NB_OK;
+
+	return bgp_nb_vpn_redirect_rt_apply(bgp, afi, NULL);
+}
+
+void bgp_nb_cli_show_vpn_redirect_rt(struct vty *vty,
+				     const struct lyd_node *dnode,
+				     bool show_defaults)
+{
+	bool ipv6 = false;
+
+	if (yang_dnode_exists(dnode, "../redirect-rt-ipv6"))
+		ipv6 = yang_dnode_get_bool(dnode, "../redirect-rt-ipv6");
+
+	vty_out(vty, "  %s redirect import %s\n", ipv6 ? "rt6" : "rt",
+		yang_dnode_get_string(dnode, NULL));
+}
+
+int bgp_nb_vpn_redirect_rt_ipv6_modify(struct nb_cb_modify_args *args)
+{
+	/* Value consumed when redirect-rt is applied; nothing else to do. */
+	return NB_OK;
+}
+
+int bgp_nb_vpn_redirect_rt_ipv6_destroy(struct nb_cb_destroy_args *args)
+{
+	return NB_OK;
+}
+
 
 static int bgp_nb_peer_af_flag_modify(struct nb_cb_modify_args *args, uint64_t flag)
 {
