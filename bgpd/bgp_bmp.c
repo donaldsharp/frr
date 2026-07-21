@@ -2717,6 +2717,32 @@ static void bmp_listener_stop(struct bmp_listener *bl)
 	bl->sock = -1;
 }
 
+static int bmp_targets_listener_set(struct bmp_targets *bt, const union sockunion *su,
+				    uint16_t port)
+{
+	struct bmp_listener *bl;
+
+	bl = bmp_listener_get(bt, su, port);
+	if (bl->sock == -1)
+		bmp_listener_start(bl);
+	return 0;
+}
+
+static int bmp_targets_listener_unset(struct bmp_targets *bt, const union sockunion *su,
+				      uint16_t port, char *errmsg, size_t errmsg_len)
+{
+	struct bmp_listener *bl;
+
+	bl = bmp_listener_find(bt, su, port);
+	if (!bl) {
+		snprintfrr(errmsg, errmsg_len, "BMP listener not found");
+		return -1;
+	}
+	bmp_listener_stop(bl);
+	bmp_listener_put(bl);
+	return 0;
+}
+
 static struct bmp_active *bmp_active_find(struct bmp_targets *bt,
 					  const char *hostname, int port)
 {
@@ -3122,12 +3148,8 @@ DEFPY(bmp_listener_main,
       "TCP Port number\n")
 {
 	VTY_DECLVAR_CONTEXT_SUB(bmp_targets, bt);
-	struct bmp_listener *bl;
 
-	bl = bmp_listener_get(bt, listener, port);
-	if (bl->sock == -1)
-		bmp_listener_start(bl);
-
+	bmp_targets_listener_set(bt, listener, port);
 	return CMD_SUCCESS;
 }
 
@@ -3143,15 +3165,12 @@ DEFPY(no_bmp_listener_main,
       "TCP Port number\n")
 {
 	VTY_DECLVAR_CONTEXT_SUB(bmp_targets, bt);
-	struct bmp_listener *bl;
+	char err[256];
 
-	bl = bmp_listener_find(bt, listener, port);
-	if (!bl) {
-		vty_out(vty, "%% BMP listener not found\n");
+	if (bmp_targets_listener_unset(bt, listener, port, err, sizeof(err)) < 0) {
+		vty_out(vty, "%% %s\n", err);
 		return CMD_WARNING;
 	}
-	bmp_listener_stop(bl);
-	bmp_listener_put(bl);
 	return CMD_SUCCESS;
 }
 
@@ -3601,8 +3620,6 @@ static int bgp_bmp_init(struct event_loop *tm)
 	 */
 	bgp_cli_bmp_init();
 
-	install_element(BMP_NODE, &bmp_listener_cmd);
-	install_element(BMP_NODE, &no_bmp_listener_cmd);
 	install_element(BMP_NODE, &bmp_connect_cmd);
 	install_element(BMP_NODE, &bmp_monitor_cmd);
 	install_element(BMP_NODE, &bmp_import_vrf_cmd);
@@ -3922,6 +3939,28 @@ static void bmp_nb_target_acl_set(void *bt, bool ipv6, const char *access_list)
 	bmp_targets_acl_set(bt, ipv6, access_list);
 }
 
+static int bmp_nb_listener_set(void *bt, const char *addr, uint16_t port)
+{
+	union sockunion su;
+
+	if (str2sockunion(addr, &su) < 0)
+		return NB_ERR_VALIDATION;
+	bmp_targets_listener_set(bt, &su, port);
+	return NB_OK;
+}
+
+static int bmp_nb_listener_unset(void *bt, const char *addr, uint16_t port)
+{
+	union sockunion su;
+	char err[256];
+
+	if (str2sockunion(addr, &su) < 0)
+		return NB_OK;
+	/* Missing runtime listener is idempotent for YANG destroy. */
+	bmp_targets_listener_unset(bt, &su, port, err, sizeof(err));
+	return NB_OK;
+}
+
 static int bgp_bmp_module_init(void)
 {
 	static struct bmp_nb_ops bmp_nb_ops_impl = {
@@ -3933,6 +3972,8 @@ static int bgp_bmp_module_init(void)
 		.target_stats_set = bmp_nb_target_stats_set,
 		.target_stats_experimental_set = bmp_nb_target_stats_experimental_set,
 		.target_acl_set = bmp_nb_target_acl_set,
+		.listener_set = bmp_nb_listener_set,
+		.listener_unset = bmp_nb_listener_unset,
 	};
 
 	bmp_nb_cb = &bmp_nb_ops_impl;

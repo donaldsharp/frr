@@ -6224,6 +6224,25 @@ DEFPY_YANG(bmp_acl_yang, bmp_acl_yang_cmd,
 	return nb_cli_apply_changes(vty, NULL);
 }
 
+DEFPY_YANG(bmp_listener_yang, bmp_listener_yang_cmd,
+	   "[no] bmp listener <A.B.C.D|X:X::X:X>$addr port (1-65535)$port",
+	   NO_STR
+	   BMP_STR
+	   "Listen for inbound BMP connections\n"
+	   "IPv4 address to listen on\n"
+	   "IPv6 address to listen on\n"
+	   "TCP Port number\n"
+	   "TCP Port number\n")
+{
+	char xpath[XPATH_MAXLEN];
+
+	snprintf(xpath, sizeof(xpath),
+		 "./incoming-session/session-list[address='%s'][tcp-port='%" PRIi64 "']", addr_str,
+		 port);
+	nb_cli_enqueue_change(vty, xpath, no ? NB_OP_DESTROY : NB_OP_CREATE, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
 DEFPY_YANG(af_routetarget_redirect_yang, af_routetarget_redirect_yang_cmd,
 	   "[no] <rt|route-target|route-target6|rt6>$rt_kw redirect import [RTLIST]",
 	   NO_STR
@@ -8573,4 +8592,5 @@ void bgp_cli_bmp_init(void)
 	install_element(BMP_NODE, &bmp_stats_yang_cmd);
 	install_element(BMP_NODE, &bmp_stats_experimental_yang_cmd);
 	install_element(BMP_NODE, &bmp_acl_yang_cmd);
+	install_element(BMP_NODE, &bmp_listener_yang_cmd);
 }

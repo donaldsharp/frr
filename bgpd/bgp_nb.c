@@ -185,6 +185,14 @@ const struct frr_yang_module_info frr_bgp_info = {
 			},
 		},
 		{
+			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/global/bmp-config/target-list/incoming-session/session-list",
+			.cbs = {
+				.create = bgp_nb_bmp_listener_create,
+				.destroy = bgp_nb_bmp_listener_destroy,
+				.cli_show = bgp_nb_cli_show_bmp_listener,
+			},
+		},
+		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/global/reject-as-sets",
 			.cbs = {
 				.modify = bgp_nb_reject_as_sets_modify,

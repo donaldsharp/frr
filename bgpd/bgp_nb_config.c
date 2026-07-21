@@ -15069,3 +15069,77 @@ void bgp_nb_cli_show_bmp_target_acl_v6(struct vty *vty, const struct lyd_node *d
 {
 	vty_out(vty, "  ipv6 access-list %s\n", yang_dnode_get_string(dnode, NULL));
 }
+
+int bgp_nb_bmp_listener_create(struct nb_cb_create_args *args)
+{
+	union sockunion su;
+	const char *addr;
+	uint16_t port;
+	void *bt;
+
+	addr = yang_dnode_get_string(args->dnode, "./address");
+	port = yang_dnode_get_uint32(args->dnode, "./tcp-port");
+
+	switch (args->event) {
+	case NB_EV_VALIDATE:
+		if (str2sockunion(addr, &su) < 0) {
+			snprintf(args->errmsg, args->errmsg_len, "Malformed BMP listener address");
+			return NB_ERR_VALIDATION;
+		}
+		return NB_OK;
+	case NB_EV_PREPARE:
+	case NB_EV_ABORT:
+		return NB_OK;
+	case NB_EV_APPLY:
+		break;
+	}
+
+	if (!bmp_nb_cb || !bmp_nb_cb->listener_set)
+		return NB_OK;
+
+	bt = nb_running_get_entry(args->dnode, NULL, true);
+	if (!bt)
+		return NB_ERR_NOT_FOUND;
+
+	return bmp_nb_cb->listener_set(bt, addr, port);
+}
+
+int bgp_nb_bmp_listener_destroy(struct nb_cb_destroy_args *args)
+{
+	union sockunion su;
+	const char *addr;
+	uint16_t port;
+	void *bt;
+
+	addr = yang_dnode_get_string(args->dnode, "./address");
+	port = yang_dnode_get_uint32(args->dnode, "./tcp-port");
+
+	switch (args->event) {
+	case NB_EV_VALIDATE:
+		if (str2sockunion(addr, &su) < 0) {
+			snprintf(args->errmsg, args->errmsg_len, "Malformed BMP listener address");
+			return NB_ERR_VALIDATION;
+		}
+		return NB_OK;
+	case NB_EV_PREPARE:
+	case NB_EV_ABORT:
+		return NB_OK;
+	case NB_EV_APPLY:
+		break;
+	}
+
+	if (!bmp_nb_cb || !bmp_nb_cb->listener_unset)
+		return NB_OK;
+
+	bt = nb_running_get_entry(args->dnode, NULL, true);
+	if (!bt)
+		return NB_OK;
+
+	return bmp_nb_cb->listener_unset(bt, addr, port);
+}
+
+void bgp_nb_cli_show_bmp_listener(struct vty *vty, const struct lyd_node *dnode, bool show_defaults)
+{
+	vty_out(vty, "   bmp listener %s port %u\n", yang_dnode_get_string(dnode, "./address"),
+		yang_dnode_get_uint32(dnode, "./tcp-port"));
+}
