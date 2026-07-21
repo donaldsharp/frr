@@ -23706,41 +23706,15 @@ void bgp_vty_init(void)
 
 	/* "neighbor password" — YANG: bgp_cli_init() */
 
-	/* "neighbor activate" commands. */
+	/* "neighbor activate" — UPA remains classic; LS → YANG bgp_cli_init() */
 	install_element(BGP_IPV4U_NODE, &neighbor_activate_cmd);
 	install_element(BGP_IPV6U_NODE, &neighbor_activate_cmd);
-	install_element(BGP_LS_NODE, &neighbor_activate_cmd);
 
-	/* "no neighbor activate" commands. */
+	/* "no neighbor activate" — UPA remains classic */
 	install_element(BGP_IPV4U_NODE, &no_neighbor_activate_cmd);
 	install_element(BGP_IPV6U_NODE, &no_neighbor_activate_cmd);
-	install_element(BGP_LS_NODE, &no_neighbor_activate_cmd);
 
-	/* "neighbor peer-group" set commands. */
-	install_element(BGP_IPV4_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV4M_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6M_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6L_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_VPNV4_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_VPNV6_NODE, &neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_FLOWSPECV4_NODE,
-			&neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_FLOWSPECV6_NODE,
-			&neighbor_set_peer_group_hidden_cmd);
-
-	/* "no neighbor peer-group unset" commands. */
-	install_element(BGP_IPV4_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV4M_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6M_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_IPV6L_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_VPNV4_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_VPNV6_NODE, &no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_FLOWSPECV4_NODE,
-			&no_neighbor_set_peer_group_hidden_cmd);
-	install_element(BGP_FLOWSPECV6_NODE,
-			&no_neighbor_set_peer_group_hidden_cmd);
+	/* "neighbor peer-group" set on AF nodes — YANG: bgp_cli_init() */
 
 	/* "neighbor softreconfiguration inbound" commands.*/
 
