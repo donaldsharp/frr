@@ -1121,6 +1121,26 @@ void bgp_nb_cli_show_evpn_ead_es_rt(struct vty *vty,
 				    const struct lyd_node *dnode,
 				    bool show_defaults);
 
+int bgp_nb_evpn_vrf_rd_modify(struct nb_cb_modify_args *args);
+int bgp_nb_evpn_vrf_rd_destroy(struct nb_cb_destroy_args *args);
+void bgp_nb_cli_show_evpn_vrf_rd(struct vty *vty, const struct lyd_node *dnode,
+				 bool show_defaults);
+
+int bgp_nb_evpn_vrf_rt_create(struct nb_cb_create_args *args);
+int bgp_nb_evpn_vrf_rt_destroy(struct nb_cb_destroy_args *args);
+void bgp_nb_cli_show_evpn_vrf_rt_import(struct vty *vty,
+					const struct lyd_node *dnode,
+					bool show_defaults);
+void bgp_nb_cli_show_evpn_vrf_rt_export(struct vty *vty,
+					const struct lyd_node *dnode,
+					bool show_defaults);
+
+int bgp_nb_evpn_vrf_rt_auto_modify(struct nb_cb_modify_args *args);
+int bgp_nb_evpn_vrf_rt_auto_destroy(struct nb_cb_destroy_args *args);
+void bgp_nb_cli_show_evpn_vrf_rt_auto(struct vty *vty,
+				      const struct lyd_node *dnode,
+				      bool show_defaults);
+
 int bgp_nb_vpn_import_modify(struct nb_cb_modify_args *args);
 int bgp_nb_vpn_import_destroy(struct nb_cb_destroy_args *args);
 void bgp_nb_cli_show_vpn_import(struct vty *vty, const struct lyd_node *dnode,

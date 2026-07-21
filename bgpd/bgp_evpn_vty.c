@@ -2281,8 +2281,8 @@ static void evpn_unconfigure_export_rt(struct bgp *bgp, struct bgpevpn *vpn,
 /*
  * Configure RD for VRF
  */
-static void evpn_configure_vrf_rd(struct bgp *bgp_vrf, struct prefix_rd *rd,
-				  const char *rd_pretty)
+void evpn_configure_vrf_rd(struct bgp *bgp_vrf, struct prefix_rd *rd,
+			   const char *rd_pretty)
 {
 	/* If we have already advertise type-5 routes with a different RD, we
 	 * have to delete and withdraw them first
@@ -2306,7 +2306,7 @@ static void evpn_configure_vrf_rd(struct bgp *bgp_vrf, struct prefix_rd *rd,
 /*
  * Unconfigure RD for VRF
  */
-static void evpn_unconfigure_vrf_rd(struct bgp *bgp_vrf)
+void evpn_unconfigure_vrf_rd(struct bgp *bgp_vrf)
 {
 	/* If we have already advertise type-5 routes with a different RD, we
 	 * have to delete and withdraw them first
@@ -6798,8 +6798,8 @@ static bool bgp_evpn_rt_matches_existing(struct list *rtl,
 /*
  * L3 RT version of above.
  */
-static bool bgp_evpn_vrf_rt_matches_existing(struct list *rtl,
-					     struct ecommunity *ecomtarget)
+bool bgp_evpn_vrf_rt_matches_existing(struct list *rtl,
+				      struct ecommunity *ecomtarget)
 {
 	struct listnode *node;
 	struct vrf_route_target *l3rt;
@@ -7939,14 +7939,7 @@ void bgp_ethernetvpn_init(void)
 	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_cmd);
 	install_element(BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_cmd);
 	install_element(BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_without_val_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rd_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vrf_rd_cmd);
-	install_element(BGP_NODE, &no_bgp_evpn_vrf_rd_without_val_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vrf_rt_cmd);
-	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_auto_cmd);
-	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vrf_rt_auto_cmd);
-	/* ead-es-route-target / ead-es-frag — YANG: bgp_cli_init() */
+	/* vrf rd / route-target — YANG: bgp_cli_init() */
 	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_advertise_svi_ip_vni_cmd);
 	install_element(BGP_EVPN_VNI_NODE,
 			&bgp_evpn_advertise_default_gw_vni_cmd);

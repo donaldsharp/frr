@@ -5330,6 +5330,138 @@ DEFPY_YANG(bgp_evpn_ead_es_rt_yang, bgp_evpn_ead_es_rt_yang_cmd,
 	return nb_cli_apply_changes(vty, NULL);
 }
 
+DEFPY_YANG(bgp_evpn_vrf_rd_yang, bgp_evpn_vrf_rd_yang_cmd,
+	   "[no] rd [ASN:NN_OR_IP-ADDRESS:NN$rd]",
+	   NO_STR
+	   EVPN_RT_DIST_HELP_STR
+	   EVPN_ASN_IP_HELP_STR)
+{
+	char af_xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+
+	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
+	nb_cli_enqueue_change(vty, af_xpath, NB_OP_CREATE, NULL);
+	snprintf(leaf, sizeof(leaf), "%s/ip-vrf/rd", af_xpath);
+
+	if (no)
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+	else {
+		if (!rd) {
+			vty_out(vty, "%% Incomplete command\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, rd);
+	}
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(bgp_evpn_vrf_rt_yang, bgp_evpn_vrf_rt_yang_cmd,
+	   "[no] route-target <both|import|export>$type RTLIST...",
+	   NO_STR
+	   "Route Target\n"
+	   "import and export\n"
+	   "import\n"
+	   "export\n"
+	   "Space separated route target list (A.B.C.D:MN|EF:OPQR|GHJK:MN)\n")
+{
+	char af_xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool do_import = false;
+	bool do_export = false;
+	int idx = 0;
+
+	if (strmatch(type, "import"))
+		do_import = true;
+	else if (strmatch(type, "export"))
+		do_export = true;
+	else if (strmatch(type, "both")) {
+		do_import = true;
+		do_export = true;
+	} else {
+		vty_out(vty, "%% Invalid Route Target type\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
+	nb_cli_enqueue_change(vty, af_xpath, NB_OP_CREATE, NULL);
+
+	argv_find(argv, argc, "RTLIST", &idx);
+	if (!idx) {
+		vty_out(vty, "%% Missing RTLIST\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	for (; idx < argc; idx++) {
+		if (argv[idx]->arg[0] == '*') {
+			vty_out(vty,
+				"%% Wildcard route-targets are not supported via YANG yet\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		if (do_import) {
+			snprintf(leaf, sizeof(leaf),
+				 "%s/ip-vrf/import-route-target[.='%s']",
+				 af_xpath, argv[idx]->arg);
+			nb_cli_enqueue_change(vty, leaf,
+					      no ? NB_OP_DESTROY : NB_OP_CREATE,
+					      NULL);
+		}
+		if (do_export) {
+			snprintf(leaf, sizeof(leaf),
+				 "%s/ip-vrf/export-route-target[.='%s']",
+				 af_xpath, argv[idx]->arg);
+			nb_cli_enqueue_change(vty, leaf,
+					      no ? NB_OP_DESTROY : NB_OP_CREATE,
+					      NULL);
+		}
+	}
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(bgp_evpn_vrf_rt_auto_yang, bgp_evpn_vrf_rt_auto_yang_cmd,
+	   "[no] route-target <both|import|export>$type auto",
+	   NO_STR
+	   "Route Target\n"
+	   "import and export\n"
+	   "import\n"
+	   "export\n"
+	   "Automatically derive route target\n")
+{
+	char af_xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool do_import = false;
+	bool do_export = false;
+	const char *val = no ? "false" : "true";
+
+	if (strmatch(type, "import"))
+		do_import = true;
+	else if (strmatch(type, "export"))
+		do_export = true;
+	else if (strmatch(type, "both")) {
+		do_import = true;
+		do_export = true;
+	} else {
+		vty_out(vty, "%% Invalid Route Target type\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
+	nb_cli_enqueue_change(vty, af_xpath, NB_OP_CREATE, NULL);
+
+	if (do_import) {
+		snprintf(leaf, sizeof(leaf),
+			 "%s/ip-vrf/import-route-target-auto", af_xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, val);
+	}
+	if (do_export) {
+		snprintf(leaf, sizeof(leaf),
+			 "%s/ip-vrf/export-route-target-auto", af_xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, val);
+	}
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
 DEFPY_YANG(bgp_imexport_vpn_yang, bgp_imexport_vpn_yang_cmd,
 	   "[no] <import|export>$direction_str vpn",
 	   NO_STR
@@ -7990,6 +8122,9 @@ void bgp_cli_init(void)
 	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_type5_yang_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_advertise_pip_yang_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_ead_es_rt_yang_cmd);
+	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rd_yang_cmd);
+	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_yang_cmd);
+	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_auto_yang_cmd);
 
 	/* AF-level import|export vpn */
 	install_element(BGP_IPV4_NODE, &bgp_imexport_vpn_yang_cmd);

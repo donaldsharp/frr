@@ -752,6 +752,8 @@ extern void bgp_evpn_configure_import_auto_rt_for_vrf(struct bgp *bgp_vrf);
 extern void bgp_evpn_unconfigure_import_rt_for_vrf(struct bgp *bgp_vrf,
 						   struct ecommunity *ecomdel);
 extern void bgp_evpn_unconfigure_import_auto_rt_for_vrf(struct bgp *bgp_vrf);
+extern bool bgp_evpn_vrf_rt_matches_existing(struct list *rtl,
+					     struct ecommunity *ecomtarget);
 extern int bgp_evpn_handle_export_rt_change(struct bgp *bgp,
 					    struct bgpevpn *vpn);
 extern void bgp_evpn_handle_autort_change(struct bgp *bgp);
