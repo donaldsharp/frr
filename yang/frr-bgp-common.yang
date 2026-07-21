@@ -1846,6 +1846,44 @@ submodule frr-bgp-common {
       uses vpn-import-params;
 
       uses vpn-route-target-params;
+
+      container sid-vpn-export {
+        description
+          "Per-AFI SRv6 SID for VRF-to-VPN export.
+           Maps to: sid vpn export ... under address-family ipv4/ipv6 unicast.";
+
+        choice sid-allocation {
+          description
+            "SRv6 SID allocation mode for VPN export.";
+
+          case index {
+            leaf sid-index {
+              type uint32 {
+                range "1..max";
+              }
+              description
+                "SRv6 SID allocation index.
+                 Maps to: sid vpn export (1-4294967295).";
+            }
+          }
+          case automatic {
+            leaf sid-auto {
+              type empty;
+              description
+                "Request automatic SRv6 SID allocation.
+                 Maps to: sid vpn export auto.";
+            }
+          }
+          case explicit {
+            leaf sid-explicit {
+              type inet:ipv6-address;
+              description
+                "Request this explicit SRv6 SID.
+                 Maps to: sid vpn export explicit X:X::X:X.";
+            }
+          }
+        }
+      }
     }
   }
 
