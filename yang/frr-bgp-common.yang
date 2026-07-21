@@ -1414,6 +1414,34 @@ submodule frr-bgp-common {
         "AS path attached to the aggregate route.
          Maps to: aggregate-address <prefix> as-path <as-path>.";
     }
+
+    leaf upa {
+      type boolean;
+      default "false";
+      description
+        "Originate Unreachable Prefix Announcements for unreachable
+         more-specific prefixes under this aggregate.
+         Maps to: aggregate-address <prefix> upa.";
+    }
+
+    leaf upa-drop {
+      type boolean;
+      default "false";
+      description
+        "Set the D-bit in UPA Extended Community so receivers install
+         a drop entry. Implies upa.
+         Maps to: aggregate-address <prefix> upa drop.";
+    }
+
+    leaf upa-max-routes {
+      type uint16 {
+        range "1..65535";
+      }
+      description
+        "Cap simultaneous UPA routes for this aggregate.
+         Implies upa. Maps to: aggregate-address <prefix> upa
+         max-routes <1-65535>.";
+    }
   }
 
   grouping admin-distance {
