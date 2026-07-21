@@ -23541,15 +23541,12 @@ void bgp_vty_init(void)
 
 	/* bgp allow-martian-nexthop — YANG: bgp_cli_init() */
 
-	/* bgp fast-convergence command */
-	install_element(BGP_NODE, &bgp_fast_convergence_cmd);
-	install_element(BGP_NODE, &no_bgp_fast_convergence_cmd);
+	/* bgp fast-convergence — YANG: bgp_cli_init() */
 
 	/* global bgp ipv6-auto-ra command */
 	install_element(CONFIG_NODE, &bgp_ipv6_auto_ra_cmd);
 
-	/* bgp ipv6-auto-ra command */
-	install_element(BGP_NODE, &bgp_ipv6_auto_ra_cmd);
+	/* bgp ipv6-auto-ra (BGP_NODE) — YANG: bgp_cli_init() */
 
 	/* global bgp update-delay command */
 	install_element(CONFIG_NODE, &bgp_global_update_delay_cmd);
@@ -23591,8 +23588,9 @@ void bgp_vty_init(void)
 
 	/* "bgp router-id" — YANG: bgp_cli_init() */
 
-	/* "bgp suppress-fib-pending" command */
-	install_element(BGP_NODE, &bgp_suppress_fib_pending_cmd);
+	/* "bgp suppress-fib-pending" — YANG: bgp_cli_init();
+	 * CONFIG_NODE remains classic.
+	 */
 
 	/* "bgp cluster-id" — YANG: bgp_cli_init() */
 
@@ -23676,8 +23674,7 @@ void bgp_vty_init(void)
 
 	/* bgp enforce-first-as — YANG: bgp_cli_init() */
 
-	/* bgp labeled-unicast explicit-null */
-	install_element(BGP_NODE, &bgp_lu_uses_explicit_null_cmd);
+	/* bgp labeled-unicast explicit-null — YANG: bgp_cli_init() */
 
 	/* bgp suppress-duplicates — YANG: bgp_cli_init() */
 
@@ -23749,14 +23746,9 @@ void bgp_vty_init(void)
 
 	/* bgp default show-nexthop-hostname — YANG: bgp_cli_init() */
 
-	/* bgp default software-version-capability */
-	install_element(BGP_NODE, &bgp_default_software_version_capability_cmd);
-
-	/* bgp default link-local-capability */
-	install_element(BGP_NODE, &bgp_default_link_local_capability_cmd);
-
-	/* bgp default dynamic-capability */
-	install_element(BGP_NODE, &bgp_default_dynamic_capability_cmd);
+	/* bgp default software-version / link-local / dynamic-capability —
+	 * YANG: bgp_cli_init()
+	 */
 
 	/* "bgp default subgroup-pkt-queue-max" — YANG: bgp_cli_init() */
 
