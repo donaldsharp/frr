@@ -10,6 +10,7 @@
 #endif
 
 #include "northbound.h"
+#include "northbound_cli.h"
 #include "libfrr.h"
 #include "vrf.h"
 #include "prefix.h"
@@ -205,6 +206,159 @@ void bgp_nb_cli_show_router_bgp_end(struct vty *vty,
 				    const struct lyd_node *dnode)
 {
 	vty_out(vty, "exit\n");
+}
+
+/*
+ * Dump a neighbor / peer-group / unnumbered entry without walking
+ * afi-safis. Peer AF knobs are emitted inside address-family blocks by
+ * bgp_nb_cli_show_global_afi_safi_end().
+ */
+static void bgp_nb_cli_show_dnode_skip_afi_safis(struct vty *vty,
+						 const struct lyd_node *dnode)
+{
+	struct nb_node *nb_node;
+	const struct lyd_node *child;
+
+	if (yang_dnode_is_default_recursive(dnode))
+		return;
+
+	nb_node = dnode->schema->priv;
+	if (nb_node && nb_node->cbs.cli_show)
+		(*nb_node->cbs.cli_show)(vty, dnode, false);
+
+	if (!(dnode->schema->nodetype &
+	      (LYS_LEAF | LYS_LEAFLIST | LYS_ANYDATA))) {
+		LY_LIST_FOR (lyd_child(dnode), child) {
+			if (strmatch(child->schema->name, "afi-safis"))
+				continue;
+			nb_cli_show_dnode_cmds(vty, child, false);
+		}
+	}
+
+	if (nb_node && nb_node->cbs.cli_show_end)
+		(*nb_node->cbs.cli_show_end)(vty, dnode);
+}
+
+static void
+bgp_nb_cli_show_container_entries_skip_af(struct vty *vty,
+					  const struct lyd_node *container)
+{
+	const struct lyd_node *child;
+
+	if (!container)
+		return;
+
+	LY_LIST_FOR (lyd_child(container), child)
+		bgp_nb_cli_show_dnode_skip_afi_safis(vty, child);
+}
+
+/*
+ * Build absolute xpath for a BGP instance's frr-bgp:bgp container.
+ * Keys match router_bgp_yang: default uses default/default; VRF and view
+ * instances use name=vrf=bgp->name.
+ */
+const char *bgp_nb_instance_xpath(const struct bgp *bgp, char *buf,
+				  size_t buflen)
+{
+	const char *name = VRF_DEFAULT_NAME;
+	const char *vrf = VRF_DEFAULT_NAME;
+
+	if (bgp->name) {
+		name = bgp->name;
+		vrf = bgp->name;
+	}
+
+	snprintfrr(buf, buflen,
+		   "/frr-routing:routing/control-plane-protocols/control-plane-protocol[type='frr-bgp:bgp'][name='%s'][vrf='%s']/frr-bgp:bgp",
+		   name, vrf);
+	return buf;
+}
+
+/*
+ * Orchestrated per-instance CLI dump. Naive nb_cli_show_dnode_cmds() on
+ * frr-bgp:bgp is wrong: peer AF config must appear inside address-family
+ * frames, and bgp default shutdown / bgp shutdown must follow peers.
+ */
+void bgp_nb_cli_show_instance(struct vty *vty, const struct lyd_node *bgp)
+{
+	const struct lyd_node *global, *child, *afs, *vnc;
+	static const char *const defer[] = {
+		"afi-safis",
+		"default-shutdown",
+		"shutdown",
+		"shutdown-message",
+		NULL,
+	};
+	unsigned int i;
+	bool skip;
+
+	bgp_nb_cli_show_router_bgp(vty, bgp, false);
+
+	global = yang_dnode_get(bgp, "global");
+	if (global) {
+		LY_LIST_FOR (lyd_child(global), child) {
+			skip = false;
+			for (i = 0; defer[i]; i++) {
+				if (strmatch(child->schema->name, defer[i])) {
+					skip = true;
+					break;
+				}
+			}
+			if (skip)
+				continue;
+			nb_cli_show_dnode_cmds(vty, child, false);
+		}
+	}
+
+	bgp_nb_cli_show_container_entries_skip_af(
+		vty, yang_dnode_get(bgp, "peer-groups"));
+	bgp_nb_cli_show_container_entries_skip_af(
+		vty, yang_dnode_get(bgp, "neighbors"));
+
+	/*
+	 * bgp default shutdown / bgp shutdown must dump after peers so a
+	 * reload does not shut every peer (see #2286).
+	 */
+	if (global) {
+		child = yang_dnode_get(global, "default-shutdown");
+		if (child)
+			nb_cli_show_dnode_cmds(vty, child, false);
+		child = yang_dnode_get(global, "shutdown");
+		if (child)
+			nb_cli_show_dnode_cmds(vty, child, false);
+		child = yang_dnode_get(global, "shutdown-message");
+		if (child)
+			nb_cli_show_dnode_cmds(vty, child, false);
+	}
+
+	afs = yang_dnode_get(bgp, "global/afi-safis");
+	if (afs) {
+		LY_LIST_FOR (lyd_child(afs), child) {
+			if (!strmatch(child->schema->name, "afi-safi"))
+				continue;
+			nb_cli_show_dnode_cmds(vty, child, false);
+		}
+	}
+
+	vnc = yang_dnode_get(bgp, "frr-bgp-vnc:vnc");
+	if (vnc)
+		nb_cli_show_dnode_cmds(vty, vnc, false);
+
+	bgp_nb_cli_show_router_bgp_end(vty, bgp);
+	vty_out(vty, "!\n");
+}
+
+void bgp_nb_cli_show_instance_bgp(struct vty *vty, struct bgp *bgp)
+{
+	char xpath[XPATH_MAXLEN];
+	const struct lyd_node *dnode;
+
+	bgp_nb_instance_xpath(bgp, xpath, sizeof(xpath));
+	dnode = yang_dnode_get(running_config->dnode, xpath);
+	if (!dnode)
+		return;
+
+	bgp_nb_cli_show_instance(vty, dnode);
 }
 
 /*
@@ -5677,6 +5831,51 @@ void bgp_nb_cli_show_global_afi_safi(struct vty *vty,
 void bgp_nb_cli_show_global_afi_safi_end(struct vty *vty,
 					 const struct lyd_node *dnode)
 {
+	const struct lyd_node *bgp_dnode;
+	const struct lyd_node *container;
+	const struct lyd_node *peer;
+	const struct lyd_node *af;
+	const char *ident;
+
+	ident = yang_dnode_get_string(dnode, "afi-safi-name");
+	bgp_dnode = yang_dnode_get_parent(dnode, "bgp");
+
+	/*
+	 * Peer / peer-group AF knobs live under neighbors|peer-groups in
+	 * YANG but must appear inside the address-family block in CLI.
+	 */
+	if (bgp_dnode) {
+		container = yang_dnode_get(bgp_dnode, "neighbors");
+		if (container) {
+			LY_LIST_FOR (lyd_child(container), peer) {
+				if (!strmatch(peer->schema->name, "neighbor") &&
+				    !strmatch(peer->schema->name,
+					      "unnumbered-neighbor"))
+					continue;
+				af = yang_dnode_getf(
+					peer,
+					"afi-safis/afi-safi[afi-safi-name='%s']",
+					ident);
+				if (af)
+					nb_cli_show_dnode_cmds(vty, af, false);
+			}
+		}
+
+		container = yang_dnode_get(bgp_dnode, "peer-groups");
+		if (container) {
+			LY_LIST_FOR (lyd_child(container), peer) {
+				if (!strmatch(peer->schema->name, "peer-group"))
+					continue;
+				af = yang_dnode_getf(
+					peer,
+					"afi-safis/afi-safi[afi-safi-name='%s']",
+					ident);
+				if (af)
+					nb_cli_show_dnode_cmds(vty, af, false);
+			}
+		}
+	}
+
 	vty_endframe(vty, " exit-address-family\n");
 }
 

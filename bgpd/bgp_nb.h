@@ -25,6 +25,12 @@ void bgp_nb_cli_show_router_bgp(struct vty *vty, const struct lyd_node *dnode,
 void bgp_nb_cli_show_router_bgp_end(struct vty *vty,
 				    const struct lyd_node *dnode);
 
+struct bgp;
+const char *bgp_nb_instance_xpath(const struct bgp *bgp, char *buf,
+				  size_t buflen);
+void bgp_nb_cli_show_instance(struct vty *vty, const struct lyd_node *dnode);
+void bgp_nb_cli_show_instance_bgp(struct vty *vty, struct bgp *bgp);
+
 /* Global leaves */
 int bgp_nb_local_as_modify(struct nb_cb_modify_args *args);
 int bgp_nb_router_id_modify(struct nb_cb_modify_args *args);
