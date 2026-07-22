@@ -19,6 +19,7 @@
 #include "bgpd/bgp_clist.h"
 #include "bgpd/bgp_filter.h"
 #include "bgpd/bgp_filter_nb.h"
+#include "frrstr.h"
 
 /* Helper struct for collecting leaf-list values */
 struct leaflist_collector {
@@ -39,6 +40,154 @@ static int collect_leaflist_value(const struct lyd_node *dnode, void *arg)
 	collector->first = false;
 
 	return YANG_ITER_CONTINUE;
+}
+
+/* Shared helpers for community / large / extcommunity list cli_show. */
+static void bgp_filter_cli_show_style_line(struct vty *vty, const char *kind,
+					   const char *name, bool numbered,
+					   bool standard, uint32_t seq,
+					   const char *action,
+					   const char *value)
+{
+	if (numbered)
+		vty_out(vty, "bgp %s %s seq %u %s %s\n", kind, name, seq,
+			action, value);
+	else
+		vty_out(vty, "bgp %s %s %s seq %u %s %s\n", kind,
+			standard ? "standard" : "expanded", name, seq, action,
+			value);
+}
+
+static void lib_community_list_entry_cli_show(struct vty *vty,
+					      const struct lyd_node *dnode,
+					      bool show_defaults)
+{
+	const char *name;
+	uint32_t seq;
+	const char *action;
+	const char *type_str;
+	char comm_str[512] = "";
+	bool standard;
+
+	name = yang_dnode_get_string(dnode, "../name");
+	seq = yang_dnode_get_uint32(dnode, "sequence");
+	action = yang_dnode_get_string(dnode, "action");
+	type_str = yang_dnode_get_string(dnode, "type");
+	standard = strmatch(type_str, "community-list-standard");
+
+	if (standard) {
+		struct leaflist_collector collector = {
+			.buffer = comm_str,
+			.buffer_size = sizeof(comm_str),
+			.first = true,
+		};
+
+		yang_dnode_iterate(collect_leaflist_value, &collector, dnode,
+				   "standard-community-string");
+	} else if (yang_dnode_exists(dnode, "expanded-community-string")) {
+		strlcpy(comm_str,
+			yang_dnode_get_string(dnode, "expanded-community-string"),
+			sizeof(comm_str));
+	}
+
+	if (!comm_str[0])
+		return;
+
+	bgp_filter_cli_show_style_line(vty, "community-list", name,
+				       all_digit(name), standard, seq, action,
+				       comm_str);
+}
+
+static void lib_large_community_list_entry_cli_show(
+	struct vty *vty, const struct lyd_node *dnode, bool show_defaults)
+{
+	const char *name;
+	uint32_t seq;
+	const char *action;
+	const char *type_str;
+	char comm_str[512] = "";
+	bool standard;
+
+	name = yang_dnode_get_string(dnode, "../name");
+	seq = yang_dnode_get_uint32(dnode, "sequence");
+	action = yang_dnode_get_string(dnode, "action");
+	type_str = yang_dnode_get_string(dnode, "type");
+	standard = strstr(type_str, "standard") != NULL;
+
+	if (standard) {
+		struct leaflist_collector collector = {
+			.buffer = comm_str,
+			.buffer_size = sizeof(comm_str),
+			.first = true,
+		};
+
+		yang_dnode_iterate(collect_leaflist_value, &collector, dnode,
+				   "standard-large-community-string");
+	} else if (yang_dnode_exists(dnode,
+				     "expanded-large-community-string")) {
+		strlcpy(comm_str,
+			yang_dnode_get_string(
+				dnode, "expanded-large-community-string"),
+			sizeof(comm_str));
+	}
+
+	if (!comm_str[0])
+		return;
+
+	bgp_filter_cli_show_style_line(vty, "large-community-list", name,
+				       all_digit(name), standard, seq, action,
+				       comm_str);
+}
+
+static void lib_extcommunity_list_entry_cli_show(struct vty *vty,
+						 const struct lyd_node *dnode,
+						 bool show_defaults)
+{
+	const char *name;
+	uint32_t seq;
+	const char *action;
+	const char *type_str;
+	char comm_str[512] = "";
+	bool standard;
+	struct leaflist_collector collector = {
+		.buffer = comm_str,
+		.buffer_size = sizeof(comm_str),
+		.first = true,
+	};
+
+	name = yang_dnode_get_string(dnode, "../name");
+	seq = yang_dnode_get_uint32(dnode, "sequence");
+	action = yang_dnode_get_string(dnode, "action");
+	type_str = yang_dnode_get_string(dnode, "type");
+	standard = strstr(type_str, "standard") != NULL;
+
+	if (standard) {
+		if (yang_dnode_exists(dnode, "extcommunity-rt")) {
+			strlcpy(comm_str, "rt ", sizeof(comm_str));
+			yang_dnode_iterate(collect_leaflist_value, &collector,
+					   dnode, "extcommunity-rt");
+		} else if (yang_dnode_exists(dnode, "extcommunity-soo")) {
+			strlcpy(comm_str, "soo ", sizeof(comm_str));
+			yang_dnode_iterate(collect_leaflist_value, &collector,
+					   dnode, "extcommunity-soo");
+		} else if (yang_dnode_exists(dnode, "extcommunity-nt")) {
+			strlcpy(comm_str, "nt ", sizeof(comm_str));
+			yang_dnode_iterate(collect_leaflist_value, &collector,
+					   dnode, "extcommunity-nt");
+		}
+	} else if (yang_dnode_exists(dnode, "expanded-extcommunity-string")) {
+		strlcpy(comm_str,
+			yang_dnode_get_string(dnode,
+					      "expanded-extcommunity-string"),
+			sizeof(comm_str));
+	}
+
+	if (!comm_str[0])
+		return;
+
+	bgp_filter_cli_show_style_line(vty, "extcommunity-list", name,
+				       all_digit(name), standard, seq, action,
+				       comm_str);
 }
 
 /*
@@ -1592,6 +1741,7 @@ const struct frr_yang_module_info frr_bgp_filter_info = {
 				.get_next = lib_community_list_entry_get_next,
 				.get_keys = lib_community_list_entry_get_keys,
 				.lookup_entry = lib_community_list_entry_lookup_entry,
+				.cli_show = lib_community_list_entry_cli_show,
 			}
 		},
 		{
@@ -1640,6 +1790,7 @@ const struct frr_yang_module_info frr_bgp_filter_info = {
 				.get_next = lib_large_community_list_entry_get_next,
 				.get_keys = lib_large_community_list_entry_get_keys,
 				.lookup_entry = lib_large_community_list_entry_lookup_entry,
+				.cli_show = lib_large_community_list_entry_cli_show,
 			}
 		},
 		{
@@ -1688,6 +1839,7 @@ const struct frr_yang_module_info frr_bgp_filter_info = {
 				.get_next = lib_extcommunity_list_entry_get_next,
 				.get_keys = lib_extcommunity_list_entry_get_keys,
 				.lookup_entry = lib_extcommunity_list_entry_lookup_entry,
+				.cli_show = lib_extcommunity_list_entry_cli_show,
 			}
 		},
 		{
