@@ -195,6 +195,9 @@ void bgp_nb_cli_show_router_bgp(struct vty *vty, const struct lyd_node *dnode,
 		vty_out(vty, " view %s", name);
 	else if (!strmatch(vrf_name, VRF_DEFAULT_NAME))
 		vty_out(vty, " vrf %s", vrf_name);
+	if (yang_dnode_exists(dnode, "./global/as-notation"))
+		vty_out(vty, " as-notation %s",
+			yang_dnode_get_string(dnode, "./global/as-notation"));
 	vty_out(vty, "\n");
 }
 
@@ -5611,6 +5614,70 @@ int bgp_nb_global_afi_safi_create(struct nb_cb_create_args *args)
 int bgp_nb_global_afi_safi_destroy(struct nb_cb_destroy_args *args)
 {
 	return NB_OK;
+}
+
+static const char *bgp_nb_afi_safi_cli_name(afi_t afi, safi_t safi)
+{
+	if (afi == AFI_IP) {
+		if (safi == SAFI_UNICAST)
+			return "ipv4 unicast";
+		if (safi == SAFI_LABELED_UNICAST)
+			return "ipv4 labeled-unicast";
+		if (safi == SAFI_MULTICAST)
+			return "ipv4 multicast";
+		if (safi == SAFI_MPLS_VPN)
+			return "ipv4 vpn";
+		if (safi == SAFI_ENCAP)
+			return "ipv4 encap";
+		if (safi == SAFI_FLOWSPEC)
+			return "ipv4 flowspec";
+		if (safi == SAFI_UNREACH)
+			return "ipv4 unreachability";
+	} else if (afi == AFI_IP6) {
+		if (safi == SAFI_UNICAST)
+			return "ipv6 unicast";
+		if (safi == SAFI_LABELED_UNICAST)
+			return "ipv6 labeled-unicast";
+		if (safi == SAFI_MULTICAST)
+			return "ipv6 multicast";
+		if (safi == SAFI_MPLS_VPN)
+			return "ipv6 vpn";
+		if (safi == SAFI_ENCAP)
+			return "ipv6 encap";
+		if (safi == SAFI_FLOWSPEC)
+			return "ipv6 flowspec";
+		if (safi == SAFI_UNREACH)
+			return "ipv6 unreachability";
+	} else if (afi == AFI_L2VPN && safi == SAFI_EVPN) {
+		return "l2vpn evpn";
+	} else if (afi == AFI_BGP_LS && safi == SAFI_BGP_LS) {
+		return "link-state link-state";
+	}
+	return NULL;
+}
+
+void bgp_nb_cli_show_global_afi_safi(struct vty *vty,
+				     const struct lyd_node *dnode,
+				     bool show_defaults)
+{
+	afi_t afi;
+	safi_t safi;
+	const char *afname;
+
+	if (!bgp_nb_dnode_afi_safi(dnode, &afi, &safi))
+		return;
+	afname = bgp_nb_afi_safi_cli_name(afi, safi);
+	if (!afname)
+		return;
+
+	/* vty_frame: header only emitted if a child prints config. */
+	vty_frame(vty, " !\n address-family %s\n", afname);
+}
+
+void bgp_nb_cli_show_global_afi_safi_end(struct vty *vty,
+					 const struct lyd_node *dnode)
+{
+	vty_endframe(vty, " exit-address-family\n");
 }
 
 static int bgp_nb_network_apply(const struct lyd_node *dnode)

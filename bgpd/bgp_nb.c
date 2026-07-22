@@ -880,6 +880,8 @@ const struct frr_yang_module_info frr_bgp_info = {
 			.cbs = {
 				.create = bgp_nb_global_afi_safi_create,
 				.destroy = bgp_nb_global_afi_safi_destroy,
+				.cli_show = bgp_nb_cli_show_global_afi_safi,
+				.cli_show_end = bgp_nb_cli_show_global_afi_safi_end,
 			},
 		},
 		{

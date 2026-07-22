@@ -81,5 +81,6 @@ when path matching was wrong.
 - Ops (debug/show/clear) remain classic by design
 - Do not YANG-convert `rpki reset` as configuration
 - Remaining classic writers: `bgp_config_write` (per-instance globals /
-  neighbors / AF), dump/debug
+  neighbors / AF — AF enter/exit `cli_show` added; full instance dump
+  still pending), dump/debug
   (filter lists, daemon/RPKI, and VNC dumps now via YANG)

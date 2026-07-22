@@ -904,6 +904,11 @@ void bgp_nb_cli_show_peer_af_nexthop_local_unchanged(struct vty *vty, const stru
 
 int bgp_nb_global_afi_safi_create(struct nb_cb_create_args *args);
 int bgp_nb_global_afi_safi_destroy(struct nb_cb_destroy_args *args);
+void bgp_nb_cli_show_global_afi_safi(struct vty *vty,
+				     const struct lyd_node *dnode,
+				     bool show_defaults);
+void bgp_nb_cli_show_global_afi_safi_end(struct vty *vty,
+					 const struct lyd_node *dnode);
 
 int bgp_nb_network_create(struct nb_cb_create_args *args);
 int bgp_nb_network_destroy(struct nb_cb_destroy_args *args);
