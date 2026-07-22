@@ -1,4 +1,4 @@
-# BGP YANG ↔ CLI Gap Matrix
+# BGP YANG <-> CLI Gap Matrix
 
 Auto-generated inventory of BGP **configuration** CLI commands
 versus YANG conversion status. Regenerate with:
@@ -9,11 +9,11 @@ python3 yang/tools/extract_bgp_cli_config.py
 
 Classification:
 
-- **CONVERTED** — installed command is defined with `DEFUN_YANG` /
+- **CONVERTED** -- installed command is defined with `DEFUN_YANG` /
   `DEFPY_YANG` / `ALIAS_YANG` (or a hidden ALIAS of one).
-- **INTENTIONAL** — left classic on purpose (node exit, hidden test,
+- **INTENTIONAL** -- left classic on purpose (node exit, hidden test,
   ops dump, `rpki reset`).
-- **MISSING** / **PARTIAL** — heuristic only for remaining classic
+- **MISSING** / **PARTIAL** -- heuristic only for remaining classic
   DEFUNs; do not treat as authoritative without checking the source.
 
 **Total config commands:** 580
