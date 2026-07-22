@@ -20,7 +20,7 @@
 
 /*
  * ===================================================================
- * VNC (Virtual Network Control / RFAPI) CLI Commands for mgmtd
+ * VNC (Virtual Network Control / RFAPI) CLI Commands
  * ===================================================================
  */
 
@@ -525,6 +525,9 @@ void vnc_defaults_cli_show(struct vty *vty, const struct lyd_node *dnode,
 	if (yang_dnode_exists(dnode, "response-lifetime"))
 		vty_out(vty, "  response-lifetime %s\n",
 			yang_dnode_get_string(dnode, "response-lifetime"));
+	if (yang_dnode_exists(dnode, "l2rd"))
+		vty_out(vty, "  l2rd %s\n",
+			yang_dnode_get_string(dnode, "l2rd"));
 	vnc_rt_cli_show_helper(vty, dnode, "  ");
 }
 
@@ -551,6 +554,9 @@ void vnc_nve_group_cli_show(struct vty *vty, const struct lyd_node *dnode,
 	if (yang_dnode_exists(dnode, "response-lifetime"))
 		vty_out(vty, "  response-lifetime %s\n",
 			yang_dnode_get_string(dnode, "response-lifetime"));
+	if (yang_dnode_exists(dnode, "l2rd"))
+		vty_out(vty, "  l2rd %s\n",
+			yang_dnode_get_string(dnode, "l2rd"));
 	vnc_rt_cli_show_helper(vty, dnode, "  ");
 }
 
@@ -627,6 +633,155 @@ void vnc_redistribute_cli_show(struct vty *vty, const struct lyd_node *dnode,
 
 
 
+
+/* --- advertise-un-method --- */
+
+DEFPY_YANG(vnc_advertise_un_method_cli, vnc_advertise_un_method_cli_cmd,
+	   "vnc advertise-un-method <encap-attr|encap-safi>$method",
+	   "VNC/RFAPI configuration\n"
+	   "Method of advertising UN addresses\n"
+	   "Via Tunnel Encap attribute (in VPN SAFI)\n"
+	   "Via Encap SAFI\n")
+{
+	nb_cli_enqueue_change(vty, "./frr-bgp-vnc:vnc/advertise-un-method",
+			      NB_OP_MODIFY, method);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+/* --- defaults / nve-group l2rd --- */
+
+DEFPY_YANG(vnc_l2rd_cli, vnc_l2rd_cli_cmd,
+	   "[no] l2rd [<(1-255)$val|auto-vn$auto_vn>]",
+	   NO_STR
+	   "Specify Local Nve ID value to use in RD for L2 routes\n"
+	   "Fixed value 1-255\n"
+	   "use the low-order octet of the NVE's VN address\n")
+{
+	if (no) {
+		nb_cli_enqueue_change(vty, "./l2rd", NB_OP_DESTROY, NULL);
+	} else if (auto_vn) {
+		nb_cli_enqueue_change(vty, "./l2rd", NB_OP_MODIFY, "auto-vn");
+	} else if (val_str) {
+		nb_cli_enqueue_change(vty, "./l2rd", NB_OP_MODIFY, val_str);
+	} else {
+		vty_out(vty, "%% Missing l2rd value\n");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+
+	return nb_cli_apply_changes(vty, NULL);	
+}
+
+/* --- l2-group --- */
+
+DEFPY_YANG_NOSH(vnc_l2_group_cli, vnc_l2_group_cli_cmd,
+		"vnc l2-group WORD$name",
+		"VNC/RFAPI configuration\n"
+		"Configure a L2 group\n"
+		"Group name\n")
+{
+	char xpath[XPATH_MAXLEN];
+	char xpath_abs[XPATH_MAXLEN + 256];
+
+	snprintf(xpath, sizeof(xpath),
+		 "./frr-bgp-vnc:vnc/l2-group[name='%s']", name);
+	nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+	nb_cli_apply_changes_clear_pending(vty, NULL);
+
+	snprintf(xpath_abs, sizeof(xpath_abs),
+		 "%s/frr-bgp-vnc:vnc/l2-group[name='%s']", VTY_CURR_XPATH,
+		 name);
+	VTY_PUSH_XPATH(BGP_VNC_L2_GROUP_NODE, xpath_abs);
+	return CMD_SUCCESS;
+}
+
+DEFPY_YANG(no_vnc_l2_group_cli, no_vnc_l2_group_cli_cmd,
+	   "no vnc l2-group WORD$name",
+	   NO_STR
+	   "VNC/RFAPI configuration\n"
+	   "Configure a L2 group\n"
+	   "Group name\n")
+{
+	char xpath[XPATH_MAXLEN];
+
+	snprintf(xpath, sizeof(xpath),
+		 "./frr-bgp-vnc:vnc/l2-group[name='%s']", name);
+	nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(vnc_l2_group_lni_cli, vnc_l2_group_lni_cli_cmd,
+	   "logical-network-id (0-4294967295)$lni",
+	   "Specify Logical Network ID associated with group\n"
+	   "value\n")
+{
+	nb_cli_enqueue_change(vty, "./logical-network-id", NB_OP_MODIFY,
+			      lni_str);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(vnc_l2_group_labels_cli, vnc_l2_group_labels_cli_cmd,
+	   "[no] labels (0-1048575)$label",
+	   NO_STR
+	   "Specify label values associated with group\n"
+	   "Label value\n")
+{
+	char xpath[XPATH_MAXLEN];
+
+	snprintf(xpath, sizeof(xpath), "./labels[.='%s']", label_str);
+	if (no)
+		nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
+	else
+		nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+void vnc_advertise_un_method_cli_show(struct vty *vty,
+				      const struct lyd_node *dnode,
+				      bool show_defaults)
+{
+	const char *method = yang_dnode_get_string(dnode, NULL);
+
+	/* Classic write only emits when encap-safi is configured. */
+	if (strmatch(method, "encap-safi"))
+		vty_out(vty, " vnc advertise-un-method encap-safi\n");
+}
+
+void vnc_l2_group_cli_show(struct vty *vty, const struct lyd_node *dnode,
+			   bool show_defaults)
+{
+	const struct lyd_node *child;
+
+	vty_out(vty, " vnc l2-group %s\n",
+		yang_dnode_get_string(dnode, "name"));
+	if (yang_dnode_exists(dnode, "logical-network-id") &&
+	    yang_dnode_get_uint32(dnode, "logical-network-id") != 0)
+		vty_out(vty, "  logical-network-id %u\n",
+			yang_dnode_get_uint32(dnode, "logical-network-id"));
+
+	{
+		bool first = true;
+
+		LY_LIST_FOR (lyd_child(dnode), child) {
+			if (strcmp(child->schema->name, "labels"))
+				continue;
+			if (first) {
+				vty_out(vty, "  labels");
+				first = false;
+			}
+			vty_out(vty, " %s", lyd_get_value(child));
+		}
+		if (!first)
+			vty_out(vty, "\n");
+	}
+	vnc_rt_cli_show_helper(vty, dnode, "  ");
+}
+
+void vnc_l2_group_cli_show_end(struct vty *vty, const struct lyd_node *dnode)
+{
+	vty_out(vty, "  exit-vnc\n");
+}
+
+
 void bgp_vnc_cli_init(void)
 {
 	install_element(BGP_NODE, &vnc_defaults_cli_cmd);
@@ -634,6 +789,9 @@ void bgp_vnc_cli_init(void)
 	install_element(BGP_NODE, &no_vnc_nve_group_cli_cmd);
 	install_element(BGP_NODE, &vrf_policy_cli_cmd);
 	install_element(BGP_NODE, &no_vrf_policy_cli_cmd);
+	install_element(BGP_NODE, &vnc_l2_group_cli_cmd);
+	install_element(BGP_NODE, &no_vnc_l2_group_cli_cmd);
+	install_element(BGP_NODE, &vnc_advertise_un_method_cli_cmd);
 	install_element(BGP_NODE, &vnc_export_bgp_mode_cli_cmd);
 	install_element(BGP_NODE, &vnc_export_bgp_group_nve_cli_cmd);
 	install_element(BGP_NODE, &no_vnc_export_bgp_group_nve_cli_cmd);
@@ -646,6 +804,7 @@ void bgp_vnc_cli_init(void)
 	install_element(BGP_VNC_DEFAULTS_NODE, &vnc_defaults_rd_cli_cmd);
 	install_element(BGP_VNC_DEFAULTS_NODE,
 			&vnc_defaults_response_lifetime_cli_cmd);
+	install_element(BGP_VNC_DEFAULTS_NODE, &vnc_l2rd_cli_cmd);
 	install_element(BGP_VNC_DEFAULTS_NODE, &vnc_rt_cli_cmd);
 	install_element(BGP_VNC_DEFAULTS_NODE, &exit_vnc_cli_cmd);
 
@@ -653,6 +812,7 @@ void bgp_vnc_cli_init(void)
 	install_element(BGP_VNC_NVE_GROUP_NODE, &vnc_nve_group_rd_cli_cmd);
 	install_element(BGP_VNC_NVE_GROUP_NODE,
 			&vnc_nve_group_response_lifetime_cli_cmd);
+	install_element(BGP_VNC_NVE_GROUP_NODE, &vnc_l2rd_cli_cmd);
 	install_element(BGP_VNC_NVE_GROUP_NODE, &vnc_rt_cli_cmd);
 	install_element(BGP_VNC_NVE_GROUP_NODE, &exit_vnc_cli_cmd);
 
@@ -661,6 +821,11 @@ void bgp_vnc_cli_init(void)
 	install_element(BGP_VRF_POLICY_NODE, &vnc_rt_cli_cmd);
 	install_element(BGP_VRF_POLICY_NODE, &vrf_policy_nexthop_cli_cmd);
 	install_element(BGP_VRF_POLICY_NODE, &exit_vrf_policy_cli_cmd);
+
+	install_element(BGP_VNC_L2_GROUP_NODE, &vnc_l2_group_lni_cli_cmd);
+	install_element(BGP_VNC_L2_GROUP_NODE, &vnc_l2_group_labels_cli_cmd);
+	install_element(BGP_VNC_L2_GROUP_NODE, &vnc_rt_cli_cmd);
+	install_element(BGP_VNC_L2_GROUP_NODE, &exit_vnc_cli_cmd);
 }
 
 #endif /* ENABLE_BGP_VNC */
