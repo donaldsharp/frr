@@ -2505,24 +2505,6 @@ static int bgp_update_delay_deconfig_vty(struct vty *vty)
 	return CMD_SUCCESS;
 }
 
-void bgp_config_write_update_delay(struct vty *vty, struct bgp *bgp)
-{
-	/* If configured globally, no need to display per-instance value */
-	if (bgp->v_update_delay != bm->v_update_delay) {
-		vty_out(vty, " update-delay %d", bgp->v_update_delay);
-		if (bgp->v_update_delay != bgp->v_establish_wait)
-			vty_out(vty, " %d", bgp->v_establish_wait);
-		vty_out(vty, "\n");
-	}
-}
-
-void bgp_config_write_advertisement_delay(struct vty *vty, struct bgp *bgp)
-{
-	if (bgp_advertisement_delay_configured(bgp) &&
-	    bgp->v_advertisement_delay != bm->v_advertisement_delay)
-		vty_out(vty, " advertisement-delay %d\n", bgp->v_advertisement_delay);
-}
-
 /* Global update-delay configuration */
 DEFPY (bgp_global_update_delay,
        bgp_global_update_delay_cmd,
@@ -2683,22 +2665,6 @@ static int bgp_rpkt_quanta_config_vty(struct vty *vty, uint32_t quanta,
 	return CMD_SUCCESS;
 }
 
-void bgp_config_write_wpkt_quanta(struct vty *vty, struct bgp *bgp)
-{
-	uint32_t quanta =
-		atomic_load_explicit(&bgp->wpkt_quanta, memory_order_relaxed);
-	if (quanta != BGP_WRITE_PACKET_MAX)
-		vty_out(vty, " write-quanta %d\n", quanta);
-}
-
-void bgp_config_write_rpkt_quanta(struct vty *vty, struct bgp *bgp)
-{
-	uint32_t quanta =
-		atomic_load_explicit(&bgp->rpkt_quanta, memory_order_relaxed);
-	if (quanta != BGP_READ_PACKET_MAX)
-		vty_out(vty, " read-quanta %d\n", quanta);
-}
-
 /* Packet quanta configuration
  *
  * XXX: The value set here controls the size of a stack buffer in the IO
@@ -2725,12 +2691,6 @@ DEFPY (bgp_rpkt_quanta,
        "Number of packets\n")
 {
 	return bgp_rpkt_quanta_config_vty(vty, quanta, !no);
-}
-
-void bgp_config_write_coalesce_time(struct vty *vty, struct bgp *bgp)
-{
-	if (!bgp->heuristic_coalesce)
-		vty_out(vty, " coalesce-time %u\n", bgp->coalesce_time);
 }
 
 DEFUN (bgp_coalesce_time,
@@ -5172,30 +5132,6 @@ DEFUN (no_bgp_listen_range,
 
 	return bgp_vty_return(vty, ret);
 }
-
-void bgp_config_write_listen(struct vty *vty, struct bgp *bgp)
-{
-	struct peer_group *group;
-	struct listnode *node, *nnode, *rnode, *nrnode;
-	struct prefix *range;
-	afi_t afi;
-
-	if (bgp->dynamic_neighbors_limit != BGP_DYNAMIC_NEIGHBORS_LIMIT_DEFAULT)
-		vty_out(vty, " bgp listen limit %d\n",
-			bgp->dynamic_neighbors_limit);
-
-	for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group)) {
-		for (afi = AFI_IP; afi < AFI_MAX; afi++) {
-			for (ALL_LIST_ELEMENTS(group->listen_range[afi], rnode,
-					       nrnode, range)) {
-				vty_out(vty,
-					" bgp listen range %pFX peer-group %s\n",
-					range, group->name);
-			}
-		}
-	}
-}
-
 
 DEFUN (bgp_disable_connected_route_check,
        bgp_disable_connected_route_check_cmd,

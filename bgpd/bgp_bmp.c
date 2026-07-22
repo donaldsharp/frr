@@ -3612,79 +3612,6 @@ DEFPY(show_bmp,
 	return CMD_SUCCESS;
 }
 
-static int bmp_config_write(struct bgp *bgp, struct vty *vty)
-{
-	struct bmp_bgp *bmpbgp = bmp_bgp_find(bgp);
-	struct bmp_targets *bt;
-	struct bmp_listener *bl;
-	struct bmp_active *ba;
-	struct bmp_imported_bgp *bib;
-	afi_t afi;
-	safi_t safi;
-
-	if (!bmpbgp)
-		return 0;
-
-	if (bmpbgp->mirror_qsizelimit != ~0UL)
-		vty_out(vty, " !\n bmp mirror buffer-limit %zu\n",
-			bmpbgp->mirror_qsizelimit);
-
-	frr_each(bmp_targets, &bmpbgp->targets, bt) {
-		vty_out(vty, " !\n bmp targets %s\n", bt->name);
-
-		if (bt->acl6_name)
-			vty_out(vty, "  ipv6 access-list %s\n", bt->acl6_name);
-		if (bt->acl_name)
-			vty_out(vty, "  ip access-list %s\n", bt->acl_name);
-
-		if (!bt->stats_send_experimental)
-			vty_out(vty, "  no bmp stats send-experimental\n");
-
-		if (bt->stat_msec)
-			vty_out(vty, "  bmp stats interval %d\n",
-					bt->stat_msec);
-
-		if (bt->mirror)
-			vty_out(vty, "  bmp mirror\n");
-
-		FOREACH_AFI_SAFI (afi, safi) {
-			if (CHECK_FLAG(bt->afimon[afi][safi],
-				       BMP_MON_PREPOLICY))
-				vty_out(vty, "  bmp monitor %s %s pre-policy\n",
-					afi2str_lower(afi), safi2str(safi));
-			if (CHECK_FLAG(bt->afimon[afi][safi],
-				       BMP_MON_POSTPOLICY))
-				vty_out(vty,
-					"  bmp monitor %s %s post-policy\n",
-					afi2str_lower(afi), safi2str(safi));
-			if (CHECK_FLAG(bt->afimon[afi][safi], BMP_MON_LOC_RIB))
-				vty_out(vty, "  bmp monitor %s %s loc-rib\n",
-					afi2str_lower(afi), safi2str(safi));
-		}
-
-		frr_each (bmp_imported_bgps, &bt->imported_bgps, bib)
-			vty_out(vty, "  bmp import-vrf-view %s\n",
-				bib->name ? bib->name : VRF_DEFAULT_NAME);
-
-		frr_each (bmp_listeners, &bt->listeners, bl)
-			vty_out(vty, "   bmp listener %pSU port %d\n", &bl->addr, bl->port);
-
-		frr_each (bmp_actives, &bt->actives, ba) {
-			vty_out(vty, "  bmp connect %s port %u min-retry %u max-retry %u",
-				ba->hostname, ba->port,
-				ba->minretry, ba->maxretry);
-
-			if (ba->ifsrc)
-				vty_out(vty, " source-interface %s\n", ba->ifsrc);
-			else
-				vty_out(vty, "\n");
-		}
-		vty_out(vty, " exit\n");
-	}
-
-	return 0;
-}
-
 static int bgp_bmp_init(struct event_loop *tm)
 {
 	install_node(&bmp_node);
@@ -4114,7 +4041,6 @@ static int bgp_bmp_module_init(void)
 	hook_register(bgp_process, bmp_process);
 	hook_register(bgp_adj_in_needed, bmp_adj_in_needed);
 	hook_register(bgp_nht_path_update, bmp_nht_path_valid);
-	hook_register(bgp_inst_config_write, bmp_config_write);
 	hook_register(bgp_inst_delete, bmp_bgp_del);
 	hook_register(frr_late_init, bgp_bmp_init);
 	hook_register(bgp_route_update, bmp_route_update);

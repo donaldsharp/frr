@@ -81,6 +81,4 @@ when path matching was wrong.
   inside address-family frames)
 - Ops (debug/show/clear) remain classic by design
 - Do not YANG-convert `rpki reset` as configuration
-- Remaining classic writers: dump/debug; BMP still registers
-  `bgp_inst_config_write` but instance dump uses YANG `bmp-config`
-  `cli_show` only (hook no longer called from `bgp_config_write`)
+- Remaining classic writers: dump/debug (and other ops)
