@@ -799,6 +799,34 @@ submodule frr-bgp-common {
          Zero disables delayed processing.";
     }
 
+    container snmp-traps {
+      description
+        "BGP SNMP trap selection (CONFIG_NODE / bm->options).
+         Defaults match the bgpd_snmp module init (rfc4273 and rfc4382
+         enabled; bgp4-mibv2 disabled).";
+
+      leaf rfc4273 {
+        type boolean;
+        default "true";
+        description
+          "Maps to: [no] bgp snmp traps rfc4273";
+      }
+
+      leaf bgp4-mibv2 {
+        type boolean;
+        default "false";
+        description
+          "Maps to: [no] bgp snmp traps bgp4-mibv2";
+      }
+
+      leaf rfc4382 {
+        type boolean;
+        default "true";
+        description
+          "Maps to: [no] bgp snmp traps rfc4382";
+      }
+    }
+
     container graceful-restart {
       description
         "Daemon-wide graceful-restart configuration (CONFIG_NODE / bm).
