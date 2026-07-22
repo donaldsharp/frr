@@ -129,13 +129,13 @@ def assign_phase(cmd: str, path: str) -> tuple[int, str]:
 	for phase, rx, name in PHASE_RULES:
 		if rx.search(cmd):
 			return phase, name
-	# neighbor without AF keywords → session
+	# neighbor without AF keywords -> session
 	if "neighbor" in cmd.lower():
 		return 2, "neighbor-session"
 	return 1, "globals"
 
 
-# Known YANG coverage hints (substring of cmd → status)
+# Known YANG coverage hints (substring of cmd -> status)
 YANG_PRESENT = [
 	(re.compile(r"router_id|local_as|confederation|cluster_id|"
 		    r"client_to_client|maxmed|always_compare_med|"
@@ -182,7 +182,7 @@ def classify_yang(cmd: str, def_kind: str | None) -> str:
 		return "INTENTIONAL"
 	if def_kind and "YANG" in def_kind:
 		return "CONVERTED"
-	# Hidden AF aliases of YANG commands (ALIAS_ATTR of …_yang).
+	# Hidden AF aliases of YANG commands (ALIAS_ATTR of ..._yang).
 	if "yang" in cmd.lower():
 		return "CONVERTED"
 	# Plain ALIAS / ALIAS_HIDDEN of a YANG command still counts.
@@ -228,7 +228,7 @@ def parse_file(path: Path) -> tuple[dict[str, tuple[str, str]], list[tuple[str, 
 def is_config_cmd(cmd_sym: str, nodes: set[str]) -> bool:
 	if SHOW_CLEAR_DEBUG_RE.match(cmd_sym):
 		return False
-	# pure ENABLE/VIEW show nodes only → skip if not also on config nodes
+	# pure ENABLE/VIEW show nodes only -> skip if not also on config nodes
 	config_nodes = nodes & BGP_CONFIG_NODES
 	if not config_nodes:
 		return False
@@ -321,7 +321,7 @@ def main() -> int:
 		by_status[r["yang_path"]] += 1
 
 	lines = [
-		"# BGP YANG ↔ CLI Gap Matrix",
+		"# BGP YANG <-> CLI Gap Matrix",
 		"",
 		"Auto-generated inventory of BGP **configuration** CLI commands",
 		"versus YANG conversion status. Regenerate with:",
@@ -332,11 +332,11 @@ def main() -> int:
 		"",
 		"Classification:",
 		"",
-		"- **CONVERTED** — installed command is defined with `DEFUN_YANG` /",
+		"- **CONVERTED** -- installed command is defined with `DEFUN_YANG` /",
 		"  `DEFPY_YANG` / `ALIAS_YANG` (or a hidden ALIAS of one).",
-		"- **INTENTIONAL** — left classic on purpose (node exit, hidden test,",
+		"- **INTENTIONAL** -- left classic on purpose (node exit, hidden test,",
 		"  ops dump, `rpki reset`).",
-		"- **MISSING** / **PARTIAL** — heuristic only for remaining classic",
+		"- **MISSING** / **PARTIAL** -- heuristic only for remaining classic",
 		"  DEFUNs; do not treat as authoritative without checking the source.",
 		"",
 		f"**Total config commands:** {len(rows)}",
@@ -382,7 +382,7 @@ def main() -> int:
 		)
 	lines.append("")
 	args.out_md.write_text("\n".join(lines))
-	print(f"Wrote {len(rows)} rows → {args.out_csv} and {args.out_md}")
+	print(f"Wrote {len(rows)} rows -> {args.out_csv} and {args.out_md}")
 	return 0
 
 
