@@ -58,13 +58,23 @@ CONFIG_BGP_HINTS = re.compile(
 )
 
 DEFUN_RE = re.compile(
-	r"^\s*(?:DEFPY|DEFUN|DEFUN_NOSH|DEFUN_HIDDEN|DEFUN_YANG|DEFPY_YANG|"
-	r"ALIAS|ALIAS_HIDDEN)\s*\(\s*(\w+)\s*,\s*(\w+)\s*,",
+	r"^\s*(?P<kind>DEFPY_YANG_HIDDEN|DEFUN_YANG_HIDDEN|DEFPY_YANG_NOSH|"
+	r"DEFUN_YANG_NOSH|DEFPY_YANG|DEFUN_YANG|ALIAS_YANG|ALIAS_ATTR|"
+	r"DEFPY_NOSH|DEFUN_NOSH|DEFPY|DEFUN|ALIAS_HIDDEN|ALIAS)\s*\(\s*"
+	r"(\w+)\s*,\s*(\w+)\s*,",
 	re.M,
 )
 
 INSTALL_RE = re.compile(
 	r"install_element\s*\(\s*(\w+)\s*,\s*&(\w+)\s*\)",
+)
+
+# Intentionally left classic (node-only, hidden test, ops dump).
+INTENTIONAL_RE = re.compile(
+	r"exit_address_family|bgp_local_mac|no_bgp_local_mac|"
+	r"evpnrt5_network|no_evpnrt5_network|test_es_|"
+	r"dump_bgp_|no_dump_bgp_|rpki_reset",
+	re.I,
 )
 
 # Heuristic phase assignment from command name / file
@@ -161,7 +171,23 @@ YANG_LIKELY_MISSING = re.compile(
 )
 
 
-def classify_yang(cmd: str) -> str:
+def classify_yang(cmd: str, def_kind: str | None) -> str:
+	"""Classify CLI conversion status.
+
+	Primary signal: whether the installed command is defined with a
+	DEFUN_YANG / DEFPY_YANG / ALIAS_YANG macro (CLI already on NB).
+	Heuristic MISSING/PARTIAL is only used for remaining classic DEFUNs.
+	"""
+	if INTENTIONAL_RE.search(cmd):
+		return "INTENTIONAL"
+	if def_kind and "YANG" in def_kind:
+		return "CONVERTED"
+	# Hidden AF aliases of YANG commands (ALIAS_ATTR of …_yang).
+	if "yang" in cmd.lower():
+		return "CONVERTED"
+	# Plain ALIAS / ALIAS_HIDDEN of a YANG command still counts.
+	if def_kind in ("ALIAS_HIDDEN", "ALIAS"):
+		return "CONVERTED"
 	if YANG_LIKELY_MISSING.search(cmd):
 		return "MISSING"
 	for rx, status in YANG_PRESENT:
@@ -171,6 +197,10 @@ def classify_yang(cmd: str) -> str:
 
 
 def action_for(status: str, phase: int) -> str:
+	if status == "CONVERTED":
+		return "keep"
+	if status == "INTENTIONAL":
+		return "skip"
 	if phase == 10:
 		return "skip-vnc"
 	if status == "MISSING":
@@ -180,18 +210,17 @@ def action_for(status: str, phase: int) -> str:
 	return "keep"
 
 
-def parse_file(path: Path) -> tuple[dict[str, str], list[tuple[str, str]]]:
-	"""Return (cmd_symbol -> cli_stringish, list of (node, cmd_symbol))."""
+def parse_file(path: Path) -> tuple[dict[str, tuple[str, str]], list[tuple[str, str]]]:
+	"""Return (cmd_symbol -> (cli, kind), list of (node, cmd_symbol))."""
 	text = path.read_text(errors="replace")
-	defs: dict[str, str] = {}
+	defs: dict[str, tuple[str, str]] = {}
 	for m in DEFUN_RE.finditer(text):
-		func, cmd_sym = m.group(1), m.group(2)
-		# try to grab the help string on next lines
+		kind, func, cmd_sym = m.group("kind"), m.group(2), m.group(3)
 		start = m.end()
 		snippet = text[start : start + 400]
 		cli_m = re.search(r'"([^"]{8,200})"', snippet)
 		cli = cli_m.group(1) if cli_m else func
-		defs[cmd_sym] = cli.replace("\n", " ").strip()
+		defs[cmd_sym] = (cli.replace("\n", " ").strip(), kind)
 	installs = INSTALL_RE.findall(text)
 	return defs, installs
 
@@ -231,7 +260,7 @@ def main() -> int:
 	)
 	args = ap.parse_args()
 
-	all_defs: dict[str, tuple[str, str]] = {}  # cmd -> (cli, file)
+	all_defs: dict[str, tuple[str, str, str]] = {}  # cmd -> (cli, file, kind)
 	install_map: dict[str, set[str]] = defaultdict(set)
 
 	for path in sorted(args.bgpd.rglob("*.c")):
@@ -240,8 +269,8 @@ def main() -> int:
 			continue
 		defs, installs = parse_file(path)
 		rel = str(path.relative_to(args.bgpd.parent))
-		for cmd, cli in defs.items():
-			all_defs[cmd] = (cli, rel)
+		for cmd, (cli, kind) in defs.items():
+			all_defs[cmd] = (cli, rel, kind)
 		for node, cmd in installs:
 			install_map[cmd].add(node)
 
@@ -249,9 +278,9 @@ def main() -> int:
 	for cmd, nodes in sorted(install_map.items()):
 		if not is_config_cmd(cmd, nodes):
 			continue
-		cli, src = all_defs.get(cmd, ("", "?"))
+		cli, src, kind = all_defs.get(cmd, ("", "?", None))
 		phase, phase_name = assign_phase(cmd, src)
-		status = classify_yang(cmd)
+		status = classify_yang(cmd, kind)
 		action = action_for(status, phase)
 		rows.append(
 			{
@@ -295,11 +324,20 @@ def main() -> int:
 		"# BGP YANG ↔ CLI Gap Matrix",
 		"",
 		"Auto-generated inventory of BGP **configuration** CLI commands",
-		"versus approximate YANG coverage. Regenerate with:",
+		"versus YANG conversion status. Regenerate with:",
 		"",
 		"```",
 		"python3 yang/tools/extract_bgp_cli_config.py",
 		"```",
+		"",
+		"Classification:",
+		"",
+		"- **CONVERTED** — installed command is defined with `DEFUN_YANG` /",
+		"  `DEFPY_YANG` / `ALIAS_YANG` (or a hidden ALIAS of one).",
+		"- **INTENTIONAL** — left classic on purpose (node exit, hidden test,",
+		"  ops dump, `rpki reset`).",
+		"- **MISSING** / **PARTIAL** — heuristic only for remaining classic",
+		"  DEFUNs; do not treat as authoritative without checking the source.",
 		"",
 		f"**Total config commands:** {len(rows)}",
 		"",
@@ -314,14 +352,18 @@ def main() -> int:
 		"",
 		"## By phase",
 		"",
-		"| phase | count | MISSING | PARTIAL |",
-		"|-------|------:|--------:|--------:|",
+		"| phase | count | CONVERTED | INTENTIONAL | MISSING | PARTIAL |",
+		"|-------|------:|----------:|------------:|--------:|--------:|",
 	]
 	for phase in sorted(by_phase, key=lambda p: int(p.split("-")[0])):
 		rs = by_phase[phase]
+		conv = sum(1 for r in rs if r["yang_path"] == "CONVERTED")
+		inten = sum(1 for r in rs if r["yang_path"] == "INTENTIONAL")
 		miss = sum(1 for r in rs if r["yang_path"] == "MISSING")
 		part = sum(1 for r in rs if r["yang_path"] == "PARTIAL")
-		lines.append(f"| {phase} | {len(rs)} | {miss} | {part} |")
+		lines.append(
+			f"| {phase} | {len(rs)} | {conv} | {inten} | {miss} | {part} |"
+		)
 
 	lines += [
 		"",
