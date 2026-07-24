@@ -67,6 +67,8 @@ TESTCASES =
 3. Verify ospf authentication with MD5 keychain authentication.
 4. Verify ospf authentication with SHA256 keychain authentication.
 5. Verify ospf authentication with different authentication methods.
+6. Verify OSPF recovers when authentication is configured after
+   interface up (late auth config / unauthenticated Hello window).
 
  """
 
@@ -1340,6 +1342,120 @@ def test_ospf_authentication_different_auths_tc35_p1(request):
     ospf_covergence = verify_ospf_neighbor(tgen, topo, dut=dut)
     assert ospf_covergence is True, "Testcase Failed \n Error  {}".format(
         ospf_covergence
+    )
+
+    write_test_footer(tc_name)
+
+
+def test_ospf_authentication_late_config_recovery(request):
+    """
+    Verify OSPF recovers when authentication is configured after the
+    interface is already up.
+
+    Sequence matching the flaky ordering from FRR PR #22781:
+      1. R2 requires authentication; R1 and R2 are FULL
+      2. reset_config_on_routers(r1) removes R1 authentication
+      3. shutdown R1 interface toward R2
+      4. no shutdown R1 interface (R1 sends unauthenticated Hellos;
+         R2 rejects them)
+      5. configure authentication on R1 (late / out of order)
+      6. clear ip ospf on R1
+      7. adjacency must return to FULL
+
+    If this fails, OSPF is not recovering from a temporary authentication
+    mismatch after auth is later configured correctly on both sides.
+    """
+    tc_name = request.node.name
+    write_test_header(tc_name)
+    tgen = get_topogen()
+    global topo
+
+    step("Bring up the base config.")
+    reset_config_on_routers(tgen)
+
+    step("Configure simple password authentication on R1 and R2.")
+    r1_ospf_auth = {
+        "r1": {
+            "links": {
+                "r2": {"ospf": {"authentication": True, "authentication-key": "ospf"}}
+            }
+        }
+    }
+    result = config_ospf_interface(tgen, topo, r1_ospf_auth)
+    assert result is True, "Testcase {} : Failed\n Error: {}".format(tc_name, result)
+
+    r2_ospf_auth = {
+        "r2": {
+            "links": {
+                "r1": {"ospf": {"authentication": True, "authentication-key": "ospf"}}
+            }
+        }
+    }
+    result = config_ospf_interface(tgen, topo, r2_ospf_auth)
+    assert result is True, "Testcase {} : Failed\n Error: {}".format(tc_name, result)
+
+    step("Verify R1 and R2 are FULL with matching authentication.")
+    ospf_covergence = verify_ospf_neighbor(tgen, topo, dut="r1")
+    assert ospf_covergence is True, "Testcase {} : Failed\n Error: {}".format(
+        tc_name, ospf_covergence
+    )
+
+    step(
+        "Reset R1 config (removes authentication) while R2 keeps requiring auth."
+    )
+    reset_config_on_routers(tgen, routerName="r1")
+
+    dut = "r1"
+    intf = topo["routers"]["r1"]["links"]["r2"]["interface"]
+
+    step("Shut R1 interface toward R2.")
+    shutdown_bringup_interface(tgen, dut, intf, False)
+
+    step(
+        "Bring R1 interface up without authentication so R1 sends "
+        "unauthenticated Hellos that R2 rejects."
+    )
+    shutdown_bringup_interface(tgen, dut, intf, True)
+
+    # Allow at least one Hello / reject cycle on the mismatch window.
+    sleep(2)
+
+    step("Verify R1-R2 adjacency is not FULL while authentication mismatches.")
+    # Check only the R1-R2 neighbor; other R1 peers may still be Full.
+    r1_r2_nbr = {
+        "r1": {
+            "ospf": {
+                "neighbors": {
+                    "r2": {
+                        "nbrState": "Full",
+                    }
+                }
+            }
+        }
+    }
+    ospf_covergence = verify_ospf_neighbor(
+        tgen, topo, dut="r1", input_dict=r1_r2_nbr, expected=False, retry_timeout=10
+    )
+    assert ospf_covergence is not True, "Testcase {} : Failed\n Error: {}".format(
+        tc_name, ospf_covergence
+    )
+
+    step(
+        "Configure authentication on R1 after the interface is already up "
+        "(late / out-of-order configuration)."
+    )
+    result = config_ospf_interface(tgen, topo, r1_ospf_auth)
+    assert result is True, "Testcase {} : Failed\n Error: {}".format(tc_name, result)
+
+    step("Clear OSPF on R1 (same order as the original flaky test sequence).")
+    clear_ospf(tgen, "r1")
+
+    step(
+        "Verify R1 and R2 become FULL after late authentication configuration."
+    )
+    ospf_covergence = verify_ospf_neighbor(tgen, topo, dut="r1")
+    assert ospf_covergence is True, "Testcase {} : Failed\n Error: {}".format(
+        tc_name, ospf_covergence
     )
 
     write_test_footer(tc_name)
