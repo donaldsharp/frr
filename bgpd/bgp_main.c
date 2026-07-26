@@ -52,6 +52,7 @@
 #include "bgpd/bgp_routemap_nb.h"
 #include "bgpd/bgp_nb.h"
 #include "bgpd/bgp_rpki_nb.h"
+#include "bgpd/bgp_filter_nb.h"
 #include "bgpd/bgp_community_alias.h"
 #include "routing_nb.h"
 
@@ -406,6 +407,7 @@ static const struct frr_yang_module_info *const bgpd_yang_modules[] = {
 	&frr_routing_info,
 	&frr_bgp_info,
 	&frr_bgp_route_map_info,
+	&frr_bgp_filter_info,
 	&frr_bgp_rpki_info,
 };
 
