@@ -21,8 +21,8 @@ module frr-bgp-filter {
 
   revision 2026-07-21 {
     description
-      "CLI audit: community/AS-path lists remain authoritative for filter
-       CLI; community-alias is modeled under frr-bgp bgp-daemon.";
+      "Add extcommunity-nt; community/AS-path/ext/large lists converted to
+       northbound CLI under frr-bgp-filter.";
     reference
       "FRRouting";
   }
@@ -314,6 +314,16 @@ module frr-bgp-filter {
                   type rt-types:route-target;
                   description
                     "List of route-target values for the ext-community SOO attribute";
+                }
+              }
+
+              case extcommunity-nt {
+                description
+                  "Set BGP ext-community node-target attribute";
+                leaf-list extcommunity-nt {
+                  type rt-types:route-target;
+                  description
+                    "List of node-target values for the ext-community NT attribute";
                 }
               }
             }

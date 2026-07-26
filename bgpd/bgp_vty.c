@@ -25095,42 +25095,13 @@ static void community_list_vty(void)
 {
 	install_node(&community_list_node);
 
-	/* Community-list.  */
-	install_element(CONFIG_NODE, &bgp_community_list_standard_cmd);
-	install_element(CONFIG_NODE, &bgp_community_list_expanded_all_cmd);
-	install_element(CONFIG_NODE, &no_bgp_community_list_standard_all_cmd);
-	install_element(CONFIG_NODE, &no_bgp_community_list_standard_all_list_cmd);
-	install_element(CONFIG_NODE, &no_bgp_community_list_expanded_all_cmd);
-	install_element(CONFIG_NODE, &no_bgp_community_list_expanded_all_list_cmd);
+	/* Community/ext/large-community-list config — YANG: bgp_filter_cli_init() */
 	install_element(VIEW_NODE, &show_bgp_community_list_cmd);
 	install_element(VIEW_NODE, &show_bgp_community_list_arg_cmd);
 
-	/* Extcommunity-list.  */
-	install_element(CONFIG_NODE, &bgp_extcommunity_list_standard_cmd);
-	install_element(CONFIG_NODE, &bgp_extcommunity_list_name_expanded_cmd);
-	install_element(CONFIG_NODE, &no_bgp_extcommunity_list_standard_all_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_extcommunity_list_standard_all_list_cmd);
-	install_element(CONFIG_NODE, &no_bgp_extcommunity_list_expanded_all_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_extcommunity_list_expanded_all_list_cmd);
 	install_element(VIEW_NODE, &show_bgp_extcommunity_list_cmd);
 	install_element(VIEW_NODE, &show_bgp_extcommunity_list_arg_cmd);
 
-	/* Large Community List */
-	install_element(CONFIG_NODE, &bgp_lcommunity_list_standard_cmd);
-	install_element(CONFIG_NODE, &bgp_lcommunity_list_expanded_cmd);
-	install_element(CONFIG_NODE, &bgp_lcommunity_list_name_standard_cmd);
-	install_element(CONFIG_NODE, &bgp_lcommunity_list_name_expanded_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_all_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_lcommunity_list_name_standard_all_cmd);
-	install_element(CONFIG_NODE,
-			&no_bgp_lcommunity_list_name_expanded_all_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_standard_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_expanded_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_name_standard_cmd);
-	install_element(CONFIG_NODE, &no_bgp_lcommunity_list_name_expanded_cmd);
 	install_element(VIEW_NODE, &show_bgp_lcommunity_list_cmd);
 	install_element(VIEW_NODE, &show_bgp_lcommunity_list_arg_cmd);
 

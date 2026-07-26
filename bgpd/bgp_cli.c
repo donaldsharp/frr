@@ -29,6 +29,7 @@
 #include "bgpd/bgp_damp.h"
 #include "bgpd/bgp_evpn.h"
 #include "bgpd/bgp_evpn_private.h"
+#include "bgpd/bgp_filter_cli.h"
 
 #include "bgpd/bgp_cli_clippy.c"
 
@@ -8914,6 +8915,8 @@ void bgp_cli_init(void)
 	install_element(BGP_IPV6_NODE, &af_sid_vpn_export_yang_cmd);
 
 	bgp_cli_install_af_neighbor();
+
+	bgp_filter_cli_init();
 }
 
 /* Called from bgp_bmp_init() after BMP_NODE is installed. */
