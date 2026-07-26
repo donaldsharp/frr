@@ -10,8 +10,8 @@ submodule frr-bgp-evpn {
     prefix inet;
   }
 
-  import ietf-routing-types {
-    prefix rt-types;
+  import frr-bgp-types {
+    prefix frr-bt;
   }
 
   import ietf-yang-types {
@@ -68,14 +68,14 @@ submodule frr-bgp-evpn {
       "Import and export route-target configuration.";
 
     leaf-list import-route-target {
-      type rt-types:route-target;
+      type frr-bt:route-target;
       description
         "Route targets used to import EVPN routes.
          Maps to: route-target import ...";
     }
 
     leaf-list export-route-target {
-      type rt-types:route-target;
+      type frr-bt:route-target;
       description
         "Route targets attached to locally originated EVPN routes.
          Maps to: route-target export ...";
@@ -189,7 +189,7 @@ submodule frr-bgp-evpn {
       }
 
       leaf rd {
-        type rt-types:route-distinguisher;
+        type frr-bt:route-distinguisher;
         description
           "Route distinguisher for this L2VNI. Maps to: rd ...";
       }
@@ -282,7 +282,7 @@ submodule frr-bgp-evpn {
     }
 
     leaf mac-vrf-site-of-origin {
-      type rt-types:route-target;
+      type frr-bt:route-target;
       description
         "Site-of-Origin extended community for MAC-VRF routes.
          Maps to: mac-vrf soo ...";
@@ -406,7 +406,7 @@ submodule frr-bgp-evpn {
       }
 
       leaf-list ead-es-export-route-target {
-        type rt-types:route-target;
+        type frr-bt:route-target;
         description
           "Route targets attached to locally originated EAD-per-ES
            routes. Maps to: ead-es-route-target export ...";
@@ -467,7 +467,7 @@ submodule frr-bgp-evpn {
         "EVPN L3VNI/IP-VRF parameters.";
 
       leaf rd {
-        type rt-types:route-distinguisher;
+        type frr-bt:route-distinguisher;
         description
           "Route distinguisher for the IP-VRF's L3VNI.
            Maps to: rd ... under EVPN AF in a VRF.";

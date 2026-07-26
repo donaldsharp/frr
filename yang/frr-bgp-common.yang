@@ -1726,7 +1726,7 @@ submodule frr-bgp-common {
     description
       "Route distinguisher value as per RFC4364.";
     leaf rd {
-      type rt-types:route-distinguisher;
+      type frr-bt:route-distinguisher;
       description
         "Route distinguisher value as per RFC4364.";
     }
@@ -1794,14 +1794,14 @@ submodule frr-bgp-common {
     description
       "Route Target list";
     leaf-list import-rt-list {
-      type rt-types:route-target;
+      type frr-bt:route-target;
       description
         "Route targets matched on VPN->VRF import.
          Maps to: rt vpn import RTLIST.";
     }
 
     leaf-list export-rt-list {
-      type rt-types:route-target;
+      type frr-bt:route-target;
       description
         "Route targets set on VRF->VPN export.
          Maps to: rt vpn export RTLIST.";

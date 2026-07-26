@@ -8801,22 +8801,54 @@ static bool bgp_nb_evpn_vrf_rt_is_import(const struct lyd_node *dnode)
 	return strmatch(dnode->schema->name, "import-route-target");
 }
 
+/*
+ * Parse an FRR CLI RT string. Wildcard import RTs are stored as "*:NN" in
+ * YANG; classic CLI rewrites '*' to '0' before ecommunity_str2com().
+ */
+static struct ecommunity *bgp_nb_evpn_vrf_rt_str2com(const char *rt_str, bool *is_wildcard)
+{
+	char buf[64];
+	bool wildcard = false;
+
+	if (is_wildcard)
+		*is_wildcard = false;
+
+	if (!rt_str || !rt_str[0])
+		return NULL;
+
+	if (rt_str[0] == '*') {
+		if (strlen(rt_str) >= sizeof(buf))
+			return NULL;
+		strlcpy(buf, rt_str, sizeof(buf));
+		buf[0] = '0';
+		wildcard = true;
+		rt_str = buf;
+	}
+
+	if (is_wildcard)
+		*is_wildcard = wildcard;
+
+	return ecommunity_str2com(rt_str, ECOMMUNITY_ROUTE_TARGET, 0);
+}
+
 int bgp_nb_evpn_vrf_rt_create(struct nb_cb_create_args *args)
 {
 	struct bgp *bgp;
 	struct ecommunity *ecom;
 	const char *rt_str;
 	bool is_import;
+	bool is_wildcard;
 
 	switch (args->event) {
 	case NB_EV_VALIDATE:
 		rt_str = yang_dnode_get_string(args->dnode, NULL);
-		if (rt_str[0] == '*') {
+		is_import = bgp_nb_evpn_vrf_rt_is_import(args->dnode);
+		if (rt_str[0] == '*' && !is_import) {
 			snprintf(args->errmsg, args->errmsg_len,
-				 "Wildcard route-targets are not supported via YANG yet");
+				 "Wildcard '*' only applicable for import");
 			return NB_ERR_VALIDATION;
 		}
-		ecom = ecommunity_str2com(rt_str, ECOMMUNITY_ROUTE_TARGET, 0);
+		ecom = bgp_nb_evpn_vrf_rt_str2com(rt_str, NULL);
 		if (!ecom) {
 			snprintf(args->errmsg, args->errmsg_len,
 				 "Malformed Route Target list");
@@ -8837,7 +8869,7 @@ int bgp_nb_evpn_vrf_rt_create(struct nb_cb_create_args *args)
 
 	is_import = bgp_nb_evpn_vrf_rt_is_import(args->dnode);
 	rt_str = yang_dnode_get_string(args->dnode, NULL);
-	ecom = ecommunity_str2com(rt_str, ECOMMUNITY_ROUTE_TARGET, 0);
+	ecom = bgp_nb_evpn_vrf_rt_str2com(rt_str, &is_wildcard);
 	if (!ecom)
 		return NB_ERR_VALIDATION;
 	ecommunity_str(ecom);
@@ -8848,7 +8880,7 @@ int bgp_nb_evpn_vrf_rt_create(struct nb_cb_create_args *args)
 			ecommunity_free(&ecom);
 			return NB_OK;
 		}
-		bgp_evpn_configure_import_rt_for_vrf(bgp, ecom, false);
+		bgp_evpn_configure_import_rt_for_vrf(bgp, ecom, is_wildcard);
 	} else {
 		if (CHECK_FLAG(bgp->vrf_flags, BGP_VRF_EXPORT_RT_CFGD) &&
 		    bgp_evpn_vrf_rt_matches_existing(bgp->vrf_export_rtl, ecom)) {
@@ -8874,8 +8906,7 @@ int bgp_nb_evpn_vrf_rt_destroy(struct nb_cb_destroy_args *args)
 		return NB_OK;
 
 	is_import = bgp_nb_evpn_vrf_rt_is_import(args->dnode);
-	ecom = ecommunity_str2com(yang_dnode_get_string(args->dnode, NULL),
-				  ECOMMUNITY_ROUTE_TARGET, 0);
+	ecom = bgp_nb_evpn_vrf_rt_str2com(yang_dnode_get_string(args->dnode, NULL), NULL);
 	if (!ecom)
 		return NB_OK;
 	ecommunity_str(ecom);

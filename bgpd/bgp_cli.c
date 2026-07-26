@@ -6100,9 +6100,8 @@ DEFPY_YANG(bgp_evpn_vrf_rt_yang, bgp_evpn_vrf_rt_yang_cmd,
 	}
 
 	for (; idx < argc; idx++) {
-		if (argv[idx]->arg[0] == '*') {
-			vty_out(vty,
-				"%% Wildcard route-targets are not supported via YANG yet\n");
+		if (argv[idx]->arg[0] == '*' && do_export) {
+			vty_out(vty, "%% Wildcard '*' only applicable for import\n");
 			return CMD_WARNING_CONFIG_FAILED;
 		}
 		if (do_import) {

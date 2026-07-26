@@ -7,8 +7,8 @@ module frr-bgp-filter {
     prefix frr-filter;
   }
 
-  import ietf-routing-types {
-    prefix rt-types;
+  import frr-bgp-types {
+    prefix frr-bt;
   }
 
   organization
@@ -301,7 +301,7 @@ module frr-bgp-filter {
                 description
                   "Set BGP ext-community route-target attribute";
                 leaf-list extcommunity-rt {
-                  type rt-types:route-target;
+                  type frr-bt:route-target;
                   description
                     "List of route-target values for the ext-community RT attribute";
                 }
@@ -311,7 +311,7 @@ module frr-bgp-filter {
                 description
                   "Set BGP ext-community site-of-origin attribute";
                 leaf-list extcommunity-soo {
-                  type rt-types:route-target;
+                  type frr-bt:route-target;
                   description
                     "List of route-target values for the ext-community SOO attribute";
                 }
@@ -321,7 +321,7 @@ module frr-bgp-filter {
                 description
                   "Set BGP ext-community node-target attribute";
                 leaf-list extcommunity-nt {
-                  type rt-types:route-target;
+                  type frr-bt:route-target;
                   description
                     "List of node-target values for the ext-community NT attribute";
                 }
