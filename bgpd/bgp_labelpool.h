@@ -47,6 +47,14 @@ struct bgp_mplsvpn_nh_label_bind_cache;
 void bgp_vpn_nh_lp_release(struct bgp_mplsvpn_nh_label_bind_cache *bmnc,
 			   mpls_label_t label);
 
+/*
+ * Release a per-nexthop label given an opaque label-id pointer that may be
+ * stale.  Callers pass the raw labelid that was used during bgp_lp_get();
+ * this function never dereferences it.  Used by async callbacks that
+ * detected their blnc context was freed before the reply fired.
+ */
+void bgp_nh_lp_release_by_id(void *labelid_ptr, mpls_label_t label);
+
 extern void bgp_lp_event_chunk(uint32_t first, uint32_t last);
 extern void bgp_lp_event_zebra_down(void);
 extern void bgp_lp_event_zebra_up(void);
@@ -102,5 +110,8 @@ bgp_label_per_nexthop_new(struct bgp_label_per_nexthop_cache_head *tree,
 struct bgp_label_per_nexthop_cache *
 bgp_label_per_nexthop_find(struct bgp_label_per_nexthop_cache_head *tree,
 			   struct prefix *nexthop);
+bool bgp_label_per_nexthop_contains(
+	struct bgp_label_per_nexthop_cache_head *tree,
+	const struct bgp_label_per_nexthop_cache *needle);
 void bgp_label_per_nexthop_init(void);
 #endif /* _FRR_BGP_LABELPOOL_H */

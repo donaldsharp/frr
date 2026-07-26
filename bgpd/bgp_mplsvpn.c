@@ -1524,6 +1524,33 @@ static int bgp_mplsvpn_get_label_per_nexthop_cb(mpls_label_t label,
 	int debug = BGP_DEBUG(vpn, VPN_LEAK_LABEL);
 	struct bgp_path_info *pi;
 	struct bgp_table *table;
+	struct bgp *bgp_iter;
+	struct listnode *node;
+	afi_t afi;
+	bool valid = false;
+
+	/*
+	 * The labelpool work queue dispatches callbacks asynchronously.  If
+	 * the target per-nexthop cache entry was freed (e.g. the last path
+	 * referencing it was unlinked via bgp_mplsvpn_path_nh_label_unlink
+	 * -> bgp_label_per_nexthop_free) between the zebra label request and
+	 * this reply, blnc is dangling and dereferencing blnc->nh SIGSEGVs.
+	 * Re-verify by pointer-identity scan across every live bgp instance's
+	 * per-nexthop trees.  On a stale pointer, release the label back to
+	 * the pool and return without touching blnc.
+	 */
+	for (ALL_LIST_ELEMENTS_RO(bm->bgp, node, bgp_iter)) {
+		for (afi = AFI_IP; afi < AFI_MAX && !valid; afi++)
+			valid = bgp_label_per_nexthop_contains(
+				&bgp_iter->mpls_labels_per_nexthop[afi], blnc);
+		if (valid)
+			break;
+	}
+	if (!valid) {
+		if (allocated && label != MPLS_INVALID_LABEL)
+			bgp_nh_lp_release_by_id(context, label);
+		return 0;
+	}
 
 	old_label = blnc->label;
 
