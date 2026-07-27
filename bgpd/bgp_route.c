@@ -361,34 +361,29 @@ void bgp_path_info_extra_free(struct bgp_path_info_extra **extra)
 			unsigned refcount;
 
 			bpi = bgp_path_info_lock(bpi);
-		/*
-		 * Parent dest may already have been reaped. After
-		 * bgp_dest_unlock_node() frees the dest it clears
-		 * rn->info; if bpi->net is a dangling pointer into that
-		 * freed dest, dest->rn may still look non-NULL. Validate
-		 * that rn->info still refers to this same dest before
-		 * touching lock counts.
-		 */
-		if (!bpi->net || !bpi->net->rn ||
-		    bgp_dest_from_rnode(bpi->net->rn) != bpi->net) {
-			bpi->net = NULL;
-		} else {
-			refcount = bgp_dest_get_lock_count(bpi->net);
-			if (refcount == 0) {
-				/*
-				 * Dest already fully unlocked; do not
-				 * call route_unlock_node (asserts).
-				 * Clear the pointer so sibling extras
-				 * do not UAF after the dest is reaped.
-				 */
+			/*
+			 * Parent dest may already have been reaped (rn
+			 * cleared). Touching rn->lock then SIGSEGVs.
+			 */
+			if (!bpi->net->rn) {
 				bpi->net = NULL;
 			} else {
-				bgp_dest_unlock_node(bpi->net);
-				if (refcount == 1)
+				refcount = bgp_dest_get_lock_count(bpi->net);
+				if (refcount == 0) {
+					/*
+					 * Dest already fully unlocked; do not
+					 * call route_unlock_node (asserts).
+					 * Clear the pointer so sibling extras
+					 * do not UAF after the dest is reaped.
+					 */
 					bpi->net = NULL;
+				} else {
+					bgp_dest_unlock_node(bpi->net);
+					if (refcount == 1)
+						bpi->net = NULL;
+				}
 			}
-		}
-		bgp_path_info_unlock(bpi);
+			bgp_path_info_unlock(bpi);
 		}
 		bgp_path_info_unlock(e->vrfleak->parent);
 		e->vrfleak->parent = NULL;
