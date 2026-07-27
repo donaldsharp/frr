@@ -133,7 +133,7 @@ static int nb_cli_schedule_command(struct vty *vty)
 	vty->pending_commit = 1;
 	vty->buffer_cmd_count++;
 	if (vty->buffer_cmd_count == NB_CMD_BATCH_SIZE)
-		nb_cli_pending_commit_check(vty);
+		return nb_cli_pending_commit_check(vty);
 
 	return CMD_SUCCESS;
 }

@@ -2874,8 +2874,8 @@ int vty_config_node_exit(struct vty *vty)
 	if (vty_config_node_exit_mgmt_cb)
 		vty_config_node_exit_mgmt_cb(vty);
 
-	/* Perform any pending commits. */
-	(void)nb_cli_pending_commit_check(vty);
+	/* Perform any pending commits; remember failure for the caller. */
+	int pending_ret = nb_cli_pending_commit_check(vty);
 
 	/* Check if there's a pending confirmed commit. */
 	if (event_is_scheduled(vty->t_confirmed_commit_timeout)) {
@@ -2907,6 +2907,9 @@ int vty_config_node_exit(struct vty *vty)
 		vty_out(vty, "exit from config node while reading config file");
 		vty->status = VTY_CLOSE;
 	}
+
+	if (pending_ret != CMD_SUCCESS)
+		return pending_ret;
 
 	return 1;
 }

@@ -1005,10 +1005,20 @@ static int cmd_execute_command_real(vector vline, struct vty *vty,
 
 			/*
 			 * Perform pending commit (if any) before executing
-			 * non-YANG command.
+			 * non-YANG command. Propagate failure: otherwise a
+			 * rejected YANG transaction (e.g. local-as == BGP AS)
+			 * is flushed here, cleared, and the CLI still returns
+			 * success — so vtysh -f exits 0 and callers cannot
+			 * detect the rejection.
 			 */
-			if (!(matched_element->attr & CMD_ATTR_YANG))
-				(void)nb_cli_pending_commit_check(vty);
+			if (!(matched_element->attr & CMD_ATTR_YANG)) {
+				ret = nb_cli_pending_commit_check(vty);
+				if (ret != CMD_SUCCESS) {
+					list_delete(&argv_list);
+					XFREE(MTYPE_TMP, argv);
+					return ret;
+				}
+			}
 		}
 
 		ret = matched_element->func(matched_element, vty, argc, argv);
