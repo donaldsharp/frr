@@ -8514,14 +8514,11 @@ static void bgp_cleanup_table(struct bgp *bgp, struct bgp_table *table, afi_t af
 			bgp_srv6_unicast_unregister_route(dest);
 
 		for (pi = bgp_dest_get_bgp_path_info(dest); pi; pi = next) {
-			const struct prefix *p = bgp_dest_get_prefix(dest);
-
 			next = pi->next;
 
-			/* Unimport EVPN routes from VRFs */
+			/* Reap VRF-imported children before freeing parent dest */
 			if (safi == SAFI_EVPN)
-				bgp_evpn_unimport_route(bgp, AFI_L2VPN,
-							SAFI_EVPN, p, pi);
+				bgp_evpn_drain_vrf_imports_for_parent(bgp, pi);
 			/* If this is a route exported to EVPN, process for un-export */
 			if (advertise_type5_routes_multipath(bgp, afi) &&
 			    is_route_injectable_into_evpn(pi))

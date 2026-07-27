@@ -4923,6 +4923,7 @@ int bgp_delete(struct bgp *bgp)
 		 * tripping the "node->lock > 0" assert.
 		 */
 		bgp_evpn_cleanup_per_vni_routes(bgp);
+		bgp_evpn_cleanup_vrf_imported_routes(bgp);
 	}
 
 	bgp_cleanup_routes(bgp);
