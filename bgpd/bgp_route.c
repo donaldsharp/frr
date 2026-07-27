@@ -361,19 +361,27 @@ void bgp_path_info_extra_free(struct bgp_path_info_extra **extra)
 			unsigned refcount;
 
 			bpi = bgp_path_info_lock(bpi);
-			refcount = bgp_dest_get_lock_count(bpi->net);
-			if (refcount == 0) {
-				/*
-				 * Dest already fully unlocked; do not call
-				 * route_unlock_node (asserts). Clear the
-				 * pointer so sibling extras do not UAF after
-				 * the dest is reaped.
-				 */
+			/*
+			 * Parent dest may already have been reaped (rn
+			 * cleared). Touching rn->lock then SIGSEGVs.
+			 */
+			if (!bpi->net->rn) {
 				bpi->net = NULL;
 			} else {
-				bgp_dest_unlock_node(bpi->net);
-				if (refcount == 1)
+				refcount = bgp_dest_get_lock_count(bpi->net);
+				if (refcount == 0) {
+					/*
+					 * Dest already fully unlocked; do not
+					 * call route_unlock_node (asserts).
+					 * Clear the pointer so sibling extras
+					 * do not UAF after the dest is reaped.
+					 */
 					bpi->net = NULL;
+				} else {
+					bgp_dest_unlock_node(bpi->net);
+					if (refcount == 1)
+						bpi->net = NULL;
+				}
 			}
 			bgp_path_info_unlock(bpi);
 		}
