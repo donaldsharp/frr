@@ -2686,8 +2686,14 @@ static enum bgp_fsm_state_progress bgp_start(struct peer_connection *connection)
 
 	/* Register peer for NHT. If next hop is already resolved, proceed
 	 * with connection setup, else wait.
+	 *
+	 * ip-transparent peers bind a non-local update-source; NHT for the
+	 * peer address can race or stay unresolved while the admin has
+	 * already forced connectivity. Mirror bgp_getsockname() and do not
+	 * block Connect on WAITING_NHT.
 	 */
-	if (!bgp_peer_connection_reg_with_nht(connection)) {
+	if (!CHECK_FLAG(peer->flags, PEER_FLAG_IP_TRANSPARENT) &&
+	    !bgp_peer_connection_reg_with_nht(connection)) {
 		if (bgp_zebra_num_connects()) {
 			frrtrace(2, frr_bgp, session_state_change, peer, 8);
 			if (bgp_debug_neighbor_events(peer))
@@ -2698,6 +2704,9 @@ static enum bgp_fsm_state_progress bgp_start(struct peer_connection *connection)
 			BGP_EVENT_ADD(connection, TCP_connection_open_failed);
 			return BGP_FSM_SUCCESS;
 		}
+	} else if (CHECK_FLAG(peer->flags, PEER_FLAG_IP_TRANSPARENT)) {
+		/* Still register for tracking, but do not block on result. */
+		bgp_peer_connection_reg_with_nht(connection);
 	}
 
 	assert(!connection->t_write);
