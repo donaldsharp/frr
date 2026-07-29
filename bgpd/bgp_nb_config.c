@@ -5395,7 +5395,11 @@ int bgp_nb_neighbor_peer_group_modify(struct nb_cb_modify_args *args)
 	switch (args->event) {
 	case NB_EV_VALIDATE:
 		peer = bgp_nb_config_peer(args->dnode);
-		if (!peer)
+		/*
+		 * Soft lookup may return NULL (same-candidate create) or a
+		 * stale/wrong entry without a live bgp — never deref blindly.
+		 */
+		if (!peer || !peer->bgp)
 			return NB_OK;
 		if (peer_dynamic_neighbor(peer)) {
 			snprintfrr(args->errmsg, args->errmsg_len,
@@ -5417,7 +5421,7 @@ int bgp_nb_neighbor_peer_group_modify(struct nb_cb_modify_args *args)
 	}
 
 	peer = bgp_nb_config_peer(args->dnode);
-	if (!peer)
+	if (!peer || !peer->bgp)
 		return NB_ERR_NOT_FOUND;
 
 	group_name = yang_dnode_get_string(args->dnode, NULL);
@@ -13527,7 +13531,6 @@ int bgp_nb_peer_af_advertise_cond_modify(struct nb_cb_modify_args *args)
 
 int bgp_nb_peer_af_advertise_cond_destroy(struct nb_cb_destroy_args *args)
 {
-	const struct lyd_node *cond;
 	struct peer *peer;
 	afi_t afi;
 	safi_t safi;
@@ -13535,14 +13538,7 @@ int bgp_nb_peer_af_advertise_cond_destroy(struct nb_cb_destroy_args *args)
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
 
-	cond = yang_dnode_get_parent(args->dnode, "conditional-advertisement");
-	if (!cond)
-		return NB_OK;
-
-	if (yang_dnode_exists(cond, "./advertise-map") &&
-	    (yang_dnode_exists(cond, "./exist-map") || yang_dnode_exists(cond, "./non-exist-map")))
-		return bgp_nb_peer_af_advertise_map_apply(cond);
-
+	/* Never re-apply on destroy: sibling leaf teardown must clear. */
 	peer = bgp_nb_config_peer(args->dnode);
 	if (!peer || !bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
 		return NB_OK;
