@@ -6480,7 +6480,7 @@ static void bgp_cli_vpn_rt_set(struct vty *vty, const char *af_xpath, const char
 }
 
 DEFPY_YANG(af_rt_vpn_yang, af_rt_vpn_yang_cmd,
-	   "[no] <rt|route-target> vpn <import|export|both>$direction_str [RTLIST]",
+	   "[no] <rt|route-target> vpn <import|export|both>$direction_str RTLIST...",
 	   NO_STR
 	   "Specify route target list\n"
 	   "Specify route target list\n"
