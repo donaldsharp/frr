@@ -6253,7 +6253,13 @@ int bgp_nb_neighbor_peer_group_destroy(struct nb_cb_destroy_args *args)
 	 * neighbor list entry remains, so only unbind — but drop inherited
 	 * AF state that is not peer-overridden (e.g. maximum-prefix-out),
 	 * otherwise the orphan keeps the group's pmax_out.
+	 *
+	 * Clear after unbind: peer_maximum_prefix_out_unset() while still a
+	 * member only re-inherits the group's value.
 	 */
+	if (peer_group_unbind(peer->bgp, peer, peer->group) != 0)
+		return NB_ERR_RESOURCE;
+
 	FOREACH_AFI_SAFI (afi, safi) {
 		if (!CHECK_FLAG(peer->af_flags[afi][safi],
 				PEER_FLAG_MAX_PREFIX_OUT))
@@ -6263,9 +6269,6 @@ int bgp_nb_neighbor_peer_group_destroy(struct nb_cb_destroy_args *args)
 			continue;
 		peer_maximum_prefix_out_unset(peer, afi, safi);
 	}
-
-	if (peer_group_unbind(peer->bgp, peer, peer->group) != 0)
-		return NB_ERR_RESOURCE;
 
 	FOREACH_AFI_SAFI (afi, safi) {
 		struct peer_af *paf = peer_af_find(peer, afi, safi);
