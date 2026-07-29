@@ -459,10 +459,12 @@ submodule frr-bgp-common-structure {
 
       leaf fqdn-capability {
         type boolean;
-        default "false";
+        default "true";
         description
           "Advertise the FQDN capability to this peer.
-           Maps to: neighbor <peer> capability fqdn.";
+           Maps to: neighbor <peer> capability fqdn.
+           Default true matches peer_create() which enables FQDN
+           unless explicitly disabled.";
       }
 
       leaf software-version-capability {

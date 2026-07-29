@@ -123,8 +123,7 @@ DEFPY_YANG(
 		 "%s/entry[sequence='%" PRId64 "']", xpath, sseq);
 
 	/* Find first community value argument */
-	argv_find(argv, argc, "AA:NN", &idx);
-	if (idx >= argc) {
+	if (!argv_find(argv, argc, "AA:NN", &idx)) {
 		vty_out(vty, "%% No community string specified\n");
 		return CMD_WARNING_CONFIG_FAILED;
 	}
@@ -671,9 +670,8 @@ DEFPY_YANG(
 	snprintfrr(xpath_entry, sizeof(xpath_entry),
 		 "%s/entry[sequence='%" PRId64 "']", xpath, sseq);
 
-	/* Find first extcommunity value argument */
-	argv_find(argv, argc, "AA:NN", &idx);
-	if (idx >= argc) {
+	/* Find first community/extcommunity value argument */
+	if (!argv_find(argv, argc, "AA:NN", &idx)) {
 		vty_out(vty, "%% No extended community string specified\n");
 		return CMD_WARNING_CONFIG_FAILED;
 	}
@@ -683,10 +681,26 @@ DEFPY_YANG(
 	nb_cli_enqueue_change(vty, "./action", NB_OP_MODIFY, action);
 	nb_cli_enqueue_change(vty, "./type", NB_OP_MODIFY, yang_type_str);
 
-	/* Add each extcommunity value as a separate leaf-list entry */
+	/*
+	 * Classic CLI is "permit rt 65001:1 rt 65001:2" — type keywords may
+	 * repeat among AA:NN tokens after the first $type. Skip and update
+	 * the leaf when rt/soo/nt reappear.
+	 */
 	for (i = idx; i < argc; i++) {
-		snprintf(xpath_leaf, sizeof(xpath_leaf),
-			 "./%s[.='%s']", rt_or_soo_leaf, argv[i]->arg);
+		if (strmatch(argv[i]->arg, "rt")) {
+			rt_or_soo_leaf = "extcommunity-rt";
+			continue;
+		}
+		if (strmatch(argv[i]->arg, "soo")) {
+			rt_or_soo_leaf = "extcommunity-soo";
+			continue;
+		}
+		if (strmatch(argv[i]->arg, "nt")) {
+			rt_or_soo_leaf = "extcommunity-nt";
+			continue;
+		}
+		snprintf(xpath_leaf, sizeof(xpath_leaf), "./%s[.='%s']",
+			 rt_or_soo_leaf, argv[i]->arg);
 		nb_cli_enqueue_change(vty, xpath_leaf, NB_OP_CREATE, NULL);
 	}
 

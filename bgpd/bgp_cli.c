@@ -1995,11 +1995,10 @@ DEFPY_YANG(bgp_listen_range_yang, bgp_listen_range_yang_cmd,
 	   "Member of the peer-group\n"
 	   "Peer-group name\n")
 {
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-	struct peer_group *group, *existing;
 	struct prefix range;
 	char pfx[PREFIX_STRLEN];
 	char xpath[XPATH_MAXLEN];
+	char check[XPATH_MAXLEN + 256];
 	const char *leaf;
 
 	if (prefix->family == AF_INET6 &&
@@ -2011,30 +2010,22 @@ DEFPY_YANG(bgp_listen_range_yang, bgp_listen_range_yang_cmd,
 	range = *prefix;
 	apply_mask(&range);
 
-	group = peer_group_lookup(bgp, pg);
-	if (!group) {
+	/*
+	 * During XFRR_start_configuration batching, peer-groups exist only in
+	 * the candidate. Runtime peer_group_lookup() fails mid-file and would
+	 * drop listen-ranges (breaking dynamic MD5 peers). Match password CLI.
+	 */
+	snprintf(check, sizeof(check),
+		 "%s/peer-groups/peer-group[peer-group-name='%s']",
+		 VTY_CURR_XPATH, pg);
+	if (!yang_dnode_exists(vty->candidate_config->dnode, check)) {
 		vty_out(vty,
 			no ? "%% Peer-group does not exist\n"
 			   : "%% Configure the peer-group first\n");
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
-	if (!no) {
-		existing = bgp_listen_range_lookup(bgp, &range, true);
-		if (existing) {
-			if (strmatch(existing->name, pg))
-				return CMD_SUCCESS;
-			vty_out(vty,
-				"%% Same listen range is attached to peer-group %s\n",
-				existing->name);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		if (bgp_listen_range_lookup(bgp, &range, false)) {
-			vty_out(vty,
-				"%% Listen range overlaps with existing listen range\n");
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-	}
+	/* Overlap / duplicate checks run in NB VALIDATE on commit. */
 
 	leaf = (range.family == AF_INET) ? "ipv4-listen-range"
 					 : "ipv6-listen-range";
@@ -2043,7 +2034,7 @@ DEFPY_YANG(bgp_listen_range_yang, bgp_listen_range_yang_cmd,
 		 "./peer-groups/peer-group[peer-group-name='%s']/%s[.='%s']",
 		 pg, leaf, pfx);
 	nb_cli_enqueue_change(vty, xpath, no ? NB_OP_DESTROY : NB_OP_CREATE,
-			      NULL);
+			      no ? NULL : pfx);
 	return nb_cli_apply_changes(vty, NULL);
 }
 

@@ -38,6 +38,7 @@
 #include "bgpd/bgp_addpath.h"
 #include "bgpd/bgp_mac.h"
 #include "bgpd/bgp_vty.h"
+#include "bgpd/bgp_nb.h"
 #include "bgpd/bgp_nht.h"
 #include "bgpd/bgp_trace.h"
 #include "bgpd/bgp_mpath.h"
@@ -7617,6 +7618,13 @@ int bgp_evpn_local_l3vni_add(vni_t l3vni, vrf_id_t vrf_id,
 
 	/* auto derive RD */
 	bgp_evpn_derive_auto_rd_for_vrf(bgp_vrf);
+
+	/*
+	 * YANG may have committed RD/RT/type-5 before this L3VNI was live.
+	 * Re-apply those leaves now so configured values win over auto
+	 * derive and type-5 advertise flags are set before we push routes.
+	 */
+	bgp_nb_evpn_vrf_yang_reapply(bgp_vrf);
 
 	/* link all corresponding l2vnis */
 	hash_iterate(bgp_evpn->vnihash,
