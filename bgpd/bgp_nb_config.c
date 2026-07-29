@@ -17,6 +17,7 @@
 #include "lib_errors.h"
 #include "routing_nb.h"
 #include "zebra.h"
+#include "asn.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_open.h"
@@ -79,6 +80,8 @@ int bgp_nb_bgp_create(struct nb_cb_create_args *args)
 	const char *vrf_name;
 	const char *name;
 	enum bgp_instance_type inst_type;
+	enum asnotation_mode asnotation = ASNOTATION_UNDEFINED;
+	const char *notation;
 	as_t as;
 	int ret;
 
@@ -105,8 +108,18 @@ int bgp_nb_bgp_create(struct nb_cb_create_args *args)
 			inst_type = BGP_INSTANCE_TYPE_VRF;
 		}
 
-		ret = bgp_get(&bgp, &as, name, inst_type, NULL,
-			      ASNOTATION_PLAIN);
+		if (yang_dnode_exists(args->dnode, "./global/as-notation")) {
+			notation = yang_dnode_get_string(args->dnode,
+							 "./global/as-notation");
+			if (strmatch(notation, "dot+"))
+				asnotation = ASNOTATION_DOTPLUS;
+			else if (strmatch(notation, "dot"))
+				asnotation = ASNOTATION_DOT;
+			else
+				asnotation = ASNOTATION_PLAIN;
+		}
+
+		ret = bgp_get(&bgp, &as, name, inst_type, NULL, asnotation);
 		if (ret != BGP_SUCCESS && ret != BGP_CREATED &&
 		    ret != BGP_INSTANCE_EXISTS)
 			return NB_ERR_RESOURCE;
@@ -180,6 +193,7 @@ void bgp_nb_cli_show_router_bgp(struct vty *vty, const struct lyd_node *dnode,
 	const char *name;
 	as_t as;
 	bool is_view = false;
+	enum asnotation_mode asnotation = ASNOTATION_PLAIN;
 
 	cpp = yang_dnode_get_parent(dnode, "control-plane-protocol");
 	vrf_name = yang_dnode_get_string(cpp, "vrf");
@@ -190,8 +204,19 @@ void bgp_nb_cli_show_router_bgp(struct vty *vty, const struct lyd_node *dnode,
 		is_view = yang_dnode_get_bool(dnode,
 					      "./global/instance-type-view");
 
+	if (yang_dnode_exists(dnode, "./global/as-notation")) {
+		const char *notation =
+			yang_dnode_get_string(dnode, "./global/as-notation");
+
+		if (strmatch(notation, "dot+"))
+			asnotation = ASNOTATION_DOTPLUS;
+		else if (strmatch(notation, "dot"))
+			asnotation = ASNOTATION_DOT;
+	}
+
 	vty_out(vty, "!\n");
-	vty_out(vty, "router bgp %u", as);
+	vty_out(vty, "router bgp ");
+	vty_out(vty, ASN_FORMAT(asnotation), &as);
 	if (is_view)
 		vty_out(vty, " view %s", name);
 	else if (!strmatch(vrf_name, VRF_DEFAULT_NAME))
@@ -3624,21 +3649,26 @@ static struct peer *bgp_nb_config_peer(const struct lyd_node *dnode)
 	struct peer_group *group;
 
 	/*
-	 * Soft lookup: VALIDATE runs before APPLY of list creates in the same
-	 * candidate, so the peer may not be in running yet. Callers must treat
-	 * NULL as "skip" during VALIDATE and as an error during APPLY.
+	 * Soft, non-recursive lookup: VALIDATE runs before APPLY of list
+	 * creates in the same candidate, so the peer may not be in running
+	 * yet. Callers must treat NULL as "skip" during VALIDATE and as an
+	 * error during APPLY.
+	 *
+	 * Must not use recursive nb_running_get_entry(): walking to the BGP
+	 * instance would return struct bgp * cast as peer when the neighbor
+	 * create is still pending, and peer->bgp would be garbage.
 	 */
 	list = yang_dnode_get_parent(dnode, "neighbor");
 	if (list)
-		return nb_running_get_entry(list, NULL, false);
+		return nb_running_get_entry_non_rec(list, NULL, false);
 
 	list = yang_dnode_get_parent(dnode, "unnumbered-neighbor");
 	if (list)
-		return nb_running_get_entry(list, NULL, false);
+		return nb_running_get_entry_non_rec(list, NULL, false);
 
 	list = yang_dnode_get_parent(dnode, "peer-group");
 	if (list) {
-		group = nb_running_get_entry(list, NULL, false);
+		group = nb_running_get_entry_non_rec(list, NULL, false);
 		return group ? group->conf : NULL;
 	}
 
@@ -7473,6 +7503,34 @@ void bgp_nb_cli_show_nexthop_prefer_global(struct vty *vty,
 /*
  * Global L2VPN EVPN AF knobs
  */
+
+/*
+ * EVPN_ENABLED is set on APPLY of advertise-all-vni. VALIDATE of sibling
+ * leaves in the same candidate must treat a pending advertise-all-vni as
+ * enabling EVPN, matching classic sequential CLI checks.
+ *
+ * Tenant L3 VRFs commonly configure advertise-default-gw / advertise-svi-ip
+ * under address-family l2vpn evpn without advertise-all-vni (that knob lives
+ * on the underlay EVPN VRF). Allow those when an EVPN VRF already exists.
+ */
+static bool bgp_nb_evpn_enabled_in_candidate(struct bgp *bgp,
+					     const struct lyd_node *dnode)
+{
+	struct bgp *bgp_evpn;
+
+	if (EVPN_ENABLED(bgp))
+		return true;
+	if (yang_dnode_exists(dnode, "../advertise-all-vni") &&
+	    yang_dnode_get_bool(dnode, "../advertise-all-vni"))
+		return true;
+
+	bgp_evpn = bgp_get_evpn();
+	if (bgp_evpn && bgp_evpn != bgp && EVPN_ENABLED(bgp_evpn))
+		return true;
+
+	return false;
+}
+
 int bgp_nb_evpn_advertise_all_vni_modify(struct nb_cb_modify_args *args)
 {
 	struct bgp *bgp;
@@ -7579,7 +7637,7 @@ int bgp_nb_evpn_advertise_default_gw_modify(struct nb_cb_modify_args *args)
 		bgp = nb_running_get_entry(args->dnode, NULL, false);
 		if (!bgp)
 			return NB_OK;
-		if (!EVPN_ENABLED(bgp)) {
+		if (!bgp_nb_evpn_enabled_in_candidate(bgp, args->dnode)) {
 			snprintf(args->errmsg, args->errmsg_len,
 				 "This command is only supported under the EVPN VRF");
 			return NB_ERR_VALIDATION;
@@ -7632,7 +7690,7 @@ int bgp_nb_evpn_advertise_svi_ip_modify(struct nb_cb_modify_args *args)
 		bgp = nb_running_get_entry(args->dnode, NULL, false);
 		if (!bgp)
 			return NB_OK;
-		if (!EVPN_ENABLED(bgp)) {
+		if (!bgp_nb_evpn_enabled_in_candidate(bgp, args->dnode)) {
 			snprintf(args->errmsg, args->errmsg_len,
 				 "This command is only supported under EVPN VRF");
 			return NB_ERR_VALIDATION;

@@ -172,6 +172,12 @@ DEFUN_YANG_NOSH(router_bgp_yang, router_bgp_yang_cmd,
 			asnotation = ASNOTATION_DOT;
 		else
 			asnotation = ASNOTATION_PLAIN;
+	} else {
+		/*
+		 * Match classic: ASDOT input like "1.300" implies asnotation
+		 * dot even without an explicit as-notation keyword.
+		 */
+		asn_str2asn_notation(argv[2]->arg, NULL, &asnotation);
 	}
 
 	snprintf(cpp_xpath, sizeof(cpp_xpath), BGP_CPP_XPATH, name, vrf_name);
@@ -2028,6 +2034,7 @@ DEFPY_YANG(bgp_listen_range_yang, bgp_listen_range_yang_cmd,
 
 	leaf = (range.family == AF_INET) ? "ipv4-listen-range"
 					 : "ipv6-listen-range";
+	prefix2str(&range, pfx, sizeof(pfx));
 	snprintf(xpath, sizeof(xpath),
 		 "./peer-groups/peer-group[peer-group-name='%s']/%s[.='%s']",
 		 pg, leaf, pfx);
@@ -7349,12 +7356,25 @@ static int bgp_cli_peer_af_xpath(struct vty *vty, const char *neighbor, char *xp
 				 size_t xpath_len, bool *is_pg)
 {
 	char base[XPATH_MAXLEN];
+	char check[XPATH_MAXLEN + 256];
 	const char *afi_safi;
 	int ret;
 
 	ret = bgp_cli_neighbor_base_xpath(vty, neighbor, base, sizeof(base), is_pg);
 	if (ret != 0)
 		return ret;
+
+	/*
+	 * Classic AF neighbor cmds require an existing peer (remote-as or
+	 * peer-group first). Creating afi-safi under a missing neighbor would
+	 * auto-create the list entry without mandatory remote-as-type.
+	 */
+	snprintf(check, sizeof(check), "%s/%s", VTY_CURR_XPATH, base + 2);
+	if (!yang_dnode_exists(vty->candidate_config->dnode, check)) {
+		vty_out(vty,
+			"%% Specify remote-as or peer-group commands first\n");
+		return -1;
+	}
 
 	afi_safi = bgp_cli_afi_safi_name(vty->node);
 	/*
