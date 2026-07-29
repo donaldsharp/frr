@@ -238,7 +238,7 @@ module frr-bgp-types {
        * and inet_aton-lenient forms such as 100.100.100:100.
        * Real validation is done by str2prefix_rd() in NB callbacks.
        */
-      pattern '[^: \t]+:[0-9]{1,10}';
+      pattern '[^: \t]+(:[^: \t]+)+';
     }
     description
       "FRR route distinguisher as accepted by CLI
@@ -248,13 +248,14 @@ module frr-bgp-types {
   typedef route-target {
     type string {
       /*
-       * Loose CLI-syntax gate; also accepts *:NN for EVPN VRF import.
+       * Loose CLI-syntax gate; also accepts *:NN for EVPN VRF import
+       * and multi-colon SoO forms such as ASN:NN:NN (e.g. 1:1:1).
        * Real validation is done by ecommunity_str2com() in NB callbacks.
        */
-      pattern '[^: \t]+:[0-9]{1,10}';
+      pattern '[^: \t]+(:[^: \t]+)+';
     }
     description
-      "FRR route target as accepted by CLI
-       (ASN:NN, AA.BB:NN, A.B.C.D:NN, or *:NN for EVPN VRF import).";
+      "FRR route target / SoO as accepted by CLI
+       (ASN:NN, AA.BB:NN, A.B.C.D:NN, *:NN, or ASN:NN:NN).";
   }
 }

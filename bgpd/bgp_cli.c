@@ -1159,8 +1159,15 @@ DEFUN_YANG(bgp_confederation_identifier_yang,
 	   "Set routing domain confederation AS\n"
 	   AS_STR)
 {
+	as_t as;
+
+	if (!asn_str2asn(argv[3]->arg, &as)) {
+		vty_out(vty, "%% Invalid AS number: %s\n", argv[3]->arg);
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+	/* inet:as-number is uint32; convert ASDOT before YANG apply. */
 	nb_cli_enqueue_change(vty, "./global/confederation/identifier",
-			      NB_OP_MODIFY, argv[3]->arg);
+			      NB_OP_MODIFY, asn_asn2asplain(as));
 	return nb_cli_apply_changes(vty, NULL);
 }
 
@@ -1186,11 +1193,17 @@ DEFUN_YANG(bgp_confederation_peers_yang, bgp_confederation_peers_yang_cmd,
 {
 	int i;
 	char xpath[XPATH_MAXLEN];
+	as_t as;
 
 	for (i = 3; i < argc; i++) {
+		if (!asn_str2asn(argv[i]->arg, &as)) {
+			vty_out(vty, "%% Invalid AS number: %s\n",
+				argv[i]->arg);
+			return CMD_WARNING_CONFIG_FAILED;
+		}
 		snprintf(xpath, sizeof(xpath),
 			 "./global/confederation/member-as[.='%s']",
-			 argv[i]->arg);
+			 asn_asn2asplain(as));
 		nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
 	}
 	return nb_cli_apply_changes(vty, NULL);
@@ -1205,11 +1218,17 @@ DEFUN_YANG(no_bgp_confederation_peers_yang, no_bgp_confederation_peers_yang_cmd,
 {
 	int i;
 	char xpath[XPATH_MAXLEN];
+	as_t as;
 
 	for (i = 4; i < argc; i++) {
+		if (!asn_str2asn(argv[i]->arg, &as)) {
+			vty_out(vty, "%% Invalid AS number: %s\n",
+				argv[i]->arg);
+			return CMD_WARNING_CONFIG_FAILED;
+		}
 		snprintf(xpath, sizeof(xpath),
 			 "./global/confederation/member-as[.='%s']",
-			 argv[i]->arg);
+			 asn_asn2asplain(as));
 		nb_cli_enqueue_change(vty, xpath, NB_OP_DESTROY, NULL);
 	}
 	return nb_cli_apply_changes(vty, NULL);
@@ -3378,8 +3397,12 @@ DEFPY_YANG(neighbor_local_as_yang, neighbor_local_as_yang_cmd,
 	if (ret != 0)
 		return CMD_WARNING_CONFIG_FAILED;
 
+	/* Clippy parses ASNUM into as_t as_str; YANG leaf is inet:as-number
+	 * (uint32). Pass plain ASN, not the original ASDOT string.
+	 */
 	snprintf(leaf, sizeof(leaf), "%s/local-as/local-as", xpath);
-	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, as_str_str);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
+			      asn_asn2asplain(as_str));
 	snprintf(leaf, sizeof(leaf), "%s/local-as/no-prepend", xpath);
 	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
 			      noprepend ? "true" : "false");
@@ -4433,6 +4456,7 @@ DEFPY_YANG(neighbor_set_peer_group_yang, neighbor_set_peer_group_yang_cmd,
 {
 	char xpath[XPATH_MAXLEN];
 	char leaf[XPATH_MAXLEN + 256];
+	char pg_path[XPATH_MAXLEN + 256];
 	bool is_pg = false;
 	int ret;
 
@@ -4446,11 +4470,46 @@ DEFPY_YANG(neighbor_set_peer_group_yang, neighbor_set_peer_group_yang_cmd,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
-	snprintf(leaf, sizeof(leaf), "%s/peer-group", xpath);
-	if (no)
+	if (no) {
+		snprintf(leaf, sizeof(leaf), "%s/peer-group", xpath);
 		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
-	else
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, pgname);
+		return nb_cli_apply_changes(vty, NULL);
+	}
+
+	/* Create neighbor list entry; remote-as-type is mandatory on neighbor. */
+	nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+
+	snprintf(pg_path, sizeof(pg_path),
+		 "%s/peer-groups/peer-group[peer-group-name='%s']/neighbor-remote-as/remote-as-type",
+		 VTY_CURR_XPATH, pgname);
+	if (yang_dnode_exists(vty->candidate_config->dnode, pg_path)) {
+		const char *astype;
+		const struct lyd_node *pg_as;
+
+		pg_as = yang_dnode_get(vty->candidate_config->dnode, pg_path);
+		astype = yang_dnode_get_string(pg_as, NULL);
+		snprintf(leaf, sizeof(leaf),
+			 "%s/neighbor-remote-as/remote-as-type", xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, astype);
+
+		snprintf(pg_path, sizeof(pg_path),
+			 "%s/peer-groups/peer-group[peer-group-name='%s']/neighbor-remote-as/remote-as",
+			 VTY_CURR_XPATH, pgname);
+		if (yang_dnode_exists(vty->candidate_config->dnode, pg_path)) {
+			const char *asval;
+			const struct lyd_node *pg_asn;
+
+			pg_asn = yang_dnode_get(vty->candidate_config->dnode,
+						pg_path);
+			asval = yang_dnode_get_string(pg_asn, NULL);
+			snprintf(leaf, sizeof(leaf),
+				 "%s/neighbor-remote-as/remote-as", xpath);
+			nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, asval);
+		}
+	}
+
+	snprintf(leaf, sizeof(leaf), "%s/peer-group", xpath);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, pgname);
 	return nb_cli_apply_changes(vty, NULL);
 }
 
@@ -6181,10 +6240,10 @@ DEFPY_YANG_NOSH(bgp_evpn_vni_yang, bgp_evpn_vni_yang_cmd,
 	struct bgpevpn *vpn;
 	int ret;
 
-	bgp = VTY_GET_CONTEXT(bgp);
-	if (!bgp)
-		return CMD_WARNING;
-
+	/*
+	 * Create via YANG first. Do not require BGP qobj context up front —
+	 * vtysh -f / mgmtd may lack it (same class as segment-routing srv6).
+	 */
 	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
 	snprintf(vni_rel, sizeof(vni_rel), "%s/vni[vni='%" PRIi64 "']", af_xpath,
 		 vni);
@@ -6194,6 +6253,20 @@ DEFPY_YANG_NOSH(bgp_evpn_vni_yang, bgp_evpn_vni_yang_cmd,
 	ret = nb_cli_apply_changes(vty, NULL);
 	if (ret != CMD_SUCCESS)
 		return ret;
+
+	bgp = VTY_GET_CONTEXT(bgp);
+	if (!bgp && vty->xpath_index > 0) {
+		const struct lyd_node *dnode;
+
+		dnode = yang_dnode_get(vty->candidate_config->dnode,
+				       VTY_CURR_XPATH);
+		if (dnode)
+			bgp = nb_running_get_entry(dnode, NULL, false);
+	}
+	if (!bgp) {
+		vty_out(vty, "%% BGP instance not found\n");
+		return CMD_WARNING;
+	}
 
 	vpn = bgp_evpn_lookup_vni(bgp, vni);
 	if (!vpn) {
@@ -8293,14 +8366,10 @@ DEFPY_YANG(neighbor_advertise_map_yang, neighbor_advertise_map_yang_cmd,
 	nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
 
 	if (no) {
-		snprintf(leaf, sizeof(leaf), "%s/%s/conditional-advertisement/advertise-map",
-			 xpath, af);
-		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
-		snprintf(leaf, sizeof(leaf), "%s/%s/conditional-advertisement/exist-map", xpath,
-			 af);
-		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
-		snprintf(leaf, sizeof(leaf), "%s/%s/conditional-advertisement/non-exist-map",
-			 xpath, af);
+		/* Destroy the whole container so leaf destroy order cannot
+		 * re-apply conditional-advertisement via sibling leaves.
+		 */
+		snprintf(leaf, sizeof(leaf), "%s/%s/conditional-advertisement", xpath, af);
 		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
 		return nb_cli_apply_changes(vty, NULL);
 	}
