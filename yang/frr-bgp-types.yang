@@ -233,25 +233,25 @@ module frr-bgp-types {
    */
   typedef route-distinguisher {
     type string {
-      pattern
-        '((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}'
-      +     '([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]):[0-9]{1,10})|'
-      +  '([0-9]{1,5}\.[0-9]{1,5}:[0-9]{1,10})|'
-      +  '([0-9]{1,10}:[0-9]{1,10})';
+      /*
+       * Loose CLI-syntax gate matching ASN:NN / AA.BB:NN / A.B.C.D:NN
+       * and inet_aton-lenient forms such as 100.100.100:100.
+       * Real validation is done by str2prefix_rd() in NB callbacks.
+       */
+      pattern '[^: \t]+:[0-9]{1,10}';
     }
     description
       "FRR route distinguisher as accepted by CLI
-       (ASN:NN, AA.BB:NN, or A.B.C.D:NN).";
+       (ASN:NN, AA.BB:NN, or A.B.C.D:NN; inet_aton-lenient IPv4).";
   }
 
   typedef route-target {
     type string {
-      pattern
-        '([*]:[0-9]{1,10})|'
-      +  '((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}'
-      +     '([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]):[0-9]{1,10})|'
-      +  '([0-9]{1,5}\.[0-9]{1,5}:[0-9]{1,10})|'
-      +  '([0-9]{1,10}:[0-9]{1,10})';
+      /*
+       * Loose CLI-syntax gate; also accepts *:NN for EVPN VRF import.
+       * Real validation is done by ecommunity_str2com() in NB callbacks.
+       */
+      pattern '[^: \t]+:[0-9]{1,10}';
     }
     description
       "FRR route target as accepted by CLI

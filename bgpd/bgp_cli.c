@@ -248,8 +248,7 @@ DEFUN_YANG_NOSH(bgp_segment_routing_srv6_yang, bgp_segment_routing_srv6_yang_cmd
 		"Segment-Routing configuration\n"
 		"Segment-Routing SRv6 configuration\n")
 {
-	VTY_DECLVAR_CONTEXT(bgp, bgp);
-
+	/* Pure node switch; do not require BGP qobj context (vtysh -f / mgmtd). */
 	vty->node = BGP_SRV6_NODE;
 	return CMD_SUCCESS;
 }
@@ -2954,8 +2953,9 @@ DEFPY_YANG(neighbor_description_yang, neighbor_description_yang_cmd,
 	str = argv_concat(argv, argc, 3);
 	snprintf(leaf, sizeof(leaf), "%s/description", xpath);
 	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, str);
+	ret = nb_cli_apply_changes(vty, NULL);
 	XFREE(MTYPE_TMP, str);
-	return nb_cli_apply_changes(vty, NULL);
+	return ret;
 }
 
 DEFPY_YANG(no_neighbor_description_yang, no_neighbor_description_yang_cmd,
@@ -5053,7 +5053,7 @@ ALIAS_ATTR(aggregate_addressv4_yang, aggregate_addressv4_yang_hidden_cmd,
 
 
 DEFPY_YANG(bgp_maxpaths_yang, bgp_maxpaths_yang_cmd,
-	   "[no] maximum-paths [1-" MULTIPATH_NUM_STR "$mpaths]",
+	   "[no] maximum-paths [(1-" MULTIPATH_NUM_STR ")$mpaths]",
 	   NO_STR
 	   "Forward packets over multiple paths\n"
 	   "Number of paths\n")
@@ -5067,15 +5067,15 @@ DEFPY_YANG(bgp_maxpaths_yang, bgp_maxpaths_yang_cmd,
 	if (no)
 		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
 	else {
-		if (!mpaths)
+		if (!mpaths_str)
 			return CMD_WARNING_CONFIG_FAILED;
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, mpaths);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, mpaths_str);
 	}
 	return nb_cli_apply_changes(vty, NULL);
 }
 
 DEFPY_YANG(bgp_maxpaths_ibgp_yang, bgp_maxpaths_ibgp_yang_cmd,
-	   "[no] maximum-paths ibgp [1-" MULTIPATH_NUM_STR "$mpaths [equal-cluster-length$cluster]]",
+	   "[no] maximum-paths ibgp [(1-" MULTIPATH_NUM_STR ")$mpaths [equal-cluster-length$cluster]]",
 	   NO_STR
 	   "Forward packets over multiple paths\n"
 	   "iBGP-multipath\n"
@@ -5094,9 +5094,9 @@ DEFPY_YANG(bgp_maxpaths_ibgp_yang, bgp_maxpaths_ibgp_yang_cmd,
 			 af_xpath);
 		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
 	} else {
-		if (!mpaths)
+		if (!mpaths_str)
 			return CMD_WARNING_CONFIG_FAILED;
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, mpaths);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, mpaths_str);
 		snprintf(leaf, sizeof(leaf), "%s/use-multiple-paths/ibgp/cluster-length-list",
 			 af_xpath);
 		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, cluster ? "true" : "false");
@@ -6635,7 +6635,7 @@ static void bgp_cli_vpn_rt_set(struct vty *vty, const char *af_xpath,
 }
 
 DEFPY_YANG(af_rt_vpn_yang, af_rt_vpn_yang_cmd,
-	   "[no] <rt|route-target> vpn <import|export|both>$direction_str [RTLIST]",
+	   "[no] <rt|route-target> vpn <import|export|both>$direction_str RTLIST...",
 	   NO_STR
 	   "Specify route target list\n"
 	   "Specify route target list\n"
