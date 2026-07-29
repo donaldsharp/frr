@@ -221,9 +221,12 @@ void bgp_nb_cli_show_router_bgp(struct vty *vty, const struct lyd_node *dnode,
 		vty_out(vty, " view %s", name);
 	else if (!strmatch(vrf_name, VRF_DEFAULT_NAME))
 		vty_out(vty, " vrf %s", vrf_name);
-	if (yang_dnode_exists(dnode, "./global/as-notation"))
-		vty_out(vty, " as-notation %s",
-			yang_dnode_get_string(dnode, "./global/as-notation"));
+	/*
+	 * Do not emit "as-notation ..." here. ASDOT is already reflected in
+	 * the ASN display; printing the keyword makes config deltas generate
+	 * "no router bgp X as-notation ..." which the YANG CLI does not
+	 * accept (classic also omits the keyword when notation was inferred).
+	 */
 	vty_out(vty, "\n");
 }
 

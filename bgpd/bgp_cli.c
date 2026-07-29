@@ -223,8 +223,12 @@ DEFUN_YANG_NOSH(router_bgp_yang, router_bgp_yang_cmd,
 }
 
 DEFUN_YANG(no_router_bgp_yang, no_router_bgp_yang_cmd,
-	   "no router bgp [ASNUM [<view|vrf> VIEWVRFNAME]]",
-	   NO_STR ROUTER_STR BGP_STR AS_STR BGP_INSTANCE_HELP_STR)
+	   "no router bgp [ASNUM [<view|vrf> VIEWVRFNAME] [as-notation <dot|dot+|plain>]]",
+	   NO_STR ROUTER_STR BGP_STR AS_STR BGP_INSTANCE_HELP_STR
+	   "Force the AS notation output style\n"
+	   "Ignore as-notation on delete\n"
+	   "Ignore as-notation on delete\n"
+	   "Ignore as-notation on delete\n")
 {
 	char cpp_xpath[XPATH_MAXLEN];
 	const char *name = VRF_DEFAULT_NAME;
@@ -2762,18 +2766,25 @@ static int bgp_cli_enqueue_remote_as(struct vty *vty, const char *base_xpath,
 			 base_xpath);
 		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
 				      asn_asn2asplain(as_num));
-	} else if (internal) {
-		snprintf(leaf, sizeof(leaf),
-			 "%s/neighbor-remote-as/remote-as-type", base_xpath);
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "internal");
-	} else if (as_auto) {
-		snprintf(leaf, sizeof(leaf),
-			 "%s/neighbor-remote-as/remote-as-type", base_xpath);
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "auto");
 	} else {
+		/*
+		 * remote-as is when-gated on as-specified. Clear any leftover
+		 * ASN leaf before/with switching to internal/external/auto
+		 * (e.g. after peer-group join copied the group's ASN).
+		 */
+		snprintf(leaf, sizeof(leaf), "%s/neighbor-remote-as/remote-as",
+			 base_xpath);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+
+		if (internal)
+			as_type = "internal";
+		else if (as_auto)
+			as_type = "auto";
+		else
+			as_type = "external";
 		snprintf(leaf, sizeof(leaf),
 			 "%s/neighbor-remote-as/remote-as-type", base_xpath);
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "external");
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, as_type);
 	}
 	return CMD_SUCCESS;
 }
@@ -7415,6 +7426,14 @@ DEFPY_YANG(neighbor_dampening_yang, neighbor_dampening_yang_cmd,
 		return CMD_WARNING_CONFIG_FAILED;
 
 	nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
+
+	/* Dampening leaves live under afi-safi/<af>/route-flap-dampening. */
+	{
+		const char *af = bgp_cli_afi_safi_name(vty->node);
+		size_t len = strlen(xpath);
+
+		snprintf(xpath + len, sizeof(xpath) - len, "/%s", af);
+	}
 
 	if (no) {
 		snprintf(leaf, sizeof(leaf),
