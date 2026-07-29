@@ -471,7 +471,8 @@ submodule frr-bgp-common-structure {
         type enumeration {
           enum disabled {
             description
-              "Do not advertise the software-version capability.";
+              "Do not advertise the software-version capability
+               (explicit override of bgp default).";
           }
           enum old-encoding {
             description
@@ -484,11 +485,11 @@ submodule frr-bgp-common-structure {
                encoding.";
           }
         }
-        default "disabled";
         description
           "Advertise the software-version capability to this peer.
            Maps to: neighbor <peer> capability software-version
-           [latest-encoding].";
+           [latest-encoding]. Absent means inherit from
+           'bgp default software-version-capability'.";
       }
 
       leaf link-local-capability {
@@ -1228,9 +1229,11 @@ submodule frr-bgp-common-structure {
       description
         "Preferred encapsulation for routes advertised to this peer.
          Maps to: neighbor <peer> encapsulation-mpls|
-         encapsulation-srv6|encapsulation-srv6-relax.";
+         encapsulation-srv6|encapsulation-srv6-relax.
+         MPLS and SRv6 may both be configured (classic CLI); srv6 and
+         srv6-relax remain mutually exclusive.";
 
-      leaf type {
+      leaf-list type {
         type enumeration {
           enum mpls {
             description
@@ -1249,7 +1252,8 @@ submodule frr-bgp-common-structure {
           }
         }
         description
-          "Encapsulation type.";
+          "Encapsulation type(s). Multiple values allowed so MPLS and
+           SRv6 can be set together.";
       }
     }
   }

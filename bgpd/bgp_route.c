@@ -4505,15 +4505,29 @@ void bgp_process_main_one(struct bgp *bgp, struct bgp_dest *dest, afi_t afi, saf
 #ifdef ENABLE_BGP_VNC
 	if ((afi == AFI_IP || afi == AFI_IP6) && (safi == SAFI_UNICAST)) {
 		if (old_select != new_select) {
-			if (old_select) {
-				vnc_import_bgp_exterior_del_route(bgp, p,
-								  old_select);
-				vnc_import_bgp_del_route(bgp, p, old_select);
-			}
-			if (new_select) {
-				vnc_import_bgp_exterior_add_route(bgp, p,
-								  new_select);
-				vnc_import_bgp_add_route(bgp, p, new_select);
+			/*
+			 * Export feedback: vnc-direct paths installed by
+			 * "vnc export bgp" must not displace resolve-nve
+			 * redistribution that tracks CE BGP paths. When the
+			 * new best is ZEBRA_ROUTE_VNC_DIRECT, keep resolve-nve
+			 * state keyed off the previous CE path.
+			 */
+			if (new_select &&
+			    new_select->type == ZEBRA_ROUTE_VNC_DIRECT) {
+				/* leave resolve-nve / exterior as-is */
+			} else {
+				if (old_select) {
+					vnc_import_bgp_exterior_del_route(
+						bgp, p, old_select);
+					vnc_import_bgp_del_route(bgp, p,
+								 old_select);
+				}
+				if (new_select) {
+					vnc_import_bgp_exterior_add_route(
+						bgp, p, new_select);
+					vnc_import_bgp_add_route(bgp, p,
+								 new_select);
+				}
 			}
 		}
 	}

@@ -772,7 +772,7 @@ struct bgp {
 #define BGP_FLAG_IPV6_NO_AUTO_RA	    (1ULL << 40)
 #define BGP_FLAG_LINK_LOCAL_CAPABILITY	    (1ULL << 43)
 #define BGP_FLAG_VRF_MAY_LISTEN		    (1ULL << 44)
-#define BGP_FLAG_SOFT_VERSION_CAPABILITY_NEW (1ULL << 45)
+#define BGP_FLAG_SOFT_VERSION_CAPABILITY_NEW (1ULL << 47)
 #define BGP_FLAG_USE_RECURSIVE_WEIGHT (1ULL << 46)
 
 /* Use current (imported) path's attributes instead of source path's attributes
@@ -2845,6 +2845,7 @@ extern int peer_ebgp_multihop_set(struct peer *peer, int ttl, bool record_cfg);
 extern int peer_ebgp_multihop_unset(struct peer *peer, bool record_cfg);
 extern void peer_cfg_ttl_set(struct peer *peer, int cfg_ttl);
 extern int peer_gtsm_configured(struct peer *peer);
+extern int peer_ebgp_multihop_cfg(struct peer *peer);
 extern int is_ebgp_multihop_configured(struct peer *peer);
 
 extern int peer_role_set(struct peer *peer, uint8_t role, bool strict_mode);
@@ -3262,6 +3263,20 @@ static inline uint32_t bgp_vrf_interfaces(struct bgp *bgp, bool active)
 /* Link BGP instance to VRF. */
 static inline void bgp_vrf_link(struct bgp *bgp, struct vrf *vrf)
 {
+	/*
+	 * If another BGP instance still owns vrf->info (e.g. an AUTO instance
+	 * created by L3VNI before YANG "router bgp … vrf" claimed the name),
+	 * release that lock and clear its vrf_id. Otherwise we leak the old
+	 * instance and leave Type-5 / RD config on a different struct bgp.
+	 */
+	if (vrf->info && vrf->info != (void *)bgp) {
+		struct bgp *old = vrf->info;
+
+		old->vrf_id = VRF_UNKNOWN;
+		vrf->info = NULL;
+		bgp_unlock(old);
+	}
+
 	bgp->vrf_id = vrf->vrf_id;
 	if (vrf->info != (void *)bgp)
 		vrf->info = (void *)bgp_lock(bgp);

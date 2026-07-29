@@ -42,6 +42,34 @@ static int collect_leaflist_value(const struct lyd_node *dnode, void *arg)
 	return YANG_ITER_CONTINUE;
 }
 
+/*
+ * Like collect_leaflist_value, but prefixes every value with a keyword
+ * (e.g. "rt" / "soo" / "nt") so ecommunity_str2com(..., keyword_included=1)
+ * accepts multi-value entries: "rt A:B rt C:D".
+ */
+struct leaflist_kw_collector {
+	char *buffer;
+	size_t buffer_size;
+	const char *keyword;
+	bool first;
+};
+
+static int collect_leaflist_keyword_value(const struct lyd_node *dnode,
+					  void *arg)
+{
+	struct leaflist_kw_collector *collector = arg;
+	const char *val = lyd_get_value(dnode);
+
+	if (!collector->first)
+		strlcat(collector->buffer, " ", collector->buffer_size);
+	strlcat(collector->buffer, collector->keyword, collector->buffer_size);
+	strlcat(collector->buffer, " ", collector->buffer_size);
+	strlcat(collector->buffer, val, collector->buffer_size);
+	collector->first = false;
+
+	return YANG_ITER_CONTINUE;
+}
+
 /* Shared helpers for community / large / extcommunity list cli_show. */
 static void bgp_filter_cli_show_style_line(struct vty *vty, const char *kind,
 					   const char *name, bool numbered,
@@ -149,11 +177,6 @@ static void lib_extcommunity_list_entry_cli_show(struct vty *vty,
 	const char *type_str;
 	char comm_str[512] = "";
 	bool standard;
-	struct leaflist_collector collector = {
-		.buffer = comm_str,
-		.buffer_size = sizeof(comm_str),
-		.first = true,
-	};
 
 	name = yang_dnode_get_string(dnode, "../name");
 	seq = yang_dnode_get_uint32(dnode, "sequence");
@@ -163,16 +186,31 @@ static void lib_extcommunity_list_entry_cli_show(struct vty *vty,
 
 	if (standard) {
 		if (yang_dnode_exists(dnode, "extcommunity-rt")) {
-			strlcpy(comm_str, "rt ", sizeof(comm_str));
-			yang_dnode_iterate(collect_leaflist_value, &collector,
+			struct leaflist_kw_collector kw = {
+				.buffer = comm_str,
+				.buffer_size = sizeof(comm_str),
+				.keyword = "rt",
+				.first = true,
+			};
+			yang_dnode_iterate(collect_leaflist_keyword_value, &kw,
 					   dnode, "extcommunity-rt");
 		} else if (yang_dnode_exists(dnode, "extcommunity-soo")) {
-			strlcpy(comm_str, "soo ", sizeof(comm_str));
-			yang_dnode_iterate(collect_leaflist_value, &collector,
+			struct leaflist_kw_collector kw = {
+				.buffer = comm_str,
+				.buffer_size = sizeof(comm_str),
+				.keyword = "soo",
+				.first = true,
+			};
+			yang_dnode_iterate(collect_leaflist_keyword_value, &kw,
 					   dnode, "extcommunity-soo");
 		} else if (yang_dnode_exists(dnode, "extcommunity-nt")) {
-			strlcpy(comm_str, "nt ", sizeof(comm_str));
-			yang_dnode_iterate(collect_leaflist_value, &collector,
+			struct leaflist_kw_collector kw = {
+				.buffer = comm_str,
+				.buffer_size = sizeof(comm_str),
+				.keyword = "nt",
+				.first = true,
+			};
+			yang_dnode_iterate(collect_leaflist_keyword_value, &kw,
 					   dnode, "extcommunity-nt");
 		}
 	} else if (yang_dnode_exists(dnode, "expanded-extcommunity-string")) {
@@ -577,7 +615,12 @@ int lib_extcommunity_list_destroy(struct nb_cb_destroy_args *args)
 /*
  * XPath: /frr-filter:lib/frr-bgp-filter:extcommunity-list/entry
  */
-int lib_extcommunity_list_entry_create(struct nb_cb_create_args *args)
+/*
+ * Install (or refresh) an extcommunity-list entry from the full candidate
+ * dnode. Used from create APPLY and apply_finish so RT/SOO leaflist children
+ * are present even when their create callbacks are no-ops.
+ */
+static int lib_extcommunity_list_entry_install(const struct lyd_node *dnode)
 {
 	const char *name;
 	const char *seq_str;
@@ -588,74 +631,85 @@ int lib_extcommunity_list_entry_create(struct nb_cb_create_args *args)
 	int ret;
 	char comm_str[512] = "";
 
-	if (args->event != NB_EV_APPLY)
-		return NB_OK;
+	name = yang_dnode_get_string(dnode, "../name");
+	seq_str = yang_dnode_get_string(dnode, "sequence");
 
-	name = yang_dnode_get_string(args->dnode, "../name");
-	seq_str = yang_dnode_get_string(args->dnode, "sequence");
+	action_str = yang_dnode_get_string(dnode, "action");
+	direct = (strcmp(action_str, "permit") == 0) ? COMMUNITY_PERMIT
+						     : COMMUNITY_DENY;
 
-	action_str = yang_dnode_get_string(args->dnode, "action");
-	direct = (strcmp(action_str, "permit") == 0) ? COMMUNITY_PERMIT : COMMUNITY_DENY;
-
-	type_str = yang_dnode_get_string(args->dnode, "type");
+	type_str = yang_dnode_get_string(dnode, "type");
 	if (strcmp(type_str, "extcommunity-list-standard-id") == 0 ||
 	    strcmp(type_str, "extcommunity-list-standard-name") == 0) {
 		style = EXTCOMMUNITY_LIST_STANDARD;
 
-		/* Check for rt or soo */
-		if (yang_dnode_exists(args->dnode, "extcommunity-rt")) {
-			struct leaflist_collector collector = {
+		if (yang_dnode_exists(dnode, "extcommunity-rt")) {
+			struct leaflist_kw_collector collector = {
 				.buffer = comm_str,
 				.buffer_size = sizeof(comm_str),
+				.keyword = "rt",
 				.first = true,
 			};
-			strlcpy(comm_str, "rt ", sizeof(comm_str));
-			collector.first = false; /* We already have "rt " prefix */
-			yang_dnode_iterate(collect_leaflist_value, &collector,
-					   args->dnode, "extcommunity-rt");
-		} else if (yang_dnode_exists(args->dnode, "extcommunity-soo")) {
-			struct leaflist_collector collector = {
+			yang_dnode_iterate(collect_leaflist_keyword_value,
+					   &collector, dnode,
+					   "extcommunity-rt");
+		} else if (yang_dnode_exists(dnode, "extcommunity-soo")) {
+			struct leaflist_kw_collector collector = {
 				.buffer = comm_str,
 				.buffer_size = sizeof(comm_str),
+				.keyword = "soo",
 				.first = true,
 			};
-			strlcpy(comm_str, "soo ", sizeof(comm_str));
-			collector.first = false; /* We already have "soo " prefix */
-			yang_dnode_iterate(collect_leaflist_value, &collector,
-					   args->dnode, "extcommunity-soo");
-		} else if (yang_dnode_exists(args->dnode, "extcommunity-nt")) {
-			struct leaflist_collector collector = {
+			yang_dnode_iterate(collect_leaflist_keyword_value,
+					   &collector, dnode,
+					   "extcommunity-soo");
+		} else if (yang_dnode_exists(dnode, "extcommunity-nt")) {
+			struct leaflist_kw_collector collector = {
 				.buffer = comm_str,
 				.buffer_size = sizeof(comm_str),
+				.keyword = "nt",
 				.first = true,
 			};
-			strlcpy(comm_str, "nt ", sizeof(comm_str));
-			collector.first = false; /* We already have "nt " prefix */
-			yang_dnode_iterate(collect_leaflist_value, &collector,
-					   args->dnode, "extcommunity-nt");
+			yang_dnode_iterate(collect_leaflist_keyword_value,
+					   &collector, dnode,
+					   "extcommunity-nt");
 		}
 	} else {
 		style = EXTCOMMUNITY_LIST_EXPANDED;
 
-		if (yang_dnode_exists(args->dnode, "expanded-extcommunity-string")) {
-			const char *regex = yang_dnode_get_string(args->dnode,
-					"expanded-extcommunity-string");
+		if (yang_dnode_exists(dnode, "expanded-extcommunity-string")) {
+			const char *regex = yang_dnode_get_string(
+				dnode, "expanded-extcommunity-string");
 			strlcpy(comm_str, regex, sizeof(comm_str));
 		}
 	}
 
-	if (comm_str[0] == '\0') {
-		zlog_warn("extcommunity-list %s: no community string specified", name);
-		return NB_ERR_VALIDATION;
-	}
+	if (comm_str[0] == '\0')
+		return NB_OK;
 
-	ret = extcommunity_list_set(bgp_clist, name, comm_str, seq_str, direct, style);
+	ret = extcommunity_list_set(bgp_clist, name, comm_str, seq_str, direct,
+				    style);
 	if (ret < 0) {
-		zlog_warn("extcommunity-list %s: failed to set entry: %d", name, ret);
+		zlog_warn("extcommunity-list %s: failed to set entry: %d", name,
+			  ret);
 		return NB_ERR_RESOURCE;
 	}
 
 	return NB_OK;
+}
+
+int lib_extcommunity_list_entry_create(struct nb_cb_create_args *args)
+{
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	return lib_extcommunity_list_entry_install(args->dnode);
+}
+
+static void lib_extcommunity_list_entry_apply_finish(
+	struct nb_cb_apply_finish_args *args)
+{
+	lib_extcommunity_list_entry_install(args->dnode);
 }
 
 int lib_extcommunity_list_entry_destroy(struct nb_cb_destroy_args *args)
@@ -683,35 +737,35 @@ int lib_extcommunity_list_entry_destroy(struct nb_cb_destroy_args *args)
 		style = EXTCOMMUNITY_LIST_STANDARD;
 
 		if (yang_dnode_exists(args->dnode, "extcommunity-rt")) {
-			struct leaflist_collector collector = {
+			struct leaflist_kw_collector collector = {
 				.buffer = comm_str,
 				.buffer_size = sizeof(comm_str),
+				.keyword = "rt",
 				.first = true,
 			};
-			strlcpy(comm_str, "rt ", sizeof(comm_str));
-			collector.first = false; /* We already have "rt " prefix */
-			yang_dnode_iterate(collect_leaflist_value, &collector,
-					   args->dnode, "extcommunity-rt");
+			yang_dnode_iterate(collect_leaflist_keyword_value,
+					   &collector, args->dnode,
+					   "extcommunity-rt");
 		} else if (yang_dnode_exists(args->dnode, "extcommunity-soo")) {
-			struct leaflist_collector collector = {
+			struct leaflist_kw_collector collector = {
 				.buffer = comm_str,
 				.buffer_size = sizeof(comm_str),
+				.keyword = "soo",
 				.first = true,
 			};
-			strlcpy(comm_str, "soo ", sizeof(comm_str));
-			collector.first = false; /* We already have "soo " prefix */
-			yang_dnode_iterate(collect_leaflist_value, &collector,
-					   args->dnode, "extcommunity-soo");
+			yang_dnode_iterate(collect_leaflist_keyword_value,
+					   &collector, args->dnode,
+					   "extcommunity-soo");
 		} else if (yang_dnode_exists(args->dnode, "extcommunity-nt")) {
-			struct leaflist_collector collector = {
+			struct leaflist_kw_collector collector = {
 				.buffer = comm_str,
 				.buffer_size = sizeof(comm_str),
+				.keyword = "nt",
 				.first = true,
 			};
-			strlcpy(comm_str, "nt ", sizeof(comm_str));
-			collector.first = false; /* We already have "nt " prefix */
-			yang_dnode_iterate(collect_leaflist_value, &collector,
-					   args->dnode, "extcommunity-nt");
+			yang_dnode_iterate(collect_leaflist_keyword_value,
+					   &collector, args->dnode,
+					   "extcommunity-nt");
 		}
 	} else {
 		style = EXTCOMMUNITY_LIST_EXPANDED;
@@ -1840,6 +1894,7 @@ const struct frr_yang_module_info frr_bgp_filter_info = {
 				.get_keys = lib_extcommunity_list_entry_get_keys,
 				.lookup_entry = lib_extcommunity_list_entry_lookup_entry,
 				.cli_show = lib_extcommunity_list_entry_cli_show,
+				.apply_finish = lib_extcommunity_list_entry_apply_finish,
 			}
 		},
 		{

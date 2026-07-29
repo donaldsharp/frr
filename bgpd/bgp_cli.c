@@ -30,6 +30,8 @@
 #include "bgpd/bgp_evpn.h"
 #include "bgpd/bgp_evpn_private.h"
 #include "bgpd/bgp_filter_cli.h"
+#include "bgpd/bgp_open.h"
+#include "bgpd/bgp_packet.h"
 #ifdef ENABLE_BGP_VNC
 #include "bgpd/bgp_vnc_nb.h"
 #endif
@@ -202,6 +204,28 @@ DEFUN_YANG_NOSH(router_bgp_yang, router_bgp_yang_cmd,
 				      asnotation == ASNOTATION_DOTPLUS
 					      ? "dot+"
 					      : "dot");
+	}
+
+	/*
+	 * Seed YANG to match bgp_create()'s default_af IPv4 unicast, but only
+	 * for a new instance. Re-entering an existing router must not restore
+	 * a previously removed default. Without the leaf, "no bgp default
+	 * ipv4-unicast" DESTROY is a no-op and labeled-unicast activate fails.
+	 */
+	{
+		struct bgp *existing;
+
+		if (strmatch(vrf_name, VRF_DEFAULT_NAME))
+			existing = bgp_get_default();
+		else
+			existing = bgp_lookup_by_name(name);
+		if (!existing) {
+			snprintf(leaf_xpath, sizeof(leaf_xpath),
+				 "%s/global/default-afi-safi[.='ipv4-unicast']",
+				 bgp_xpath);
+			nb_cli_enqueue_change(vty, leaf_xpath, NB_OP_CREATE,
+					      NULL);
+		}
 	}
 
 	ret = nb_cli_apply_changes(vty, NULL);
@@ -1170,15 +1194,34 @@ DEFUN_YANG(bgp_confederation_identifier_yang,
 	   AS_STR)
 {
 	as_t as;
+	int ret;
+	char asplain[32];
+	struct bgp *bgp;
 
 	if (!asn_str2asn(argv[3]->arg, &as)) {
 		vty_out(vty, "%% Invalid AS number: %s\n", argv[3]->arg);
 		return CMD_WARNING_CONFIG_FAILED;
 	}
-	/* inet:as-number is uint32; convert ASDOT before YANG apply. */
+	/*
+	 * Do not VTY_DECLVAR_CONTEXT here: during integrated frr.conf load
+	 * (XFRR batch) router-bgp context is not pushed until commit, and
+	 * DECLVAR would abort before YANG apply — leaving confed_id unset.
+	 */
+	snprintf(asplain, sizeof(asplain), "%u", as);
 	nb_cli_enqueue_change(vty, "./global/confederation/identifier",
-			      NB_OP_MODIFY, asn_asn2asplain(as));
-	return nb_cli_apply_changes(vty, NULL);
+			      NB_OP_MODIFY, asplain);
+	ret = nb_cli_apply_changes(vty, NULL);
+	/*
+	 * Preserve user-facing notation (e.g. "1.0") when the instance
+	 * already exists (interactive / post-commit). During XFRR batch
+	 * bgp is often still NULL — the NB modify callback sets confed_id.
+	 */
+	if (ret == CMD_SUCCESS) {
+		bgp = VTY_GET_CONTEXT(bgp);
+		if (bgp)
+			bgp_confederation_id_set(bgp, as, argv[3]->arg);
+	}
+	return ret;
 }
 
 DEFUN_YANG(no_bgp_confederation_identifier_yang,
@@ -2478,13 +2521,16 @@ DEFUN_YANG(bgp_shutdown_msg_yang, bgp_shutdown_msg_yang_cmd,
 	   "Shutdown message\n")
 {
 	char *msgstr;
+	int ret;
 
 	msgstr = argv_concat(argv, argc, 3);
 	nb_cli_enqueue_change(vty, "./global/shutdown", NB_OP_MODIFY, "true");
 	nb_cli_enqueue_change(vty, "./global/shutdown-message", NB_OP_MODIFY,
 			      msgstr);
+	/* Pointer is stored in the change list — free only after apply. */
+	ret = nb_cli_apply_changes(vty, NULL);
 	XFREE(MTYPE_TMP, msgstr);
-	return nb_cli_apply_changes(vty, NULL);
+	return ret;
 }
 
 DEFUN_YANG(no_bgp_shutdown_yang, no_bgp_shutdown_yang_cmd, "no bgp shutdown",
@@ -3154,8 +3200,10 @@ DEFPY_YANG(neighbor_shutdown_msg_yang, neighbor_shutdown_msg_yang_cmd,
 	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "true");
 	snprintf(leaf, sizeof(leaf), "%s/admin-shutdown/message", xpath);
 	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, msgstr);
+	/* Pointer is stored in the change list — free only after apply. */
+	ret = nb_cli_apply_changes(vty, NULL);
 	XFREE(MTYPE_TMP, msgstr);
-	return nb_cli_apply_changes(vty, NULL);
+	return ret;
 }
 
 DEFPY_YANG(no_neighbor_shutdown_msg_yang, no_neighbor_shutdown_msg_yang_cmd,
@@ -3728,6 +3776,12 @@ DEFPY_YANG(neighbor_capability_software_version_yang,
 	snprintf(leaf, sizeof(leaf),
 		 "%s/capability-options/software-version-capability", xpath);
 	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, val);
+	/*
+	 * Leaf has no YANG default: "disabled" is a real override of
+	 * bgp default software-version. Capability messages are sent
+	 * solely by the NB modify/destroy callbacks — do not send again
+	 * here (would double capabilityRecv).
+	 */
 	return nb_cli_apply_changes(vty, NULL);
 }
 
@@ -3983,7 +4037,10 @@ DEFPY_YANG(neighbor_bfd_param_yang, neighbor_bfd_param_yang_cmd,
 {
 	char xpath[XPATH_MAXLEN];
 	char leaf[XPATH_MAXLEN + 256];
-	char buf[16];
+	/* Distinct buffers: nb_cli_enqueue_change stores the pointer, not a copy. */
+	char detect_buf[16];
+	char min_rx_buf[16];
+	char min_tx_buf[16];
 	bool is_pg = false;
 	int ret;
 
@@ -3994,15 +4051,15 @@ DEFPY_YANG(neighbor_bfd_param_yang, neighbor_bfd_param_yang_cmd,
 
 	snprintf(leaf, sizeof(leaf), "%s/bfd-options/enable", xpath);
 	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, "true");
-	snprintf(buf, sizeof(buf), "%" PRIi64, detect);
+	snprintf(detect_buf, sizeof(detect_buf), "%" PRIi64, detect);
 	snprintf(leaf, sizeof(leaf), "%s/bfd-options/detect-multiplier", xpath);
-	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
-	snprintf(buf, sizeof(buf), "%" PRIi64, min_rx);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, detect_buf);
+	snprintf(min_rx_buf, sizeof(min_rx_buf), "%" PRIi64, min_rx);
 	snprintf(leaf, sizeof(leaf), "%s/bfd-options/required-min-rx", xpath);
-	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
-	snprintf(buf, sizeof(buf), "%" PRIi64, min_tx);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, min_rx_buf);
+	snprintf(min_tx_buf, sizeof(min_tx_buf), "%" PRIi64, min_tx);
 	snprintf(leaf, sizeof(leaf), "%s/bfd-options/desired-min-tx", xpath);
-	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, min_tx_buf);
 	return nb_cli_apply_changes(vty, NULL);
 }
 
@@ -5200,18 +5257,25 @@ static int bgp_cli_redistribute(struct vty *vty, const char *proto,
 	struct bgp *bgp;
 
 	if (strmatch(proto, "table-direct")) {
+		/*
+		 * During XFRR batch load, router-bgp context is not pushed
+		 * yet — do not abort. NB validate covers table/VRF checks.
+		 */
 		bgp = VTY_GET_CONTEXT(bgp);
-		if (!bgp)
-			return CMD_WARNING_CONFIG_FAILED;
-		if (instance == RT_TABLE_MAIN || instance == RT_TABLE_LOCAL) {
-			vty_out(vty, "%% 'table-direct', can not use %u routing table\n", instance);
-			return CMD_WARNING_CONFIG_FAILED;
-		}
-		if (vty->node == BGP_IPV6_NODE &&
-		    bgp->vrf_id != VRF_DEFAULT) {
-			vty_out(vty,
-				"%% Only default BGP instance can use 'table-direct'\n");
-			return CMD_WARNING_CONFIG_FAILED;
+		if (bgp) {
+			if (instance == RT_TABLE_MAIN ||
+			    instance == RT_TABLE_LOCAL) {
+				vty_out(vty,
+					"%% 'table-direct', can not use %u routing table\n",
+					instance);
+				return CMD_WARNING_CONFIG_FAILED;
+			}
+			if (vty->node == BGP_IPV6_NODE &&
+			    bgp->vrf_id != VRF_DEFAULT) {
+				vty_out(vty,
+					"%% Only default BGP instance can use 'table-direct'\n");
+				return CMD_WARNING_CONFIG_FAILED;
+			}
 		}
 	}
 
@@ -5340,7 +5404,7 @@ DEFPY_YANG(bgp_distance_yang, bgp_distance_yang_cmd,
 {
 	char af_xpath[XPATH_MAXLEN];
 	char leaf[XPATH_MAXLEN + 256];
-	char buf[8];
+	char ext_buf[8], int_buf[8], local_buf[8];
 
 	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
 	nb_cli_enqueue_change(vty, af_xpath, NB_OP_CREATE, NULL);
@@ -5358,15 +5422,19 @@ DEFPY_YANG(bgp_distance_yang, bgp_distance_yang_cmd,
 	if (!ext_str || !internal_str || !local_str)
 		return CMD_WARNING_CONFIG_FAILED;
 
+	/*
+	 * Distinct buffers: nb_cli_enqueue_change stores the value pointer
+	 * until apply; reusing one buf made all three leaves the last value.
+	 */
 	snprintf(leaf, sizeof(leaf), "%s/admin-distance/external", af_xpath);
-	snprintf(buf, sizeof(buf), "%" PRIi64, ext);
-	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	snprintf(ext_buf, sizeof(ext_buf), "%" PRIi64, ext);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, ext_buf);
 	snprintf(leaf, sizeof(leaf), "%s/admin-distance/internal", af_xpath);
-	snprintf(buf, sizeof(buf), "%" PRIi64, internal);
-	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	snprintf(int_buf, sizeof(int_buf), "%" PRIi64, internal);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, int_buf);
 	snprintf(leaf, sizeof(leaf), "%s/admin-distance/local", af_xpath);
-	snprintf(buf, sizeof(buf), "%" PRIi64, local);
-	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, buf);
+	snprintf(local_buf, sizeof(local_buf), "%" PRIi64, local);
+	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, local_buf);
 	return nb_cli_apply_changes(vty, NULL);
 }
 
@@ -6245,14 +6313,20 @@ DEFPY_YANG_NOSH(bgp_evpn_vni_yang, bgp_evpn_vni_yang_cmd,
 	char af_xpath[XPATH_MAXLEN];
 	char vni_rel[XPATH_MAXLEN + 256];
 	char vni_abs[XPATH_MAXLEN + 256];
-	struct bgp *bgp;
-	struct bgpevpn *vpn;
 	int ret;
 
 	/*
-	 * Create via YANG first. Do not require BGP qobj context up front —
-	 * vtysh -f / mgmtd may lack it (same class as segment-routing srv6).
+	 * Pure YANG enter (like bmp targets): create the VNI in the
+	 * candidate and push its xpath. Do not require a live BGP/VPN
+	 * object — under XFRR batch APPLY is deferred, so VTY context /
+	 * nb_running lookups fail and nested "flooding …" would otherwise
+	 * land on the parent EVPN node (overwriting global flooding).
 	 */
+	if (vty->xpath_index == 0) {
+		vty_out(vty, "%% Missing BGP YANG context\n");
+		return CMD_WARNING;
+	}
+
 	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
 	snprintf(vni_rel, sizeof(vni_rel), "%s/vni[vni='%" PRIi64 "']", af_xpath,
 		 vni);
@@ -6263,37 +6337,11 @@ DEFPY_YANG_NOSH(bgp_evpn_vni_yang, bgp_evpn_vni_yang_cmd,
 	if (ret != CMD_SUCCESS)
 		return ret;
 
-	bgp = VTY_GET_CONTEXT(bgp);
-	if (!bgp && vty->xpath_index > 0) {
-		const struct lyd_node *dnode;
-
-		dnode = yang_dnode_get(vty->candidate_config->dnode,
-				       VTY_CURR_XPATH);
-		if (dnode)
-			bgp = nb_running_get_entry(dnode, NULL, false);
-	}
-	if (!bgp) {
-		vty_out(vty, "%% BGP instance not found\n");
-		return CMD_WARNING;
-	}
-
-	vpn = bgp_evpn_lookup_vni(bgp, vni);
-	if (!vpn) {
-		vty_out(vty, "%% Failed to create VNI\n");
-		return CMD_WARNING;
-	}
-
-	if (vty->xpath_index == 0) {
-		vty_out(vty, "%% Missing BGP YANG context\n");
-		return CMD_WARNING;
-	}
-
 	snprintf(vni_abs, sizeof(vni_abs),
 		 "%s/global/afi-safis/afi-safi[afi-safi-name='frr-routing:l2vpn-evpn']/l2vpn-evpn/vni[vni='%" PRIi64
 		 "']",
 		 VTY_CURR_XPATH, vni);
 	VTY_PUSH_XPATH(BGP_EVPN_VNI_NODE, vni_abs);
-	VTY_PUSH_CONTEXT_SUB(BGP_EVPN_VNI_NODE, vpn);
 	return CMD_SUCCESS;
 }
 
@@ -7546,13 +7594,14 @@ DEFPY_YANG(neighbor_encap_srv6_yang, neighbor_encap_srv6_yang_cmd,
 
 	af = bgp_cli_afi_safi_name(vty->node);
 	nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
-	snprintf(leaf, sizeof(leaf), "%s/%s/encapsulation/type", xpath, af);
 
 	yang_val = strmatch(encap, "encapsulation-srv6-relax") ? "srv6-relax"
 							       : "srv6";
 	flag = strmatch(encap, "encapsulation-srv6-relax")
 		       ? PEER_FLAG_CONFIG_ENCAPSULATION_SRV6_RELAX
 		       : PEER_FLAG_CONFIG_ENCAPSULATION_SRV6;
+	snprintf(leaf, sizeof(leaf), "%s/%s/encapsulation/type[.='%s']", xpath,
+		 af, yang_val);
 
 	if (no) {
 		peer = peer_and_group_lookup_vty(vty, neighbor);
@@ -7565,7 +7614,7 @@ DEFPY_YANG(neighbor_encap_srv6_yang, neighbor_encap_srv6_yang_cmd,
 		}
 		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
 	} else
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, yang_val);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_CREATE, yang_val);
 
 	return nb_cli_apply_changes(vty, NULL);
 }
@@ -7581,10 +7630,11 @@ DEFPY_YANG(neighbor_encapsulation_srv6_or_mpls_yang,
 	char leaf[XPATH_MAXLEN + 256];
 	bool is_pg = false;
 	const char *af;
+	const char *yang_val;
 	struct peer *peer;
 	afi_t afi;
 	safi_t safi;
-	uint64_t flag, other;
+	uint64_t flag;
 	int ret;
 
 	ret = bgp_cli_peer_af_xpath(vty, peer_str, xpath, sizeof(xpath),
@@ -7594,7 +7644,12 @@ DEFPY_YANG(neighbor_encapsulation_srv6_or_mpls_yang,
 
 	af = bgp_cli_afi_safi_name(vty->node);
 	nb_cli_enqueue_change(vty, xpath, NB_OP_CREATE, NULL);
-	snprintf(leaf, sizeof(leaf), "%s/%s/encapsulation/type", xpath, af);
+
+	yang_val = srv6 ? "srv6" : "mpls";
+	flag = srv6 ? PEER_FLAG_CONFIG_ENCAPSULATION_SRV6
+		    : PEER_FLAG_CONFIG_ENCAPSULATION_MPLS;
+	snprintf(leaf, sizeof(leaf), "%s/%s/encapsulation/type[.='%s']", xpath,
+		 af, yang_val);
 
 	if (no) {
 		peer = peer_and_group_lookup_vty(vty, peer_str);
@@ -7602,23 +7657,13 @@ DEFPY_YANG(neighbor_encapsulation_srv6_or_mpls_yang,
 			return CMD_WARNING_CONFIG_FAILED;
 		afi = bgp_node_afi(vty);
 		safi = bgp_node_safi(vty);
-		flag = srv6 ? PEER_FLAG_CONFIG_ENCAPSULATION_SRV6
-			    : PEER_FLAG_CONFIG_ENCAPSULATION_MPLS;
-		other = srv6 ? PEER_FLAG_CONFIG_ENCAPSULATION_MPLS
-			     : PEER_FLAG_CONFIG_ENCAPSULATION_SRV6;
 
 		if (!peergroup_af_flag_check(peer, afi, safi, flag))
 			return CMD_SUCCESS;
 
-		/* Keep the other encapsulation if still configured. */
-		if (peergroup_af_flag_check(peer, afi, safi, other))
-			nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
-					      srv6 ? "mpls" : "srv6");
-		else
-			nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
 	} else
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY,
-				      srv6 ? "srv6" : "mpls");
+		nb_cli_enqueue_change(vty, leaf, NB_OP_CREATE, yang_val);
 
 	return nb_cli_apply_changes(vty, NULL);
 }
