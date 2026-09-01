@@ -5291,7 +5291,7 @@ DEFPY(show_bgp_l2vpn_evpn_route,
  */
 DEFPY(show_bgp_l2vpn_evpn_route_rd,
       show_bgp_l2vpn_evpn_route_rd_cmd,
-      "show bgp l2vpn evpn route rd <ASN:NN_OR_IP-ADDRESS:NN|all> [type "EVPN_TYPE_ALL_LIST"] [json$uj [brief$brief]]",
+      "show bgp l2vpn evpn route rd <ASN:NN_OR_IP-ADDRESS:NN|all> [type "EVPN_TYPE_ALL_LIST"] [{json$uj|brief$brief}]",
       SHOW_STR
       BGP_STR
       L2VPN_HELP_STR
@@ -5312,6 +5312,11 @@ DEFPY(show_bgp_l2vpn_evpn_route_rd,
 	json_object *json = NULL;
 	int idx_ext_community = 0;
 	int rd_all = 0;
+
+	if (brief && !uj) {
+		vty_out(vty, "%% brief option requires json\n");
+		return CMD_WARNING;
+	}
 
 	bgp = bgp_get_evpn();
 	if (!bgp)
