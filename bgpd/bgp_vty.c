@@ -18817,7 +18817,7 @@ static int bgp_show_neighbor_vty(struct vty *vty, const char *name, enum show_ty
 
 /* "show [ip] bgp neighbors" commands.  */
 DEFPY(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
-      "show [ip] bgp [<view|vrf> VIEWVRFNAME] [<ipv4|ipv6>] neighbors [<A.B.C.D|X:X::X:X|WORD>] [graceful-restart] [json$uj [brief$brief [established|failed]]]",
+      "show [ip] bgp [<view|vrf> VIEWVRFNAME] [<ipv4|ipv6>] neighbors [<A.B.C.D|X:X::X:X|WORD>] [graceful-restart] [{json$uj|brief$brief}] [established|failed]",
       SHOW_STR IP_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AF_STR BGP_AF_STR
       "Detailed information on TCP and BGP neighbor connections\n"
       "Neighbor to display information about\n"
@@ -18839,6 +18839,24 @@ DEFPY(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
 	int gr_idx = 0;
 	bool show_gr = false;
 	uint16_t peer_show_flags = 0;
+	int filter_idx = 0;
+	bool want_established = false;
+	bool want_failed = false;
+
+	if (brief && !use_json) {
+		vty_out(vty, "%% brief option requires json\n");
+		return CMD_WARNING;
+	}
+
+	if (argv_find(argv, argc, "established", &filter_idx))
+		want_established = true;
+	else if (argv_find(argv, argc, "failed", &filter_idx))
+		want_failed = true;
+
+	if ((want_established || want_failed) && !(use_json && brief)) {
+		vty_out(vty, "%% established and failed options require json brief\n");
+		return CMD_WARNING;
+	}
 
 	/* [<vrf> VIEWVRFNAME] */
 	if (argv_find(argv, argc, "vrf", &idx)) {
@@ -18889,9 +18907,9 @@ DEFPY(show_ip_bgp_neighbors, show_ip_bgp_neighbors_cmd,
 		peer_show_flags |= VTY_BGP_PEER_SHOW_GR_INFO;
 	else if (use_json && brief) {
 		SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_BRIEF_INFO);
-		if (argv_find(argv, argc, "established", &idx))
+		if (want_established)
 			SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_STATE_ESTABLISHED_INFO);
-		else if (argv_find(argv, argc, "failed", &idx))
+		else if (want_failed)
 			SET_FLAG(peer_show_flags, VTY_BGP_PEER_SHOW_STATE_FAILED_INFO);
 	}
 
