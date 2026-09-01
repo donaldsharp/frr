@@ -19188,7 +19188,7 @@ DEFPY(show_ip_bgp_vrf_afi_safi_routes_detailed,
 
 DEFPY (show_ip_bgp_neighbor_routes,
        show_ip_bgp_neighbor_routes_cmd,
-       "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]] neighbors <A.B.C.D|X:X::X:X|WORD> <flap-statistics|dampened-routes|routes> [json$uj [brief$brief]]",
+       "show [ip] bgp [<view|vrf> VIEWVRFNAME] ["BGP_AFI_CMD_STR" ["BGP_SAFI_WITH_LABEL_CMD_STR"]] neighbors <A.B.C.D|X:X::X:X|WORD> <flap-statistics|dampened-routes|routes> [{json$uj|brief$brief}]",
        SHOW_STR
        IP_STR
        BGP_STR
@@ -19212,6 +19212,11 @@ DEFPY (show_ip_bgp_neighbor_routes,
 	struct peer *peer;
 	enum bgp_show_type sh_type = bgp_show_type_neighbor;
 	int idx = 0;
+
+	if (brief && !uj) {
+		vty_out(vty, "%% brief option requires json\n");
+		return CMD_WARNING;
+	}
 
 	if (uj)
 		argc--;
