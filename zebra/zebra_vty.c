@@ -1768,7 +1768,7 @@ DEFPY (show_route,
           [" FRR_IP6_REDIST_STR_ZEBRA "$type_str]\
         >\
        [nexthop-group$ng [summary$ng_summary [ecmp-count <gt$ecmp_gt|lt$ecmp_lt|eq$ecmp_eq> (1-256)$ecmp_count]]]\
-       [failed$failed] [json$json [brief$brief]]",
+       [failed$failed] [{json$json|brief$brief}]",
        SHOW_STR
        IP_STR
        "IP forwarding table\n"
@@ -1820,6 +1820,11 @@ DEFPY (show_route,
 		.multi = vrf_all || table_all,
 		.brief = !!brief,
 	};
+
+	if (brief && !json) {
+		vty_out(vty, "%% brief option requires json\n");
+		return CMD_WARNING;
+	}
 
 	if (!vrf_is_backend_netns()) {
 		if ((vrf_all || vrf_name) && (table || table_all)) {
