@@ -30,6 +30,14 @@ DEFINE_MTYPE_STATIC(LIB, CMD_MATCHSTACK, "Command Match Stack");
 static int add_nexthops(struct list *, struct graph_node *,
 			struct graph_node **, size_t, bool);
 
+static enum match_type match_token(struct cmd_token *, char *);
+
+static bool token_is_exact_nonvariable(struct cmd_token *tok, const char *input)
+{
+	return tok && input && tok->type != VARIABLE_TKN &&
+	       match_token(tok, input) == exact_match;
+}
+
 static enum matcher_rv command_match_r(struct graph_node *, vector,
 				       unsigned int, struct graph_node **,
 				       struct list **);
@@ -49,8 +57,6 @@ static struct list *disambiguate(struct list *, struct list *, vector,
 int compare_completions(const void *, const void *);
 
 /* token matcher prototypes */
-static enum match_type match_token(struct cmd_token *, char *);
-
 static enum match_type match_ipv4(const char *);
 
 static enum match_type match_ipv4_prefix(const char *);
@@ -243,11 +249,34 @@ static enum matcher_rv command_match_r(struct graph_node *start, vector vline,
 	struct list *next = list_new();
 	add_nexthops(next, start, NULL, 0, is_neg(vline, 1));
 
+	/*
+	 * If a keyword (or other non-variable) exactly matches the next
+	 * input token, do not also follow VARIABLE_TKN.  Otherwise optional
+	 * WORD neighbors steal "json"/"brief" and the follow set explodes
+	 * into peer-specific subcommands.
+	 */
+	bool skip_variable = false;
+
+	if (n + 1 < vector_active(vline)) {
+		char *next_input = vector_slot(vline, n + 1);
+
+		for (ALL_LIST_ELEMENTS_RO(next, ln, gn)) {
+			if (token_is_exact_nonvariable(gn->data, next_input)) {
+				skip_variable = true;
+				break;
+			}
+		}
+	}
+
 	// determine the best match
 	for (ALL_LIST_ELEMENTS_RO(next, ln, gn)) {
+		struct cmd_token *tok = gn->data;
+
+		if (skip_variable && tok->type == VARIABLE_TKN)
+			continue;
+
 		// if we've matched all input we're looking for END_TKN
 		if (n + 1 == vector_active(vline)) {
-			struct cmd_token *tok = gn->data;
 			if (tok->type == END_TKN) {
 				// if more than one END_TKN in the follow set
 				if (*currbest) {
@@ -369,17 +398,23 @@ enum matcher_rv command_complete(struct graph *graph, vector vline,
 		input_token = vector_slot(vline, idx);
 
 		int exact_match_exists = 0;
-		for (ALL_LIST_ELEMENTS_RO(current, node, gstack))
+		int skip_variable = 0;
+		for (ALL_LIST_ELEMENTS_RO(current, node, gstack)) {
+			struct cmd_token *token = gstack[0]->data;
+
+			if (token_is_exact_nonvariable(token, input_token))
+				skip_variable = 1;
 			if (!exact_match_exists)
 				exact_match_exists =
-					(match_token(gstack[0]->data,
-						     input_token)
+					(match_token(token, input_token)
 					 == exact_match);
-			else
-				break;
+		}
 
 		for (ALL_LIST_ELEMENTS_RO(current, node, gstack)) {
 			struct cmd_token *token = gstack[0]->data;
+
+			if (skip_variable && token->type == VARIABLE_TKN)
+				continue;
 
 			if (token->attr & CMD_ATTR_HIDDEN)
 				continue;
