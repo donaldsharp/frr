@@ -18897,7 +18897,7 @@ DEFPY (show_ip_bgp_instance_neighbor_bestpath_route,
 DEFPY(show_ip_bgp_instance_neighbor_advertised_route,
 	show_ip_bgp_instance_neighbor_advertised_route_cmd,
 	"show [ip] bgp [<view|vrf> VIEWVRFNAME] [" BGP_AFI_CMD_STR " [" BGP_SAFI_WITH_LABEL_CMD_STR
-	"]] [all$all] neighbors <A.B.C.D|X:X::X:X|WORD> <advertised-routes|received-routes|filtered-routes> [route-map RMAP_NAME$route_map] [<A.B.C.D/M|X:X::X:X/M>$prefix | detail$detail] [json$uj [brief$brief] | wide$wide]",
+	"]] [all$all] neighbors <A.B.C.D|X:X::X:X|WORD> <advertised-routes|received-routes|filtered-routes> [route-map RMAP_NAME$route_map] [<A.B.C.D/M|X:X::X:X/M>$prefix | detail$detail] [{json$uj|brief$brief} | wide$wide]",
 	SHOW_STR IP_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AFI_HELP_STR BGP_SAFI_WITH_LABEL_HELP_STR
 	"Display the entries for all address families\n"
 	"Detailed information on TCP and BGP neighbor connections\n"
@@ -18928,6 +18928,11 @@ DEFPY(show_ip_bgp_instance_neighbor_advertised_route,
 	struct listnode *node;
 	struct bgp *abgp;
 	int ret;
+
+	if (brief && !uj) {
+		vty_out(vty, "%% brief option requires json\n");
+		return CMD_WARNING;
+	}
 
 	if (detail || prefix_str)
 		SET_FLAG(show_flags, BGP_SHOW_OPT_ROUTES_DETAIL);
