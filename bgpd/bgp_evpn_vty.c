@@ -5237,7 +5237,7 @@ int bgp_evpn_cli_parse_type(int *type, struct cmd_token **argv, int argc)
  */
 DEFPY(show_bgp_l2vpn_evpn_route,
       show_bgp_l2vpn_evpn_route_cmd,
-      "show bgp l2vpn evpn route [detail$detail] [type "EVPN_TYPE_ALL_LIST"] ["BGP_SELF_ORIG_CMD_STR"] [json$uj [brief$brief]]",
+      "show bgp l2vpn evpn route [detail$detail] [type "EVPN_TYPE_ALL_LIST"] ["BGP_SELF_ORIG_CMD_STR"] [{json$uj|brief$brief}]",
       SHOW_STR
       BGP_STR
       L2VPN_HELP_STR
@@ -5255,6 +5255,11 @@ DEFPY(show_bgp_l2vpn_evpn_route,
 	int arg_idx = 0;
 	bool self_orig = false;
 	json_object *json = NULL;
+
+	if (brief && !uj) {
+		vty_out(vty, "%% brief option requires json\n");
+		return CMD_WARNING;
+	}
 
 	bgp = bgp_get_evpn();
 	if (!bgp)
