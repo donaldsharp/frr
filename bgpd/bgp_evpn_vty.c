@@ -3850,7 +3850,7 @@ static void write_vni_config(struct vty *vty, struct bgpevpn *vpn)
 
 DEFPY(show_ip_bgp_l2vpn_evpn_neighbor_routes,
       show_ip_bgp_l2vpn_evpn_neighbor_routes_cmd,
-      "show [ip] bgp l2vpn evpn neighbors <A.B.C.D|X:X::X:X|WORD>$neighbor routes [json$uj [brief$brief]]",
+      "show [ip] bgp l2vpn evpn neighbors <A.B.C.D|X:X::X:X|WORD>$neighbor routes [{json$uj|brief$brief}]",
       SHOW_STR
       IP_STR
       BGP_STR
@@ -3869,6 +3869,11 @@ DEFPY(show_ip_bgp_l2vpn_evpn_neighbor_routes,
 	afi_t afi = AFI_L2VPN;
 	safi_t safi = SAFI_EVPN;
 	struct bgp *bgp = NULL;
+
+	if (brief && !uj) {
+		vty_out(vty, "%% brief option requires json\n");
+		return CMD_WARNING;
+	}
 
 	bgp_vty_find_and_parse_afi_safi_bgp(vty, argv, argc, &idx, &afi, &safi, &bgp, uj);
 	if (!idx) {
