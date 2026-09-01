@@ -1587,7 +1587,7 @@ DEFPY (show_interface_nexthop_group,
 }
 
 DEFPY(show_nexthop_group, show_nexthop_group_cmd,
-      "show nexthop-group rib <(0-4294967295)$id|[singleton <ip$v4|ipv6$v6>] [<kernel|zebra|bgp|sharp>$type_str] [vrf <NAME$vrf_name|all$vrf_all>]> [json$uj [brief$brief]]",
+      "show nexthop-group rib <(0-4294967295)$id|[singleton <ip$v4|ipv6$v6>] [<kernel|zebra|bgp|sharp>$type_str] [vrf <NAME$vrf_name|all$vrf_all>]> [{json$uj|brief$brief}]",
       SHOW_STR
       "Show Nexthop Groups\n"
       "RIB information\n"
@@ -1608,6 +1608,11 @@ DEFPY(show_nexthop_group, show_nexthop_group_cmd,
 	afi_t afi = AFI_UNSPEC;
 	uint8_t type = 0;
 	json_object *json = NULL;
+
+	if (brief && !uj) {
+		vty_out(vty, "%% brief option requires json\n");
+		return CMD_WARNING;
+	}
 
 	if (uj)
 		json = json_object_new_object();
