@@ -16596,7 +16596,7 @@ DEFPY(show_ip_bgp, show_ip_bgp_cmd,
           |X:X::X:X/M longer-prefixes\
           |"BGP_SELF_ORIG_CMD_STR"\
           |detail-routes$detail_routes [internal$internal]\
-          ] [json$uj [detail$detail_json | brief$brief] | wide$wide]",
+          ] [{json$uj|brief$brief|detail$detail_json} | wide$wide]",
       SHOW_STR IP_STR BGP_STR BGP_INSTANCE_HELP_STR BGP_AFI_HELP_STR
 	      BGP_SAFI_WITH_LABEL_HELP_STR
       "Display the entries for all address families\n"
@@ -16648,8 +16648,8 @@ DEFPY(show_ip_bgp, show_ip_bgp_cmd,
       "Display detailed version of all routes\n"
       "Display detailed version of all routes including internal data\n"
       JSON_STR
-      "Display detailed version of JSON output\n"
       "Brief\n"
+      "Display detailed version of JSON output\n"
       "Increase table width for longer prefixes\n")
 {
 	afi_t afi = AFI_IP6;
@@ -16664,6 +16664,16 @@ DEFPY(show_ip_bgp, show_ip_bgp_cmd,
 	uint16_t show_flags = 0;
 	enum rpki_states rpki_target_state = RPKI_NOT_BEING_USED;
 	struct prefix p;
+
+	if ((brief || detail_json) && !uj) {
+		vty_out(vty, "%% %s option requires json\n", brief ? "brief" : "detail");
+		return CMD_WARNING;
+	}
+
+	if (brief && detail_json) {
+		vty_out(vty, "%% brief and detail are mutually exclusive\n");
+		return CMD_WARNING;
+	}
 
 	if (uj) {
 		argc--;
@@ -16719,6 +16729,9 @@ DEFPY(show_ip_bgp, show_ip_bgp_cmd,
 		}
 
 		if (maybecomm && !strmatch(maybecomm, "json")
+		    && !strmatch(maybecomm, "brief")
+		    && !strmatch(maybecomm, "detail")
+		    && !strmatch(maybecomm, "wide")
 		    && !strmatch(maybecomm, "exact-match"))
 			community = maybecomm;
 
