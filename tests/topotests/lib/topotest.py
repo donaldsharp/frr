@@ -1639,6 +1639,16 @@ def setup_node_tmpdir(logdir, name):
     return logfile
 
 
+def default_frrdir():
+    """Directory that holds the FRR daemon binaries on this host."""
+    if not sys.platform.startswith("freebsd"):
+        return "/usr/lib/frr"
+    for path in ("/usr/local/libexec/frr", "/usr/local/sbin", "/usr/lib/frr"):
+        if os.path.isfile(os.path.join(path, "zebra")):
+            return path
+    return "/usr/local/libexec/frr"
+
+
 class Router(Node):
     "A Node with IPv4/IPv6 forwarding enabled"
 
@@ -1687,7 +1697,7 @@ class Router(Node):
         self.config_defaults = configparser.ConfigParser(
             defaults={
                 "verbosity": "info",
-                "frrdir": "/usr/lib/frr",
+                "frrdir": default_frrdir(),
                 "routertype": "frr",
                 "memleak_path": "",
             }

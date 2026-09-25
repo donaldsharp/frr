@@ -377,7 +377,10 @@ def _build_root(ns, private_mounts):
         inner = parts[-1]
         dest = jail_path / inner.lstrip("/")
         if len(parts) == 1:
+            # Linux mounts these paths as tmpfs, mode 1777. FRR binds
+            # /var/run/frr sockets after it drops to the frr user.
             dest.mkdir(parents=True, exist_ok=True)
+            os.chmod(dest, 0o1777)
             continue
         outer = Path(parts[0])
         if outer.is_file() or (outer.exists() and not outer.is_dir()):
@@ -561,9 +564,11 @@ def jail_mkdir(ns, inner):
     """Create a directory inside the jail root.
 
     The root is already private, so this stands in for a tmpfs mount.
+    Mode 1777 matches a Linux tmpfs.
     """
     path = Path(ns.jail_path) / str(inner).lstrip("/")
     path.mkdir(parents=True, exist_ok=True)
+    os.chmod(path, 0o1777)
 
 
 def jail_bind_mount(ns, outer, inner):

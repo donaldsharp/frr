@@ -125,12 +125,7 @@ def get_exabgp_cmd(commander=None):
 
 def _default_frrdir():
     """Pick the FRR daemon directory for this platform."""
-    if not sys.platform.startswith("freebsd"):
-        return "/usr/lib/frr"
-    for path in ("/usr/local/libexec/frr", "/usr/local/sbin", "/usr/lib/frr"):
-        if os.path.isfile(os.path.join(path, "zebra")):
-            return path
-    return "/usr/local/libexec/frr"
+    return topotest.default_frrdir()
 
 
 # Topogen configuration defaults
