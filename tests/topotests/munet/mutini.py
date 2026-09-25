@@ -24,12 +24,13 @@ import sys
 from signal import Signals as S
 
 
-try:
+# Relative imports work when this file is part of the munet package. Running
+# the file directly as a script has no package, so the modules are imported
+# from this directory instead.
+if __package__:
     from munet import host
     from munet import linux
-except ModuleNotFoundError:
-    # We cannot use relative imports and still run this module directly as a script, and
-    # there are some use cases where we want to run this file as a script.
+else:
     sys.path.append(os.path.dirname(os.path.realpath(__file__)))
     import host
     import linux

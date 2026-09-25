@@ -25,12 +25,13 @@ import termios
 import tty
 
 
-try:
+# Relative imports work when this file is part of the munet package. Running
+# the file directly as a script has no package, so the modules are imported
+# from this directory instead.
+if __package__:
     from . import host
     from .config import list_to_dict_with_key
-except ImportError:
-    # We cannot use relative imports and still run this module directly as a script, and
-    # there are some use cases where we want to run this file as a script.
+else:
     sys.path.append(os.path.dirname(os.path.realpath(__file__)))
     import host
 
