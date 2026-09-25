@@ -79,6 +79,30 @@ time) run:
    modprobe sch_netem
 
 
+Running on FreeBSD 15.1
+"""""""""""""""""""""""
+
+Topotests on FreeBSD use VNET jails, ``epair(4)`` links, and ``if_bridge(4)``
+switches. pytest collects the directories named in the ``[freebsd]`` section
+of ``tests/topotests/pytest.ini``. ``--freebsd-all`` or
+``PYTEST_FREEBSD_ALL=1`` collects the rest of the tree.
+
+Run the suite as root on a kernel built with ``VIMAGE``. The harness loads
+``if_epair`` and ``if_bridge`` with ``kldload -n``. Install bash and python3,
+and create the ``frr`` user and ``frrvty`` group the same way as a normal
+FreeBSD FRR install. Daemons are taken from ``/usr/local/libexec/frr`` when
+``zebra`` is there, otherwise ``/usr/local/sbin``. Each jail links
+``/usr/local/etc/frr`` to ``/etc/frr``, so a build configured with
+``--sysconfdir=/usr/local/etc`` reads the test configuration.
+
+The allowlist covers p2p and switched OSPF, OSPFv3, RIP, RIPng, EIGRP, Babel,
+and basic BGP. MPLS, SRv6, Linux VRF, and ``tc netem`` tests stay off that
+list. A new VNET has forwarding disabled; the harness turns on
+``net.inet.ip.forwarding`` and ``net.inet6.ip6.forwarding`` inside each jail
+and sets ``net.inet6.ip6.dad_count=0`` so configured addresses leave the
+tentative state immediately.
+
+
 Enable Coredumps
 """"""""""""""""
 

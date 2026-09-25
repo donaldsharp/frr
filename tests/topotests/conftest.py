@@ -5,6 +5,7 @@ Topotest conftest.py file.
 
 # pylint: disable=consider-using-f-string
 
+import configparser
 import contextlib
 import glob
 import logging
@@ -72,6 +73,21 @@ def is_main_runner():
     return "PYTEST_XDIST_WORKER" not in os.environ
 
 
+def _freebsd_allowed_tests():
+    """Directory names listed under pytest.ini [freebsd] tests."""
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read(Path(__file__).resolve().parent / "pytest.ini")
+    if not parser.has_section("freebsd"):
+        return set()
+    return set(parser.get("freebsd", "tests", fallback="").split())
+
+
+def _freebsd_collect_all(config):
+    if os.environ.get("PYTEST_FREEBSD_ALL") == "1":
+        return True
+    return bool(config.getoption("--freebsd-all"))
+
+
 def pytest_addoption(parser):
     """
     Add topology-only option to the topology tester. This option makes pytest
@@ -81,6 +97,12 @@ def pytest_addoption(parser):
         "--asan-abort",
         action="store_true",
         help="Configure address sanitizer to abort process on error",
+    )
+
+    parser.addoption(
+        "--freebsd-all",
+        action="store_true",
+        help="On FreeBSD, collect every topotest instead of the [freebsd] list",
     )
 
     parser.addoption(
@@ -622,11 +644,47 @@ def setup_coverage(config):
         commander.cmd_raises(f"chmod 2775 {gcdadir}")
 
 
+def pytest_ignore_collect(collection_path, config):
+    """On FreeBSD, collect only the directories named in pytest.ini [freebsd].
+
+    Return None to leave the decision to other hooks, including norecursedirs.
+    """
+    if not sys.platform.startswith("freebsd"):
+        return None
+    if _freebsd_collect_all(config):
+        return None
+
+    root = Path(__file__).resolve().parent
+    try:
+        rel = Path(collection_path).resolve().relative_to(root)
+    except ValueError:
+        return None
+    if not rel.parts:
+        return None
+    # Top-level modules such as conftest.py stay visible. Suites live in
+    # directories named by the allowlist.
+    if len(rel.parts) == 1 and Path(collection_path).is_file():
+        return None
+    if rel.parts[0] not in _freebsd_allowed_tests():
+        return True
+    return None
+
+
 def pytest_configure(config):
     """
     Assert that the environment is correctly configured, and get extra config.
     """
     topotest.g_pytest_config = ConfigOptionsProxy(config)
+
+    if sys.platform.startswith("freebsd"):
+        from munet import freebsd
+
+        freebsd.reap_stale()
+        if _freebsd_collect_all(config):
+            logger.info("FreeBSD topotests: collecting the full tree")
+        else:
+            allowed = " ".join(sorted(_freebsd_allowed_tests()))
+            logger.info("FreeBSD topotest allowlist: %s", allowed or "(empty)")
 
     if config.getoption("--collect-only"):
         return
@@ -754,12 +812,20 @@ def session_autouse():
     is_main = is_main_runner()
 
     logger.debug("Before the run (is_main: %s)", is_main)
+    if sys.platform.startswith("freebsd"):
+        from munet import freebsd
+
+        freebsd.reap_stale()
     if is_main:
         cleanup_previous()
     yield
     # Reap munet/mutini children on xdist workers too; otherwise a few stuck
     # workers with zombie mutini block the controller until the session is killed.
     cleanup_current()
+    if sys.platform.startswith("freebsd"):
+        from munet import freebsd
+
+        freebsd.cleanup_our_jails()
     logger.debug("After the run (is_main: %s)", is_main)
 
 
