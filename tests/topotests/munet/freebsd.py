@@ -18,6 +18,8 @@ process id so namespace teardown does not signal an unrelated process.
 
 import atexit
 import contextlib
+import ctypes
+import ctypes.util
 import fcntl
 import json
 import logging
@@ -28,6 +30,40 @@ import subprocess
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_libc = None
+
+
+def _libc_handle():
+    global _libc
+    if _libc is None:
+        _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+    return _libc
+
+
+def set_process_name(name):
+    """Set the name shown by ps via setproctitle."""
+    libc = _libc_handle()
+    # A leading "-" keeps ps from prefixing the name with the executable.
+    libc.setproctitle.restype = None
+    libc.setproctitle.argtypes = (ctypes.c_char_p, ctypes.c_char_p)
+    libc.setproctitle(b"-%s", name.encode("ascii"))
+
+
+def set_parent_death_signal(signum):
+    """Deliver signum when the parent exits, using procctl."""
+    libc = _libc_handle()
+    # P_PID is 0. PROC_PDEATHSIG_CTL is 11.
+    sig = ctypes.c_int(signum)
+    libc.procctl.argtypes = (
+        ctypes.c_int,
+        ctypes.c_int64,
+        ctypes.c_int,
+        ctypes.c_void_p,
+    )
+    libc.procctl.restype = ctypes.c_int
+    libc.procctl(0, 0, 11, ctypes.byref(sig))
+
 
 JAIL_ROOT = Path("/tmp/frr-topotest-jails")
 LOCK_PATH = Path("/tmp/frr-topotest.lock")
