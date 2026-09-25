@@ -4,7 +4,9 @@
 """FreeBSD VNET jail backend for munet.
 
 Each munet and each host is a persistent VNET jail. The munet jail owns the
-bridges. epair(4) endpoints move into host jails with ``ifconfig IF vnet``.
+bridges. Router jails are children of that jail: their names are
+``parent.child``, and the kernel uses the text before the last dot as the
+parent. epair(4) endpoints then move into those children by jail id.
 The jail root is a private directory with read-only nullfs of the base
 system, so cleanup can unmount before removing the directory. ``/usr/local/etc/frr``
 is a symlink to ``/etc/frr`` so a FreeBSD build that uses ``--sysconfdir=/usr/local/etc``
@@ -197,6 +199,11 @@ def _umount_tree(root):
 
 
 def _child_jails(parent):
+    """Return host-visible names of jails whose parent jid is ``parent``."""
+    looked = _host_run(["/usr/sbin/jls", "-j", parent, "jid"], check=False)
+    parent_jid = (looked.stdout or "").strip() if looked.returncode == 0 else ""
+    if not parent_jid.isdigit():
+        return []
     proc = _host_run(["/usr/sbin/jls", "-n"], check=False)
     kids = []
     for line in (proc.stdout or "").splitlines():
@@ -205,7 +212,7 @@ def _child_jails(parent):
             if "=" in tok:
                 key, val = tok.split("=", 1)
                 fields[key] = val
-        if fields.get("parent") == parent and fields.get("name"):
+        if fields.get("parent") == parent_jid and fields.get("name"):
             kids.append(fields["name"])
     return kids
 
@@ -396,9 +403,17 @@ def _build_root(ns, private_mounts):
     return mounts
 
 
-def _jail_create(ns, parent_name):
+def _jail_create(ns, nested):
+    """Create the jail and store its jid.
+
+    ``parent`` is a read-only jid. Passing ``parent=<name>`` is rejected.
+    A name ``parent.child`` created from the host makes ``parent`` the
+    parent jail, which is required before ``ifconfig IF vnet <jid>`` can
+    move an epair out of the munet jail.
+    """
     cmd = [
         "/usr/sbin/jail",
+        "-i",
         "-c",
         f"name={ns.jail_name}",
         f"path={ns.jail_path}",
@@ -413,13 +428,16 @@ def _jail_create(ns, parent_name):
         "allow.mount.nullfs=true",
         "allow.mount.devfs=true",
         "enforce_statfs=1",
+        "children.max=8" if nested else "children.max=128",
     ]
-    if parent_name:
-        cmd.append(f"parent={parent_name}")
-        cmd.append("children.max=8")
-    else:
-        cmd.append("children.max=128")
-    _host_run(cmd)
+    proc = _host_run(cmd)
+    jid_text = (proc.stdout or "").strip().split()
+    if not jid_text or not jid_text[0].isdigit():
+        looked = _host_run(["/usr/sbin/jls", "-j", ns.jail_name, "jid"])
+        jid_text = [(looked.stdout or "").strip()]
+    if not jid_text[0].isdigit() or int(jid_text[0]) <= 0:
+        raise RuntimeError(f"could not read jid for {ns.jail_name}: {proc.stdout!r}")
+    ns.jail_jid = int(jid_text[0])
 
 
 def _jail_sysctl(name):
@@ -482,9 +500,11 @@ def init_namespace(ns, private_mounts=None, set_hostname=True):
         parent_name = parent.jail_name
 
     ns.freebsd_jail = True
-    ns.jail_name = _next_name(ns.name)
+    short = _next_name(ns.name)
+    ns.jail_name = f"{parent_name}.{short}" if parent_name else short
+    ns.jail_jid = None
     ns.jail_hostname = _hostname_for(ns.name)
-    ns.jail_path = str(JAIL_ROOT / str(_our_pid()) / ns.jail_name)
+    ns.jail_path = str(JAIL_ROOT / str(_our_pid()) / short)
     ns.freebsd_mounts = []
     ns.freebsd_cwd = None
     ns.nsflags = []
@@ -513,7 +533,7 @@ def init_namespace(ns, private_mounts=None, set_hostname=True):
                 "parent": parent_name or "",
             }
         )
-        _jail_create(ns, parent_name)
+        _jail_create(ns, parent_name is not None)
         _jail_sysctl(ns.jail_name)
         _install_pre(ns, _pre_argv(ns))
     except Exception:
@@ -528,7 +548,7 @@ def init_namespace(ns, private_mounts=None, set_hostname=True):
                 exc_info=True,
             )
         raise
-    ns.logger.info("%s: created VNET jail %s", ns, ns.jail_name)
+    ns.logger.info("%s: created VNET jail %s jid %s", ns, ns.jail_name, ns.jail_jid)
 
 
 def set_namespace_cwd(ns, cwd):
@@ -726,6 +746,14 @@ def _rename_up(ns, current, wanted, mtu):
         ns.logger.warning("%s: inet6 -ifdisabled %s: %s", ns, wanted, err)
 
 
+def _vnet_arg(ns):
+    """Jail id for ``ifconfig IF vnet``. The move only sees child jails."""
+    jid = getattr(ns, "jail_jid", None)
+    if not jid:
+        raise RuntimeError(f"{getattr(ns, 'jail_name', ns)} has no jail id")
+    return str(jid)
+
+
 def _create_epair(munet):
     text = _cmd_text(munet, ["/sbin/ifconfig", "epair", "create"])
     end_a = text.split()[-1]
@@ -743,8 +771,8 @@ def add_link(munet, name1, if1, name2, if2, mtu, isp2p):
         if len(nsif1) >= 16 or len(nsif2) >= 16:
             raise RuntimeError(f"interface name exceeds 15 characters: {nsif1} {nsif2}")
         end_a, end_b = _create_epair(munet)
-        _cmd_text(munet, ["/sbin/ifconfig", end_a, "vnet", lhost.jail_name])
-        _cmd_text(munet, ["/sbin/ifconfig", end_b, "vnet", rhost.jail_name])
+        _cmd_text(munet, ["/sbin/ifconfig", end_a, "vnet", _vnet_arg(lhost)])
+        _cmd_text(munet, ["/sbin/ifconfig", end_b, "vnet", _vnet_arg(rhost)])
         _rename_up(lhost, end_a, nsif1, mtu)
         _rename_up(rhost, end_b, nsif2, mtu)
         lhost.register_interface(if1)
@@ -759,7 +787,7 @@ def add_link(munet, name1, if1, name2, if2, mtu, isp2p):
         if len(nsif1) >= 16 or len(nsif2) >= 16:
             raise RuntimeError(f"interface name exceeds 15 characters: {nsif1} {nsif2}")
         end_a, end_b = _create_epair(munet)
-        _cmd_text(munet, ["/sbin/ifconfig", end_b, "vnet", rhost.jail_name])
+        _cmd_text(munet, ["/sbin/ifconfig", end_b, "vnet", _vnet_arg(rhost)])
         _rename_up(munet, end_a, nsif1, mtu)
         _cmd_text(munet, ["/sbin/ifconfig", switch.name, "addm", nsif1])
         _cmd_text(munet, ["/sbin/ifconfig", switch.name, "up"])
