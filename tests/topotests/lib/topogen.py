@@ -932,14 +932,17 @@ class TopoRouter(TopoGear):
                 if result:
                     self.load_config(daemon, "")
                     if daemonstr == "ospf":
-                        grep_cmd = "grep -E 'router ospf ([0-9]+*)' {} | grep -o -E '([0-9]*)'".format(
-                            source_path
-                        )
+                        # [0-9]+ is valid on both GNU and BSD grep. [0-9]+*
+                        # is not: BSD grep reports "repetition-operator
+                        # operand invalid", and that text was then used as
+                        # an instance id.
+                        grep_cmd = (
+                            "grep -E 'router ospf [0-9]+' {} | grep -o -E '[0-9]+'"
+                        ).format(source_path)
                         result = self.run(grep_cmd, warn=False)
-                        if result:  # instances
-                            instances = result.split("\n")
-                            for inst in instances:
-                                if inst != "":
+                        if result:
+                            for inst in result.split("\n"):
+                                if inst.isdigit():
                                     self.load_config(daemon, "", None, inst)
             if extra_daemons is not None:
                 for item in extra_daemons:
