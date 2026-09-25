@@ -87,13 +87,49 @@ switches. pytest collects the directories named in the ``[freebsd]`` section
 of ``tests/topotests/pytest.ini``. ``--freebsd-all`` or
 ``PYTEST_FREEBSD_ALL=1`` collects the rest of the tree.
 
-Run the suite as root on a kernel built with ``VIMAGE``. The harness loads
-``if_epair`` and ``if_bridge`` with ``kldload -n``. Install bash and python3,
-and create the ``frr`` user and ``frrvty`` group the same way as a normal
-FreeBSD FRR install. Daemons are taken from ``/usr/local/libexec/frr`` when
-``zebra`` is there, otherwise ``/usr/local/sbin``. Each jail links
-``/usr/local/etc/frr`` to ``/etc/frr``, so a build configured with
-``--sysconfdir=/usr/local/etc`` reads the test configuration.
+``jail``, ``jexec``, ``ifconfig``, ``kldload``, and the ``if_epair`` and
+``if_bridge`` modules are part of the base system. ``GENERIC`` includes
+``VIMAGE``. Run the suite as root.
+
+Packages
+~~~~~~~~
+
+Install bash, a debugger, and the pytest stack that matches the ``python3``
+package. The version suffix (``py311``, ``py312``, ...) has to be the same
+interpreter ``python3`` runs, or pytest will import the wrong modules:
+
+.. code:: shell
+
+   pkg install bash gdb python3
+   pyver=$(python3 -c 'import sys; print("%d%d" % sys.version_info[:2])')
+   pkg install py${pyver}-pytest py${pyver}-pytest-asyncio py${pyver}-pytest-xdist
+
+Load the link and bridge modules once. They stay loaded until reboot; the
+harness also runs ``kldload -n`` when a test starts:
+
+.. code:: shell
+
+   sysctl kern.features.vimage
+   kldload -n if_epair
+   kldload -n if_bridge
+
+``kern.features.vimage`` must print ``1``.
+
+Build and install FRR with the steps in
+:doc:`building-frr-for-freebsd14`, including the ``frr`` user and the
+``frrvty`` group. The allowlisted suites need these daemons on the install
+prefix, normally ``/usr/local/libexec/frr``: ``zebra``, ``mgmtd``,
+``staticd``, ``ospfd``, ``ospf6d``, ``bgpd``, ``ripd``, ``ripngd``,
+``eigrpd``, and ``babeld``. Each jail links ``/usr/local/etc/frr`` to
+``/etc/frr``, so a build configured with ``--sysconfdir=/usr/local/etc``
+reads the test configuration.
+
+From ``tests/topotests``:
+
+.. code:: shell
+
+   cd tests/topotests
+   sudo pytest
 
 The allowlist covers p2p and switched OSPF, OSPFv3, RIP, RIPng, EIGRP, Babel,
 and basic BGP. MPLS, SRv6, Linux VRF, and ``tc netem`` tests stay off that
