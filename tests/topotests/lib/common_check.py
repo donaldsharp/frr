@@ -49,17 +49,27 @@ def ip_check_path_selection(
     return ret
 
 
-def iproute2_check_path_selection(router, ipaddr_str, expected, vrf_name=None):
-    if not topotest.iproute2_is_json_capable():
-        return None
+def _iproute_show_dst(prefix):
+    """Destination key written by an exact ``ip route show PREFIX``."""
+    if prefix in ("default", "0.0.0.0/0", "::/0"):
+        return "default"
+    if ":" in prefix:
+        if prefix.endswith("/128"):
+            return prefix[:-4]
+        return prefix
+    if prefix.endswith("/32"):
+        return prefix[:-3]
+    return prefix
 
-    if vrf_name:
-        cmdstr = f"ip -json route show vrf {vrf_name} {ipaddr_str}"
-    else:
-        cmdstr = f"ip -json route show {ipaddr_str}"
+
+def iproute2_check_path_selection(router, ipaddr_str, expected, vrf_name=None):
+    family = "ipv6" if ":" in ipaddr_str else "ipv4"
     try:
-        output = json.loads(router.cmd(cmdstr))
-    except (json.JSONDecodeError, ValueError):
+        routes = topotest.kernel_routes(router, vrf=vrf_name or None, family=family)
+    except Exception:
         output = []
+    else:
+        want = _iproute_show_dst(ipaddr_str)
+        output = [route for route in routes if route.get("dst") == want]
 
     return topotest.json_cmp(output, expected)
