@@ -25,7 +25,7 @@ sys.path.append(os.path.join(CWD, "../"))
 from lib import topotest
 from lib.topogen import Topogen, TopoRouter, get_topogen
 
-pytestmark = [pytest.mark.bgpd, pytest.mark.freebsd_kernel_crash]
+pytestmark = [pytest.mark.bgpd, pytest.mark.freebsd_kernel_crash, pytest.mark.freebsd_kernel_crash_one]
 
 
 def build_topo(tgen):

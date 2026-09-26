@@ -31,7 +31,7 @@ from lib.topolog import logger
 
 # Required to instantiate the topology builder class.
 
-pytestmark = [pytest.mark.bgpd, pytest.mark.freebsd_kernel_crash]
+pytestmark = [pytest.mark.bgpd, pytest.mark.freebsd_kernel_crash, pytest.mark.freebsd_kernel_crash_one]
 
 
 """

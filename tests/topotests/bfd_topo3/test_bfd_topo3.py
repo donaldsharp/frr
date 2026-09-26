@@ -29,7 +29,7 @@ from lib import topotest
 from lib.topogen import Topogen, TopoRouter, get_topogen
 from lib.topolog import logger
 
-pytestmark = [pytest.mark.bfdd, pytest.mark.bgpd, pytest.mark.staticd, pytest.mark.freebsd_kernel_crash]
+pytestmark = [pytest.mark.bfdd, pytest.mark.bgpd, pytest.mark.staticd, pytest.mark.freebsd_kernel_crash, pytest.mark.freebsd_kernel_crash_one]
 
 
 def setup_module(mod):
