@@ -70,7 +70,7 @@ from lib.bgp import (
 )
 from lib.topojson import build_config_from_json
 
-pytestmark = [pytest.mark.bgpd, pytest.mark.evpn, pytest.mark.staticd]
+pytestmark = [pytest.mark.bgpd, pytest.mark.evpn, pytest.mark.staticd, pytest.mark.freebsd_kernel_crash]
 
 # Global variables
 NETWORK1_1 = {"ipv4": "10.1.1.1/32", "ipv6": "10::1/128"}

@@ -34,7 +34,7 @@ from lib.topolog import logger
 
 from lib.pim import McastTesterHelper
 
-pytestmark = [pytest.mark.bgpd, pytest.mark.pimd]
+pytestmark = [pytest.mark.bgpd, pytest.mark.pimd, pytest.mark.freebsd_kernel_crash]
 
 app_helper = McastTesterHelper()
 

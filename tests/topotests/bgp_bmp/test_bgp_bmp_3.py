@@ -55,7 +55,7 @@ from .bgpbmp import (
 from lib.topogen import Topogen, get_topogen
 from lib.topolog import logger
 
-pytestmark = [pytest.mark.bgpd]
+pytestmark = [pytest.mark.bgpd, pytest.mark.freebsd_kernel_crash]
 
 PRE_POLICY = "pre-policy"
 POST_POLICY = "post-policy"

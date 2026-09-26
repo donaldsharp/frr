@@ -67,7 +67,7 @@ from lib import topotest
 from lib.common_config import retry, step
 from lib.topogen import Topogen, TopoRouter
 
-pytestmark = [pytest.mark.staticd, pytest.mark.mgmtd]
+pytestmark = [pytest.mark.staticd, pytest.mark.mgmtd, pytest.mark.freebsd_kernel_crash]
 
 
 @retry(retry_timeout=15, initial_wait=1)

@@ -34,7 +34,7 @@ import pytest
 import json
 from functools import partial
 
-pytestmark = [pytest.mark.pimd]
+pytestmark = [pytest.mark.pimd, pytest.mark.freebsd_kernel_crash]
 
 CWD = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(CWD, "../"))

@@ -71,7 +71,7 @@ from lib import topotest
 from lib.topogen import Topogen, get_topogen
 from lib.topolog import logger
 
-pytestmark = [pytest.mark.bfdd, pytest.mark.isisd]
+pytestmark = [pytest.mark.bfdd, pytest.mark.isisd, pytest.mark.freebsd_kernel_crash]
 
 
 def setup_module(mod):

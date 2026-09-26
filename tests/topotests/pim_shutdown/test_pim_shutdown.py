@@ -31,7 +31,7 @@ from lib.topogen import Topogen, get_topogen
 
 from lib.pim import McastTesterHelper
 
-pytestmark = [pytest.mark.ospfd, pytest.mark.pimd]
+pytestmark = [pytest.mark.ospfd, pytest.mark.pimd, pytest.mark.freebsd_kernel_crash]
 
 app_helper = McastTesterHelper()
 

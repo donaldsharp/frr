@@ -52,7 +52,7 @@ from lib.ospf import (
     verify_ospf_summary,
 )
 
-pytestmark = [pytest.mark.ospf6d, pytest.mark.staticd]
+pytestmark = [pytest.mark.ospf6d, pytest.mark.staticd, pytest.mark.freebsd_kernel_crash]
 
 # Global variables
 topo = None

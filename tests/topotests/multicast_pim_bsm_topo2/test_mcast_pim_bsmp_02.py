@@ -79,7 +79,7 @@ from lib.pim import (
 from lib.topolog import logger
 from lib.topojson import build_config_from_json
 
-pytestmark = [pytest.mark.pimd, pytest.mark.staticd]
+pytestmark = [pytest.mark.pimd, pytest.mark.staticd, pytest.mark.freebsd_kernel_crash]
 
 
 TOPOLOGY = """

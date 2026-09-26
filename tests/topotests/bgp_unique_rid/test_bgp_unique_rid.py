@@ -60,7 +60,7 @@ from lib.topogen import Topogen, get_topogen
 from lib.topojson import build_config_from_json
 from lib.topolog import logger
 
-pytestmark = [pytest.mark.bgpd, pytest.mark.ospfd, pytest.mark.staticd]
+pytestmark = [pytest.mark.bgpd, pytest.mark.ospfd, pytest.mark.staticd, pytest.mark.freebsd_kernel_crash]
 
 # Required to instantiate the topology builder class.
 from lib.common_config import (

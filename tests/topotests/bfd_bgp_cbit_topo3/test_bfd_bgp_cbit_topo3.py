@@ -39,7 +39,7 @@ from .common_bfd_bgp_cbit_topo3 import (
     common_memory_leak,
 )
 
-pytestmark = [pytest.mark.bgpd, pytest.mark.bfdd]
+pytestmark = [pytest.mark.bgpd, pytest.mark.bfdd, pytest.mark.freebsd_kernel_crash]
 
 
 def setup_module(mod):

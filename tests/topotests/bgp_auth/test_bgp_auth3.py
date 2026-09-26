@@ -49,7 +49,7 @@ from bgp_auth_common import (
 )
 from lib.topogen import Topogen, TopoRouter, get_topogen
 
-pytestmark = [pytest.mark.bgpd, pytest.mark.ospfd]
+pytestmark = [pytest.mark.bgpd, pytest.mark.ospfd, pytest.mark.freebsd_kernel_crash]
 
 CWD = os.path.dirname(os.path.realpath(__file__))
 

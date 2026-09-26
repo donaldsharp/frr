@@ -102,7 +102,7 @@ HOLD_TIMER = 3
 PREFERRED_NEXT_HOP = "link_local"
 ASSERT_MSG = "Testcase {} : Failed Error: {}"
 
-pytestmark = [pytest.mark.pim6d]
+pytestmark = [pytest.mark.pim6d, pytest.mark.freebsd_kernel_crash]
 
 
 def setup_module(mod):

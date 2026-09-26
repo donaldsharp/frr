@@ -105,7 +105,7 @@ from lib.topolog import logger
 # Required to instantiate the topology builder class.
 from lib.pim import McastTesterHelper
 
-pytestmark = [pytest.mark.pimd, pytest.mark.ospfd]
+pytestmark = [pytest.mark.pimd, pytest.mark.ospfd, pytest.mark.freebsd_kernel_crash]
 
 
 def build_topo(tgen):

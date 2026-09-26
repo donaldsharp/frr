@@ -38,7 +38,7 @@ sys.path.append(os.path.join(CWD, "../"))
 from lib import topotest
 from lib.topogen import Topogen, get_topogen
 
-pytestmark = [pytest.mark.bgpd, pytest.mark.ospfd]
+pytestmark = [pytest.mark.bgpd, pytest.mark.ospfd, pytest.mark.freebsd_kernel_crash]
 
 
 def setup_module(mod):
