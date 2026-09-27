@@ -83,9 +83,9 @@ Running on FreeBSD 15.1
 """""""""""""""""""""""
 
 Topotests on FreeBSD use VNET jails, ``epair(4)`` links, and ``if_bridge(4)``
-switches. pytest collects the directories named in the ``[freebsd]`` section
-of ``tests/topotests/pytest.ini``. ``--freebsd-all`` or
-``PYTEST_FREEBSD_ALL=1`` collects the rest of the tree.
+switches. pytest selects tests marked ``freebsd`` (``pytest.mark.freebsd``).
+Pass ``-m`` to choose a different set; ``-m ''`` collects the full tree. Add
+the mark to a test module once that test is known to pass.
 
 ``jail``, ``jexec``, ``ifconfig``, ``kldload``, and the ``if_epair`` and
 ``if_bridge`` modules are part of the base system. ``GENERIC`` includes
@@ -117,12 +117,10 @@ harness also runs ``kldload -n`` when a test starts:
 
 Build and install FRR with the steps in
 :doc:`building-frr-for-freebsd14`, including the ``frr`` user and the
-``frrvty`` group. The allowlisted suites need these daemons on the install
-prefix, normally ``/usr/local/libexec/frr``: ``zebra``, ``mgmtd``,
-``staticd``, ``ospfd``, ``ospf6d``, ``bgpd``, ``ripd``, ``ripngd``,
-``eigrpd``, and ``babeld``. Each jail links ``/usr/local/etc/frr`` to
-``/etc/frr``, so a build configured with ``--sysconfdir=/usr/local/etc``
-reads the test configuration.
+``frrvty`` group. Marked tests need the daemons they start on the install
+prefix, normally ``/usr/local/libexec/frr``. Each jail links
+``/usr/local/etc/frr`` to ``/etc/frr``, so a build configured with
+``--sysconfdir=/usr/local/etc`` reads the test configuration.
 
 From ``tests/topotests``:
 
@@ -131,9 +129,7 @@ From ``tests/topotests``:
    cd tests/topotests
    sudo pytest
 
-The allowlist covers p2p and switched OSPF, OSPFv3, RIP, RIPng, EIGRP, Babel,
-and basic BGP. MPLS, SRv6, Linux VRF, and ``tc netem`` tests stay off that
-list. A new VNET has forwarding disabled; the harness turns on
+A new VNET has forwarding disabled; the harness turns on
 ``net.inet.ip.forwarding`` and ``net.inet6.ip6.forwarding`` inside each jail
 and sets ``net.inet6.ip6.dad_count=0`` so configured addresses leave the
 tentative state immediately.

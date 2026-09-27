@@ -124,6 +124,5 @@ Add the following lines to the end of ``/etc/sysctl.conf``:
 Topotests
 ^^^^^^^^^
 
-FreeBSD 15.1 can run a subset of the topology tests in VNET jails. See
-:ref:`topotests` for the host requirements and the ``pytest.ini``
-``[freebsd]`` allowlist.
+FreeBSD 15.1 can run topology tests marked ``freebsd`` in VNET jails. See
+:ref:`topotests` for the host requirements.
