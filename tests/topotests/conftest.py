@@ -72,19 +72,6 @@ def is_main_runner():
     return "PYTEST_XDIST_WORKER" not in os.environ
 
 
-def _select_freebsd_mark(config):
-    """On FreeBSD, run tests marked freebsd unless the user passed -m."""
-    if not sys.platform.startswith("freebsd"):
-        return
-    if config.option.markexpr:
-        return
-    argv = sys.argv[1:]
-    if "-m" in argv or any(arg.startswith("-m=") for arg in argv):
-        return
-    config.option.markexpr = "freebsd"
-    logger.info("FreeBSD topotests: selecting pytest.mark.freebsd")
-
-
 def pytest_addoption(parser):
     """
     Add topology-only option to the topology tester. This option makes pytest
@@ -645,7 +632,6 @@ def pytest_configure(config):
         from munet import freebsd
 
         freebsd.reap_stale()
-        _select_freebsd_mark(config)
 
     if config.getoption("--collect-only"):
         return
