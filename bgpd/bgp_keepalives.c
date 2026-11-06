@@ -177,7 +177,9 @@ void *bgp_keepalives_start(void *arg)
 	/* use monotonic clock with condition variable */
 	pthread_condattr_t attrs;
 	pthread_condattr_init(&attrs);
+#ifndef __APPLE__
 	pthread_condattr_setclock(&attrs, CLOCK_MONOTONIC);
+#endif
 	pthread_cond_init(peerhash_cond, &attrs);
 	pthread_condattr_destroy(&attrs);
 
@@ -198,10 +200,35 @@ void *bgp_keepalives_start(void *arg)
 	frr_pthread_notify_running(fpt);
 
 	while (atomic_load_explicit(&fpt->running, memory_order_relaxed)) {
-		if (peerhash->count > 0)
+		if (peerhash->count > 0) {
+#ifdef __APPLE__
+			/* macOS has no pthread_condattr_setclock(), its
+			 * pthread_cond_timedwait() deadline is always
+			 * CLOCK_REALTIME.  Translate the monotonic deadline.
+			 */
+			struct timespec mono_now, real_now, abs_ts;
+
+			clock_gettime(CLOCK_MONOTONIC, &mono_now);
+			clock_gettime(CLOCK_REALTIME, &real_now);
+
+			abs_ts.tv_sec = next_update_ts.tv_sec - mono_now.tv_sec
+					+ real_now.tv_sec;
+			abs_ts.tv_nsec = next_update_ts.tv_nsec
+					 - mono_now.tv_nsec + real_now.tv_nsec;
+			if (abs_ts.tv_nsec < 0) {
+				abs_ts.tv_sec--;
+				abs_ts.tv_nsec += 1000000000L;
+			} else if (abs_ts.tv_nsec >= 1000000000L) {
+				abs_ts.tv_sec++;
+				abs_ts.tv_nsec -= 1000000000L;
+			}
+			pthread_cond_timedwait(peerhash_cond, peerhash_mtx,
+					       &abs_ts);
+#else
 			pthread_cond_timedwait(peerhash_cond, peerhash_mtx,
 					       &next_update_ts);
-		else
+#endif
+		} else
 			while (peerhash->count == 0
 			       && atomic_load_explicit(&fpt->running,
 						       memory_order_relaxed))
