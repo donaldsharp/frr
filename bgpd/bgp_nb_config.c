@@ -118,19 +118,52 @@ int bgp_nb_bgp_create(struct nb_cb_create_args *args)
 				asnotation = ASNOTATION_PLAIN;
 		}
 
-		ret = bgp_get_vty(&bgp, &as, name, inst_type, NULL, asnotation);
-		if (ret != BGP_SUCCESS && ret != BGP_CREATED && ret != BGP_INSTANCE_EXISTS)
-			return NB_ERR_RESOURCE;
+		/*
+		 * Match classic router_bgp: look up with force_config so an
+		 * AUTO instance created by L3VNI (same VRF name) is reclaimed
+		 * instead of skipped. bgp_get_vty() filters AUTO and would
+		 * create a second struct bgp — config (RD/Type-5) then lands
+		 * on the YANG instance while L3VNI stays on the AUTO one
+		 * (memory leak + missing EVPN prefixes).
+		 */
+		ret = bgp_lookup_by_as_name_type(&bgp, &as, NULL, asnotation, name, inst_type,
+						 true);
+		if (!(bgp && ret == BGP_INSTANCE_EXISTS)) {
+			ret = bgp_get_vty(&bgp, &as, name, inst_type, NULL, asnotation);
+			if (ret != BGP_SUCCESS && ret != BGP_CREATED && ret != BGP_INSTANCE_EXISTS)
+				return NB_ERR_RESOURCE;
+		}
 
 		if (inst_type == BGP_INSTANCE_TYPE_VRF || IS_BGP_INSTANCE_HIDDEN(bgp)) {
+			struct vrf *vrf;
+
 			bgp_vpn_leak_export(bgp);
 			UNSET_FLAG(bgp->vrf_flags, BGP_VRF_AUTO);
 			UNSET_FLAG(bgp->flags, BGP_FLAG_INSTANCE_HIDDEN);
 			UNSET_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS);
+
+			/* Ensure the claimed instance owns the VRF link. */
+			if (name) {
+				vrf = vrf_lookup_by_name(name);
+				if (vrf && (bgp->vrf_id != vrf->vrf_id || vrf->info != (void *)bgp))
+					bgp_vrf_link(bgp, vrf);
+			}
 		}
 
 		nb_running_set_entry(args->dnode, bgp);
 		bgp_vpn_leak_export(bgp);
+
+		/*
+		 * bgp_create() seeds default_af IPv4 unicast. Under XFRR
+		 * batching, the router-bgp seed CREATE of default-afi-safi
+		 * ipv4-unicast and "no bgp default ipv4-unicast" DESTROY
+		 * cancel in the candidate, so the destroy callback never
+		 * runs and peers stay IPv4-activated (e.g. BGP-LS fabric
+		 * tests leak EBGP prefixes as LS NLRIs). Clear the C
+		 * default here; child default-afi-safi create callbacks
+		 * re-apply only what remains in the committed tree.
+		 */
+		bgp->default_af[AFI_IP][SAFI_UNICAST] = false;
 
 		/*
 		 * Inverse race: L3VNI may already be live when the VRF BGP
