@@ -978,6 +978,8 @@ static int cmd_execute_command_real(vector vline, struct vty *vty,
 	int argc = argv_list->count;
 
 	int ret;
+	int pending_ret = CMD_SUCCESS;
+
 	if (matched_element->daemon)
 		ret = CMD_SUCCESS_DAEMON;
 	else {
@@ -995,13 +997,23 @@ static int cmd_execute_command_real(vector vline, struct vty *vty,
 
 			/*
 			 * Perform pending commit (if any) before executing
-			 * non-YANG command.
+			 * non-YANG command.  Remember a failure so it is not
+			 * lost, but still run the command: it may be one that
+			 * has to execute regardless (e.g. "exit").
 			 */
 			if (!(matched_element->attr & CMD_ATTR_YANG))
-				(void)nb_cli_pending_commit_check(vty);
+				pending_ret = nb_cli_pending_commit_check(vty);
 		}
 
 		ret = matched_element->func(matched_element, vty, argc, argv);
+
+		/*
+		 * Report a rejected pending commit through this command's
+		 * return value when the command itself succeeded, so that
+		 * callers such as "vtysh -f" can detect the failure.
+		 */
+		if (ret == CMD_SUCCESS && pending_ret != CMD_SUCCESS)
+			ret = pending_ret;
 	}
 
 	// delete list and cmd_token's in it
