@@ -2337,6 +2337,13 @@ static void bgp_rfapi_delete_nve_group(struct vty *vty, /* NULL = no output */
 	}
 	if (rfg->rfp_cfg)
 		XFREE(MTYPE_RFAPI_RFP_GROUP_CFG, rfg->rfp_cfg);
+	/* Force-close VRF "add vrf" descriptor if still open. */
+	if (rfg->rfd) {
+		struct rfapi_descriptor *rfd = rfg->rfd;
+
+		rfg->rfd = NULL;
+		rfapi_close(rfd);
+	}
 	listnode_delete(bgp->rfapi_cfg->nve_groups_sequential, rfg);
 
 	QOBJ_UNREG(rfg);
@@ -2396,7 +2403,7 @@ static void bgp_rfapi_delete_nve_group(struct vty *vty, /* NULL = no output */
 	}
 }
 
-static int
+int
 bgp_rfapi_delete_named_nve_group(struct vty *vty, /* NULL = no output */
 				 struct bgp *bgp,
 				 const char *rfg_name,	/* NULL = any */

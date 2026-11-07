@@ -117,19 +117,52 @@ int bgp_nb_bgp_create(struct nb_cb_create_args *args)
 				asnotation = ASNOTATION_PLAIN;
 		}
 
-		ret = bgp_get_vty(&bgp, &as, name, inst_type, NULL, asnotation);
-		if (ret != BGP_SUCCESS && ret != BGP_CREATED && ret != BGP_INSTANCE_EXISTS)
-			return NB_ERR_RESOURCE;
+		/*
+		 * Match classic router_bgp: look up with force_config so an
+		 * AUTO instance created by L3VNI (same VRF name) is reclaimed
+		 * instead of skipped. bgp_get_vty() filters AUTO and would
+		 * create a second struct bgp — config (RD/Type-5) then lands
+		 * on the YANG instance while L3VNI stays on the AUTO one
+		 * (memory leak + missing EVPN prefixes).
+		 */
+		ret = bgp_lookup_by_as_name_type(&bgp, &as, NULL, asnotation, name, inst_type,
+						 true);
+		if (!(bgp && ret == BGP_INSTANCE_EXISTS)) {
+			ret = bgp_get_vty(&bgp, &as, name, inst_type, NULL, asnotation);
+			if (ret != BGP_SUCCESS && ret != BGP_CREATED && ret != BGP_INSTANCE_EXISTS)
+				return NB_ERR_RESOURCE;
+		}
 
 		if (inst_type == BGP_INSTANCE_TYPE_VRF || IS_BGP_INSTANCE_HIDDEN(bgp)) {
+			struct vrf *vrf;
+
 			bgp_vpn_leak_export(bgp);
 			UNSET_FLAG(bgp->vrf_flags, BGP_VRF_AUTO);
 			UNSET_FLAG(bgp->flags, BGP_FLAG_INSTANCE_HIDDEN);
 			UNSET_FLAG(bgp->flags, BGP_FLAG_DELETE_IN_PROGRESS);
+
+			/* Ensure the claimed instance owns the VRF link. */
+			if (name) {
+				vrf = vrf_lookup_by_name(name);
+				if (vrf && (bgp->vrf_id != vrf->vrf_id || vrf->info != (void *)bgp))
+					bgp_vrf_link(bgp, vrf);
+			}
 		}
 
 		nb_running_set_entry(args->dnode, bgp);
 		bgp_vpn_leak_export(bgp);
+
+		/*
+		 * bgp_create() seeds default_af IPv4 unicast. Under XFRR
+		 * batching, the router-bgp seed CREATE of default-afi-safi
+		 * ipv4-unicast and "no bgp default ipv4-unicast" DESTROY
+		 * cancel in the candidate, so the destroy callback never
+		 * runs and peers stay IPv4-activated (e.g. BGP-LS fabric
+		 * tests leak EBGP prefixes as LS NLRIs). Clear the C
+		 * default here; child default-afi-safi create callbacks
+		 * re-apply only what remains in the committed tree.
+		 */
+		bgp->default_af[AFI_IP][SAFI_UNICAST] = false;
 
 		/*
 		 * Inverse race: L3VNI may already be live when the VRF BGP
@@ -342,6 +375,90 @@ const char *bgp_nb_instance_xpath(const struct bgp *bgp, char *buf, size_t bufle
 }
 
 /*
+ * Locate the running-config frr-bgp:bgp dnode for a BGP instance by walking
+ * control-plane-protocol list keys (name/vrf). Avoids identityref predicates
+ * in xpath lookups that silently fail (type-5 / RD reapply no-op).
+ */
+static const struct lyd_node *bgp_nb_find_instance_dnode(const struct bgp *bgp)
+{
+	const struct lyd_node *root, *cpps, *cpp, *bgp_dnode;
+	const char *want_name = VRF_DEFAULT_NAME;
+	const char *want_vrf = VRF_DEFAULT_NAME;
+	const char *name, *vrf, *type;
+
+	if (!bgp || !running_config || !running_config->dnode)
+		return NULL;
+
+	if (bgp->name) {
+		want_name = bgp->name;
+		want_vrf = bgp->name;
+	}
+
+	root = running_config->dnode;
+	cpps = yang_dnode_get(root, "/frr-routing:routing/control-plane-protocols");
+	if (!cpps)
+		return NULL;
+
+	LY_LIST_FOR (lyd_child(cpps), cpp) {
+		if (!strmatch(cpp->schema->name, "control-plane-protocol"))
+			continue;
+		if (!yang_dnode_exists(cpp, "./type") || !yang_dnode_exists(cpp, "./name") ||
+		    !yang_dnode_exists(cpp, "./vrf"))
+			continue;
+		type = yang_dnode_get_string(cpp, "./type");
+		/*
+		 * Identityref string form varies by libyang (frr-bgp:bgp,
+		 * bgp, …). Accept any value whose final identity name is bgp.
+		 */
+		if (!type)
+			continue;
+		{
+			const char *id = strrchr(type, ':');
+
+			id = id ? id + 1 : type;
+			if (!strmatch(id, "bgp"))
+				continue;
+		}
+		name = yang_dnode_get_string(cpp, "./name");
+		vrf = yang_dnode_get_string(cpp, "./vrf");
+		if (!strmatch(name, want_name) || !strmatch(vrf, want_vrf))
+			continue;
+		bgp_dnode = yang_dnode_get(cpp, "frr-bgp:bgp");
+		if (bgp_dnode)
+			return bgp_dnode;
+	}
+
+	return NULL;
+}
+
+/*
+ * Resolve struct bgp * for a dnode under frr-bgp:bgp by walking up to the
+ * control-plane-protocol name/vrf keys. Prefer this over nb_running_get_entry
+ * alone for EVPN ip-vrf leaves — parent-chain entry lookup has bound the
+ * wrong (default) instance and made RD / type-5 APPLY a silent no-op.
+ */
+static struct bgp *bgp_nb_dnode_lookup_bgp(const struct lyd_node *dnode)
+{
+	const struct lyd_node *cpp;
+	const char *name, *vrf;
+	struct bgp *bgp;
+
+	cpp = yang_dnode_get_parent(dnode, "control-plane-protocol");
+	if (cpp && yang_dnode_exists(cpp, "name") && yang_dnode_exists(cpp, "vrf")) {
+		name = yang_dnode_get_string(cpp, "name");
+		vrf = yang_dnode_get_string(cpp, "vrf");
+		if (strmatch(vrf, VRF_DEFAULT_NAME))
+			bgp = bgp_get_default();
+		else
+			bgp = bgp_lookup_by_name(name);
+		if (bgp)
+			return bgp;
+	}
+
+	return nb_running_get_entry(dnode, NULL, false);
+}
+
+/*
  * Orchestrated per-instance CLI dump. Naive nb_cli_show_dnode_cmds() on
  * frr-bgp:bgp is wrong: peer AF config must appear inside address-family
  * frames, and bgp default shutdown / bgp shutdown must follow peers.
@@ -359,6 +476,8 @@ void bgp_nb_cli_show_instance(struct vty *vty, const struct lyd_node *bgp)
 
 	global = yang_dnode_get(bgp, "global");
 	if (global) {
+		struct bgp *bgp_inst;
+
 		LY_LIST_FOR (lyd_child(global), child) {
 			skip = false;
 			for (i = 0; defer[i]; i++) {
@@ -371,6 +490,15 @@ void bgp_nb_cli_show_instance(struct vty *vty, const struct lyd_node *bgp)
 				continue;
 			nb_cli_show_dnode_cmds(vty, child, false);
 		}
+
+		/*
+		 * ipv4-unicast is the implicit default (seeded in YANG, omitted
+		 * from show). When cleared, emit the classic negative so
+		 * write-config / reload keeps default_af false.
+		 */
+		bgp_inst = nb_running_get_entry(bgp, NULL, false);
+		if (bgp_inst && !bgp_inst->default_af[AFI_IP][SAFI_UNICAST])
+			vty_out(vty, " no bgp default ipv4-unicast\n");
 	}
 
 	bgp_nb_cli_show_container_entries_skip_af(vty, yang_dnode_get(bgp, "peer-groups"));
@@ -411,11 +539,9 @@ void bgp_nb_cli_show_instance(struct vty *vty, const struct lyd_node *bgp)
 
 void bgp_nb_cli_show_instance_bgp(struct vty *vty, struct bgp *bgp)
 {
-	char xpath[XPATH_MAXLEN];
 	const struct lyd_node *dnode;
 
-	bgp_nb_instance_xpath(bgp, xpath, sizeof(xpath));
-	dnode = yang_dnode_get(running_config->dnode, xpath);
+	dnode = bgp_nb_find_instance_dnode(bgp);
 	if (!dnode)
 		return;
 
@@ -432,8 +558,31 @@ int bgp_nb_local_as_modify(struct nb_cb_modify_args *args)
 	struct peer *peer;
 	struct listnode *node;
 
-	if (args->event != NB_EV_APPLY)
+	switch (args->event) {
+	case NB_EV_VALIDATE:
+		/*
+		 * Reject changing the instance AS to a value already used as a
+		 * peer local-as override (classic peer_local_as_set constraint).
+		 */
+		bgp = nb_running_get_entry(args->dnode, NULL, false);
+		if (!bgp)
+			return NB_OK;
+		new_as = yang_dnode_get_uint32(args->dnode, NULL);
+		for (ALL_LIST_ELEMENTS_RO(bgp->peer, node, peer)) {
+			if (CHECK_FLAG(peer->flags, PEER_FLAG_LOCAL_AS) &&
+			    peer->change_local_as == new_as) {
+				snprintfrr(args->errmsg, args->errmsg_len,
+					   "Cannot have local-as same as BGP AS number");
+				return NB_ERR_VALIDATION;
+			}
+		}
 		return NB_OK;
+	case NB_EV_PREPARE:
+	case NB_EV_ABORT:
+		return NB_OK;
+	case NB_EV_APPLY:
+		break;
+	}
 
 	bgp = nb_running_get_entry(args->dnode, NULL, true);
 	new_as = yang_dnode_get_uint32(args->dnode, NULL);
@@ -1500,7 +1649,17 @@ int bgp_nb_confederation_identifier_destroy(struct nb_cb_destroy_args *args)
 void bgp_nb_cli_show_confederation_identifier(struct vty *vty, const struct lyd_node *dnode,
 					      bool show_defaults)
 {
-	vty_out(vty, " bgp confederation identifier %s\n", yang_dnode_get_string(dnode, NULL));
+	struct bgp *bgp = nb_running_get_entry(dnode, NULL, false);
+
+	/*
+	 * Prefer confed_id_pretty so ASDOT input like "1.0" round-trips;
+	 * YANG leaf is asplain uint32 and would always show "65536".
+	 */
+	if (bgp && bgp->confed_id_pretty)
+		vty_out(vty, " bgp confederation identifier %s\n", bgp->confed_id_pretty);
+	else
+		vty_out(vty, " bgp confederation identifier %s\n",
+			yang_dnode_get_string(dnode, NULL));
 }
 
 int bgp_nb_confederation_member_as_create(struct nb_cb_create_args *args)
@@ -2071,7 +2230,16 @@ int bgp_nb_default_afi_safi_destroy(struct nb_cb_destroy_args *args)
 void bgp_nb_cli_show_default_afi_safi(struct vty *vty, const struct lyd_node *dnode,
 				      bool show_defaults)
 {
-	vty_out(vty, " bgp default %s\n", yang_dnode_get_string(dnode, NULL));
+	const char *afi_safi = yang_dnode_get_string(dnode, NULL);
+
+	/*
+	 * ipv4-unicast is seeded as the implicit C default on new instances.
+	 * Omit from show running unless showing defaults (classic behavior).
+	 */
+	if (!show_defaults && strmatch(afi_safi, "ipv4-unicast"))
+		return;
+
+	vty_out(vty, " bgp default %s\n", afi_safi);
 }
 
 int bgp_nb_gr_stale_routes_time_modify(struct nb_cb_modify_args *args)
@@ -2671,8 +2839,15 @@ int bgp_nb_shutdown_modify(struct nb_cb_modify_args *args)
 	bgp = nb_running_get_entry(args->dnode, NULL, true);
 	global = yang_dnode_get_parent(args->dnode, "global");
 	if (yang_dnode_get_bool(args->dnode, NULL)) {
+		/*
+		 * If shutdown-message is in the same candidate, let its
+		 * modify callback call bgp_shutdown_enable() with the text.
+		 * Enabling here first with NULL makes the later call a no-op
+		 * (BGP_FLAG_SHUTDOWN already set) and peers get an empty
+		 * RFC 8203 message.
+		 */
 		if (yang_dnode_exists(global, "shutdown-message"))
-			msg = yang_dnode_get_string(global, "shutdown-message");
+			return NB_OK;
 		bgp_shutdown_enable(bgp, msg, bgp_nb_shutdown_send_notify(global));
 	} else
 		bgp_shutdown_disable(bgp);
@@ -2837,11 +3012,13 @@ void bgp_nb_cli_show_suppress_fib_pending(struct vty *vty, const struct lyd_node
 					  bool show_defaults)
 {
 	/*
-	 * Delay leaf is when-gated and omitted from running when it equals
-	 * the YANG default. Print the enable form here in that case.
+	 * CLI always stores delay (YANG default 1000). nb_cli_show_dnode_cmds
+	 * skips the default-valued delay leaf, so its cli_show never runs.
+	 * Print the enable form here when delay is absent OR at default.
 	 */
 	if (yang_dnode_get_bool(dnode, NULL)) {
-		if (!yang_dnode_exists(dnode, "../suppress-fib-pending-delay"))
+		if (!yang_dnode_exists(dnode, "../suppress-fib-pending-delay") ||
+		    yang_dnode_is_default(dnode, "../suppress-fib-pending-delay"))
 			vty_out(vty, " bgp suppress-fib-pending\n");
 	} else if (show_defaults)
 		vty_out(vty, " no bgp suppress-fib-pending\n");
@@ -3501,6 +3678,10 @@ int bgp_nb_peer_group_remote_as_type_modify(struct nb_cb_modify_args *args)
 int bgp_nb_peer_group_remote_as_type_destroy(struct nb_cb_destroy_args *args)
 {
 	struct peer_group *group;
+	struct peer *peer;
+	struct listnode *node, *nnode;
+	enum peer_asn_type as_type;
+	as_t as;
 
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
@@ -3508,6 +3689,25 @@ int bgp_nb_peer_group_remote_as_type_destroy(struct nb_cb_destroy_args *args)
 	group = nb_running_get_entry(args->dnode, NULL, true);
 	if (!group)
 		return NB_OK;
+
+	as_type = group->conf->as_type;
+	as = group->conf->as;
+
+	/*
+	 * YANG may stamp PEER_FLAG_REMOTE_AS on members when copying the
+	 * group's AS onto the mandatory neighbor remote-as leaf. Clear that
+	 * override when the member AS still matches the group so
+	 * peer_group_remote_as_delete() resets the session (→ Active).
+	 */
+	for (ALL_LIST_ELEMENTS(group->peer, node, nnode, peer)) {
+		if (!CHECK_FLAG(peer->flags_override, PEER_FLAG_REMOTE_AS))
+			continue;
+		if (peer->as_type != as_type)
+			continue;
+		if (as_type == AS_SPECIFIED && peer->as != as)
+			continue;
+		UNSET_FLAG(peer->flags_override, PEER_FLAG_REMOTE_AS);
+	}
 
 	peer_group_remote_as_delete(group);
 	return NB_OK;
@@ -4459,6 +4659,7 @@ int bgp_nb_peer_ttl_security_modify(struct nb_cb_modify_args *args)
 {
 	struct peer *peer;
 	uint8_t hops;
+	int ret;
 
 	switch (args->event) {
 	case NB_EV_VALIDATE:
@@ -4469,6 +4670,17 @@ int bgp_nb_peer_ttl_security_modify(struct nb_cb_modify_args *args)
 		if (peer->conf_if && hops > 1) {
 			snprintfrr(args->errmsg, args->errmsg_len,
 				   "interface peer hops cannot exceed 1");
+			return NB_ERR_VALIDATION;
+		}
+		/*
+		 * Mutual exclusion with ebgp-multihop must be enforced in
+		 * VALIDATE: APPLY-time rejection cannot block the commit, and
+		 * a local-as override may have temporarily sorted the peer as
+		 * iBGP while cfg_ttl still records operator multihop.
+		 */
+		if (peer_ebgp_multihop_cfg(peer)) {
+			snprintfrr(args->errmsg, args->errmsg_len,
+				   "%%Cannot configure both ttl-security hops and ebgp-multihop");
 			return NB_ERR_VALIDATION;
 		}
 		return NB_OK;
@@ -4483,7 +4695,13 @@ int bgp_nb_peer_ttl_security_modify(struct nb_cb_modify_args *args)
 	if (!peer)
 		return NB_ERR_NOT_FOUND;
 
-	if (peer_ttl_security_hops_set(peer, yang_dnode_get_uint8(args->dnode, NULL)))
+	ret = peer_ttl_security_hops_set(peer, yang_dnode_get_uint8(args->dnode, NULL));
+	if (ret == BGP_ERR_NO_EBGP_MULTIHOP_WITH_TTLHACK) {
+		snprintfrr(args->errmsg, args->errmsg_len,
+			   "%%Cannot configure both ttl-security hops and ebgp-multihop");
+		return NB_ERR_RESOURCE;
+	}
+	if (ret)
 		return NB_ERR_RESOURCE;
 	return NB_OK;
 }
@@ -4548,15 +4766,31 @@ static int bgp_nb_peer_local_as_apply(struct peer *peer, const struct lyd_node *
 int bgp_nb_peer_local_as_modify(struct nb_cb_modify_args *args)
 {
 	struct peer *peer;
-	as_t as;
+	as_t as, bgp_as;
+	const struct lyd_node *bgp_dnode;
 
 	switch (args->event) {
 	case NB_EV_VALIDATE:
-		peer = bgp_nb_config_peer(args->dnode);
-		if (!peer || !peer->bgp)
-			return NB_OK;
 		as = yang_dnode_get_uint32(args->dnode, NULL);
-		if (peer->bgp->as == as) {
+		/*
+		 * Always prefer the candidate instance AS (./global/local-as).
+		 * Same-transaction "router bgp 110" + "neighbor … local-as 110"
+		 * must fail VALIDATE even when the peer already exists with a
+		 * different running AS (checking peer->bgp->as alone wrongly
+		 * returns NB_OK and the batch commits).
+		 */
+		bgp_dnode = yang_dnode_get_parent(args->dnode, "bgp");
+		if (bgp_dnode && yang_dnode_exists(bgp_dnode, "./global/local-as")) {
+			bgp_as = yang_dnode_get_uint32(bgp_dnode, "./global/local-as");
+			if (bgp_as == as) {
+				snprintfrr(args->errmsg, args->errmsg_len,
+					   "Cannot have local-as same as BGP AS number");
+				return NB_ERR_VALIDATION;
+			}
+			return NB_OK;
+		}
+		peer = bgp_nb_config_peer(args->dnode);
+		if (peer && peer->bgp && peer->bgp->as == as) {
 			snprintfrr(args->errmsg, args->errmsg_len,
 				   "Cannot have local-as same as BGP AS number");
 			return NB_ERR_VALIDATION;
@@ -5047,16 +5281,51 @@ int bgp_nb_peer_cap_soft_version_modify(struct nb_cb_modify_args *args)
 		return NB_ERR_NOT_FOUND;
 
 	val = yang_dnode_get_string(args->dnode, NULL);
-	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD |
-				      PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	/* Clear both encodings separately so peer_flag_* finds each flag. */
+	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
 	if (strmatch(val, "old-encoding"))
 		peer_flag_set(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
 	else if (strmatch(val, "latest-encoding"))
 		peer_flag_set(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	else {
+		/* disabled: explicit override of bgp default inheritance */
+		SET_FLAG(peer->flags_override, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+		SET_FLAG(peer->flags_override, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	}
 
 	enable = !strmatch(val, "disabled");
 	bgp_nb_capability_send(peer, CAPABILITY_CODE_SOFT_VERSION,
 			       enable ? CAPABILITY_ACTION_SET : CAPABILITY_ACTION_UNSET);
+	return NB_OK;
+}
+
+int bgp_nb_peer_cap_soft_version_destroy(struct nb_cb_destroy_args *args)
+{
+	struct peer *peer;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	peer = bgp_nb_config_peer(args->dnode);
+	if (!peer)
+		return NB_OK;
+
+	/* Leaf gone → inherit from bgp default again. */
+	UNSET_FLAG(peer->flags_override, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+	UNSET_FLAG(peer->flags_override, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	if (CHECK_FLAG(peer->bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_OLD))
+		peer_flag_set(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+	if (CHECK_FLAG(peer->bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_NEW))
+		peer_flag_set(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+
+	bgp_nb_capability_send(peer, CAPABILITY_CODE_SOFT_VERSION,
+			       (CHECK_FLAG(peer->flags, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD) ||
+				CHECK_FLAG(peer->flags, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW))
+				       ? CAPABILITY_ACTION_SET
+				       : CAPABILITY_ACTION_UNSET);
 	return NB_OK;
 }
 
@@ -5071,7 +5340,7 @@ void bgp_nb_cli_show_peer_cap_soft_version(struct vty *vty, const struct lyd_nod
 	else if (strmatch(val, "latest-encoding"))
 		vty_out(vty, " neighbor %s capability software-version latest-encoding\n",
 			bgp_nb_config_peer_name(dnode));
-	else if (show_defaults)
+	else
 		vty_out(vty, " no neighbor %s capability software-version\n",
 			bgp_nb_config_peer_name(dnode));
 }
@@ -5666,9 +5935,23 @@ int bgp_nb_neighbor_peer_group_modify(struct nb_cb_modify_args *args)
 			return NB_ERR_VALIDATION;
 		}
 		group_name = yang_dnode_get_string(args->dnode, NULL);
-		if (!peer_group_lookup(peer->bgp, group_name)) {
+		group = peer_group_lookup(peer->bgp, group_name);
+		if (!group) {
 			snprintfrr(args->errmsg, args->errmsg_len,
 				   "Configure the peer-group first");
+			return NB_ERR_VALIDATION;
+		}
+		/*
+		 * Mirror peer_group_bind(): ebgp-multihop and ttl-security
+		 * cannot be mixed across peer and group. APPLY alone returns
+		 * a generic resource error; reject here so the CLI message
+		 * matches classic behavior.
+		 */
+		if ((CHECK_FLAG(peer->flags, PEER_FLAG_EBGP_MULTIHOP) &&
+		     group->conf->gtsm_hops != BGP_GTSM_HOPS_DISABLED) ||
+		    (peer->gtsm_hops != BGP_GTSM_HOPS_DISABLED && group->conf->cfg_ttl != 0)) {
+			snprintfrr(args->errmsg, args->errmsg_len,
+				   "%%Cannot configure both ttl-security hops and ebgp-multihop");
 			return NB_ERR_VALIDATION;
 		}
 		return NB_OK;
@@ -5690,6 +5973,11 @@ int bgp_nb_neighbor_peer_group_modify(struct nb_cb_modify_args *args)
 
 	as = peer->as;
 	ret = peer_group_bind(peer->bgp, &peer->connection->su, peer, group, &as);
+	if (ret == BGP_ERR_NO_EBGP_MULTIHOP_WITH_TTLHACK) {
+		snprintfrr(args->errmsg, args->errmsg_len,
+			   "%%Cannot configure both ttl-security hops and ebgp-multihop");
+		return NB_ERR_VALIDATION;
+	}
 	if (ret != 0)
 		return NB_ERR_RESOURCE;
 
@@ -5701,6 +5989,8 @@ int bgp_nb_neighbor_peer_group_modify(struct nb_cb_modify_args *args)
 int bgp_nb_neighbor_peer_group_destroy(struct nb_cb_destroy_args *args)
 {
 	struct peer *peer;
+	afi_t afi;
+	safi_t safi;
 
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
@@ -5709,8 +5999,29 @@ int bgp_nb_neighbor_peer_group_destroy(struct nb_cb_destroy_args *args)
 	if (!peer || !peer->group)
 		return NB_OK;
 
+	/*
+	 * Classic no_neighbor_set_peer_group deletes the peer. In YANG the
+	 * neighbor list entry remains, so only unbind — but drop inherited
+	 * AF state that is not peer-overridden (e.g. maximum-prefix-out),
+	 * otherwise the orphan keeps the group's pmax_out.
+	 */
+	FOREACH_AFI_SAFI (afi, safi) {
+		if (!CHECK_FLAG(peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_OUT))
+			continue;
+		if (CHECK_FLAG(peer->af_flags_override[afi][safi], PEER_FLAG_MAX_PREFIX_OUT))
+			continue;
+		peer_maximum_prefix_out_unset(peer, afi, safi);
+	}
+
 	if (peer_group_unbind(peer->bgp, peer, peer->group) != 0)
 		return NB_ERR_RESOURCE;
+
+	FOREACH_AFI_SAFI (afi, safi) {
+		struct peer_af *paf = peer_af_find(peer, afi, safi);
+
+		if (paf)
+			update_group_adjust_peer(paf);
+	}
 	return NB_OK;
 }
 
@@ -8282,7 +8593,8 @@ static void bgp_nb_evpn_type5_rmap_free(struct bgp *bgp, afi_t afi, safi_t safi)
  * Reconcile the running Type-5 export state of one afi/safi with the
  * configured values of its YANG container.
  */
-static int bgp_nb_evpn_type5_apply(const struct lyd_node *dnode)
+static int bgp_nb_evpn_type5_apply(const struct lyd_node *dnode, struct bgp *bgp_hint,
+				   bool clear_rmap)
 {
 	struct bgp *bgp;
 	const struct lyd_node *cont = NULL;
@@ -8299,14 +8611,26 @@ static int bgp_nb_evpn_type5_apply(const struct lyd_node *dnode)
 	if (!bgp_nb_evpn_type5_container(dnode, &cont, &afi, &safi))
 		return NB_ERR_NOT_FOUND;
 
-	bgp = nb_running_get_entry(cont, NULL, true);
+	/*
+	 * Prefer an explicit VRF BGP (reapply after L3VNI attach). Fall back
+	 * to resolving by control-plane-protocol name/vrf keys — walking
+	 * nb_running_get_entry from ip-vrf leaves has bound the wrong
+	 * instance and left type-5 / RD flags unset on the tenant VRF.
+	 */
+	bgp = bgp_hint;
+	if (!bgp)
+		bgp = bgp_nb_dnode_lookup_bgp(cont);
 	if (!bgp)
 		return NB_ERR_NOT_FOUND;
 
 	flags = &bgp->af_flags[AFI_L2VPN][SAFI_EVPN];
 
 	enable = yang_dnode_exists(cont, "./enable") && yang_dnode_get_bool(cont, "./enable");
-	if (enable && yang_dnode_exists(cont, "./route-map"))
+	/*
+	 * Destroy callbacks receive the running-tree dnode, so ./route-map
+	 * still appears present. clear_rmap forces treat-as-absent.
+	 */
+	if (!clear_rmap && enable && yang_dnode_exists(cont, "./route-map"))
 		rmap = yang_dnode_get_string(cont, "./route-map");
 
 	if (safi == SAFI_UNICAST) {
@@ -8414,6 +8738,13 @@ static int bgp_nb_evpn_type5_apply(const struct lyd_node *dnode)
 	    (!was_advertising || rmap_changed || adv_flag_changed || skip_newly_disabled))
 		bgp_evpn_advertise_type5_routes(bgp, afi, safi);
 
+	/*
+	 * Flags may have been set before L3VNI was live (advertise helpers
+	 * no-op without l3vni). Once the VNI is attached, push VRF routes.
+	 */
+	if (bgp->l3vni)
+		update_advertise_vrf_routes(bgp);
+
 	return NB_OK;
 }
 
@@ -8421,56 +8752,56 @@ int bgp_nb_evpn_type5_enable_modify(struct nb_cb_modify_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_enable_destroy(struct nb_cb_destroy_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_gateway_ip_modify(struct nb_cb_modify_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_gateway_ip_destroy(struct nb_cb_destroy_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_route_map_modify(struct nb_cb_modify_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_route_map_destroy(struct nb_cb_destroy_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, true);
 }
 
 int bgp_nb_evpn_type5_skip_evpn_imported_modify(struct nb_cb_modify_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_skip_evpn_imported_destroy(struct nb_cb_destroy_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 void bgp_nb_cli_show_evpn_type5_enable(struct vty *vty, const struct lyd_node *dnode,
@@ -8791,7 +9122,7 @@ int bgp_nb_evpn_vrf_rd_modify(struct nb_cb_modify_args *args)
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
 
-	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_dnode_lookup_bgp(args->dnode);
 	if (!bgp)
 		return NB_ERR_NOT_FOUND;
 
@@ -8814,7 +9145,7 @@ int bgp_nb_evpn_vrf_rd_destroy(struct nb_cb_destroy_args *args)
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
 
-	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_dnode_lookup_bgp(args->dnode);
 	if (!bgp || !is_vrf_rd_configured(bgp))
 		return NB_OK;
 
@@ -8898,7 +9229,6 @@ static struct ecommunity *bgp_nb_evpn_vrf_rt_str2com(const char *rt_str, bool *i
  */
 void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 {
-	char xpath[XPATH_MAXLEN];
 	const struct lyd_node *bgp_dnode, *afs, *af, *ip_vrf, *child, *enable;
 	struct prefix_rd prd;
 	const char *rd_str;
@@ -8911,14 +9241,25 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 	if (!bgp || !running_config || !running_config->dnode)
 		return;
 
-	bgp_nb_instance_xpath(bgp, xpath, sizeof(xpath));
-	bgp_dnode = yang_dnode_get(running_config->dnode, xpath);
-	if (!bgp_dnode)
+	/*
+	 * Resolve the instance dnode by walking list keys — identityref
+	 * xpath predicates for control-plane-protocol have been unreliable
+	 * and made reapply a silent no-op (type-5 / RD never pushed after
+	 * L3VNI attach).
+	 */
+	bgp_dnode = bgp_nb_find_instance_dnode(bgp);
+	if (!bgp_dnode) {
+		if (BGP_DEBUG(zebra, ZEBRA))
+			zlog_debug("%s: no YANG dnode for VRF %s", __func__, bgp->name_pretty);
 		return;
+	}
 
 	afs = yang_dnode_get(bgp_dnode, "global/afi-safis");
-	if (!afs)
+	if (!afs) {
+		if (BGP_DEBUG(zebra, ZEBRA))
+			zlog_debug("%s: no YANG afi-safis for VRF %s", __func__, bgp->name_pretty);
 		return;
+	}
 
 	ip_vrf = NULL;
 	LY_LIST_FOR (lyd_child(afs), af) {
@@ -8949,10 +9290,10 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 	}
 
 	LY_LIST_FOR (lyd_child(ip_vrf), child) {
-		struct bgp_evpn_rt_config *rt_config = bgp->vrf_route_target_config;
-		struct bgp_evpn_cfgd_rt *cfgd_rt;
-
 		if (strmatch(child->schema->name, "import-route-target")) {
+			struct bgp_evpn_cfgd_rt *cfgd_rt;
+			struct bgp_evpn_rt_config *rt_config;
+
 			ecom = bgp_nb_evpn_vrf_rt_str2com(yang_dnode_get_string(child, NULL),
 							  &is_wildcard);
 			if (!ecom)
@@ -8962,11 +9303,15 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 			ecommunity_free(&ecom);
 			if (!cfgd_rt)
 				continue;
+			rt_config = bgp->vrf_route_target_config;
 			if (bgp_evpn_cfgd_rt_slu_find(&rt_config->cfgd_import, cfgd_rt))
 				bgp_evpn_cfgd_rt_free(cfgd_rt);
 			else
 				bgp_nb_evpn_vrf_rt_batch(bgp, cfgd_rt, true, true);
 		} else if (strmatch(child->schema->name, "export-route-target")) {
+			struct bgp_evpn_cfgd_rt *cfgd_rt;
+			struct bgp_evpn_rt_config *rt_config;
+
 			ecom = bgp_nb_evpn_vrf_rt_str2com(yang_dnode_get_string(child, NULL), NULL);
 			if (!ecom)
 				continue;
@@ -8975,6 +9320,7 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 			ecommunity_free(&ecom);
 			if (!cfgd_rt)
 				continue;
+			rt_config = bgp->vrf_route_target_config;
 			if (bgp_evpn_cfgd_rt_slu_find(&rt_config->cfgd_export, cfgd_rt))
 				bgp_evpn_cfgd_rt_free(cfgd_rt);
 			else
@@ -8984,10 +9330,16 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 
 	enable = yang_dnode_get(ip_vrf, "./ipv4-unicast/enable");
 	if (enable)
-		bgp_nb_evpn_type5_apply(enable);
+		bgp_nb_evpn_type5_apply(enable, bgp, false);
 	enable = yang_dnode_get(ip_vrf, "./ipv6-unicast/enable");
 	if (enable)
-		bgp_nb_evpn_type5_apply(enable);
+		bgp_nb_evpn_type5_apply(enable, bgp, false);
+	enable = yang_dnode_get(ip_vrf, "./ipv4-vpn/enable");
+	if (enable)
+		bgp_nb_evpn_type5_apply(enable, bgp, false);
+	enable = yang_dnode_get(ip_vrf, "./ipv6-vpn/enable");
+	if (enable)
+		bgp_nb_evpn_type5_apply(enable, bgp, false);
 
 	if (bgp->l3vni)
 		update_advertise_vrf_routes(bgp);
@@ -9026,7 +9378,7 @@ int bgp_nb_evpn_vrf_rt_create(struct nb_cb_create_args *args)
 		break;
 	}
 
-	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_dnode_lookup_bgp(args->dnode);
 	if (!bgp)
 		return NB_ERR_NOT_FOUND;
 
@@ -9070,7 +9422,7 @@ int bgp_nb_evpn_vrf_rt_destroy(struct nb_cb_destroy_args *args)
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
 
-	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_dnode_lookup_bgp(args->dnode);
 	if (!bgp)
 		return NB_OK;
 
@@ -9176,7 +9528,14 @@ static struct bgp *bgp_nb_evpn_vni_underlay(const struct lyd_node *dnode)
 	const struct lyd_node *af;
 
 	af = yang_dnode_get_parent(dnode, "afi-safi");
-	return nb_running_get_entry(af ? af : dnode, NULL, true);
+	/* Never abort: VALIDATE runs before BGP APPLY during config load. */
+	if (af) {
+		struct bgp *bgp = nb_running_get_entry(af, NULL, false);
+
+		if (bgp)
+			return bgp;
+	}
+	return bgp_nb_dnode_lookup_bgp(dnode);
 }
 
 int bgp_nb_evpn_vni_create(struct nb_cb_create_args *args)
@@ -9187,11 +9546,11 @@ int bgp_nb_evpn_vni_create(struct nb_cb_create_args *args)
 
 	switch (args->event) {
 	case NB_EV_VALIDATE:
-		bgp = bgp_nb_evpn_vni_underlay(args->dnode);
-		if (!bgp) {
-			snprintfrr(args->errmsg, args->errmsg_len, "BGP instance not found");
-			return NB_ERR_VALIDATION;
-		}
+		/*
+		 * L3VNI conflict check does not need struct bgp. Requiring a
+		 * running BGP entry here aborts during integrated config load
+		 * when VALIDATE runs before any APPLY.
+		 */
 		vni = yang_dnode_get_uint32(args->dnode, "./vni");
 		if (bgp_evpn_lookup_l3vni_l2vni_table(vni)) {
 			snprintfrr(args->errmsg, args->errmsg_len,
@@ -12478,34 +12837,53 @@ static void bgp_nb_peer_af_encap_clear(struct peer *peer, afi_t afi, safi_t safi
 	peer_af_flag_unset(peer, afi, safi, PEER_FLAG_CONFIG_ENCAPSULATION_MPLS);
 }
 
-int bgp_nb_peer_af_encapsulation_modify(struct nb_cb_modify_args *args)
+static uint64_t bgp_nb_peer_af_encap_flag(const char *val)
+{
+	if (strmatch(val, "mpls"))
+		return PEER_FLAG_CONFIG_ENCAPSULATION_MPLS;
+	if (strmatch(val, "srv6-relax"))
+		return PEER_FLAG_CONFIG_ENCAPSULATION_SRV6_RELAX;
+	return PEER_FLAG_CONFIG_ENCAPSULATION_SRV6;
+}
+
+int bgp_nb_peer_af_encapsulation_create(struct nb_cb_create_args *args)
 {
 	struct peer *peer;
 	afi_t afi;
 	safi_t safi;
 	const char *val;
 	uint64_t flag;
+	const struct lyd_node *encap, *entry;
 
 	switch (args->event) {
 	case NB_EV_VALIDATE: {
-		bool has_srv6, has_relax;
+		bool has_srv6 = false, has_relax = false;
 
 		peer = bgp_nb_config_peer(args->dnode);
 		if (!peer || !bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
 			return NB_OK;
 
-		val = yang_dnode_get_string(args->dnode, NULL);
-		has_srv6 = peergroup_af_flag_check(peer, afi, safi,
-						   PEER_FLAG_CONFIG_ENCAPSULATION_SRV6);
-		has_relax = peergroup_af_flag_check(peer, afi, safi,
-						    PEER_FLAG_CONFIG_ENCAPSULATION_SRV6_RELAX);
+		encap = yang_dnode_get_parent(args->dnode, "encapsulation");
+		if (encap) {
+			LY_LIST_FOR (lyd_child(encap), entry) {
+				const char *v;
+
+				if (!strmatch(entry->schema->name, "type"))
+					continue;
+				v = yang_dnode_get_string(entry, NULL);
+				if (strmatch(v, "srv6"))
+					has_srv6 = true;
+				else if (strmatch(v, "srv6-relax"))
+					has_relax = true;
+			}
+		}
 
 		/*
 		 * Unicast CLI treats srv6 and srv6-relax as mutually exclusive
-		 * and requires unconfigure before switching.
+		 * and requires unconfigure before switching. Candidate may
+		 * already contain both during a bad edit — reject.
 		 */
-		if (safi == SAFI_UNICAST && ((strmatch(val, "srv6") && has_relax) ||
-					     (strmatch(val, "srv6-relax") && has_srv6))) {
+		if (safi == SAFI_UNICAST && has_srv6 && has_relax) {
 			snprintfrr(args->errmsg, args->errmsg_len,
 				   "Peer is already configured, unset it first");
 			return NB_ERR_VALIDATION;
@@ -12524,14 +12902,17 @@ int bgp_nb_peer_af_encapsulation_modify(struct nb_cb_modify_args *args)
 		return NB_ERR_NOT_FOUND;
 
 	val = yang_dnode_get_string(args->dnode, NULL);
-	if (strmatch(val, "mpls"))
-		flag = PEER_FLAG_CONFIG_ENCAPSULATION_MPLS;
-	else if (strmatch(val, "srv6-relax"))
-		flag = PEER_FLAG_CONFIG_ENCAPSULATION_SRV6_RELAX;
-	else
-		flag = PEER_FLAG_CONFIG_ENCAPSULATION_SRV6;
+	flag = bgp_nb_peer_af_encap_flag(val);
 
-	bgp_nb_peer_af_encap_clear(peer, afi, safi);
+	if (peergroup_af_flag_check(peer, afi, safi, flag))
+		return NB_OK;
+
+	/* srv6 and srv6-relax replace each other; mpls is independent. */
+	if (flag == PEER_FLAG_CONFIG_ENCAPSULATION_SRV6)
+		peer_af_flag_unset(peer, afi, safi, PEER_FLAG_CONFIG_ENCAPSULATION_SRV6_RELAX);
+	else if (flag == PEER_FLAG_CONFIG_ENCAPSULATION_SRV6_RELAX)
+		peer_af_flag_unset(peer, afi, safi, PEER_FLAG_CONFIG_ENCAPSULATION_SRV6);
+
 	if (peer_af_flag_set(peer, afi, safi, flag) < 0)
 		return NB_ERR_RESOURCE;
 	return NB_OK;
@@ -12542,6 +12923,8 @@ int bgp_nb_peer_af_encapsulation_destroy(struct nb_cb_destroy_args *args)
 	struct peer *peer;
 	afi_t afi;
 	safi_t safi;
+	const char *val;
+	uint64_t flag;
 
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
@@ -12550,7 +12933,16 @@ int bgp_nb_peer_af_encapsulation_destroy(struct nb_cb_destroy_args *args)
 	if (!peer || !bgp_nb_dnode_afi_safi(args->dnode, &afi, &safi))
 		return NB_OK;
 
-	bgp_nb_peer_af_encap_clear(peer, afi, safi);
+	/*
+	 * Leaf-list destroy removes one value. Container/list destroy of the
+	 * parent may still call us without a typed value — clear all.
+	 */
+	if (args->dnode->schema->nodetype == LYS_LEAFLIST) {
+		val = yang_dnode_get_string(args->dnode, NULL);
+		flag = bgp_nb_peer_af_encap_flag(val);
+		peer_af_flag_unset(peer, afi, safi, flag);
+	} else
+		bgp_nb_peer_af_encap_clear(peer, afi, safi);
 	return NB_OK;
 }
 
@@ -14626,6 +15018,23 @@ void bgp_nb_cli_show_peer_oad(struct vty *vty, const struct lyd_node *dnode, boo
 		vty_out(vty, " no neighbor %s oad\n", bgp_nb_config_peer_name(dnode));
 }
 
+static void bgp_nb_peer_announce_routes(struct peer *peer)
+{
+	afi_t afi;
+	safi_t safi;
+	struct peer_af *paf;
+
+	FOREACH_AFI_SAFI (afi, safi) {
+		if (!peer->afc[afi][safi])
+			continue;
+		paf = peer_af_find(peer, afi, safi);
+		if (paf) {
+			update_group_adjust_peer(paf);
+			bgp_announce_route(peer, afi, safi, false);
+		}
+	}
+}
+
 static void bgp_nb_peer_gs_soft_reset(struct peer *peer)
 {
 	struct listnode *node, *nnode;
@@ -14633,14 +15042,20 @@ static void bgp_nb_peer_gs_soft_reset(struct peer *peer)
 	afi_t afi;
 	safi_t safi;
 
+	/*
+	 * Match classic neighbor graceful-shutdown: soft-in clear plus
+	 * re-announce so originated routes pick up/drop GSHUT / loc-pref 0.
+	 */
 	if (CHECK_FLAG(peer->sflags, PEER_STATUS_GROUP)) {
 		for (ALL_LIST_ELEMENTS(peer->group->peer, node, nnode, member)) {
 			FOREACH_AFI_SAFI (afi, safi)
 				peer_clear_soft(member, afi, safi, BGP_CLEAR_SOFT_IN);
+			bgp_nb_peer_announce_routes(member);
 		}
 	} else {
 		FOREACH_AFI_SAFI (afi, safi)
 			peer_clear_soft(peer, afi, safi, BGP_CLEAR_SOFT_IN);
+		bgp_nb_peer_announce_routes(peer);
 	}
 }
 
@@ -15799,11 +16214,13 @@ void bgp_nb_cli_show_daemon_suppress_fib(struct vty *vty, const struct lyd_node 
 					 bool show_defaults)
 {
 	/*
-	 * Delay leaf is when-gated and omitted from running when it equals
-	 * the YANG default. Print the enable form here in that case.
+	 * CLI always stores delay (YANG default 1000). nb_cli_show_dnode_cmds
+	 * skips the default-valued delay leaf, so its cli_show never runs.
+	 * Print the enable form here when delay is absent OR at default.
 	 */
 	if (yang_dnode_get_bool(dnode, NULL)) {
-		if (!yang_dnode_exists(dnode, "../suppress-fib-pending-delay"))
+		if (!yang_dnode_exists(dnode, "../suppress-fib-pending-delay") ||
+		    yang_dnode_is_default(dnode, "../suppress-fib-pending-delay"))
 			vty_out(vty, "bgp suppress-fib-pending\n");
 	} else if (show_defaults)
 		vty_out(vty, "no bgp suppress-fib-pending\n");
@@ -16763,7 +17180,14 @@ int bgp_nb_peer_local_role_strict_destroy(struct nb_cb_destroy_args *args)
 	if (!peer)
 		return NB_OK;
 
-	bgp_nb_peer_local_role_apply(peer, args->dnode);
+	/*
+	 * Only clear strict-mode. Do not call bgp_nb_peer_local_role_apply():
+	 * "no neighbor … local-role" destroys strict-mode and role together,
+	 * and apply order can unset the role first — re-apply from the old
+	 * dnode would resurrect the role and leave the capability advertised.
+	 */
+	if (CHECK_FLAG(peer->flags, PEER_FLAG_ROLE))
+		peer_role_set(peer, peer->local_role, false);
 	return NB_OK;
 }
 
