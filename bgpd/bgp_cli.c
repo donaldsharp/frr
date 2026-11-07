@@ -5448,6 +5448,7 @@ DEFPY_YANG(bgp_evpn_advertise_all_vni_yang,
 	return nb_cli_apply_changes(vty, NULL);
 }
 
+/* Deprecated: use "auto-route-target both rfc8365-compatible". */
 DEFPY_YANG(bgp_evpn_autort_rfc8365_yang, bgp_evpn_autort_rfc8365_yang_cmd,
 	   "[no] autort rfc8365-compatible",
 	   NO_STR
@@ -5456,11 +5457,14 @@ DEFPY_YANG(bgp_evpn_autort_rfc8365_yang, bgp_evpn_autort_rfc8365_yang_cmd,
 {
 	char af_xpath[XPATH_MAXLEN];
 	char leaf[XPATH_MAXLEN + 256];
+	const char *dir;
 
 	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
 	nb_cli_enqueue_change(vty, af_xpath, NB_OP_CREATE, NULL);
-	snprintfrr(leaf, sizeof(leaf), "%s/autort-rfc8365-compatible", af_xpath);
-	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
+	for (dir = "import"; dir; dir = strmatch(dir, "import") ? "export" : NULL) {
+		snprintfrr(leaf, sizeof(leaf), "%s/%s-autort-rfc8365-compatible", af_xpath, dir);
+		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, no ? "false" : "true");
+	}
 	return nb_cli_apply_changes(vty, NULL);
 }
 
@@ -5994,6 +5998,104 @@ DEFPY_YANG(bgp_evpn_vrf_rt_yang, bgp_evpn_vrf_rt_yang_cmd,
 	return nb_cli_apply_changes(vty, NULL);
 }
 
+/*
+ * Shared handler for "[no] auto-route-target" under the EVPN VRF (@vrf) or
+ * an L2VNI. @type is "both|import|export" (NULL means both for the no form),
+ * @mode is an add-mode keyword or "rfc8365-compatible" (VRF only).
+ */
+static int bgp_evpn_autort_cli(struct vty *vty, bool vrf, bool no, const char *type,
+			       const char *mode)
+{
+	static const char *const dirs[] = { "import", "export" };
+	char af_xpath[XPATH_MAXLEN];
+	char leaf[XPATH_MAXLEN + 256];
+	bool rfc = mode && strmatch(mode, "rfc8365-compatible");
+	bool sel[2];
+
+	sel[0] = !type || strmatch(type, "import") || strmatch(type, "both");
+	sel[1] = !type || strmatch(type, "export") || strmatch(type, "both");
+
+	if (vrf) {
+		bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
+		if (!no)
+			nb_cli_enqueue_change(vty, af_xpath, NB_OP_CREATE, NULL);
+	}
+
+	for (int i = 0; i < 2; i++) {
+		if (!sel[i])
+			continue;
+
+		if (rfc) {
+			snprintfrr(leaf, sizeof(leaf), "%s/%s-autort-rfc8365-compatible", af_xpath,
+				   dirs[i]);
+			nb_cli_enqueue_change(vty, leaf, no ? NB_OP_DESTROY : NB_OP_MODIFY,
+					      no ? NULL : "true");
+			continue;
+		}
+
+		if (vrf)
+			snprintfrr(leaf, sizeof(leaf), "%s/ip-vrf/%s-auto-route-target", af_xpath,
+				   dirs[i]);
+		else
+			snprintfrr(leaf, sizeof(leaf), "./%s-auto-route-target", dirs[i]);
+
+		if (!no) {
+			nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, mode);
+			continue;
+		}
+
+		/*
+		 * With an explicit mode only clear a matching configuration;
+		 * without one clear whatever is configured.
+		 */
+		if (mode) {
+			char cur_xpath[XPATH_MAXLEN * 2];
+			const struct lyd_node *cur;
+
+			snprintfrr(cur_xpath, sizeof(cur_xpath), "%s%s", VTY_CURR_XPATH, leaf + 1);
+			cur = yang_dnode_get(vty->candidate_config->dnode, cur_xpath);
+			if (cur && !strmatch(yang_dnode_get_string(cur, NULL), mode))
+				continue;
+		}
+		nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+
+		if (vrf && !mode) {
+			snprintfrr(leaf, sizeof(leaf), "%s/%s-autort-rfc8365-compatible", af_xpath,
+				   dirs[i]);
+			nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+		}
+	}
+
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+#define AUTORT_HELP_STR                                                                           \
+	"Automatic route-target configuration\n"                                                  \
+	"Import and export\n"                                                                     \
+	"Import\n"                                                                                \
+	"Export\n"                                                                                \
+	"Always add the automatic route-target, even when manual route-targets are configured\n"  \
+	"Never add the automatic route-target\n"                                                  \
+	"Add the automatic route-target only when no manual route-target is configured (default)\n"
+
+DEFPY_YANG(bgp_evpn_vrf_auto_rt_yang, bgp_evpn_vrf_auto_rt_yang_cmd,
+	   "auto-route-target <both|import|export>$type <add-always|add-never|add-if-no-manual|rfc8365-compatible>$mode",
+	   AUTORT_HELP_STR
+	   "Encode the automatic route-target as RFC 8365 compatible (set the VXLAN encapsulation bits in the local admin field)\n")
+{
+	return bgp_evpn_autort_cli(vty, true, false, type, mode);
+}
+
+DEFPY_YANG(no_bgp_evpn_vrf_auto_rt_yang, no_bgp_evpn_vrf_auto_rt_yang_cmd,
+	   "no auto-route-target [<both|import|export>$type [<add-always|add-never|add-if-no-manual|rfc8365-compatible>$mode]]",
+	   NO_STR
+	   AUTORT_HELP_STR
+	   "Encode the automatic route-target as RFC 8365 compatible (set the VXLAN encapsulation bits in the local admin field)\n")
+{
+	return bgp_evpn_autort_cli(vty, true, true, type, mode);
+}
+
+/* Deprecated: use "auto-route-target <both|import|export> add-always". */
 DEFPY_YANG(bgp_evpn_vrf_rt_auto_yang, bgp_evpn_vrf_rt_auto_yang_cmd,
 	   "[no] route-target <both|import|export>$type auto",
 	   NO_STR
@@ -6003,37 +6105,11 @@ DEFPY_YANG(bgp_evpn_vrf_rt_auto_yang, bgp_evpn_vrf_rt_auto_yang_cmd,
 	   "export\n"
 	   "Automatically derive route target\n")
 {
-	char af_xpath[XPATH_MAXLEN];
-	char leaf[XPATH_MAXLEN + 256];
-	bool do_import = false;
-	bool do_export = false;
-	const char *val = no ? "false" : "true";
+	if (strmatch(type, "import") || strmatch(type, "export") || strmatch(type, "both"))
+		return bgp_evpn_autort_cli(vty, true, !!no, type, "add-always");
 
-	if (strmatch(type, "import"))
-		do_import = true;
-	else if (strmatch(type, "export"))
-		do_export = true;
-	else if (strmatch(type, "both")) {
-		do_import = true;
-		do_export = true;
-	} else {
-		vty_out(vty, "%% Invalid Route Target type\n");
-		return CMD_WARNING_CONFIG_FAILED;
-	}
-
-	bgp_cli_global_af_xpath(vty, af_xpath, sizeof(af_xpath));
-	nb_cli_enqueue_change(vty, af_xpath, NB_OP_CREATE, NULL);
-
-	if (do_import) {
-		snprintfrr(leaf, sizeof(leaf), "%s/ip-vrf/import-route-target-auto", af_xpath);
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, val);
-	}
-	if (do_export) {
-		snprintfrr(leaf, sizeof(leaf), "%s/ip-vrf/export-route-target-auto", af_xpath);
-		nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, val);
-	}
-
-	return nb_cli_apply_changes(vty, NULL);
+	vty_out(vty, "%% Invalid Route Target type\n");
+	return CMD_WARNING_CONFIG_FAILED;
 }
 
 DEFPY_YANG_NOSH(bgp_evpn_vni_yang, bgp_evpn_vni_yang_cmd,
@@ -6120,17 +6196,18 @@ DEFPY_YANG(bgp_evpn_vni_rd_yang, bgp_evpn_vni_rd_yang_cmd,
 }
 
 DEFPY_YANG(bgp_evpn_vni_rt_yang, bgp_evpn_vni_rt_yang_cmd,
-	   "[no] route-target <both|import|export>$type RT$rt",
+	   "[no] route-target <both|import|export>$type RTLIST...",
 	   NO_STR
 	   "Route Target\n"
 	   "import and export\n"
 	   "import\n"
 	   "export\n"
-	   "Route target (A.B.C.D:MN|EF:OPQR|GHJK:MN)\n")
+	   "Space separated route target list (A.B.C.D:MN|EF:OPQR|GHJK:MN|*:OPQR|*:MN)\n")
 {
 	char leaf[XPATH_MAXLEN];
 	bool do_import = false;
 	bool do_export = false;
+	int idx = 0;
 
 	if (strmatch(type, "import"))
 		do_import = true;
@@ -6144,15 +6221,77 @@ DEFPY_YANG(bgp_evpn_vni_rt_yang, bgp_evpn_vni_rt_yang_cmd,
 		return CMD_WARNING_CONFIG_FAILED;
 	}
 
-	if (do_import) {
-		snprintfrr(leaf, sizeof(leaf), "./import-route-target[.='%s']", rt);
-		nb_cli_enqueue_change(vty, leaf, no ? NB_OP_DESTROY : NB_OP_CREATE, NULL);
+	argv_find(argv, argc, "RTLIST", &idx);
+	if (!idx) {
+		vty_out(vty, "%% Missing RTLIST\n");
+		return CMD_WARNING_CONFIG_FAILED;
 	}
-	if (do_export) {
-		snprintfrr(leaf, sizeof(leaf), "./export-route-target[.='%s']", rt);
-		nb_cli_enqueue_change(vty, leaf, no ? NB_OP_DESTROY : NB_OP_CREATE, NULL);
+
+	for (; idx < argc; idx++) {
+		if (argv[idx]->arg[0] == '*' && do_export) {
+			vty_out(vty, "%% Wildcard '*' only applicable for import\n");
+			return CMD_WARNING_CONFIG_FAILED;
+		}
+		if (do_import) {
+			snprintfrr(leaf, sizeof(leaf), "./import-route-target[.='%s']",
+				   argv[idx]->arg);
+			nb_cli_enqueue_change(vty, leaf, no ? NB_OP_DESTROY : NB_OP_CREATE, NULL);
+		}
+		if (do_export) {
+			snprintfrr(leaf, sizeof(leaf), "./export-route-target[.='%s']",
+				   argv[idx]->arg);
+			nb_cli_enqueue_change(vty, leaf, no ? NB_OP_DESTROY : NB_OP_CREATE, NULL);
+		}
 	}
 	return nb_cli_apply_changes(vty, NULL);
+}
+
+/* Remove every configured route-target of one direction from the L2VNI. */
+DEFPY_YANG(no_bgp_evpn_vni_rt_without_val_yang, no_bgp_evpn_vni_rt_without_val_yang_cmd,
+	   "no route-target <import|export>$type",
+	   NO_STR
+	   "Route Target\n"
+	   "import\n"
+	   "export\n")
+{
+	const struct lyd_node *vni_dnode, *child;
+	const char *want = strmatch(type, "import") ? "import-route-target" : "export-route-target";
+	char leaf[XPATH_MAXLEN];
+	bool found = false;
+
+	vni_dnode = yang_dnode_get(vty->candidate_config->dnode, VTY_CURR_XPATH);
+	if (vni_dnode) {
+		LY_LIST_FOR (lyd_child(vni_dnode), child) {
+			if (!strmatch(child->schema->name, want))
+				continue;
+			snprintfrr(leaf, sizeof(leaf), "./%s[.='%s']", want,
+				   yang_dnode_get_string(child, NULL));
+			nb_cli_enqueue_change(vty, leaf, NB_OP_DESTROY, NULL);
+			found = true;
+		}
+	}
+
+	if (!found) {
+		vty_out(vty, "%% %s RT is not configured for this VNI\n",
+			strmatch(type, "import") ? "Import" : "Export");
+		return CMD_WARNING_CONFIG_FAILED;
+	}
+	return nb_cli_apply_changes(vty, NULL);
+}
+
+DEFPY_YANG(bgp_evpn_vni_auto_rt_yang, bgp_evpn_vni_auto_rt_yang_cmd,
+	   "auto-route-target <both|import|export>$type <add-always|add-never|add-if-no-manual>$mode",
+	   AUTORT_HELP_STR)
+{
+	return bgp_evpn_autort_cli(vty, false, false, type, mode);
+}
+
+DEFPY_YANG(no_bgp_evpn_vni_auto_rt_yang, no_bgp_evpn_vni_auto_rt_yang_cmd,
+	   "no auto-route-target [<both|import|export>$type [<add-always|add-never|add-if-no-manual>$mode]]",
+	   NO_STR
+	   AUTORT_HELP_STR)
+{
+	return bgp_evpn_autort_cli(vty, false, true, type, mode);
 }
 
 DEFPY_YANG(bgp_evpn_vni_advertise_default_gw_yang,
@@ -9174,11 +9313,16 @@ void bgp_cli_init(void)
 	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rd_yang_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_yang_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_rt_auto_yang_cmd);
+	install_element(BGP_EVPN_NODE, &bgp_evpn_vrf_auto_rt_yang_cmd);
+	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vrf_auto_rt_yang_cmd);
 	install_element(BGP_EVPN_NODE, &bgp_evpn_vni_yang_cmd);
 	install_element(BGP_EVPN_NODE, &no_bgp_evpn_vni_yang_cmd);
 	install_element(BGP_EVPN_VNI_NODE, &exit_vni_yang_cmd);
 	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rd_yang_cmd);
 	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_rt_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_rt_without_val_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_auto_rt_yang_cmd);
+	install_element(BGP_EVPN_VNI_NODE, &no_bgp_evpn_vni_auto_rt_yang_cmd);
 	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_advertise_default_gw_yang_cmd);
 	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_advertise_svi_ip_yang_cmd);
 	install_element(BGP_EVPN_VNI_NODE, &bgp_evpn_vni_advertise_subnet_yang_cmd);

@@ -16,27 +16,27 @@ Classification:
 - **MISSING** / **PARTIAL** -- heuristic only for remaining classic
   DEFUNs; do not treat as authoritative without checking the source.
 
-**Total config commands:** 580
+**Total config commands:** 617
 
 ## Coverage summary
 
 | yang_path | count |
 |-----------|------:|
-| CONVERTED | 570 |
+| CONVERTED | 607 |
 | INTENTIONAL | 10 |
 
 ## By phase
 
 | phase | count | CONVERTED | INTENTIONAL | MISSING | PARTIAL |
 |-------|------:|----------:|------------:|--------:|--------:|
-| 1-globals | 160 | 155 | 5 | 0 | 0 |
-| 2-neighbor-session | 98 | 98 | 0 | 0 | 0 |
-| 3-af-policy | 5 | 5 | 0 | 0 | 0 |
+| 1-globals | 166 | 161 | 5 | 0 | 0 |
+| 2-neighbor-session | 116 | 116 | 0 | 0 | 0 |
+| 3-af-policy | 6 | 6 | 0 | 0 | 0 |
 | 4-network-vpn | 29 | 29 | 0 | 0 | 0 |
-| 5-evpn | 41 | 37 | 4 | 0 | 0 |
-| 6-srv6-ls-upa-fs | 13 | 13 | 0 | 0 | 0 |
-| 7-bmp-rpki | 24 | 23 | 1 | 0 | 0 |
-| 8-filter-rmap | 169 | 169 | 0 | 0 | 0 |
+| 5-evpn | 46 | 42 | 4 | 0 | 0 |
+| 6-srv6-ls-upa-fs | 14 | 14 | 0 | 0 | 0 |
+| 7-bmp-rpki | 29 | 28 | 1 | 0 | 0 |
+| 8-filter-rmap | 170 | 170 | 0 | 0 | 0 |
 | 10-vnc | 41 | 41 | 0 | 0 | 0 |
 
 ## Full inventory
@@ -107,12 +107,14 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `bgp_daemon_snmp_traps_rfc4382_yang_cmd` | bgpd/bgp_cli.c | CONFIG_NODE | CONVERTED | keep | 1-globals |
 | `bgp_daemon_suppress_fib_yang_cmd` | bgpd/bgp_cli.c | CONFIG_NODE | CONVERTED | keep | 1-globals |
 | `bgp_daemon_update_delay_yang_cmd` | bgpd/bgp_cli.c | CONFIG_NODE | CONVERTED | keep | 1-globals |
+| `bgp_dampening_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 1-globals |
 | `bgp_dampening_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_def_originate_eval_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_default_afi_safi_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_default_dynamic_capability_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_default_link_local_capability_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_default_local_preference_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
+| `bgp_default_originate_setonly_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_default_show_hostname_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_default_show_nexthop_hostname_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_default_shutdown_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
@@ -146,10 +148,12 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `bgp_evpn_vni_advertise_default_gw_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
 | `bgp_evpn_vni_advertise_subnet_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
 | `bgp_evpn_vni_advertise_svi_ip_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
+| `bgp_evpn_vni_auto_rt_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
 | `bgp_evpn_vni_flooding_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
 | `bgp_evpn_vni_rd_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
 | `bgp_evpn_vni_rt_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
 | `bgp_evpn_vni_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE | CONVERTED | keep | 5-evpn |
+| `bgp_evpn_vrf_auto_rt_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE | CONVERTED | keep | 5-evpn |
 | `bgp_evpn_vrf_rd_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE | CONVERTED | keep | 5-evpn |
 | `bgp_evpn_vrf_rt_auto_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE | CONVERTED | keep | 5-evpn |
 | `bgp_evpn_vrf_rt_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE | CONVERTED | keep | 5-evpn |
@@ -183,7 +187,9 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `bgp_maxmed_admin_medv_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_maxmed_admin_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_maxmed_onstartup_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
+| `bgp_maxpaths_ibgp_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4_NODE;BGP_IPV6L_N | CONVERTED | keep | 1-globals |
 | `bgp_maxpaths_ibgp_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
+| `bgp_maxpaths_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4_NODE;BGP_IPV6L_N | CONVERTED | keep | 1-globals |
 | `bgp_maxpaths_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_minimum_holdtime_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_network_import_check_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 4-network-vpn |
@@ -203,6 +209,7 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `bgp_rr_allow_outbound_policy_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_segment_routing_srv6_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 6-srv6-ls-upa-fs |
 | `bgp_shutdown_msg_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
+| `bgp_shutdown_no_notify_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_shutdown_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_sid_vpn_export_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `bgp_srv6_encap_behavior_yang_cmd` | bgpd/bgp_cli.c | BGP_SRV6_NODE | CONVERTED | keep | 6-srv6-ls-upa-fs |
@@ -220,6 +227,7 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `bmp_acl_yang_cmd` | bgpd/bgp_cli.c | BMP_NODE | CONVERTED | keep | 7-bmp-rpki |
 | `bmp_connect_yang_cmd` | bgpd/bgp_cli.c | BMP_NODE | CONVERTED | keep | 7-bmp-rpki |
 | `bmp_import_vrf_yang_cmd` | bgpd/bgp_cli.c | BMP_NODE | CONVERTED | keep | 7-bmp-rpki |
+| `bmp_initiation_yang_cmd` | bgpd/bgp_cli.c | BMP_NODE | CONVERTED | keep | 7-bmp-rpki |
 | `bmp_listener_yang_cmd` | bgpd/bgp_cli.c | BMP_NODE | CONVERTED | keep | 7-bmp-rpki |
 | `bmp_mirror_limit_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 7-bmp-rpki |
 | `bmp_mirror_yang_cmd` | bgpd/bgp_cli.c | BMP_NODE | CONVERTED | keep | 7-bmp-rpki |
@@ -234,6 +242,7 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `exit_vni_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
 | `ipv6_bgp_network_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV6L_NODE;BGP_IPV6M_NODE;BGP_IPV6_N | CONVERTED | keep | 4-network-vpn |
 | `match_alias_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
+| `match_aspa_cmd` | bgpd/bgp_rpki.c | RMAP_NODE | CONVERTED | keep | 7-bmp-rpki |
 | `match_aspath_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
 | `match_aspath_count_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
 | `match_community_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
@@ -264,18 +273,24 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `match_vpn_dataplane_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
 | `match_vrl_source_vrf_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
 | `neighbor_accept_own_yang_cmd` | bgpd/bgp_cli.c | BGP_VPNV4_NODE;BGP_VPNV6_NODE | CONVERTED | keep | 2-neighbor-session |
-| `neighbor_activate_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4U_NODE;BGP_IPV6U_NODE;BGP_LS_NOD | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_activate_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_FLOWSPECV4_NODE;BGP_FL | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_activate_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_addpath_rx_paths_limit_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_addpath_rx_paths_limit_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_addpath_tx_best_selected_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_addpath_tx_best_selected_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_addpath_tx_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_addpath_tx_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_advertise_interval_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_advertise_map_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_advertise_map_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_aigp_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
-| `neighbor_allowas_in_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4U_NODE;BGP_IPV6U_N | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_allowas_in_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_allowas_in_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_as_loop_detection_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_as_override_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_as_override_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_attr_unchanged_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_attr_unchanged_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_bfd_cbit_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_bfd_param_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
@@ -287,14 +302,19 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `neighbor_capability_enhe_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_capability_fqdn_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_capability_link_local_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_capability_orf_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_capability_orf_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_capability_software_version_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_dampening_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_dampening_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_default_originate_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_default_originate_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_description_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_disable_addpath_rx_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 3-af-policy |
 | `neighbor_disable_addpath_rx_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 3-af-policy |
 | `neighbor_disable_connected_check_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_disable_link_bw_ieee_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_distribute_list_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_distribute_list_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_dont_capability_negotiate_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_ebgp_multihop_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
@@ -303,7 +323,7 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `neighbor_enforce_first_as_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_extended_link_bw_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_extended_opt_params_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
-| `neighbor_filter_list_yang_cmd` | bgpd/bgp_cli.c | BGP_FLOWSPECV4_NODE;BGP_FLOWSPECV6_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_filter_list_yang_cmd` | bgpd/bgp_cli.c | BGP_FLOWSPECV4_NODE;BGP_FLOWSPECV6_NODE; | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_filter_list_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_graceful_restart_disable_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_graceful_restart_helper_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
@@ -316,12 +336,13 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `neighbor_local_role_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_ls_local_link_id_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_ls_remote_link_id_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
-| `neighbor_maximum_prefix_out_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4U_NODE;BGP_IPV6U_NODE | CONVERTED | keep | 3-af-policy |
+| `neighbor_maximum_prefix_out_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 3-af-policy |
 | `neighbor_maximum_prefix_out_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 3-af-policy |
-| `neighbor_maximum_prefix_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4U_NODE;BGP_IPV6U_NODE | CONVERTED | keep | 3-af-policy |
+| `neighbor_maximum_prefix_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 3-af-policy |
 | `neighbor_maximum_prefix_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 3-af-policy |
 | `neighbor_nexthop_local_unchanged_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV6_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_nexthop_local_unchanged_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_nexthop_self_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_nexthop_self_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_oad_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_override_capability_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
@@ -331,34 +352,44 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `neighbor_path_attribute_withdraw_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_peer_group_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_port_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
-| `neighbor_prefix_list_yang_cmd` | bgpd/bgp_cli.c | BGP_FLOWSPECV4_NODE;BGP_FLOWSPECV6_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_prefix_list_yang_cmd` | bgpd/bgp_cli.c | BGP_FLOWSPECV4_NODE;BGP_FLOWSPECV6_NODE; | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_prefix_list_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_remote_as_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_remove_private_as_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_remove_private_as_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_route_map_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_FLOWSPECV4_NODE;BGP_FL | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_route_map_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_route_reflector_client_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_FLOWSPECV4_NODE;BGP_FL | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_route_reflector_client_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_route_server_client_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_FLOWSPECV4_NODE;BGP_FL | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_route_server_client_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_rpki_strict_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 7-bmp-rpki |
+| `neighbor_send_community_rpki_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 7-bmp-rpki |
 | `neighbor_send_community_rpki_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 7-bmp-rpki |
+| `neighbor_send_community_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_send_community_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_send_nhc_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_set_peer_group_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 8-filter-rmap |
+| `neighbor_set_peer_group_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_FLOWSPECV4_NODE;BGP_FLOWSPECV6_NODE; | CONVERTED | keep | 8-filter-rmap |
 | `neighbor_shutdown_msg_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_shutdown_rtt_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_shutdown_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_soft_reconfiguration_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_FLOWSPECV4_NODE;BGP_FL | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_soft_reconfiguration_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_solo_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
-| `neighbor_soo_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_soo_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE;BGP_IPV4L_NODE;BGP_IPV4M_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_strict_capability_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_tcp_mss_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_timers_connect_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_timers_delayopen_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_timers_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_ttl_security_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_unsuppress_map_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_unsuppress_map_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_upa_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 6-srv6-ls-upa-fs |
 | `neighbor_upa_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 6-srv6-ls-upa-fs |
 | `neighbor_update_source_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
+| `neighbor_weight_yang_cmd` | bgpd/bgp_cli.c | BGP_IPV4L_NODE;BGP_IPV4M_NODE;BGP_IPV4_N | CONVERTED | keep | 2-neighbor-session |
 | `neighbor_weight_yang_hidden_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 2-neighbor-session |
 | `no_bgp_advertisement_delay_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `no_bgp_always_compare_med_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
@@ -401,7 +432,10 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `no_bgp_deterministic_med_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `no_bgp_disable_connected_route_check_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `no_bgp_ebgp_requires_policy_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 5-evpn |
+| `no_bgp_evpn_vni_auto_rt_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
+| `no_bgp_evpn_vni_rt_without_val_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_VNI_NODE | CONVERTED | keep | 5-evpn |
 | `no_bgp_evpn_vni_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE | CONVERTED | keep | 5-evpn |
+| `no_bgp_evpn_vrf_auto_rt_yang_cmd` | bgpd/bgp_cli.c | BGP_EVPN_NODE | CONVERTED | keep | 5-evpn |
 | `no_bgp_extcommunity_list_expanded_all_cli_cmd` | bgpd/bgp_filter_cli.c | CONFIG_NODE | CONVERTED | keep | 8-filter-rmap |
 | `no_bgp_extcommunity_list_expanded_cli_cmd` | bgpd/bgp_filter_cli.c | CONFIG_NODE | CONVERTED | keep | 8-filter-rmap |
 | `no_bgp_extcommunity_list_standard_all_cli_cmd` | bgpd/bgp_filter_cli.c | CONFIG_NODE | CONVERTED | keep | 8-filter-rmap |
@@ -434,16 +468,19 @@ See also machine-readable [`BGP_YANG_CLI_GAP.csv`](BGP_YANG_CLI_GAP.csv).
 | `no_bgp_rr_allow_outbound_policy_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `no_bgp_segment_routing_srv6_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 6-srv6-ls-upa-fs |
 | `no_bgp_shutdown_msg_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
+| `no_bgp_shutdown_no_notify_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `no_bgp_shutdown_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `no_bgp_srv6_locator_yang_cmd` | bgpd/bgp_cli.c | BGP_SRV6_NODE | CONVERTED | keep | 6-srv6-ls-upa-fs |
 | `no_bgp_suppress_duplicates_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 5-evpn |
 | `no_bgp_tcp_keepalive_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `no_bgp_timers_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
 | `no_bgp_update_delay_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 1-globals |
+| `no_bmp_initiation_yang_cmd` | bgpd/bgp_cli.c | BMP_NODE | CONVERTED | keep | 7-bmp-rpki |
 | `no_bmp_targets_yang_cmd` | bgpd/bgp_cli.c | BGP_NODE | CONVERTED | keep | 7-bmp-rpki |
 | `no_dump_bgp_all_cmd` | bgpd/bgp_dump.c | CONFIG_NODE | INTENTIONAL | skip | 1-globals |
 | `no_evpnrt5_network_cmd` | bgpd/bgp_evpn_vty.c | BGP_EVPN_NODE | INTENTIONAL | skip | 5-evpn |
 | `no_match_alias_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
+| `no_match_aspa_cmd` | bgpd/bgp_rpki.c | RMAP_NODE | CONVERTED | keep | 7-bmp-rpki |
 | `no_match_aspath_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
 | `no_match_community_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
 | `no_match_ecommunity_cmd` | bgpd/bgp_routemap.c | RMAP_NODE | CONVERTED | keep | 8-filter-rmap |
