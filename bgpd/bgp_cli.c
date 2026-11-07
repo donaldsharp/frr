@@ -3670,6 +3670,12 @@ DEFPY_YANG(neighbor_capability_software_version_yang,
 
 	snprintfrr(leaf, sizeof(leaf), "%s/capability-options/software-version-capability", xpath);
 	nb_cli_enqueue_change(vty, leaf, NB_OP_MODIFY, val);
+	/*
+	 * Leaf has no YANG default: "disabled" is a real override of
+	 * bgp default software-version. Capability messages are sent
+	 * solely by the NB modify/destroy callbacks — do not send again
+	 * here (would double capabilityRecv).
+	 */
 	return nb_cli_apply_changes(vty, NULL);
 }
 

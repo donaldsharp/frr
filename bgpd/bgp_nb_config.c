@@ -5067,16 +5067,51 @@ int bgp_nb_peer_cap_soft_version_modify(struct nb_cb_modify_args *args)
 		return NB_ERR_NOT_FOUND;
 
 	val = yang_dnode_get_string(args->dnode, NULL);
-	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD |
-				      PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	/* Clear both encodings separately so peer_flag_* finds each flag. */
+	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
 	if (strmatch(val, "old-encoding"))
 		peer_flag_set(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
 	else if (strmatch(val, "latest-encoding"))
 		peer_flag_set(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	else {
+		/* disabled: explicit override of bgp default inheritance */
+		SET_FLAG(peer->flags_override, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+		SET_FLAG(peer->flags_override, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	}
 
 	enable = !strmatch(val, "disabled");
 	bgp_nb_capability_send(peer, CAPABILITY_CODE_SOFT_VERSION,
 			       enable ? CAPABILITY_ACTION_SET : CAPABILITY_ACTION_UNSET);
+	return NB_OK;
+}
+
+int bgp_nb_peer_cap_soft_version_destroy(struct nb_cb_destroy_args *args)
+{
+	struct peer *peer;
+
+	if (args->event != NB_EV_APPLY)
+		return NB_OK;
+
+	peer = bgp_nb_config_peer(args->dnode);
+	if (!peer)
+		return NB_OK;
+
+	/* Leaf gone → inherit from bgp default again. */
+	UNSET_FLAG(peer->flags_override, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+	UNSET_FLAG(peer->flags_override, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+	peer_flag_unset(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+	if (CHECK_FLAG(peer->bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_OLD))
+		peer_flag_set(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD);
+	if (CHECK_FLAG(peer->bgp->flags, BGP_FLAG_SOFT_VERSION_CAPABILITY_NEW))
+		peer_flag_set(peer, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW);
+
+	bgp_nb_capability_send(peer, CAPABILITY_CODE_SOFT_VERSION,
+			       (CHECK_FLAG(peer->flags, PEER_FLAG_CAPABILITY_SOFT_VERSION_OLD) ||
+				CHECK_FLAG(peer->flags, PEER_FLAG_CAPABILITY_SOFT_VERSION_NEW))
+				       ? CAPABILITY_ACTION_SET
+				       : CAPABILITY_ACTION_UNSET);
 	return NB_OK;
 }
 
@@ -5091,7 +5126,7 @@ void bgp_nb_cli_show_peer_cap_soft_version(struct vty *vty, const struct lyd_nod
 	else if (strmatch(val, "latest-encoding"))
 		vty_out(vty, " neighbor %s capability software-version latest-encoding\n",
 			bgp_nb_config_peer_name(dnode));
-	else if (show_defaults)
+	else
 		vty_out(vty, " no neighbor %s capability software-version\n",
 			bgp_nb_config_peer_name(dnode));
 }
