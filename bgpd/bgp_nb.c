@@ -4636,6 +4636,13 @@ const struct frr_yang_module_info frr_bgp_info = {
 				.destroy = bgp_nb_neighbor_peer_group_destroy,
 				.cli_show = bgp_nb_cli_show_neighbor_peer_group,
 			},
+			/*
+			 * Bind must run after the neighbor list create in the
+			 * same candidate (create+bind batch); otherwise APPLY
+			 * soft-lookup misses the peer and returns element-not-
+			 * found, leaving members unbound.
+			 */
+			.priority = NB_DFLT_PRIORITY + 1,
 		},
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/local-port",
@@ -4678,7 +4685,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv4-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -5377,7 +5384,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/ipv6-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -5596,7 +5603,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/l3vpn-ipv4-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -5647,7 +5654,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/neighbor/afi-safis/afi-safi/l3vpn-ipv6-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -5769,7 +5776,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv4-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -5820,7 +5827,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/ipv6-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -6039,7 +6046,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/l3vpn-ipv4-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -6090,7 +6097,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/neighbors/unnumbered-neighbor/afi-safis/afi-safi/l3vpn-ipv6-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -6212,7 +6219,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv4-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -6263,7 +6270,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/ipv6-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -6482,7 +6489,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/l3vpn-ipv4-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
@@ -6533,7 +6540,7 @@ const struct frr_yang_module_info frr_bgp_info = {
 		{
 			.xpath = "/frr-routing:routing/control-plane-protocols/control-plane-protocol/frr-bgp:bgp/peer-groups/peer-group/afi-safis/afi-safi/l3vpn-ipv6-unicast/encapsulation/type",
 			.cbs = {
-				.modify = bgp_nb_peer_af_encapsulation_modify,
+				.create = bgp_nb_peer_af_encapsulation_create,
 				.destroy = bgp_nb_peer_af_encapsulation_destroy,
 				.cli_show = bgp_nb_cli_show_peer_af_encapsulation,
 			},
