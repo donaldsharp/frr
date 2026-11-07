@@ -376,6 +376,90 @@ const char *bgp_nb_instance_xpath(const struct bgp *bgp, char *buf, size_t bufle
 }
 
 /*
+ * Locate the running-config frr-bgp:bgp dnode for a BGP instance by walking
+ * control-plane-protocol list keys (name/vrf). Avoids identityref predicates
+ * in xpath lookups that silently fail (type-5 / RD reapply no-op).
+ */
+static const struct lyd_node *bgp_nb_find_instance_dnode(const struct bgp *bgp)
+{
+	const struct lyd_node *root, *cpps, *cpp, *bgp_dnode;
+	const char *want_name = VRF_DEFAULT_NAME;
+	const char *want_vrf = VRF_DEFAULT_NAME;
+	const char *name, *vrf, *type;
+
+	if (!bgp || !running_config || !running_config->dnode)
+		return NULL;
+
+	if (bgp->name) {
+		want_name = bgp->name;
+		want_vrf = bgp->name;
+	}
+
+	root = running_config->dnode;
+	cpps = yang_dnode_get(root, "/frr-routing:routing/control-plane-protocols");
+	if (!cpps)
+		return NULL;
+
+	LY_LIST_FOR (lyd_child(cpps), cpp) {
+		if (!strmatch(cpp->schema->name, "control-plane-protocol"))
+			continue;
+		if (!yang_dnode_exists(cpp, "./type") || !yang_dnode_exists(cpp, "./name") ||
+		    !yang_dnode_exists(cpp, "./vrf"))
+			continue;
+		type = yang_dnode_get_string(cpp, "./type");
+		/*
+		 * Identityref string form varies by libyang (frr-bgp:bgp,
+		 * bgp, …). Accept any value whose final identity name is bgp.
+		 */
+		if (!type)
+			continue;
+		{
+			const char *id = strrchr(type, ':');
+
+			id = id ? id + 1 : type;
+			if (!strmatch(id, "bgp"))
+				continue;
+		}
+		name = yang_dnode_get_string(cpp, "./name");
+		vrf = yang_dnode_get_string(cpp, "./vrf");
+		if (!strmatch(name, want_name) || !strmatch(vrf, want_vrf))
+			continue;
+		bgp_dnode = yang_dnode_get(cpp, "frr-bgp:bgp");
+		if (bgp_dnode)
+			return bgp_dnode;
+	}
+
+	return NULL;
+}
+
+/*
+ * Resolve struct bgp * for a dnode under frr-bgp:bgp by walking up to the
+ * control-plane-protocol name/vrf keys. Prefer this over nb_running_get_entry
+ * alone for EVPN ip-vrf leaves — parent-chain entry lookup has bound the
+ * wrong (default) instance and made RD / type-5 APPLY a silent no-op.
+ */
+static struct bgp *bgp_nb_dnode_lookup_bgp(const struct lyd_node *dnode)
+{
+	const struct lyd_node *cpp;
+	const char *name, *vrf;
+	struct bgp *bgp;
+
+	cpp = yang_dnode_get_parent(dnode, "control-plane-protocol");
+	if (cpp && yang_dnode_exists(cpp, "name") && yang_dnode_exists(cpp, "vrf")) {
+		name = yang_dnode_get_string(cpp, "name");
+		vrf = yang_dnode_get_string(cpp, "vrf");
+		if (strmatch(vrf, VRF_DEFAULT_NAME))
+			bgp = bgp_get_default();
+		else
+			bgp = bgp_lookup_by_name(name);
+		if (bgp)
+			return bgp;
+	}
+
+	return nb_running_get_entry(dnode, NULL, false);
+}
+
+/*
  * Orchestrated per-instance CLI dump. Naive nb_cli_show_dnode_cmds() on
  * frr-bgp:bgp is wrong: peer AF config must appear inside address-family
  * frames, and bgp default shutdown / bgp shutdown must follow peers.
@@ -393,6 +477,8 @@ void bgp_nb_cli_show_instance(struct vty *vty, const struct lyd_node *bgp)
 
 	global = yang_dnode_get(bgp, "global");
 	if (global) {
+		struct bgp *bgp_inst;
+
 		LY_LIST_FOR (lyd_child(global), child) {
 			skip = false;
 			for (i = 0; defer[i]; i++) {
@@ -405,6 +491,15 @@ void bgp_nb_cli_show_instance(struct vty *vty, const struct lyd_node *bgp)
 				continue;
 			nb_cli_show_dnode_cmds(vty, child, false);
 		}
+
+		/*
+		 * ipv4-unicast is the implicit default (seeded in YANG, omitted
+		 * from show). When cleared, emit the classic negative so
+		 * write-config / reload keeps default_af false.
+		 */
+		bgp_inst = nb_running_get_entry(bgp, NULL, false);
+		if (bgp_inst && !bgp_inst->default_af[AFI_IP][SAFI_UNICAST])
+			vty_out(vty, " no bgp default ipv4-unicast\n");
 	}
 
 	bgp_nb_cli_show_container_entries_skip_af(vty, yang_dnode_get(bgp, "peer-groups"));
@@ -445,11 +540,9 @@ void bgp_nb_cli_show_instance(struct vty *vty, const struct lyd_node *bgp)
 
 void bgp_nb_cli_show_instance_bgp(struct vty *vty, struct bgp *bgp)
 {
-	char xpath[XPATH_MAXLEN];
 	const struct lyd_node *dnode;
 
-	bgp_nb_instance_xpath(bgp, xpath, sizeof(xpath));
-	dnode = yang_dnode_get(running_config->dnode, xpath);
+	dnode = bgp_nb_find_instance_dnode(bgp);
 	if (!dnode)
 		return;
 
@@ -1557,7 +1650,17 @@ int bgp_nb_confederation_identifier_destroy(struct nb_cb_destroy_args *args)
 void bgp_nb_cli_show_confederation_identifier(struct vty *vty, const struct lyd_node *dnode,
 					      bool show_defaults)
 {
-	vty_out(vty, " bgp confederation identifier %s\n", yang_dnode_get_string(dnode, NULL));
+	struct bgp *bgp = nb_running_get_entry(dnode, NULL, false);
+
+	/*
+	 * Prefer confed_id_pretty so ASDOT input like "1.0" round-trips;
+	 * YANG leaf is asplain uint32 and would always show "65536".
+	 */
+	if (bgp && bgp->confed_id_pretty)
+		vty_out(vty, " bgp confederation identifier %s\n", bgp->confed_id_pretty);
+	else
+		vty_out(vty, " bgp confederation identifier %s\n",
+			yang_dnode_get_string(dnode, NULL));
 }
 
 int bgp_nb_confederation_member_as_create(struct nb_cb_create_args *args)
@@ -2128,7 +2231,16 @@ int bgp_nb_default_afi_safi_destroy(struct nb_cb_destroy_args *args)
 void bgp_nb_cli_show_default_afi_safi(struct vty *vty, const struct lyd_node *dnode,
 				      bool show_defaults)
 {
-	vty_out(vty, " bgp default %s\n", yang_dnode_get_string(dnode, NULL));
+	const char *afi_safi = yang_dnode_get_string(dnode, NULL);
+
+	/*
+	 * ipv4-unicast is seeded as the implicit C default on new instances.
+	 * Omit from show running unless showing defaults (classic behavior).
+	 */
+	if (!show_defaults && strmatch(afi_safi, "ipv4-unicast"))
+		return;
+
+	vty_out(vty, " bgp default %s\n", afi_safi);
 }
 
 int bgp_nb_gr_stale_routes_time_modify(struct nb_cb_modify_args *args)
@@ -2913,11 +3025,13 @@ void bgp_nb_cli_show_suppress_fib_pending(struct vty *vty, const struct lyd_node
 					  bool show_defaults)
 {
 	/*
-	 * Delay leaf is when-gated and omitted from running when it equals
-	 * the YANG default. Print the enable form here in that case.
+	 * CLI always stores delay (YANG default 1000). nb_cli_show_dnode_cmds
+	 * skips the default-valued delay leaf, so its cli_show never runs.
+	 * Print the enable form here when delay is absent OR at default.
 	 */
 	if (yang_dnode_get_bool(dnode, NULL)) {
-		if (!yang_dnode_exists(dnode, "../suppress-fib-pending-delay"))
+		if (!yang_dnode_exists(dnode, "../suppress-fib-pending-delay") ||
+		    yang_dnode_is_default(dnode, "../suppress-fib-pending-delay"))
 			vty_out(vty, " bgp suppress-fib-pending\n");
 	} else if (show_defaults)
 		vty_out(vty, " no bgp suppress-fib-pending\n");
@@ -8852,7 +8966,8 @@ static void bgp_nb_evpn_type5_rmap_free(struct bgp *bgp, afi_t afi, safi_t safi)
  * Reconcile the running Type-5 export state of one afi/safi with the
  * configured values of its YANG container.
  */
-static int bgp_nb_evpn_type5_apply(const struct lyd_node *dnode)
+static int bgp_nb_evpn_type5_apply(const struct lyd_node *dnode, struct bgp *bgp_hint,
+				   bool clear_rmap)
 {
 	struct bgp *bgp;
 	const struct lyd_node *cont = NULL;
@@ -8869,14 +8984,26 @@ static int bgp_nb_evpn_type5_apply(const struct lyd_node *dnode)
 	if (!bgp_nb_evpn_type5_container(dnode, &cont, &afi, &safi))
 		return NB_ERR_NOT_FOUND;
 
-	bgp = nb_running_get_entry(cont, NULL, true);
+	/*
+	 * Prefer an explicit VRF BGP (reapply after L3VNI attach). Fall back
+	 * to resolving by control-plane-protocol name/vrf keys — walking
+	 * nb_running_get_entry from ip-vrf leaves has bound the wrong
+	 * instance and left type-5 / RD flags unset on the tenant VRF.
+	 */
+	bgp = bgp_hint;
+	if (!bgp)
+		bgp = bgp_nb_dnode_lookup_bgp(cont);
 	if (!bgp)
 		return NB_ERR_NOT_FOUND;
 
 	flags = &bgp->af_flags[AFI_L2VPN][SAFI_EVPN];
 
 	enable = yang_dnode_exists(cont, "./enable") && yang_dnode_get_bool(cont, "./enable");
-	if (enable && yang_dnode_exists(cont, "./route-map"))
+	/*
+	 * Destroy callbacks receive the running-tree dnode, so ./route-map
+	 * still appears present. clear_rmap forces treat-as-absent.
+	 */
+	if (!clear_rmap && enable && yang_dnode_exists(cont, "./route-map"))
 		rmap = yang_dnode_get_string(cont, "./route-map");
 
 	if (safi == SAFI_UNICAST) {
@@ -8984,6 +9111,13 @@ static int bgp_nb_evpn_type5_apply(const struct lyd_node *dnode)
 	    (!was_advertising || rmap_changed || adv_flag_changed || skip_newly_disabled))
 		bgp_evpn_advertise_type5_routes(bgp, afi, safi);
 
+	/*
+	 * Flags may have been set before L3VNI was live (advertise helpers
+	 * no-op without l3vni). Once the VNI is attached, push VRF routes.
+	 */
+	if (bgp->l3vni)
+		update_advertise_vrf_routes(bgp);
+
 	return NB_OK;
 }
 
@@ -8991,56 +9125,56 @@ int bgp_nb_evpn_type5_enable_modify(struct nb_cb_modify_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_enable_destroy(struct nb_cb_destroy_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_gateway_ip_modify(struct nb_cb_modify_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_gateway_ip_destroy(struct nb_cb_destroy_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_route_map_modify(struct nb_cb_modify_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_route_map_destroy(struct nb_cb_destroy_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, true);
 }
 
 int bgp_nb_evpn_type5_skip_evpn_imported_modify(struct nb_cb_modify_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 int bgp_nb_evpn_type5_skip_evpn_imported_destroy(struct nb_cb_destroy_args *args)
 {
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
-	return bgp_nb_evpn_type5_apply(args->dnode);
+	return bgp_nb_evpn_type5_apply(args->dnode, NULL, false);
 }
 
 void bgp_nb_cli_show_evpn_type5_enable(struct vty *vty, const struct lyd_node *dnode,
@@ -9451,7 +9585,7 @@ int bgp_nb_evpn_vrf_rd_modify(struct nb_cb_modify_args *args)
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
 
-	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_dnode_lookup_bgp(args->dnode);
 	if (!bgp)
 		return NB_ERR_NOT_FOUND;
 
@@ -9474,7 +9608,7 @@ int bgp_nb_evpn_vrf_rd_destroy(struct nb_cb_destroy_args *args)
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
 
-	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_dnode_lookup_bgp(args->dnode);
 	if (!bgp || !is_vrf_rd_configured(bgp))
 		return NB_OK;
 
@@ -9558,7 +9692,6 @@ static struct ecommunity *bgp_nb_evpn_vrf_rt_str2com(const char *rt_str, bool *i
  */
 void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 {
-	char xpath[XPATH_MAXLEN];
 	const struct lyd_node *bgp_dnode, *afs, *af, *ip_vrf, *child, *enable;
 	struct prefix_rd prd;
 	const char *rd_str;
@@ -9571,14 +9704,25 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 	if (!bgp || !running_config || !running_config->dnode)
 		return;
 
-	bgp_nb_instance_xpath(bgp, xpath, sizeof(xpath));
-	bgp_dnode = yang_dnode_get(running_config->dnode, xpath);
-	if (!bgp_dnode)
+	/*
+	 * Resolve the instance dnode by walking list keys — identityref
+	 * xpath predicates for control-plane-protocol have been unreliable
+	 * and made reapply a silent no-op (type-5 / RD never pushed after
+	 * L3VNI attach).
+	 */
+	bgp_dnode = bgp_nb_find_instance_dnode(bgp);
+	if (!bgp_dnode) {
+		if (BGP_DEBUG(zebra, ZEBRA))
+			zlog_debug("%s: no YANG dnode for VRF %s", __func__, bgp->name_pretty);
 		return;
+	}
 
 	afs = yang_dnode_get(bgp_dnode, "global/afi-safis");
-	if (!afs)
+	if (!afs) {
+		if (BGP_DEBUG(zebra, ZEBRA))
+			zlog_debug("%s: no YANG afi-safis for VRF %s", __func__, bgp->name_pretty);
 		return;
+	}
 
 	ip_vrf = NULL;
 	LY_LIST_FOR (lyd_child(afs), af) {
@@ -9609,10 +9753,10 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 	}
 
 	LY_LIST_FOR (lyd_child(ip_vrf), child) {
-		struct bgp_evpn_rt_config *rt_config = bgp->vrf_route_target_config;
-		struct bgp_evpn_cfgd_rt *cfgd_rt;
-
 		if (strmatch(child->schema->name, "import-route-target")) {
+			struct bgp_evpn_cfgd_rt *cfgd_rt;
+			struct bgp_evpn_rt_config *rt_config;
+
 			ecom = bgp_nb_evpn_vrf_rt_str2com(yang_dnode_get_string(child, NULL),
 							  &is_wildcard);
 			if (!ecom)
@@ -9622,11 +9766,15 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 			ecommunity_free(&ecom);
 			if (!cfgd_rt)
 				continue;
+			rt_config = bgp->vrf_route_target_config;
 			if (bgp_evpn_cfgd_rt_slu_find(&rt_config->cfgd_import, cfgd_rt))
 				bgp_evpn_cfgd_rt_free(cfgd_rt);
 			else
 				bgp_nb_evpn_vrf_rt_batch(bgp, cfgd_rt, true, true);
 		} else if (strmatch(child->schema->name, "export-route-target")) {
+			struct bgp_evpn_cfgd_rt *cfgd_rt;
+			struct bgp_evpn_rt_config *rt_config;
+
 			ecom = bgp_nb_evpn_vrf_rt_str2com(yang_dnode_get_string(child, NULL), NULL);
 			if (!ecom)
 				continue;
@@ -9635,6 +9783,7 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 			ecommunity_free(&ecom);
 			if (!cfgd_rt)
 				continue;
+			rt_config = bgp->vrf_route_target_config;
 			if (bgp_evpn_cfgd_rt_slu_find(&rt_config->cfgd_export, cfgd_rt))
 				bgp_evpn_cfgd_rt_free(cfgd_rt);
 			else
@@ -9644,10 +9793,16 @@ void bgp_nb_evpn_vrf_yang_reapply(struct bgp *bgp)
 
 	enable = yang_dnode_get(ip_vrf, "./ipv4-unicast/enable");
 	if (enable)
-		bgp_nb_evpn_type5_apply(enable);
+		bgp_nb_evpn_type5_apply(enable, bgp, false);
 	enable = yang_dnode_get(ip_vrf, "./ipv6-unicast/enable");
 	if (enable)
-		bgp_nb_evpn_type5_apply(enable);
+		bgp_nb_evpn_type5_apply(enable, bgp, false);
+	enable = yang_dnode_get(ip_vrf, "./ipv4-vpn/enable");
+	if (enable)
+		bgp_nb_evpn_type5_apply(enable, bgp, false);
+	enable = yang_dnode_get(ip_vrf, "./ipv6-vpn/enable");
+	if (enable)
+		bgp_nb_evpn_type5_apply(enable, bgp, false);
 
 	if (bgp->l3vni)
 		update_advertise_vrf_routes(bgp);
@@ -9686,7 +9841,7 @@ int bgp_nb_evpn_vrf_rt_create(struct nb_cb_create_args *args)
 		break;
 	}
 
-	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_dnode_lookup_bgp(args->dnode);
 	if (!bgp)
 		return NB_ERR_NOT_FOUND;
 
@@ -9730,7 +9885,7 @@ int bgp_nb_evpn_vrf_rt_destroy(struct nb_cb_destroy_args *args)
 	if (args->event != NB_EV_APPLY)
 		return NB_OK;
 
-	bgp = nb_running_get_entry(args->dnode, NULL, true);
+	bgp = bgp_nb_dnode_lookup_bgp(args->dnode);
 	if (!bgp)
 		return NB_OK;
 
@@ -9836,7 +9991,14 @@ static struct bgp *bgp_nb_evpn_vni_underlay(const struct lyd_node *dnode)
 	const struct lyd_node *af;
 
 	af = yang_dnode_get_parent(dnode, "afi-safi");
-	return nb_running_get_entry(af ? af : dnode, NULL, true);
+	/* Never abort: VALIDATE runs before BGP APPLY during config load. */
+	if (af) {
+		struct bgp *bgp = nb_running_get_entry(af, NULL, false);
+
+		if (bgp)
+			return bgp;
+	}
+	return bgp_nb_dnode_lookup_bgp(dnode);
 }
 
 int bgp_nb_evpn_vni_create(struct nb_cb_create_args *args)
@@ -9847,11 +10009,11 @@ int bgp_nb_evpn_vni_create(struct nb_cb_create_args *args)
 
 	switch (args->event) {
 	case NB_EV_VALIDATE:
-		bgp = bgp_nb_evpn_vni_underlay(args->dnode);
-		if (!bgp) {
-			snprintfrr(args->errmsg, args->errmsg_len, "BGP instance not found");
-			return NB_ERR_VALIDATION;
-		}
+		/*
+		 * L3VNI conflict check does not need struct bgp. Requiring a
+		 * running BGP entry here aborts during integrated config load
+		 * when VALIDATE runs before any APPLY.
+		 */
 		vni = yang_dnode_get_uint32(args->dnode, "./vni");
 		if (bgp_evpn_lookup_l3vni_l2vni_table(vni)) {
 			snprintfrr(args->errmsg, args->errmsg_len,
@@ -16588,11 +16750,13 @@ void bgp_nb_cli_show_daemon_suppress_fib(struct vty *vty, const struct lyd_node 
 					 bool show_defaults)
 {
 	/*
-	 * Delay leaf is when-gated and omitted from running when it equals
-	 * the YANG default. Print the enable form here in that case.
+	 * CLI always stores delay (YANG default 1000). nb_cli_show_dnode_cmds
+	 * skips the default-valued delay leaf, so its cli_show never runs.
+	 * Print the enable form here when delay is absent OR at default.
 	 */
 	if (yang_dnode_get_bool(dnode, NULL)) {
-		if (!yang_dnode_exists(dnode, "../suppress-fib-pending-delay"))
+		if (!yang_dnode_exists(dnode, "../suppress-fib-pending-delay") ||
+		    yang_dnode_is_default(dnode, "../suppress-fib-pending-delay"))
 			vty_out(vty, "bgp suppress-fib-pending\n");
 	} else if (show_defaults)
 		vty_out(vty, "no bgp suppress-fib-pending\n");
