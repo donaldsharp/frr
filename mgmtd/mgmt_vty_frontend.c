@@ -433,7 +433,7 @@ error:
 		return CMD_SUCCESS;
 
 	assert(vty->mgmt_client_id && vty->mgmt_session_id);
-	if (vty_mgmt_send_commit_config(vty, false, false, true) < 0)
+	if (vty_mgmt_send_commit_config(vty, false, false, true, false) < 0)
 		goto error;
 
 	return CMD_SUCCESS;
@@ -443,7 +443,8 @@ error:
 /* Commit Config */
 /* ------------- */
 
-int vty_mgmt_send_commit_config(struct vty *vty, bool validate_only, bool abort, bool unlock)
+int vty_mgmt_send_commit_config(struct vty *vty, bool validate_only, bool abort, bool unlock,
+				bool explicit_commit)
 {
 	if (mgmt_fe_client && vty->mgmt_session_id) {
 		vty->mgmt_req_id++;
@@ -456,6 +457,7 @@ int vty_mgmt_send_commit_config(struct vty *vty, bool validate_only, bool abort,
 		}
 
 		vty->mgmt_req_pending_cmd = "MESSAGE_COMMCFG_REQ";
+		vty->mgmt_req_pending_data = explicit_commit;
 		vty->mgmt_num_pending_setcfg = 0;
 	}
 
@@ -467,7 +469,8 @@ static void vty_mgmt_handle_commit_config_reply(struct mgmt_fe_client *client, u
 						uintptr_t session_ctx, uint64_t req_id,
 						bool success, enum mgmt_ds_id src_ds_id,
 						enum mgmt_ds_id dst_ds_id, bool validate_only,
-						bool unlock, const char *errmsg_if_any)
+						bool unlock, bool changed,
+						const char *errmsg_if_any)
 {
 	struct vty *vty;
 
@@ -485,6 +488,8 @@ static void vty_mgmt_handle_commit_config_reply(struct mgmt_fe_client *client, u
 				client_id, req_id, errmsg_if_any ? ": " : "", errmsg_if_any ?: "");
 		if (errmsg_if_any)
 			vty_out(vty, "%% Configuration applied with notes:\n%s\n", errmsg_if_any);
+		else if (!changed && vty->mgmt_req_pending_data)
+			vty_out(vty, "MGMTD: No changes found to be committed!\n");
 	}
 
 	if (unlock) {
@@ -751,7 +756,7 @@ static void vty_end_config_mgmt(struct vty *vty)
 	 * pending changes.
 	 */
 	if (vty->mgmt_num_pending_setcfg)
-		vty_mgmt_send_commit_config(vty, false, false, false);
+		vty_mgmt_send_commit_config(vty, false, false, false, false);
 }
 
 static int nb_cli_apply_changes_mgmt(struct vty *vty, const char *xpath_base_abs)

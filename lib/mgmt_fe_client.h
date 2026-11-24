@@ -72,7 +72,8 @@ struct mgmt_fe_client_cbs {
 				     uint64_t client_id, uintptr_t session_id,
 				     uintptr_t user_session_client, uint64_t req_id, bool success,
 				     enum mgmt_ds_id src_ds_id, enum mgmt_ds_id dst_ds_id,
-				     bool validate_only, bool unlock, const char *errmsg_if_any);
+				     bool validate_only, bool unlock, bool changed,
+				     const char *errmsg_if_any);
 
 	/* Called when get-tree result is returned */
 	int (*get_tree_notify)(struct mgmt_fe_client *client, uintptr_t user_data,

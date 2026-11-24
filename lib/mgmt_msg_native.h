@@ -616,6 +616,7 @@ struct mgmt_msg_commit {
  * @target: the datastore committed into.
  * @action: action taken, i.e., apply, abort, or validate.
  * @unlock: true indicates receiver should unlock the datastores.
+ * @changed: true if configuration changes were present to commit.
  */
 struct mgmt_msg_commit_reply {
 	struct mgmt_msg_header;
@@ -623,7 +624,8 @@ struct mgmt_msg_commit_reply {
 	uint8_t target; /* MGMT_MSG_DATASTORE_* */
 	uint8_t action; /* MGMT_MSG_COMMIT_* */
 	uint8_t unlock;
-	uint8_t resv2[4];
+	uint8_t changed;
+	uint8_t resv2[3];
 };
 
 /**

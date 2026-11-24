@@ -685,7 +685,7 @@ int mgmt_fe_adapter_txn_error(uint64_t txn_id, uint64_t req_id, bool short_circu
 
 static void fe_session_send_commit_reply(struct mgmt_fe_session_ctx *session, uint64_t req_id,
 					 uint8_t source, uint8_t target, uint8_t action,
-					 bool unlock, const char *info)
+					 bool unlock, bool changed, const char *info)
 {
 	struct mgmt_msg_commit_reply *msg;
 	int ret;
@@ -699,14 +699,15 @@ static void fe_session_send_commit_reply(struct mgmt_fe_session_ctx *session, ui
 	msg->target = target;
 	msg->action = action;
 	msg->unlock = unlock;
+	msg->changed = changed;
 
 	if (info && info[0])
 		mgmt_msg_native_add_str(msg, info);
 
 	_dbg("Sending commit-reply session-id %" PRIu64 " on %s req-id %" PRIu64
-	     " source-ds: %s target-ds: %s action: %u unlock: %d",
+	     " source-ds: %s target-ds: %s action: %u unlock: %d changed: %d",
 	     session->session_id, session->adapter->name, req_id, mgmt_ds_id2name(source),
-	     mgmt_ds_id2name(target), action, unlock);
+	     mgmt_ds_id2name(target), action, unlock, changed);
 
 	ret = fe_adapter_send_msg(session->adapter, msg, mgmt_msg_native_get_msg_len(msg), false);
 	mgmt_msg_native_free_msg(msg);
@@ -772,7 +773,8 @@ int mgmt_fe_send_commit_cfg_reply(uint64_t session_id, uint64_t txn_id, enum mgm
 
 	if (result == MGMTD_SUCCESS || result == MGMTD_NO_CFG_CHANGES)
 		fe_session_send_commit_reply(session, req_id, src_ds_id, dst_ds_id, action, unlock,
-					     error_if_any);
+					     result == MGMTD_SUCCESS,
+					     result == MGMTD_SUCCESS ? error_if_any : NULL);
 	else {
 		ret = fe_session_send_error(session, req_id, false, mgmt_result_to_error(result),
 					    "commit failed session-id %" PRIu64
@@ -1204,7 +1206,7 @@ static int fe_session_send_edit_reply(struct mgmt_fe_session_ctx *session, uint6
 
 	mgmt_msg_native_xpath_encode(msg, xpath);
 
-	if (data)
+	if (data && data[0])
 		mgmt_msg_native_append(msg, data, strlen(data) + 1);
 
 	_dbg("Sending edit-reply from adapter %s to session-id %" PRIu64 " req-id %" PRIu64
@@ -1265,7 +1267,8 @@ int mgmt_fe_adapter_send_edit_reply(uint64_t session_id, uint64_t txn_id, uint64
 	else
 		ret = fe_session_send_edit_reply(session, req_id,
 						 result == MGMTD_SUCCESS /*changed*/,
-						 (*edit)->created, (*edit)->xpath_created, errstr);
+						 (*edit)->created, (*edit)->xpath_created,
+						 result == MGMTD_SUCCESS ? errstr : NULL);
 	XFREE(MTYPE_MGMTD_TXN_REQ, *edit);
 
 	assert(session->cfg_txn_id == txn_id);

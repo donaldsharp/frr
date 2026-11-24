@@ -97,7 +97,10 @@ static int txn_set_config_error(struct txn_req *txn_req, enum mgmt_result error,
 				const char *error_info)
 {
 	txn_req->error = error;
-	darr_in_strdup(txn_req->err_info, error_info);
+	if (error_info)
+		darr_in_strdup(txn_req->err_info, error_info);
+	else
+		darr_free(txn_req->err_info);
 	return -1;
 }
 
@@ -996,7 +999,7 @@ static int txn_get_config_changes(struct txn_req_commit *ccreq, struct nb_config
 		 * The reply routing special cases abort, this isn't pretty,
 		 * fix in later cleanup.
 		 */
-		return txn_set_config_error(txn_req, MGMTD_SUCCESS, "commit abort");
+		return txn_set_config_error(txn_req, MGMTD_SUCCESS, NULL);
 	}
 
 	nb_config = mgmt_ds_get_nb_config(ccreq->src_ds_ctx);

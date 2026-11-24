@@ -154,7 +154,7 @@ DEFPY(mgmt_commit,
 	if (!validate_only && !vty->mgmt_locked_running_ds)
 		vty_out(vty, "Warning: running datastore is not locked.\n");
 
-	if (vty_mgmt_send_commit_config(vty, validate_only, abort, false) != 0)
+	if (vty_mgmt_send_commit_config(vty, validate_only, abort, false, true) != 0)
 		return CMD_WARNING_CONFIG_FAILED;
 	return CMD_SUCCESS;
 }

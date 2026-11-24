@@ -447,6 +447,7 @@ static void fe_client_handle_native_msg(struct mgmt_fe_client *client,
 	struct mgmt_msg_rpc_reply *rpc_msg;
 	struct mgmt_msg_error *err_msg;
 	struct mgmt_msg_commit *commit_msg;
+	struct mgmt_msg_commit_reply *commit_reply;
 	struct mgmt_msg_lock *lock_msg;
 	struct mgmt_msg_header *orig_msg = NULL;
 	const char *xpath = NULL;
@@ -566,7 +567,7 @@ static void fe_client_handle_native_msg(struct mgmt_fe_client *client,
 								  commit_msg->target,
 								  commit_msg->action ==
 									  MGMT_MSG_COMMIT_VALIDATE,
-								  commit_msg->unlock,
+								  commit_msg->unlock, false,
 								  err_msg->errstr);
 			break;
 		case MGMT_MSG_CODE_EDIT:
@@ -608,21 +609,20 @@ generic_error_handler:
 	case MGMT_MSG_CODE_COMMIT_REPLY:
 		if (!session->client->cbs.commit_config_notify)
 			break;
-		commit_msg = (typeof(commit_msg))msg;
-		if (msg_len > sizeof(*commit_msg)) {
-			if (!MGMT_MSG_VALIDATE_NUL_TERM(commit_msg, msg_len)) {
+		commit_reply = (typeof(commit_reply))msg;
+		if (msg_len > sizeof(*commit_reply)) {
+			if (!MGMT_MSG_VALIDATE_NUL_TERM(commit_reply, msg_len)) {
 				log_err_fe_client("Corrupt commit-reply msg recv");
 				break;
 			}
-			info = (const char *)(commit_msg + 1);
+			info = (const char *)(commit_reply + 1);
 		}
-		session->client->cbs.commit_config_notify(client, client->user_data,
-							  session->client_id, session->session_id,
-							  session->user_ctx, msg->req_id, true,
-							  commit_msg->source, commit_msg->target,
-							  commit_msg->action ==
-								  MGMT_MSG_COMMIT_VALIDATE,
-							  commit_msg->unlock, info);
+		session->client->cbs
+			.commit_config_notify(client, client->user_data, session->client_id,
+					      session->session_id, session->user_ctx, msg->req_id,
+					      true, commit_reply->source, commit_reply->target,
+					      commit_reply->action == MGMT_MSG_COMMIT_VALIDATE,
+					      commit_reply->unlock, !!commit_reply->changed, info);
 
 		break;
 	case MGMT_MSG_CODE_LOCK_REPLY:
